@@ -7,3 +7,4 @@
 # Python cache artifacts
 __pycache__/
 *.pyc
+logs/mcp_server.log
