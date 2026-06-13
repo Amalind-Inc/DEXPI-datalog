@@ -31,6 +31,7 @@ class Manifest:
     schema_version: int
     dexpi_xml: Path
     rule_pack_name: str
+    rule_pack_path: Path | None
     rule_pack_version: int
     rule_pack_lifecycle_state: str
     execution_mode: str
@@ -206,6 +207,7 @@ def validate_manifest(raw: object) -> tuple[Manifest | None, list[Diagnostic]]:
 
     rule_pack = raw.get("rule_pack")
     rule_pack_name = _require_string_field(rule_pack, "name", "rule_pack", diagnostics)
+    rule_pack_path = _optional_string_field(rule_pack, "path", "rule_pack", diagnostics)
     rule_pack_version = _require_int_field(
         rule_pack, "version", "rule_pack", diagnostics
     )
@@ -262,6 +264,7 @@ def validate_manifest(raw: object) -> tuple[Manifest | None, list[Diagnostic]]:
         schema_version=schema_version,
         dexpi_xml=Path(dexpi_xml).expanduser(),
         rule_pack_name=rule_pack_name,
+        rule_pack_path=Path(rule_pack_path).expanduser() if rule_pack_path else None,
         rule_pack_version=rule_pack_version,
         rule_pack_lifecycle_state=lifecycle_state,
         execution_mode=execution_mode,
@@ -320,6 +323,36 @@ def _require_int_field(
                 code="manifest.invalid_integer",
                 severity="error",
                 message=f"{parent}.{field} must be an integer.",
+                path=f"{parent}.{field}",
+            )
+        )
+        return None
+    return value
+
+
+def _optional_string_field(
+    block: object, field: str, parent: str, diagnostics: list[Diagnostic]
+) -> str | None:
+    if not isinstance(block, dict):
+        diagnostics.append(
+            Diagnostic(
+                code="manifest.invalid_section",
+                severity="error",
+                message=f"{parent} must be an object.",
+                path=parent,
+            )
+        )
+        return None
+
+    value = block.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        diagnostics.append(
+            Diagnostic(
+                code="manifest.invalid_string",
+                severity="error",
+                message=f"{parent}.{field} must be a non-empty string when provided.",
                 path=f"{parent}.{field}",
             )
         )
