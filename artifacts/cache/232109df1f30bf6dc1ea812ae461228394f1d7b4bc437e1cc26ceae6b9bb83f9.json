@@ -1,0 +1,48 @@
+{
+  "canonical_objects": [
+    {
+      "canonical_tag": "L-1",
+      "diagnostics": [],
+      "object_id": "L-1",
+      "source_attributes": {
+        "id": "L-1",
+        "tag": "L-1"
+      }
+    },
+    {
+      "canonical_tag": "P-101",
+      "diagnostics": [
+        {
+          "code": "normalizer.ambiguous_canonical_tag",
+          "message": "Canonical tag 'P-101' for object 'P-101' has an ambiguous raw variant 'P101'.",
+          "path": "P-101",
+          "severity": "warning"
+        }
+      ],
+      "object_id": "P-101",
+      "source_attributes": {
+        "componentClass": "Pump",
+        "id": "P-101",
+        "tag": "P-101",
+        "tag_variant_1": "P101"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "normalizer.ambiguous_canonical_tag",
+      "message": "Canonical tag 'P-101' for object 'P-101' has an ambiguous raw variant 'P101'.",
+      "path": "P-101",
+      "severity": "warning"
+    }
+  ],
+  "raw_tag_variants": {
+    "L-1": [
+      "L-1"
+    ],
+    "P-101": [
+      "P-101",
+      "P101"
+    ]
+  }
+}

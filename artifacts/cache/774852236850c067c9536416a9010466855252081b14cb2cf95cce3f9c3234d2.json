@@ -1,0 +1,16 @@
+{
+  "canonical_objects": [
+    {
+      "canonical_tag": "P-101",
+      "diagnostics": [],
+      "object_id": "P-101",
+      "source_attributes": {
+        "id": "P-101"
+      }
+    }
+  ],
+  "diagnostics": [],
+  "raw_tag_variants": {
+    "P-101": []
+  }
+}
