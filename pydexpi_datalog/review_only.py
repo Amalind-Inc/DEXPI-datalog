@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .artifact_set import persist_artifact_set
 from .cache_execution import load_or_build_canonical_engineering_ir
 from .execution_lock import acquire_run_context_lock
 from .manifest import (
@@ -79,7 +80,12 @@ def run_review_only(manifest_path: Path) -> int:
             findings=findings,
             cache=cache,
         )
-        persist_artifact(artifact_dir, run_id, artifact, manifest_path)
+        persist_artifact(
+            artifact_dir=artifact_dir,
+            run_id=run_id,
+            artifact=artifact,
+            manifest_path=manifest_path,
+        )
         print(render_console_report(artifact))
     finally:
         if run_lock is not None:
@@ -100,17 +106,17 @@ def build_artifact(
     findings: list[dict[str, object]],
     cache: dict[str, str] | None,
 ) -> dict[str, object]:
+    has_errors = any(diag.severity == "error" for diag in diagnostics)
     return {
         "artifact_type": "review_only",
         "run": {
             "manifest_path": str(manifest_path.resolve()),
             "run_id": manifest.run_id if manifest else None,
             "execution_mode": manifest.execution_mode if manifest else None,
-            "status": "failed"
-            if any(diag.severity == "error" for diag in diagnostics)
-            else "ok",
+            "status": "failed" if has_errors else "ok",
         },
         "diagnostics": [diag.to_dict() for diag in diagnostics],
+        "failure": derive_failure(diagnostics) if has_errors else None,
         "cache": cache,
         "findings": findings,
         "patch_proposals": [],
@@ -118,16 +124,21 @@ def build_artifact(
 
 
 def persist_artifact(
-    artifact_dir: Path, run_id: str, artifact: dict[str, object], manifest_path: Path
+    *,
+    artifact_dir: Path,
+    run_id: str,
+    artifact: dict[str, object],
+    manifest_path: Path,
 ) -> None:
-    run_dir = artifact_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path = run_dir / "review_only.json"
-    artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
-
-    manifest_copy = run_dir / manifest_path.name
-    if manifest_path.exists():
-        manifest_copy.write_text(manifest_path.read_text(encoding="utf-8"), encoding="utf-8")
+    persist_artifact_set(
+        artifact_dir=artifact_dir,
+        run_id=run_id,
+        artifact_name="review_only.json",
+        artifact_type="review_only",
+        artifact=artifact,
+        manifest_path=manifest_path,
+        failure=artifact["failure"],
+    )
 
 
 def render_console_report(artifact: dict[str, object]) -> str:
@@ -139,10 +150,26 @@ def render_console_report(artifact: dict[str, object]) -> str:
     lines.append("")
     findings = artifact["findings"]
     lines.append(f"Findings: {len(findings)}")
+    grouped_findings: dict[tuple[str, str], list[str]] = {}
     for finding in findings:
+        key = (finding["severity"], finding["rule_id"])
         affected_object_ids = finding["affected_object_ids"]
         affected_object = affected_object_ids[0] if affected_object_ids else "-"
+        grouped_findings.setdefault(key, []).append(affected_object)
+
+    for (severity, rule_id), object_ids in grouped_findings.items():
+        if len(object_ids) == 1:
+            lines.append(f"[{severity}] {rule_id} {object_ids[0]}")
+            continue
         lines.append(
-            f"[{finding['severity']}] {finding['rule_id']} {affected_object}"
+            f"{len(object_ids)}x [{severity}] {rule_id} examples: {', '.join(object_ids)}"
         )
     return "\n".join(lines)
+
+
+def derive_failure(diagnostics: list[Diagnostic]) -> dict[str, object]:
+    for diagnostic in diagnostics:
+        if not diagnostic.code.startswith("rule_pack."):
+            continue
+        return {"category": "evaluation"}
+    return {"category": "validation"}

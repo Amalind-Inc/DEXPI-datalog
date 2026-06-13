@@ -98,6 +98,10 @@ class ReviewOnlyCliTests(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(run_artifact_dir, ignore_errors=True))
         return run_artifact_dir
 
+    def load_artifact_set(self, run_id: str) -> dict[str, object]:
+        artifact_set_path = REPO_ROOT / "artifacts" / run_id / "artifact_set.json"
+        return json.loads(artifact_set_path.read_text(encoding="utf-8"))
+
     def test_review_only_persists_raw_findings_with_evidence_and_no_patch_proposals(
         self,
     ) -> None:
@@ -262,6 +266,194 @@ class ReviewOnlyCliTests(unittest.TestCase):
             self.assertIn("rule_pack.unknown_predicate", diagnostic_codes)
             self.assertEqual(artifact["findings"], [])
             self.assertEqual(artifact["patch_proposals"], [])
+
+    def test_review_only_persists_artifact_set_with_stable_ids_and_ordering(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            source_path = tmp_path / "plant.xml"
+            source_path.write_text(
+                (
+                    "<PlantModel>"
+                    "<Equipment id='P-101' tag='P-101' />"
+                    "<Equipment id='P-102' tag='P-102' />"
+                    "</PlantModel>"
+                ),
+                encoding="utf-8",
+            )
+            rule_pack_path = tmp_path / "rule_pack.json"
+            self.write_rule_pack(rule_pack_path)
+
+            run_id = "artifact-set-run"
+            manifest_path = tmp_path / "manifest.json"
+            self.write_manifest(
+                manifest_path,
+                source_path=source_path,
+                rule_pack_path=rule_pack_path,
+                run_id=run_id,
+            )
+
+            run_artifact_dir = REPO_ROOT / "artifacts" / run_id
+            artifact_path = run_artifact_dir / "review_only.json"
+            artifact_set_path = run_artifact_dir / "artifact_set.json"
+            self.cleanup_run_dir(run_id)
+
+            result = self.run_review_only(manifest_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(artifact_path.exists())
+            self.assertTrue(artifact_set_path.exists())
+
+            artifact_set = self.load_artifact_set(run_id)
+            self.assertEqual(artifact_set["run_id"], run_id)
+            self.assertEqual(
+                artifact_set["artifact_ids"],
+                {
+                    "manifest": f"{run_id}:manifest",
+                    "review_only": f"{run_id}:review_only",
+                },
+            )
+            self.assertEqual(
+                artifact_set["artifacts"],
+                [
+                    {
+                        "artifact_id": f"{run_id}:manifest",
+                        "artifact_type": "manifest_copy",
+                        "path": str((run_artifact_dir / "manifest.json").resolve()),
+                    },
+                    {
+                        "artifact_id": f"{run_id}:review_only",
+                        "artifact_type": "review_only",
+                        "path": str(artifact_path.resolve()),
+                    },
+                ],
+            )
+
+    def test_review_only_console_groups_repeated_findings_while_artifact_keeps_records(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            source_path = tmp_path / "plant.xml"
+            source_path.write_text(
+                (
+                    "<PlantModel>"
+                    "<Equipment id='P-101' tag='P-101' />"
+                    "<Equipment id='P-102' tag='P-102' />"
+                    "</PlantModel>"
+                ),
+                encoding="utf-8",
+            )
+            rule_pack_path = tmp_path / "rule_pack.json"
+            self.write_rule_pack(rule_pack_path)
+
+            run_id = "grouped-findings-run"
+            manifest_path = tmp_path / "manifest.json"
+            self.write_manifest(
+                manifest_path,
+                source_path=source_path,
+                rule_pack_path=rule_pack_path,
+                run_id=run_id,
+            )
+
+            artifact_path = REPO_ROOT / "artifacts" / run_id / "review_only.json"
+            self.cleanup_run_dir(run_id)
+
+            result = self.run_review_only(manifest_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(artifact["findings"]), 2)
+            self.assertEqual(
+                artifact["findings"],
+                [
+                    {
+                        "rule_id": "equipment-tag-present",
+                        "severity": "informational",
+                        "affected_object_ids": ["P-101"],
+                        "evidence_trail": {
+                            "primary_rule": "equipment-tag-present",
+                            "supporting_facts": [
+                                {
+                                    "predicate": "has_tag",
+                                    "object_id": "P-101",
+                                    "canonical_tag": "P-101",
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "rule_id": "equipment-tag-present",
+                        "severity": "informational",
+                        "affected_object_ids": ["P-102"],
+                        "evidence_trail": {
+                            "primary_rule": "equipment-tag-present",
+                            "supporting_facts": [
+                                {
+                                    "predicate": "has_tag",
+                                    "object_id": "P-102",
+                                    "canonical_tag": "P-102",
+                                }
+                            ],
+                        },
+                    },
+                ],
+            )
+            expected_console = "\n".join(
+                [
+                    "Review-Only Report",
+                    "Status: ok",
+                    f"Run ID: {run_id}",
+                    "",
+                    "Findings: 2",
+                    "2x [informational] equipment-tag-present examples: P-101, P-102",
+                ]
+            )
+            self.assertEqual(result.stdout.strip(), expected_console)
+
+    def test_failed_review_only_run_persists_categorized_failure_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            source_path = tmp_path / "plant.xml"
+            source_path.write_text(
+                "<PlantModel><Equipment id='P-101' tag='P-101' /></PlantModel>",
+                encoding="utf-8",
+            )
+            rule_pack_path = tmp_path / "rule_pack.json"
+            self.write_invalid_rule_pack(rule_pack_path)
+
+            run_id = "failed-review-only-run"
+            manifest_path = tmp_path / "manifest.json"
+            self.write_manifest(
+                manifest_path,
+                source_path=source_path,
+                rule_pack_path=rule_pack_path,
+                run_id=run_id,
+            )
+
+            run_artifact_dir = REPO_ROOT / "artifacts" / run_id
+            artifact_path = run_artifact_dir / "review_only.json"
+            artifact_set_path = run_artifact_dir / "artifact_set.json"
+            self.cleanup_run_dir(run_id)
+
+            result = self.run_review_only(manifest_path)
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertTrue(artifact_path.exists())
+            self.assertTrue(artifact_set_path.exists())
+
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            artifact_set = self.load_artifact_set(run_id)
+            self.assertEqual(artifact["run"]["status"], "failed")
+            self.assertEqual(artifact["failure"], {"category": "evaluation"})
+            diagnostic_codes = {item["code"] for item in artifact["diagnostics"]}
+            self.assertIn("rule_pack.unknown_predicate", diagnostic_codes)
+            self.assertEqual(
+                artifact_set["failure"],
+                {
+                    "category": "evaluation",
+                    "artifact_id": f"{run_id}:review_only",
+                },
+            )
 
 
 if __name__ == "__main__":
