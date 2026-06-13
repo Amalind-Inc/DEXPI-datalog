@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "pydexpi_datalog_1",
+  "project_id": "4c6e1133-2247-4297-941d-888374a81048"
+}

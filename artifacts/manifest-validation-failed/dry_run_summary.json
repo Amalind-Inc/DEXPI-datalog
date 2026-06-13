@@ -1,0 +1,32 @@
+{
+  "artifact_type": "dry_run_summary",
+  "diagnostics": [
+    {
+      "code": "manifest.unsupported_format",
+      "message": "Only JSON manifests are supported in the current implementation.",
+      "path": "manifest",
+      "severity": "error"
+    },
+    {
+      "code": "manifest.invalid_json",
+      "message": "Manifest is not valid JSON: Expecting value",
+      "path": "manifest:1:1",
+      "severity": "error"
+    },
+    {
+      "code": "manifest.invalid_type",
+      "message": "Manifest root must be a JSON object.",
+      "path": "manifest",
+      "severity": "error"
+    }
+  ],
+  "findings": [],
+  "patch_proposals": [],
+  "run": {
+    "execution_mode": null,
+    "manifest_path": "/private/var/folders/7d/0gnbg6s135s6sdsyw8m56j740000gn/T/tmp5er2qhzv/manifest.yaml",
+    "run_id": null,
+    "status": "failed"
+  },
+  "structural_summary": null
+}
