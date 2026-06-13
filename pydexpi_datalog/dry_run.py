@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from .canonical_ir import build_canonical_engineering_ir
 from .manifest import (
     Diagnostic,
     Manifest,
@@ -32,21 +33,42 @@ def run_dry_run(manifest_path: Path) -> int:
         )
 
     summary: dict[str, object] | None = None
-    if manifest is not None and not diagnostics:
+    canonical_ir: dict[str, object] | None = None
+    if manifest is not None and not has_error_diagnostics(diagnostics):
         summary, source_diagnostics = summarize_source(manifest)
         diagnostics.extend(source_diagnostics)
+        if not has_error_diagnostics(diagnostics):
+            ir_result = build_canonical_engineering_ir(manifest.dexpi_xml)
+            canonical_ir = {
+                "canonical_objects": [
+                    {
+                        "object_id": obj.object_id,
+                        "canonical_tag": obj.canonical_tag,
+                        "source_attributes": obj.source_attributes,
+                        "diagnostics": obj.diagnostics,
+                    }
+                    for obj in ir_result.canonical_objects
+                ],
+                "raw_tag_variants": ir_result.raw_tag_variants,
+                "diagnostics": ir_result.diagnostics,
+            }
 
     artifact = build_artifact(
         manifest_path=manifest_path,
         manifest=manifest,
         diagnostics=diagnostics,
         summary=summary,
+        canonical_ir=canonical_ir,
     )
     persist_artifact(artifact_dir, run_id, artifact, manifest_path)
     print(render_console_report(artifact))
 
     has_errors = any(item["severity"] == "error" for item in artifact["diagnostics"])
     return 1 if has_errors else 0
+
+
+def has_error_diagnostics(diagnostics: list[Diagnostic]) -> bool:
+    return any(diagnostic.severity == "error" for diagnostic in diagnostics)
 
 
 def summarize_source(manifest: Manifest) -> tuple[dict[str, object] | None, list[Diagnostic]]:
@@ -116,6 +138,7 @@ def build_artifact(
     manifest: Manifest | None,
     diagnostics: list[Diagnostic],
     summary: dict[str, object] | None,
+    canonical_ir: dict[str, object] | None,
 ) -> dict[str, object]:
     return {
         "artifact_type": "dry_run_summary",
@@ -129,6 +152,7 @@ def build_artifact(
         },
         "diagnostics": [diag.to_dict() for diag in diagnostics],
         "structural_summary": summary,
+        "canonical_engineering_ir": canonical_ir,
         "findings": [],
         "patch_proposals": [],
     }

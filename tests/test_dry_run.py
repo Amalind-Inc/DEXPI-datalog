@@ -68,7 +68,12 @@ class DryRunCliTests(unittest.TestCase):
             tmp_path = Path(tmp_dir)
             source_path = tmp_path / "plant.xml"
             source_path.write_text(
-                "<PlantModel><Equipment id='P-101'/><Line id='L-1'/></PlantModel>",
+                (
+                    "<PlantModel>"
+                    "<Equipment id='P-101' tag='P-101' tag_variant_1='P101' componentClass='Pump' />"
+                    "<Line id='L-1' tag='L-1' />"
+                    "</PlantModel>"
+                ),
                 encoding="utf-8",
             )
 
@@ -118,6 +123,35 @@ class DryRunCliTests(unittest.TestCase):
             self.assertEqual(
                 artifact["structural_summary"]["object_ids"],
                 ["L-1", "P-101"],
+            )
+            self.assertEqual(
+                artifact["canonical_engineering_ir"]["canonical_objects"],
+                [
+                    {
+                        "object_id": "L-1",
+                        "canonical_tag": "L-1",
+                        "source_attributes": {"id": "L-1", "tag": "L-1"},
+                        "diagnostics": [],
+                    },
+                    {
+                        "object_id": "P-101",
+                        "canonical_tag": "P-101",
+                        "source_attributes": {
+                            "id": "P-101",
+                            "tag": "P-101",
+                            "tag_variant_1": "P101",
+                            "componentClass": "Pump",
+                        },
+                        "diagnostics": [
+                            {
+                                "code": "normalizer.ambiguous_canonical_tag",
+                                "severity": "warning",
+                                "message": "Canonical tag 'P-101' for object 'P-101' has an ambiguous raw variant 'P101'.",
+                                "path": "P-101",
+                            }
+                        ],
+                    },
+                ],
             )
             self.assertEqual(artifact["findings"], [])
             self.assertEqual(artifact["patch_proposals"], [])
