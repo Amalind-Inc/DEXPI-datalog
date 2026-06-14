@@ -7,6 +7,8 @@ from .compile_rule import run_compile_rule
 from .dry_run import run_dry_run
 from .export_facts import run_export_facts
 from .review_only import run_review_only
+from .verify_raw_fixture import run_verify_raw_fixture
+from .verify_suite import run_verify_suite
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,6 +58,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where compiled rule artifacts will be written.",
     )
 
+    verify_suite = subparsers.add_parser(
+        "verify-suite",
+        help="Run the tracer-bullet verifier over a checked-in fixture suite.",
+    )
+    verify_suite.add_argument(
+        "suite_manifest", type=Path, help="Path to a verifier suite manifest."
+    )
+    verify_suite.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where verifier output artifacts will be written.",
+    )
+
+    verify_raw_fixture = subparsers.add_parser(
+        "verify-raw-fixture",
+        help="Run the tracer-bullet verifier from one raw DEXPI XML input.",
+    )
+    verify_raw_fixture.add_argument(
+        "dexpi_xml", type=Path, help="Path to a raw DEXPI XML input fixture."
+    )
+    verify_raw_fixture.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where persisted verifier artifacts will be written.",
+    )
+
     return parser
 
 
@@ -75,6 +105,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "compile-rule":
         return run_compile_rule(rule_yaml_path=args.rule_yaml, output_dir=args.output_dir)
+    if args.command == "verify-suite":
+        return run_verify_suite(
+            suite_manifest_path=args.suite_manifest,
+            output_dir=args.output_dir,
+        )
+    if args.command == "verify-raw-fixture":
+        return run_verify_raw_fixture(
+            dexpi_xml_path=args.dexpi_xml,
+            output_dir=args.output_dir,
+        )
 
     parser.error(f"unsupported command: {args.command}")
     return 2

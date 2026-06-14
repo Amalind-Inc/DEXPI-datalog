@@ -1,0 +1,39 @@
+{
+  "evidence": {
+    "boundary": {
+      "kind": "matched_required_component",
+      "object_id": "SwingCheckValve-1"
+    },
+    "matched_objects": [
+      {
+        "class": "SwingCheckValve",
+        "object_id": "SwingCheckValve-1"
+      }
+    ],
+    "traversed_edges": [
+      {
+        "edge_key": 0,
+        "source_id": "Nozzle-2",
+        "target_id": "SwingCheckValve-1"
+      }
+    ],
+    "traversed_objects": [
+      {
+        "class": "Nozzle",
+        "object_id": "Nozzle-2"
+      },
+      {
+        "class": "SwingCheckValve",
+        "object_id": "SwingCheckValve-1"
+      }
+    ]
+  },
+  "message": "Required downstream check valve was found before the first branch or terminal boundary.",
+  "result_type": "pass",
+  "rule_id": "pump_discharge_check_valve",
+  "schema_version": 1,
+  "subject": {
+    "discharge_nozzle_id": "Nozzle-2",
+    "pump_id": "CentrifugalPump-1"
+  }
+}

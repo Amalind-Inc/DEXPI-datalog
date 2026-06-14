@@ -1,0 +1,93 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "CentrifugalPump-1",
+        "target_id": "Nozzle-6"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "CentrifugalPump-1",
+        "target_id": "Nozzle-5"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "PipingNetworkSegment-4",
+        "target_id": "Nozzle-6"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "PipingNetworkSegment-4",
+        "target_id": "SwingCheckValve-1"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "CentrifugalPump",
+          "proteusId": "CentrifugalPump-1",
+          "tagName": "P4711"
+        },
+        "fact_type": "node",
+        "node_id": "CentrifugalPump-1"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "proteusId": "Nozzle-6",
+          "subTagName": "N6"
+        },
+        "fact_type": "node",
+        "node_id": "Nozzle-6"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "proteusId": "Nozzle-5",
+          "subTagName": "N5"
+        },
+        "fact_type": "node",
+        "node_id": "Nozzle-5"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSegment",
+          "proteusId": "PipingNetworkSegment-4"
+        },
+        "fact_type": "node",
+        "node_id": "PipingNetworkSegment-4"
+      },
+      {
+        "attributes": {
+          "label": "SwingCheckValve",
+          "proteusId": "SwingCheckValve-1"
+        },
+        "fact_type": "node",
+        "node_id": "SwingCheckValve-1"
+      }
+    ]
+  },
+  "fixture_id": "pass_c01_local_segment",
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/C01 DEXPI Reference P&ID/C01V04-VER.EX01.xml"
+}

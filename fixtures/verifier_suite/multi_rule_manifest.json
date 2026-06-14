@@ -1,0 +1,17 @@
+{
+  "fixtures": [
+    {
+      "adapted": false,
+      "adaptation_reason": null,
+      "changes": [],
+      "expected_result_path": null,
+      "fixture_id": "overlap_e06_natural",
+      "graph_facts_path": "fixtures/graph_contract/e06-pump-hex/graph_facts.json",
+      "source_example": "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml"
+    }
+  ],
+  "rules": [
+    "pump_discharge_check_valve",
+    "pump_discharge_not_terminal_nozzle"
+  ]
+}

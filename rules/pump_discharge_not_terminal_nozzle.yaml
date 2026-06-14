@@ -1,0 +1,15 @@
+schema_version: 1
+rule_family: pump_discharge_path
+rule_id: pump_discharge_not_terminal_nozzle
+description: >
+  The first downstream item on a centrifugal pump discharge path must not be a
+  terminal nozzle.
+applies_to:
+  subject_class: CentrifugalPump
+  start_from: discharge_nozzle
+  traversal_scope: first_unbranched_downstream_segment
+require:
+  component_class: NonTerminalProcessComponent
+boundary_behavior:
+  terminal_before_match: hard_violation
+severity: hard_violation

@@ -1,0 +1,34 @@
+{
+  "evidence": {
+    "boundary": {
+      "kind": "terminal_object",
+      "object_id": "2accb8cf-7c3d-4563-8c22-5d817f464bd5"
+    },
+    "matched_objects": [],
+    "traversed_edges": [
+      {
+        "edge_key": 0,
+        "source_id": "57c776dc-fc90-4276-bb53-f0bbdd01bb83",
+        "target_id": "2accb8cf-7c3d-4563-8c22-5d817f464bd5"
+      }
+    ],
+    "traversed_objects": [
+      {
+        "class": "Nozzle",
+        "object_id": "57c776dc-fc90-4276-bb53-f0bbdd01bb83"
+      },
+      {
+        "class": "Nozzle",
+        "object_id": "2accb8cf-7c3d-4563-8c22-5d817f464bd5"
+      }
+    ]
+  },
+  "message": "No downstream check valve was found before the first terminal boundary.",
+  "result_type": "hard_violation",
+  "rule_id": "pump_discharge_check_valve",
+  "schema_version": 1,
+  "subject": {
+    "discharge_nozzle_id": "57c776dc-fc90-4276-bb53-f0bbdd01bb83",
+    "pump_id": "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb"
+  }
+}

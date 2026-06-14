@@ -1,0 +1,24 @@
+{
+  "evidence": {
+    "boundary": {
+      "kind": "unresolved_discharge_nozzle",
+      "object_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
+    },
+    "matched_objects": [],
+    "traversed_edges": [],
+    "traversed_objects": [
+      {
+        "class": "CentrifugalPump",
+        "object_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
+      }
+    ]
+  },
+  "message": "The verifier could not determine a unique discharge nozzle from the available graph evidence.",
+  "result_type": "evaluation_diagnostic",
+  "rule_id": "pump_discharge_check_valve",
+  "schema_version": 1,
+  "subject": {
+    "discharge_nozzle_id": "unknown",
+    "pump_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
+  }
+}
