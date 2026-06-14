@@ -1,0 +1,43 @@
+{
+  "evidence": {
+    "boundary": {
+      "kind": "terminal_object",
+      "object_id": "Nozzle-7"
+    },
+    "matched_objects": [],
+    "traversed_edges": [
+      {
+        "edge_key": 0,
+        "source_id": "Nozzle-6",
+        "target_id": "PipeReducer-1"
+      },
+      {
+        "edge_key": 0,
+        "source_id": "PipeReducer-1",
+        "target_id": "Nozzle-7"
+      }
+    ],
+    "traversed_objects": [
+      {
+        "class": "Nozzle",
+        "object_id": "Nozzle-6"
+      },
+      {
+        "class": "PipeReducer",
+        "object_id": "PipeReducer-1"
+      },
+      {
+        "class": "Nozzle",
+        "object_id": "Nozzle-7"
+      }
+    ]
+  },
+  "message": "No downstream check valve was found before the first terminal boundary.",
+  "result_type": "hard_violation",
+  "rule_id": "pump_discharge_check_valve",
+  "schema_version": 1,
+  "subject": {
+    "discharge_nozzle_id": "Nozzle-6",
+    "pump_id": "CentrifugalPump-1"
+  }
+}

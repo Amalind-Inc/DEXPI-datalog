@@ -1,0 +1,6 @@
+[submodule "pyDEXPI"]
+	path = pyDEXPI
+	url = https://github.com/process-intelligence-research/pyDEXPI.git
+[submodule "TrainingTestCases"]
+	path = TrainingTestCases
+	url = https://gitlab.com/dexpi/TrainingTestCases.git

@@ -1,0 +1,5 @@
+.decl rule_subject_class(rule:symbol, class:symbol)
+.decl rule_required_component_class(rule:symbol, class:symbol)
+
+rule_subject_class("pump_discharge_check_valve", "CentrifugalPump").
+rule_required_component_class("pump_discharge_check_valve", "CheckValve").

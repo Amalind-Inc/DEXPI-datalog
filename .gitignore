@@ -7,4 +7,10 @@
 # Python cache artifacts
 __pycache__/
 *.pyc
+.venv/
 logs/mcp_server.log
+
+.TrainingTestCases/*
+
+# bv (beads viewer) local config and caches
+.bv/

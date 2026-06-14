@@ -1,0 +1,25 @@
+{
+  "extractor": {
+    "git_commit": "83e5a11c4af3635ad12290a4dbe310480eb6d7a3",
+    "git_remote": "https://github.com/process-intelligence-research/pyDEXPI.git",
+    "name": "pyDEXPI",
+    "version": "1.2.0"
+  },
+  "fixtures": [
+    {
+      "edge_count": 4,
+      "fixture_id": "e03-pump",
+      "node_count": 5
+    },
+    {
+      "edge_count": 21,
+      "fixture_id": "e06-pump-hex",
+      "node_count": 18
+    },
+    {
+      "edge_count": 376,
+      "fixture_id": "c01-reference-pid",
+      "node_count": 214
+    }
+  ]
+}

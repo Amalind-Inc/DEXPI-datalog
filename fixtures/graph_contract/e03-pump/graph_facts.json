@@ -1,0 +1,117 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76",
+        "target_id": "0b687eb8-3f23-47df-866e-2d8301b4e8c3"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76",
+        "target_id": "c3dc91b0-455b-4134-ac41-4a9846a73126"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "a231c4f7-0d29-4110-892f-3695da0adf24",
+        "target_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c3dc91b0-455b-4134-ac41-4a9846a73126",
+        "target_id": "3ea7cea6-1bdb-4310-97fd-258ab41b634e"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "Chamber",
+          "label_description": "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).",
+          "labels": "Chamber:CustomAttributeOwner",
+          "lowerLimitDesignPressure": "-0.5 bar",
+          "lowerLimitDesignTemperature": "-45.0 \u00b0C",
+          "materialOfConstructionCode": "1.4306/8",
+          "proteusId": "Chamber-1",
+          "upperLimitDesignPressure": "60.0 bar",
+          "upperLimitDesignTemperature": "80.0 \u00b0C"
+        },
+        "fact_type": "node",
+        "node_id": "0b687eb8-3f23-47df-866e-2d8301b4e8c3"
+      },
+      {
+        "attributes": {
+          "label": "CentrifugalPump",
+          "label_description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+          "labels": "CentrifugalPump:Pump:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "CentrifugalPump-1",
+          "tagName": "P-4713",
+          "tagNamePrefix": "P",
+          "tagNameSequenceNumber": "4713"
+        },
+        "fact_type": "node",
+        "node_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "3ea7cea6-1bdb-4310-97fd-258ab41b634e"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "a231c4f7-0d29-4110-892f-3695da0adf24"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N-1"
+        },
+        "fact_type": "node",
+        "node_id": "c3dc91b0-455b-4134-ac41-4a9846a73126"
+      }
+    ]
+  },
+  "fixture_id": "e03-pump",
+  "graph": {
+    "edge_count": 4,
+    "node_count": 5
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/TrainingTestCases/dexpi 1.3/example pids/E03 Pump With Nozzles/E03V01-VER.EX01.xml"
+}

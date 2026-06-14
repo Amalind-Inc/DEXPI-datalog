@@ -1,0 +1,35 @@
+{
+  "evidence": {
+    "boundary": {
+      "kind": "off_page_connector",
+      "object_id": "FlowOutPipeOffPageConnector-1"
+    },
+    "matched_objects": [],
+    "traversed_edges": [
+      {
+        "edge_key": 0,
+        "source_id": "Nozzle-6",
+        "target_id": "FlowOutPipeOffPageConnector-1"
+      }
+    ],
+    "traversed_objects": [
+      {
+        "class": "Nozzle",
+        "object_id": "Nozzle-6"
+      },
+      {
+        "class": "FlowOutPipeOffPageConnector",
+        "object_id": "FlowOutPipeOffPageConnector-1"
+      }
+    ],
+    "uncertainty_text": "The discharge path may continue beyond the page edge."
+  },
+  "message": "No downstream check valve was found before the discharge path terminated at an off-page connector.",
+  "result_type": "bounded_failure_off_page",
+  "rule_id": "pump_discharge_check_valve",
+  "schema_version": 1,
+  "subject": {
+    "discharge_nozzle_id": "Nozzle-6",
+    "pump_id": "CentrifugalPump-1"
+  }
+}
