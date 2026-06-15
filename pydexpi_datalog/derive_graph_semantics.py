@@ -56,11 +56,25 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
         ".decl composition_edge(source:symbol, target:symbol, attr_name:symbol)",
         ".decl reference_edge(source:symbol, target:symbol, attr_name:symbol)",
         ".decl candidate_topology_edge(source:symbol, target:symbol, attr_name:symbol)",
+        ".decl downstream_candidate(source:symbol, target:symbol)",
+        ".decl downstream_composition(source:symbol, target:symbol)",
+        ".decl downstream_reference(source:symbol, target:symbol)",
+        ".decl reachable(source:symbol, target:symbol)",
         "",
     ]
     lines.extend(render_edge_facts("composition_edge", composition_edges))
     lines.extend(render_edge_facts("reference_edge", reference_edges))
     lines.extend(render_edge_facts("candidate_topology_edge", candidate_topology_edges))
+    lines.extend(
+        [
+            "",
+            "downstream_candidate(source, target) :- candidate_topology_edge(source, target, _).",
+            "downstream_composition(source, target) :- composition_edge(source, target, _).",
+            "downstream_reference(source, target) :- reference_edge(source, target, _).",
+            "reachable(source, target) :- candidate_topology_edge(source, target, _).",
+            "reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 

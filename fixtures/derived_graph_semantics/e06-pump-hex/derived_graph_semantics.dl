@@ -1,6 +1,10 @@
 .decl composition_edge(source:symbol, target:symbol, attr_name:symbol)
 .decl reference_edge(source:symbol, target:symbol, attr_name:symbol)
 .decl candidate_topology_edge(source:symbol, target:symbol, attr_name:symbol)
+.decl downstream_candidate(source:symbol, target:symbol)
+.decl downstream_composition(source:symbol, target:symbol)
+.decl downstream_reference(source:symbol, target:symbol)
+.decl reachable(source:symbol, target:symbol)
 
 composition_edge("152b44e1-3763-4f6f-bb0e-ef69897c2c61", "3b212201-f8b6-47ed-9019-d7961f3276c8", "segments").
 composition_edge("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "57c776dc-fc90-4276-bb53-f0bbdd01bb83", "nozzles").
@@ -36,3 +40,9 @@ candidate_topology_edge("72b41d51-c363-4b85-94d4-03d0f1a19a63", "2accb8cf-7c3d-4
 candidate_topology_edge("72b41d51-c363-4b85-94d4-03d0f1a19a63", "57c776dc-fc90-4276-bb53-f0bbdd01bb83", "sourceItem").
 candidate_topology_edge("e68d9f73-079d-429b-9d05-8454e68f54df", "19205919-1462-4a6f-9349-42b9350d3089", "nodes").
 candidate_topology_edge("ffbb37e9-dbf2-4b51-bcfb-f0fa9c072ff0", "9a14bc5e-b4e4-4619-a061-12d7e396c10d", "nodes").
+
+downstream_candidate(source, target) :- candidate_topology_edge(source, target, _).
+downstream_composition(source, target) :- composition_edge(source, target, _).
+downstream_reference(source, target) :- reference_edge(source, target, _).
+reachable(source, target) :- candidate_topology_edge(source, target, _).
+reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).

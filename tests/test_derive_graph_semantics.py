@@ -68,6 +68,19 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
                 datalog,
             )
             self.assertIn(
+                ".decl downstream_candidate(source:symbol, target:symbol)",
+                datalog,
+            )
+            self.assertIn(
+                ".decl downstream_composition(source:symbol, target:symbol)",
+                datalog,
+            )
+            self.assertIn(
+                ".decl downstream_reference(source:symbol, target:symbol)",
+                datalog,
+            )
+            self.assertIn(".decl reachable(source:symbol, target:symbol)", datalog)
+            self.assertIn(
                 'composition_edge("195e5f6b-5320-43cc-a25b-e4b14f8497dc", "152b44e1-3763-4f6f-bb0e-ef69897c2c61", "pipingNetworkSystems").',
                 datalog,
             )
@@ -79,6 +92,27 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
                 'candidate_topology_edge("3b212201-f8b6-47ed-9019-d7961f3276c8", "2accb8cf-7c3d-4563-8c22-5d817f464bd5", "targetItem").',
                 datalog,
             )
+            self.assertIn(
+                "downstream_candidate(source, target) :- candidate_topology_edge(source, target, _).",
+                datalog,
+            )
+            self.assertIn(
+                "downstream_composition(source, target) :- composition_edge(source, target, _).",
+                datalog,
+            )
+            self.assertIn(
+                "downstream_reference(source, target) :- reference_edge(source, target, _).",
+                datalog,
+            )
+            self.assertIn(
+                "reachable(source, target) :- candidate_topology_edge(source, target, _).",
+                datalog,
+            )
+            self.assertIn(
+                "reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).",
+                datalog,
+            )
+            self.assertNotIn(".decl downstream(source:symbol, target:symbol)", datalog)
 
     def test_repo_persists_representative_derived_graph_semantics_fixture(self) -> None:
         self.assertTrue(CHECKED_IN_E06_DERIVED.exists(), CHECKED_IN_E06_DERIVED)
