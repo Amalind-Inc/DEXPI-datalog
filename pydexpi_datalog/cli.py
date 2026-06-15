@@ -53,6 +53,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where corpus fact artifacts and summary will be written.",
     )
 
+    derive_graph_semantics = subparsers.add_parser(
+        "derive-graph-semantics",
+        help="Derive graph semantic predicates from graph-mirrored base facts.",
+    )
+    derive_graph_semantics.add_argument(
+        "graph_facts", type=Path, help="Path to a graph_facts.json artifact."
+    )
+    derive_graph_semantics.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where derived graph semantics artifacts will be written.",
+    )
+
     compile_rule = subparsers.add_parser(
         "compile-rule",
         help="Validate one YAML discharge rule and compile it to Souffle-style Datalog.",
@@ -121,6 +135,13 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_export_corpus(
             fixture_root=args.fixture_root,
+            output_dir=args.output_dir,
+        )
+    if args.command == "derive-graph-semantics":
+        from .derive_graph_semantics import run_derive_graph_semantics
+
+        return run_derive_graph_semantics(
+            graph_facts_path=args.graph_facts,
             output_dir=args.output_dir,
         )
     if args.command == "compile-rule":
