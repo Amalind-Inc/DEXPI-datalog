@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 from pathlib import Path
+import re
 
 from pydexpi import __file__ as pydexpi_file
 from pydexpi.loaders import GraphLoader, ProteusSerializer
@@ -11,6 +12,71 @@ from pydexpi.loaders import GraphLoader, ProteusSerializer
 def run_export_facts(
     *, dexpi_xml_path: Path, fixture_id: str, output_dir: Path
 ) -> int:
+    artifact = export_graph_facts_artifact(
+        dexpi_xml_path=dexpi_xml_path,
+        fixture_id=fixture_id,
+        output_dir=output_dir,
+    )
+    print(render_console_report(artifact))
+    return 0
+
+
+def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
+    fixture_root_for_summary = fixture_root.as_posix()
+    fixture_root = fixture_root.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    excluded_fixtures: list[dict[str, str]] = []
+    fixture_summaries: list[dict[str, object]] = []
+
+    for dexpi_xml_path in sorted(fixture_root.glob("**/*.xml")):
+        relative_path = dexpi_xml_path.relative_to(fixture_root)
+        fixture_id = fixture_id_from_path(relative_path)
+        try:
+            artifact = export_graph_facts_artifact(
+                dexpi_xml_path=dexpi_xml_path,
+                fixture_id=fixture_id,
+                output_dir=output_dir,
+                source_path=(Path(fixture_root_for_summary) / relative_path).as_posix(),
+            )
+        except Exception as error:  # pyDEXPI raises several parser-specific exceptions.
+            fixture_summaries.append(
+                {
+                    "fixture_id": fixture_id,
+                    "relative_path": relative_path.as_posix(),
+                    "status": "failed",
+                    "error": str(error),
+                }
+            )
+            continue
+
+        graph = artifact["graph"]
+        fixture_summaries.append(
+            {
+                "fixture_id": fixture_id,
+                "relative_path": relative_path.as_posix(),
+                "status": "parsed",
+                "node_count": graph["node_count"],
+                "edge_count": graph["edge_count"],
+                "artifact_path": f"{fixture_id}/graph_facts.json",
+            }
+        )
+
+    summary = build_corpus_summary(
+        fixture_root=fixture_root_for_summary,
+        fixtures=fixture_summaries,
+        excluded_fixtures=excluded_fixtures,
+    )
+    (output_dir / "corpus_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    print(render_corpus_report(summary))
+    return 0
+
+
+def export_graph_facts_artifact(
+    *, dexpi_xml_path: Path, fixture_id: str, output_dir: Path, source_path: str | None = None
+) -> dict[str, object]:
     serializer = ProteusSerializer()
     dexpi_model = serializer.load(dexpi_xml_path.parent, dexpi_xml_path.name)
 
@@ -19,14 +85,20 @@ def run_export_facts(
         dexpi_xml_path=dexpi_xml_path,
         fixture_id=fixture_id,
         graph=graph,
+        source_path=source_path,
     )
     persist_graph_facts_artifact(output_dir=output_dir, fixture_id=fixture_id, artifact=artifact)
-    print(render_console_report(artifact))
-    return 0
+    return artifact
+
+
+def fixture_id_from_path(relative_path: Path) -> str:
+    slug_source = relative_path.with_suffix("").as_posix().replace("/", " ")
+    slug = re.sub(r"[^a-z0-9]+", "-", slug_source.lower()).strip("-")
+    return slug
 
 
 def build_graph_facts_artifact(
-    *, dexpi_xml_path: Path, fixture_id: str, graph: object
+    *, dexpi_xml_path: Path, fixture_id: str, graph: object, source_path: str | None = None
 ) -> dict[str, object]:
     nodes = [
         {
@@ -51,7 +123,7 @@ def build_graph_facts_artifact(
     ]
     return {
         "fixture_id": fixture_id,
-        "source_path": str(dexpi_xml_path.resolve()),
+        "source_path": source_path or str(dexpi_xml_path.resolve()),
         "graph": {
             "node_count": len(nodes),
             "edge_count": len(edges),
@@ -85,5 +157,40 @@ def render_console_report(artifact: dict[str, object]) -> str:
             f"Fixture ID: {artifact['fixture_id']}",
             f"Nodes: {graph['node_count']}",
             f"Edges: {graph['edge_count']}",
+        ]
+    )
+
+
+def build_corpus_summary(
+    *,
+    fixture_root: str,
+    fixtures: list[dict[str, object]],
+    excluded_fixtures: list[dict[str, str]],
+) -> dict[str, object]:
+    parsed = [fixture for fixture in fixtures if fixture["status"] == "parsed"]
+    failed = [fixture for fixture in fixtures if fixture["status"] == "failed"]
+    return {
+        "fixture_root": fixture_root,
+        "totals": {
+            "discovered": len(fixtures) + len(excluded_fixtures),
+            "parsed": len(parsed),
+            "failed": len(failed),
+            "excluded": len(excluded_fixtures),
+        },
+        "fixtures": fixtures,
+        "excluded_fixtures": excluded_fixtures,
+    }
+
+
+def render_corpus_report(summary: dict[str, object]) -> str:
+    totals = summary["totals"]
+    return "\n".join(
+        [
+            "Exported DEXPI 1.3 Corpus Facts",
+            f"Fixture Root: {summary['fixture_root']}",
+            f"Discovered: {totals['discovered']}",
+            f"Parsed: {totals['parsed']}",
+            f"Failed: {totals['failed']}",
+            f"Excluded: {totals['excluded']}",
         ]
     )

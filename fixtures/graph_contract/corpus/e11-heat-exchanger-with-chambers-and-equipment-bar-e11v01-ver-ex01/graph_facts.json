@@ -1,0 +1,106 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2b6409c1-a484-4480-b641-956efe86f82d",
+        "target_id": "5b91f5ea-e18d-4ea3-8e4d-079adf2f1e4e"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5b91f5ea-e18d-4ea3-8e4d-079adf2f1e4e",
+        "target_id": "3477fd8d-2f68-4810-a767-246a45303dc1"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5b91f5ea-e18d-4ea3-8e4d-079adf2f1e4e",
+        "target_id": "599dba99-0c42-4cbd-9f34-df750ab96103"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "2b6409c1-a484-4480-b641-956efe86f82d"
+      },
+      {
+        "attributes": {
+          "label": "Chamber",
+          "label_description": "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).",
+          "labels": "Chamber:CustomAttributeOwner",
+          "lowerLimitDesignPressure": "-1.0 bar",
+          "lowerLimitDesignTemperature": "-45.0 \u00b0C",
+          "proteusId": "Chamber-1",
+          "subTagName": "Chamber 1",
+          "upperLimitDesignPressure": "60.0 bar",
+          "upperLimitDesignTemperature": "100.0 \u00b0C"
+        },
+        "fact_type": "node",
+        "node_id": "3477fd8d-2f68-4810-a767-246a45303dc1"
+      },
+      {
+        "attributes": {
+          "label": "Chamber",
+          "label_description": "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).",
+          "labels": "Chamber:CustomAttributeOwner",
+          "lowerLimitDesignPressure": "-1.0 bar",
+          "lowerLimitDesignTemperature": "-45.0 \u00b0C",
+          "proteusId": "Chamber-2",
+          "subTagName": "Chamber 2",
+          "upperLimitDesignPressure": "30.0 bar",
+          "upperLimitDesignTemperature": "100.0 \u00b0C"
+        },
+        "fact_type": "node",
+        "node_id": "599dba99-0c42-4cbd-9f34-df750ab96103"
+      },
+      {
+        "attributes": {
+          "designHeatFlowRate": "313.0 kW",
+          "designHeatTransferArea": "46.8 m2",
+          "label": "PlateHeatExchanger",
+          "label_description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+          "labels": "PlateHeatExchanger:HeatExchanger:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "plateHeight": "850.0 mm",
+          "plateWidth": "1100.0 mm",
+          "proteusId": "PlateHeatExchanger-1",
+          "tagName": "H1101",
+          "tagNamePrefix": "H",
+          "tagNameSequenceNumber": "1101",
+          "tagNameSuffix": ""
+        },
+        "fact_type": "node",
+        "node_id": "5b91f5ea-e18d-4ea3-8e4d-079adf2f1e4e"
+      }
+    ]
+  },
+  "fixture_id": "e11-heat-exchanger-with-chambers-and-equipment-bar-e11v01-ver-ex01",
+  "graph": {
+    "edge_count": 3,
+    "node_count": 4
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E11 Heat Exchanger with Chambers and Equipment Bar/E11V01-VER.EX01.xml"
+}

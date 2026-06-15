@@ -1,0 +1,49 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "dec7448c-a495-4768-8d71-a736ebe51231",
+        "target_id": "d6fffbb9-8901-4656-ade4-10cd5dfc11e4"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "Tank",
+          "label_description": "A vessel intended to contain fluid for storage. Typically a receiving or collecting function for further distribution. Typically with a vertical and cylindrical or square shape and a flat or conical bottom (from http://data.posccaesar.org/rdl/RDS445139).",
+          "labels": "Tank:Vessel:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "Tank-1",
+          "tagName": "T1301"
+        },
+        "fact_type": "node",
+        "node_id": "d6fffbb9-8901-4656-ade4-10cd5dfc11e4"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "dec7448c-a495-4768-8d71-a736ebe51231"
+      }
+    ]
+  },
+  "fixture_id": "e13-tank-with-plant-structure-information-e13v01-ver-ex01",
+  "graph": {
+    "edge_count": 1,
+    "node_count": 2
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E13 Tank with Plant Structure Information/E13V01-VER.EX01.xml"
+}

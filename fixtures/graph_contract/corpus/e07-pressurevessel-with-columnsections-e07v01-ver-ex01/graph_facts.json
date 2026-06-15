@@ -1,0 +1,243 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "1551cad4-f338-4a59-9dd5-5e97ccb2757a",
+        "target_id": "54b6828e-b001-417f-bd38-8f3d32492297"
+      },
+      {
+        "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "66937ddb-1648-49d7-8dbc-877e0ef57788",
+        "target_id": "c239d322-221c-44bc-92f2-c597e7f9af5a"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "7da64ea8-8f5b-4cd1-9fa1-e4d5708539c6",
+        "target_id": "1551cad4-f338-4a59-9dd5-5e97ccb2757a"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "7da64ea8-8f5b-4cd1-9fa1-e4d5708539c6",
+        "target_id": "66937ddb-1648-49d7-8dbc-877e0ef57788"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "7da64ea8-8f5b-4cd1-9fa1-e4d5708539c6",
+        "target_id": "b76e811a-32b1-4e3d-a814-177add13e6b7"
+      },
+      {
+        "attributes": {
+          "attr_name": "columnSections",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "1551cad4-f338-4a59-9dd5-5e97ccb2757a"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "183a6557-3eea-4230-b9c3-9844a3a7e2cd"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "3ab7afd7-f53f-4c05-9af8-b545b3172683"
+      },
+      {
+        "attributes": {
+          "attr_name": "columnSections",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "66937ddb-1648-49d7-8dbc-877e0ef57788"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "66da09c4-a5ce-478c-aa84-23de0615dc5b"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b76e811a-32b1-4e3d-a814-177add13e6b7",
+        "target_id": "a002dc2a-ba71-46cc-97c8-cfc303663804"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "TaggedColumnSection",
+          "label_description": "A fully tagged column section.",
+          "labels": "TaggedColumnSection:ColumnSection:CustomAttributeOwner:TaggedPlantItem:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "TaggedColumnSection-2",
+          "tagName": "S3212",
+          "tagNamePrefix": "S",
+          "tagNameSequenceNumber": "3212"
+        },
+        "fact_type": "node",
+        "node_id": "1551cad4-f338-4a59-9dd5-5e97ccb2757a"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-4",
+          "subTagName": "N4"
+        },
+        "fact_type": "node",
+        "node_id": "183a6557-3eea-4230-b9c3-9844a3a7e2cd"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-3",
+          "subTagName": "N3"
+        },
+        "fact_type": "node",
+        "node_id": "3ab7afd7-f53f-4c05-9af8-b545b3172683"
+      },
+      {
+        "attributes": {
+          "label": "ColumnTraysArrangement",
+          "label_description": "The trays of a column.",
+          "labels": "ColumnTraysArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "numberOfTrays": 8,
+          "proteusId": "ColumnTraysArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "54b6828e-b001-417f-bd38-8f3d32492297"
+      },
+      {
+        "attributes": {
+          "label": "TaggedColumnSection",
+          "label_description": "A fully tagged column section.",
+          "labels": "TaggedColumnSection:ColumnSection:CustomAttributeOwner:TaggedPlantItem:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "TaggedColumnSection-1",
+          "tagName": "S3211",
+          "tagNamePrefix": "S",
+          "tagNameSequenceNumber": "3211"
+        },
+        "fact_type": "node",
+        "node_id": "66937ddb-1648-49d7-8dbc-877e0ef57788"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N1"
+        },
+        "fact_type": "node",
+        "node_id": "66da09c4-a5ce-478c-aa84-23de0615dc5b"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "7da64ea8-8f5b-4cd1-9fa1-e4d5708539c6"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-2",
+          "subTagName": "N2"
+        },
+        "fact_type": "node",
+        "node_id": "a002dc2a-ba71-46cc-97c8-cfc303663804"
+      },
+      {
+        "attributes": {
+          "label": "PressureVessel",
+          "label_description": "A vessel intended to withstand external and/or internal pressure (from http://data.posccaesar.org/rdl/RDS427229).",
+          "labels": "PressureVessel:Vessel:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PressureVessel-1",
+          "tagName": "PV321",
+          "tagNamePrefix": "PV",
+          "tagNameSequenceNumber": "321"
+        },
+        "fact_type": "node",
+        "node_id": "b76e811a-32b1-4e3d-a814-177add13e6b7"
+      },
+      {
+        "attributes": {
+          "label": "ColumnPackingsArrangement",
+          "label_description": "The packings of a column.",
+          "labels": "ColumnPackingsArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "packingType": "rings",
+          "proteusId": "ColumnPackingsArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "c239d322-221c-44bc-92f2-c597e7f9af5a"
+      }
+    ]
+  },
+  "fixture_id": "e07-pressurevessel-with-columnsections-e07v01-ver-ex01",
+  "graph": {
+    "edge_count": 11,
+    "node_count": 10
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E07 PressureVessel with ColumnSections/E07V01-VER.EX01.xml"
+}

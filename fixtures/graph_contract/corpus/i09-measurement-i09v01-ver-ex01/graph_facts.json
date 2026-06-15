@@ -1,0 +1,216 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2122a65e-a780-4a06-9f4c-4f996064313b",
+        "target_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2122a65e-a780-4a06-9f4c-4f996064313b",
+        "target_id": "d22b85fe-a9d2-473d-8ea2-1adf4be18c8f"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2122a65e-a780-4a06-9f4c-4f996064313b",
+        "target_id": "ed547b49-5c09-4eec-8f5c-c4f62acdc419"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "60399403-e439-4882-8bfe-9801a0917886",
+        "target_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "60399403-e439-4882-8bfe-9801a0917886",
+        "target_id": "e48c222b-6789-4b2b-92db-1ad1fadd016c"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9498532a-50e5-46fd-9a5d-6d3341a64bd7",
+        "target_id": "d5a3213b-9601-4f9f-b0c5-48d04832c64a"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9",
+        "target_id": "60399403-e439-4882-8bfe-9801a0917886"
+      },
+      {
+        "attributes": {
+          "attr_name": "processSignalGeneratingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9",
+        "target_id": "e48c222b-6789-4b2b-92db-1ad1fadd016c"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "d22b85fe-a9d2-473d-8ea2-1adf4be18c8f",
+        "target_id": "9498532a-50e5-46fd-9a5d-6d3341a64bd7"
+      },
+      {
+        "attributes": {
+          "attr_name": "sensingLocation",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "e48c222b-6789-4b2b-92db-1ad1fadd016c",
+        "target_id": "9498532a-50e5-46fd-9a5d-6d3341a64bd7"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ed547b49-5c09-4eec-8f5c-c4f62acdc419",
+        "target_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "2122a65e-a780-4a06-9f4c-4f996064313b"
+      },
+      {
+        "attributes": {
+          "label": "MeasuringLineFunction",
+          "label_description": "Information flow function for measured values.",
+          "labels": "MeasuringLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "proteusId": "MeasuringLineFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "60399403-e439-4882-8bfe-9801a0917886"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1"
+        },
+        "fact_type": "node",
+        "node_id": "9498532a-50e5-46fd-9a5d-6d3341a64bd7"
+      },
+      {
+        "attributes": {
+          "label": "ProcessInstrumentationFunction",
+          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
+          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "location": "central",
+          "processInstrumentationFunctionCategory": "L",
+          "processInstrumentationFunctionNumber": "09",
+          "processInstrumentationFunctions": "I",
+          "proteusId": "ProcessInstrumentationFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "95401d22-bbf1-4bba-8df2-34e0b56edbb9"
+      },
+      {
+        "attributes": {
+          "label": "Tank",
+          "label_description": "A vessel intended to contain fluid for storage. Typically a receiving or collecting function for further distribution. Typically with a vertical and cylindrical or square shape and a flat or conical bottom (from http://data.posccaesar.org/rdl/RDS445139).",
+          "labels": "Tank:Vessel:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "Tank-1",
+          "tagName": "T09",
+          "tagNamePrefix": "T",
+          "tagNameSequenceNumber": "09"
+        },
+        "fact_type": "node",
+        "node_id": "d22b85fe-a9d2-473d-8ea2-1adf4be18c8f"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "d5a3213b-9601-4f9f-b0c5-48d04832c64a"
+      },
+      {
+        "attributes": {
+          "label": "ProcessSignalGeneratingFunction",
+          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
+          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ProcessSignalGeneratingFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "e48c222b-6789-4b2b-92db-1ad1fadd016c"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "09",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "ed547b49-5c09-4eec-8f5c-c4f62acdc419"
+      }
+    ]
+  },
+  "fixture_id": "i09-measurement-i09v01-ver-ex01",
+  "graph": {
+    "edge_count": 11,
+    "node_count": 8
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/I09 Measurement/I09V01-VER.EX01.xml"
+}

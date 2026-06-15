@@ -1,0 +1,265 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2",
+        "target_id": "83e4b0eb-f3e4-4c07-a366-f5316581a9c2"
+      },
+      {
+        "attributes": {
+          "attr_name": "connectorReference",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2",
+        "target_id": "b19ece10-f1af-4867-8ced-5ec41b83869b"
+      },
+      {
+        "attributes": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "3db022d6-ba30-466f-8017-534fa6b7afee",
+        "target_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "6a514328-00d8-4d3a-a034-14c67e23e1f2",
+        "target_id": "76b596d5-710c-4f31-ab0e-c5ab83890ca9"
+      },
+      {
+        "attributes": {
+          "attr_name": "pipingNetworkSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "723c69ec-a565-4498-9bbc-bd630c9e8b16",
+        "target_id": "3db022d6-ba30-466f-8017-534fa6b7afee"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "723c69ec-a565-4498-9bbc-bd630c9e8b16",
+        "target_id": "6a514328-00d8-4d3a-a034-14c67e23e1f2"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "76b596d5-710c-4f31-ab0e-c5ab83890ca9",
+        "target_id": "a03f69c7-6217-4ce9-8d03-11cd7fbef890"
+      },
+      {
+        "attributes": {
+          "attr_name": "items",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f",
+        "target_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 1,
+        "fact_type": "edge",
+        "source_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f",
+        "target_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f",
+        "target_id": "76b596d5-710c-4f31-ab0e-c5ab83890ca9"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f",
+        "target_id": "f03e100b-21cf-4cae-956d-5e5beea41673"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "f03e100b-21cf-4cae-956d-5e5beea41673",
+        "target_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "f03e100b-21cf-4cae-956d-5e5beea41673",
+        "target_id": "76b596d5-710c-4f31-ab0e-c5ab83890ca9"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceNode",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "f03e100b-21cf-4cae-956d-5e5beea41673",
+        "target_id": "83e4b0eb-f3e4-4c07-a366-f5316581a9c2"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "FlowInPipeOffPageConnector",
+          "label_description": "A pipe connector that indicates that a preceding part of a piping network segment is represented somewhere else, either on the same PID, or on some other PID.",
+          "labels": "FlowInPipeOffPageConnector:PipeOffPageConnector:CustomAttributeOwner:PipingNetworkSegmentItem:PipingNodeOwner:PipingSourceItem",
+          "proteusId": "FlowInPipeOffPageConnector-1"
+        },
+        "fact_type": "node",
+        "node_id": "0cdd1984-de48-4899-8f4b-b5b30fc826f2"
+      },
+      {
+        "attributes": {
+          "fluidCode": "MNb",
+          "label": "PipingNetworkSystem",
+          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "lineNumber": "48121",
+          "nominalDiameterNumericalValueRepresentation": "80",
+          "pipingClassCode": "75HB",
+          "proteusId": "PipingNetworkSystem-1"
+        },
+        "fact_type": "node",
+        "node_id": "3db022d6-ba30-466f-8017-534fa6b7afee"
+      },
+      {
+        "attributes": {
+          "label": "CentrifugalPump",
+          "label_description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+          "labels": "CentrifugalPump:Pump:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "CentrifugalPump-1",
+          "tagName": "P4712",
+          "tagNamePrefix": "P",
+          "tagNameSequenceNumber": "4712"
+        },
+        "fact_type": "node",
+        "node_id": "6a514328-00d8-4d3a-a034-14c67e23e1f2"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "723c69ec-a565-4498-9bbc-bd630c9e8b16"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1"
+        },
+        "fact_type": "node",
+        "node_id": "76b596d5-710c-4f31-ab0e-c5ab83890ca9"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "83e4b0eb-f3e4-4c07-a366-f5316581a9c2"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "80",
+          "proteusId": "PipingNode-2"
+        },
+        "fact_type": "node",
+        "node_id": "a03f69c7-6217-4ce9-8d03-11cd7fbef890"
+      },
+      {
+        "attributes": {
+          "label": "PipeOffPageConnectorReferenceByNumber",
+          "label_description": "A reference to a PipeOffPageConnector by drawing and connector number.",
+          "labels": "PipeOffPageConnectorReferenceByNumber:PipeOffPageConnectorReference:CustomAttributeOwner",
+          "referencedConnectorNumber": "123"
+        },
+        "fact_type": "node",
+        "node_id": "b19ece10-f1af-4867-8ced-5ec41b83869b"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSegment",
+          "label_description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
+          "labels": "PipingNetworkSegment:ActuatingElectricalLocation:CustomAttributeOwner:SensingLocation",
+          "proteusId": "PipingNetworkSegment-1"
+        },
+        "fact_type": "node",
+        "node_id": "b69d40dd-4ce5-449f-b22e-fe0652e54f6f"
+      },
+      {
+        "attributes": {
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
+        },
+        "fact_type": "node",
+        "node_id": "f03e100b-21cf-4cae-956d-5e5beea41673"
+      }
+    ]
+  },
+  "fixture_id": "p02-pipe-from-opc-to-nozzle-p02v01-ver-ex01",
+  "graph": {
+    "edge_count": 14,
+    "node_count": 10
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/P02 Pipe From OPC to Nozzle/P02V01-VER.EX01.xml"
+}

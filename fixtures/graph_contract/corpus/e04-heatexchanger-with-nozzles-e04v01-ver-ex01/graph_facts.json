@@ -1,0 +1,174 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "0362d8d7-f2e5-445f-b22c-a8851658d5c6",
+        "target_id": "3c3a05dc-cac5-4d47-a352-c439a95179a5"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "3c3a05dc-cac5-4d47-a352-c439a95179a5",
+        "target_id": "6e7bbcf8-542e-4ef4-a55e-14565f49eef9"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "3c3a05dc-cac5-4d47-a352-c439a95179a5",
+        "target_id": "9397800e-7496-4ead-a48e-927229c2ea1f"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "3c3a05dc-cac5-4d47-a352-c439a95179a5",
+        "target_id": "a011f373-8bcc-43fe-a997-34d7afb73881"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "6e7bbcf8-542e-4ef4-a55e-14565f49eef9",
+        "target_id": "d17dcd11-12b0-473e-9447-e4bc0fd51061"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9397800e-7496-4ead-a48e-927229c2ea1f",
+        "target_id": "f1e34712-7875-4d24-adea-96b0aa3bd51c"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "a011f373-8bcc-43fe-a997-34d7afb73881",
+        "target_id": "b20bf0f9-eb77-4265-b369-1d7f678c1771"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "0362d8d7-f2e5-445f-b22c-a8851658d5c6"
+      },
+      {
+        "attributes": {
+          "label": "PlateHeatExchanger",
+          "label_description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+          "labels": "PlateHeatExchanger:HeatExchanger:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PlateHeatExchanger-1",
+          "tagName": "H-1009",
+          "tagNamePrefix": "H",
+          "tagNameSequenceNumber": "1009"
+        },
+        "fact_type": "node",
+        "node_id": "3c3a05dc-cac5-4d47-a352-c439a95179a5"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-3",
+          "subTagName": "N-4"
+        },
+        "fact_type": "node",
+        "node_id": "6e7bbcf8-542e-4ef4-a55e-14565f49eef9"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N-2"
+        },
+        "fact_type": "node",
+        "node_id": "9397800e-7496-4ead-a48e-927229c2ea1f"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-2",
+          "subTagName": "N-3"
+        },
+        "fact_type": "node",
+        "node_id": "a011f373-8bcc-43fe-a997-34d7afb73881"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-2"
+        },
+        "fact_type": "node",
+        "node_id": "b20bf0f9-eb77-4265-b369-1d7f678c1771"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-3"
+        },
+        "fact_type": "node",
+        "node_id": "d17dcd11-12b0-473e-9447-e4bc0fd51061"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "f1e34712-7875-4d24-adea-96b0aa3bd51c"
+      }
+    ]
+  },
+  "fixture_id": "e04-heatexchanger-with-nozzles-e04v01-ver-ex01",
+  "graph": {
+    "edge_count": 7,
+    "node_count": 8
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E04 HeatExchanger With Nozzles/E04V01-VER.EX01.xml"
+}

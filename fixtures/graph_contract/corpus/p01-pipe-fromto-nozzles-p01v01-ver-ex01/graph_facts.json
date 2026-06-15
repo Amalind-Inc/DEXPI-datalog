@@ -1,0 +1,257 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2d28ee05-d2dc-4581-9865-0ced6c3a2989",
+        "target_id": "1538a6e1-d987-406b-a3b8-11752e72df6c"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5074da09-1bff-4a4c-b404-0ad754b6eb53",
+        "target_id": "2d28ee05-d2dc-4581-9865-0ced6c3a2989"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "51a82210-906c-43ce-816a-0b7b43ed6a7e",
+        "target_id": "b0395e0f-a872-4fcc-99f0-ec0d5b682016"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "6a7d9c8e-a3f5-45d3-a31f-673ff4d5f94b",
+        "target_id": "5074da09-1bff-4a4c-b404-0ad754b6eb53"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "6a7d9c8e-a3f5-45d3-a31f-673ff4d5f94b",
+        "target_id": "51a82210-906c-43ce-816a-0b7b43ed6a7e"
+      },
+      {
+        "attributes": {
+          "attr_name": "pipingNetworkSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "6a7d9c8e-a3f5-45d3-a31f-673ff4d5f94b",
+        "target_id": "8a734a0c-52ef-4d9a-8b2e-73f24ad407b4"
+      },
+      {
+        "attributes": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "8a734a0c-52ef-4d9a-8b2e-73f24ad407b4",
+        "target_id": "c2ce4913-d914-4f37-9274-685b9904cbd7"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "8f12e3fa-6fbc-4ed7-89ab-54d6c7416d0a",
+        "target_id": "2d28ee05-d2dc-4581-9865-0ced6c3a2989"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "8f12e3fa-6fbc-4ed7-89ab-54d6c7416d0a",
+        "target_id": "b0395e0f-a872-4fcc-99f0-ec0d5b682016"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b0395e0f-a872-4fcc-99f0-ec0d5b682016",
+        "target_id": "a61e8ad7-4f46-4dca-8b32-1ef6470c5f6c"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c2ce4913-d914-4f37-9274-685b9904cbd7",
+        "target_id": "2d28ee05-d2dc-4581-9865-0ced6c3a2989"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c2ce4913-d914-4f37-9274-685b9904cbd7",
+        "target_id": "8f12e3fa-6fbc-4ed7-89ab-54d6c7416d0a"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c2ce4913-d914-4f37-9274-685b9904cbd7",
+        "target_id": "b0395e0f-a872-4fcc-99f0-ec0d5b682016"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-2"
+        },
+        "fact_type": "node",
+        "node_id": "1538a6e1-d987-406b-a3b8-11752e72df6c"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-2"
+        },
+        "fact_type": "node",
+        "node_id": "2d28ee05-d2dc-4581-9865-0ced6c3a2989"
+      },
+      {
+        "attributes": {
+          "label": "PlateHeatExchanger",
+          "label_description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+          "labels": "PlateHeatExchanger:HeatExchanger:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PlateHeatExchanger-1",
+          "tagName": "H1008",
+          "tagNamePrefix": "H",
+          "tagNameSequenceNumber": "1008"
+        },
+        "fact_type": "node",
+        "node_id": "5074da09-1bff-4a4c-b404-0ad754b6eb53"
+      },
+      {
+        "attributes": {
+          "label": "CentrifugalPump",
+          "label_description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+          "labels": "CentrifugalPump:Pump:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "CentrifugalPump-1",
+          "tagName": "P4712",
+          "tagNamePrefix": "P",
+          "tagNameSequenceNumber": "4712"
+        },
+        "fact_type": "node",
+        "node_id": "51a82210-906c-43ce-816a-0b7b43ed6a7e"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "6a7d9c8e-a3f5-45d3-a31f-673ff4d5f94b"
+      },
+      {
+        "attributes": {
+          "fluidCode": "M",
+          "label": "PipingNetworkSystem",
+          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "lineNumber": "48122",
+          "nominalDiameterNumericalValueRepresentation": "80",
+          "pipingClassCode": "75HB",
+          "proteusId": "PipingNetworkSystem-1"
+        },
+        "fact_type": "node",
+        "node_id": "8a734a0c-52ef-4d9a-8b2e-73f24ad407b4"
+      },
+      {
+        "attributes": {
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
+        },
+        "fact_type": "node",
+        "node_id": "8f12e3fa-6fbc-4ed7-89ab-54d6c7416d0a"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "a61e8ad7-4f46-4dca-8b32-1ef6470c5f6c"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1"
+        },
+        "fact_type": "node",
+        "node_id": "b0395e0f-a872-4fcc-99f0-ec0d5b682016"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSegment",
+          "label_description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
+          "labels": "PipingNetworkSegment:ActuatingElectricalLocation:CustomAttributeOwner:SensingLocation",
+          "proteusId": "PipingNetworkSegment-1"
+        },
+        "fact_type": "node",
+        "node_id": "c2ce4913-d914-4f37-9274-685b9904cbd7"
+      }
+    ]
+  },
+  "fixture_id": "p01-pipe-fromto-nozzles-p01v01-ver-ex01",
+  "graph": {
+    "edge_count": 13,
+    "node_count": 10
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/P01 Pipe FromTo Nozzles/P01V01-VER.EX01.xml"
+}

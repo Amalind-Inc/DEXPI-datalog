@@ -3,13 +3,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .compile_rule import run_compile_rule
-from .dry_run import run_dry_run
-from .export_facts import run_export_facts
-from .review_only import run_review_only
-from .verify_raw_fixture import run_verify_raw_fixture
-from .verify_suite import run_verify_suite
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pydexpi-datalog")
@@ -44,6 +37,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="Directory where exported fact artifacts will be written.",
+    )
+
+    export_corpus = subparsers.add_parser(
+        "export-corpus",
+        help="Export graph-mirrored base facts for a DEXPI XML fixture corpus.",
+    )
+    export_corpus.add_argument(
+        "fixture_root", type=Path, help="Directory containing DEXPI XML fixtures."
+    )
+    export_corpus.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where corpus fact artifacts and summary will be written.",
     )
 
     compile_rule = subparsers.add_parser(
@@ -94,23 +101,42 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "dry-run":
+        from .dry_run import run_dry_run
+
         return run_dry_run(args.manifest)
     if args.command == "review-only":
+        from .review_only import run_review_only
+
         return run_review_only(args.manifest)
     if args.command == "export-facts":
+        from .export_facts import run_export_facts
+
         return run_export_facts(
             dexpi_xml_path=args.dexpi_xml,
             fixture_id=args.fixture_id,
             output_dir=args.output_dir,
         )
+    if args.command == "export-corpus":
+        from .export_facts import run_export_corpus
+
+        return run_export_corpus(
+            fixture_root=args.fixture_root,
+            output_dir=args.output_dir,
+        )
     if args.command == "compile-rule":
+        from .compile_rule import run_compile_rule
+
         return run_compile_rule(rule_yaml_path=args.rule_yaml, output_dir=args.output_dir)
     if args.command == "verify-suite":
+        from .verify_suite import run_verify_suite
+
         return run_verify_suite(
             suite_manifest_path=args.suite_manifest,
             output_dir=args.output_dir,
         )
     if args.command == "verify-raw-fixture":
+        from .verify_raw_fixture import run_verify_raw_fixture
+
         return run_verify_raw_fixture(
             dexpi_xml_path=args.dexpi_xml,
             output_dir=args.output_dir,

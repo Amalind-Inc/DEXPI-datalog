@@ -1,0 +1,727 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "items",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b",
+        "target_id": "50edd35f-e782-4fcc-adc6-150518c4c207"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b",
+        "target_id": "77d5bd87-5b69-4671-816b-eea5cce492e8"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b",
+        "target_id": "b9424cab-2936-46b3-93b5-aa86d8ffc2f2"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "09860ea8-2de0-4cd7-bec0-af4740a03132",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "09860ea8-2de0-4cd7-bec0-af4740a03132",
+        "target_id": "d62b5f03-f2da-449c-b257-81a787ceaf41"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "1420331e-e71a-42ba-b050-7953211cfa5b",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "valve",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "16657455-22d1-4bb9-a78f-2ec62046f719",
+        "target_id": "50edd35f-e782-4fcc-adc6-150518c4c207"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "2808328b-4401-4f2a-a3d0-f344c967581d",
+        "target_id": "e5999886-646b-4dfd-ba30-d2aadf930b5e"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "469dd29b-4088-42b1-8531-976affcb1632",
+        "target_id": "fda3e87a-b424-48b9-9364-4d628d02e547"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "50edd35f-e782-4fcc-adc6-150518c4c207",
+        "target_id": "066e143a-95c6-4717-9161-9dd7be48ffd2"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "50edd35f-e782-4fcc-adc6-150518c4c207",
+        "target_id": "3a695e1a-6214-4bfc-9fdb-71716f5c14aa"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "70b4a51d-0908-4928-b59c-f00fb475ce76",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetNode",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "77d5bd87-5b69-4671-816b-eea5cce492e8",
+        "target_id": "066e143a-95c6-4717-9161-9dd7be48ffd2"
+      },
+      {
+        "attributes": {
+          "attr_name": "targetItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "77d5bd87-5b69-4671-816b-eea5cce492e8",
+        "target_id": "50edd35f-e782-4fcc-adc6-150518c4c207"
+      },
+      {
+        "attributes": {
+          "attr_name": "sensingLocation",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "79f2847d-fd40-4713-8b48-687a14be9aa5",
+        "target_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90",
+        "target_id": "09860ea8-2de0-4cd7-bec0-af4740a03132"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90",
+        "target_id": "70b4a51d-0908-4928-b59c-f00fb475ce76"
+      },
+      {
+        "attributes": {
+          "attr_name": "actuatingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90",
+        "target_id": "d62b5f03-f2da-449c-b257-81a787ceaf41"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90",
+        "target_id": "f2914fb7-577f-4c4d-ab9b-e6a5868262b1"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "82050715-6eb9-4055-881a-1f103e0f1827",
+        "target_id": "2808328b-4401-4f2a-a3d0-f344c967581d"
+      },
+      {
+        "attributes": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "89102b0a-d49f-4944-b3b7-72a83c6c7e37",
+        "target_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "1420331e-e71a-42ba-b050-7953211cfa5b"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "2808328b-4401-4f2a-a3d0-f344c967581d"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "469dd29b-4088-42b1-8531-976affcb1632"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "82050715-6eb9-4055-881a-1f103e0f1827"
+      },
+      {
+        "attributes": {
+          "attr_name": "pipingNetworkSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "89102b0a-d49f-4944-b3b7-72a83c6c7e37"
+      },
+      {
+        "attributes": {
+          "attr_name": "actuatingSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "b862e9a8-e385-4dbf-b3e0-d986ac3bf5d0"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9354a477-01f2-4779-929f-9e876e31982d",
+        "target_id": "fda3e87a-b424-48b9-9364-4d628d02e547"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b3ee7e31-9f00-4430-bac4-375b71a56b08",
+        "target_id": "79f2847d-fd40-4713-8b48-687a14be9aa5"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b3ee7e31-9f00-4430-bac4-375b71a56b08",
+        "target_id": "fda3e87a-b424-48b9-9364-4d628d02e547"
+      },
+      {
+        "attributes": {
+          "attr_name": "operatedValveReference",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b862e9a8-e385-4dbf-b3e0-d986ac3bf5d0",
+        "target_id": "16657455-22d1-4bb9-a78f-2ec62046f719"
+      },
+      {
+        "attributes": {
+          "attr_name": "controlledActuator",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b862e9a8-e385-4dbf-b3e0-d986ac3bf5d0",
+        "target_id": "5b2c081a-f932-4fbd-b6cf-36c22832f08f"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceNode",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b9424cab-2936-46b3-93b5-aa86d8ffc2f2",
+        "target_id": "3a695e1a-6214-4bfc-9fdb-71716f5c14aa"
+      },
+      {
+        "attributes": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b9424cab-2936-46b3-93b5-aa86d8ffc2f2",
+        "target_id": "50edd35f-e782-4fcc-adc6-150518c4c207"
+      },
+      {
+        "attributes": {
+          "attr_name": "systems",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "d62b5f03-f2da-449c-b257-81a787ceaf41",
+        "target_id": "b862e9a8-e385-4dbf-b3e0-d986ac3bf5d0"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "e20e3739-bfc7-4401-b1cb-c890e617ffbf",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "e20e3739-bfc7-4401-b1cb-c890e617ffbf",
+        "target_id": "fda3e87a-b424-48b9-9364-4d628d02e547"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "e5999886-646b-4dfd-ba30-d2aadf930b5e",
+        "target_id": "2808328b-4401-4f2a-a3d0-f344c967581d"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "e5999886-646b-4dfd-ba30-d2aadf930b5e",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "f2914fb7-577f-4c4d-ab9b-e6a5868262b1",
+        "target_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "attr_name": "processSignalGeneratingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fda3e87a-b424-48b9-9364-4d628d02e547",
+        "target_id": "79f2847d-fd40-4713-8b48-687a14be9aa5"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fda3e87a-b424-48b9-9364-4d628d02e547",
+        "target_id": "b3ee7e31-9f00-4430-bac4-375b71a56b08"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fda3e87a-b424-48b9-9364-4d628d02e547",
+        "target_id": "e20e3739-bfc7-4401-b1cb-c890e617ffbf"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "PipingNetworkSegment",
+          "label_description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
+          "labels": "PipingNetworkSegment:ActuatingElectricalLocation:CustomAttributeOwner:SensingLocation",
+          "proteusId": "PipingNetworkSegment-1"
+        },
+        "fact_type": "node",
+        "node_id": "00e4db64-f9e9-4086-8bd3-a52eb8cab22b"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "066e143a-95c6-4717-9161-9dd7be48ffd2"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "proteusId": "SignalLineFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "09860ea8-2de0-4cd7-bec0-af4740a03132"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "033",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "1420331e-e71a-42ba-b050-7953211cfa5b"
+      },
+      {
+        "attributes": {
+          "label": "OperatedValveReference",
+          "label_description": "A reference to an OperatedValve.",
+          "labels": "OperatedValveReference:CustomAttributeOwner",
+          "proteusId": "OperatedValveReference-1"
+        },
+        "fact_type": "node",
+        "node_id": "16657455-22d1-4bb9-a78f-2ec62046f719"
+      },
+      {
+        "attributes": {
+          "label": "ProcessInstrumentationFunction",
+          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
+          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "location": "central",
+          "processInstrumentationFunctionCategory": "U",
+          "processInstrumentationFunctionNumber": "031",
+          "processInstrumentationFunctions": "S",
+          "proteusId": "ProcessInstrumentationFunction-3"
+        },
+        "fact_type": "node",
+        "node_id": "2808328b-4401-4f2a-a3d0-f344c967581d"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "proteusId": "PipingNode-2"
+        },
+        "fact_type": "node",
+        "node_id": "3a695e1a-6214-4bfc-9fdb-71716f5c14aa"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "032",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-2"
+        },
+        "fact_type": "node",
+        "node_id": "469dd29b-4088-42b1-8531-976affcb1632"
+      },
+      {
+        "attributes": {
+          "label": "GlobeValve",
+          "label_description": "A valve that is a valve where the closure member is a disc or piston operating with linear motion normal to the flat or shaped seat (from http://data.posccaesar.org/rdl/RDS416204).",
+          "labels": "GlobeValve:OperatedValve:PipingComponent:CustomAttributeOwner:PipingNetworkSegmentItem:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "GlobeValve-1"
+        },
+        "fact_type": "node",
+        "node_id": "50edd35f-e782-4fcc-adc6-150518c4c207"
+      },
+      {
+        "attributes": {
+          "label": "ControlledActuator",
+          "label_description": "A transducer that is intended to convert energy (electric, mechanical, pneumatic or hydraulic) from an external source into kinetic energy (motion) in response to a signal or power input.",
+          "labels": "ControlledActuator:CustomAttributeOwner",
+          "proteusId": "ControlledActuator-1"
+        },
+        "fact_type": "node",
+        "node_id": "5b2c081a-f932-4fbd-b6cf-36c22832f08f"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "portStatus": "L",
+          "proteusId": "SignalLineFunction-3",
+          "signalProcessControlFunctions": "O"
+        },
+        "fact_type": "node",
+        "node_id": "70b4a51d-0908-4928-b59c-f00fb475ce76"
+      },
+      {
+        "attributes": {
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
+        },
+        "fact_type": "node",
+        "node_id": "77d5bd87-5b69-4671-816b-eea5cce492e8"
+      },
+      {
+        "attributes": {
+          "label": "ProcessSignalGeneratingFunction",
+          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
+          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ProcessSignalGeneratingFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "79f2847d-fd40-4713-8b48-687a14be9aa5"
+      },
+      {
+        "attributes": {
+          "label": "ProcessInstrumentationFunction",
+          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
+          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "location": "central",
+          "processInstrumentationFunctionCategory": "Y",
+          "processInstrumentationFunctionNumber": "033",
+          "processInstrumentationFunctions": "CS",
+          "proteusId": "ProcessInstrumentationFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "80ba1a4d-b8ac-4c42-a2ba-1bf063e34b90"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "031",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-3"
+        },
+        "fact_type": "node",
+        "node_id": "82050715-6eb9-4055-881a-1f103e0f1827"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSystem",
+          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PipingNetworkSystem-1"
+        },
+        "fact_type": "node",
+        "node_id": "89102b0a-d49f-4944-b3b7-72a83c6c7e37"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "9354a477-01f2-4779-929f-9e876e31982d"
+      },
+      {
+        "attributes": {
+          "label": "MeasuringLineFunction",
+          "label_description": "Information flow function for measured values.",
+          "labels": "MeasuringLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "proteusId": "MeasuringLineFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "b3ee7e31-9f00-4430-bac4-375b71a56b08"
+      },
+      {
+        "attributes": {
+          "label": "ActuatingSystem",
+          "label_description": "An assembly of artefacts that is designed to fulfill an ActuatingFunction.",
+          "labels": "ActuatingSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ActuatingSystem-1"
+        },
+        "fact_type": "node",
+        "node_id": "b862e9a8-e385-4dbf-b3e0-d986ac3bf5d0"
+      },
+      {
+        "attributes": {
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
+        },
+        "fact_type": "node",
+        "node_id": "b9424cab-2936-46b3-93b5-aa86d8ffc2f2"
+      },
+      {
+        "attributes": {
+          "label": "ActuatingFunction",
+          "label_description": "A function for acting control structures relating to the process.",
+          "labels": "ActuatingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ActuatingFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "d62b5f03-f2da-449c-b257-81a787ceaf41"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "portStatus": "H",
+          "proteusId": "SignalLineFunction-4",
+          "signalProcessControlFunctions": "A"
+        },
+        "fact_type": "node",
+        "node_id": "e20e3739-bfc7-4401-b1cb-c890e617ffbf"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "proteusId": "SignalLineFunction-5"
+        },
+        "fact_type": "node",
+        "node_id": "e5999886-646b-4dfd-ba30-d2aadf930b5e"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "portStatus": "H",
+          "proteusId": "SignalLineFunction-2",
+          "signalProcessControlFunctions": "O"
+        },
+        "fact_type": "node",
+        "node_id": "f2914fb7-577f-4c4d-ab9b-e6a5868262b1"
+      },
+      {
+        "attributes": {
+          "label": "ProcessInstrumentationFunction",
+          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
+          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "location": "central",
+          "processInstrumentationFunctionCategory": "F",
+          "processInstrumentationFunctionNumber": "032",
+          "processInstrumentationFunctions": "IC",
+          "proteusId": "ProcessInstrumentationFunction-2"
+        },
+        "fact_type": "node",
+        "node_id": "fda3e87a-b424-48b9-9364-4d628d02e547"
+      }
+    ]
+  },
+  "fixture_id": "i06-ccr-flow-indication-and-high-alarm-flow-control-control-valve-i06v01-ver-ex01",
+  "graph": {
+    "edge_count": 44,
+    "node_count": 25
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/I06 CCR flow indication and high alarm, flow control, control valve/I06V01-VER.EX01.xml"
+}

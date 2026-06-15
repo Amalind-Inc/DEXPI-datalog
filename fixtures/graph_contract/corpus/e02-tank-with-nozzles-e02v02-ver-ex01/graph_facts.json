@@ -1,0 +1,329 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "36a90247-ae47-4879-a074-332613bf4d9c",
+        "target_id": "5dd71c1a-4cd5-4a70-b1b8-ea4dc29aabc5"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "51578e57-b1ff-4a05-8361-ade19e68456d",
+        "target_id": "fd81526f-410e-4af3-8dc3-defdf75ec82e"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "70fde97c-7764-4444-a34d-925d9bec6d33",
+        "target_id": "51d0e5ea-2b11-47f8-b195-ab88e68b87a2"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "cf61a128-024c-4b84-8353-a613dc9ddfe3",
+        "target_id": "9ea9c235-2c95-47b5-90e0-be2e292aa00c"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "d7a6b847-97ca-41f7-a4b8-c57266f42f47",
+        "target_id": "fa5188f3-e786-4080-9169-e070ecf414aa"
+      },
+      {
+        "attributes": {
+          "attr_name": "nodes",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "f316615f-175c-42b5-a8b7-fcecb81d4536",
+        "target_id": "c641c213-5d2c-476c-a261-7f94e959140b"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "36a90247-ae47-4879-a074-332613bf4d9c"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "51578e57-b1ff-4a05-8361-ade19e68456d"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "519de261-69de-43a7-b0c6-161e6b7c6a4f"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "70fde97c-7764-4444-a34d-925d9bec6d33"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "8dab345e-eaa1-41e2-9eed-fd8acf0c0d08"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "cf61a128-024c-4b84-8353-a613dc9ddfe3"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fa5188f3-e786-4080-9169-e070ecf414aa",
+        "target_id": "f316615f-175c-42b5-a8b7-fcecb81d4536"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-3",
+          "subTagName": "N-5"
+        },
+        "fact_type": "node",
+        "node_id": "36a90247-ae47-4879-a074-332613bf4d9c"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N-1"
+        },
+        "fact_type": "node",
+        "node_id": "51578e57-b1ff-4a05-8361-ade19e68456d"
+      },
+      {
+        "attributes": {
+          "label": "Chamber",
+          "label_description": "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).",
+          "labels": "Chamber:CustomAttributeOwner",
+          "lowerLimitDesignPressure": "-1.0 bar",
+          "lowerLimitDesignTemperature": "-45.0 \u00b0C",
+          "materialOfConstructionCode": "1.4306",
+          "nominalDiameter": "2.0 m",
+          "proteusId": "Chamber-1",
+          "subTagName": "Chamber 1",
+          "upperLimitDesignPressure": "0.1 bar",
+          "upperLimitDesignTemperature": "100.0 \u00b0C"
+        },
+        "fact_type": "node",
+        "node_id": "519de261-69de-43a7-b0c6-161e6b7c6a4f"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "80",
+          "nominalDiameterRepresentation": "DN 80",
+          "nominalDiameterStandard": "DN 80 (DIN 2448)",
+          "nominalDiameterTypeRepresentation": "DN",
+          "proteusId": "PipingNode-2"
+        },
+        "fact_type": "node",
+        "node_id": "51d0e5ea-2b11-47f8-b195-ab88e68b87a2"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "50",
+          "nominalDiameterRepresentation": "DN 50",
+          "nominalDiameterStandard": "DN 50 (DIN 2448)",
+          "nominalDiameterTypeRepresentation": "DN",
+          "proteusId": "PipingNode-3"
+        },
+        "fact_type": "node",
+        "node_id": "5dd71c1a-4cd5-4a70-b1b8-ea4dc29aabc5"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-2",
+          "subTagName": "N-2"
+        },
+        "fact_type": "node",
+        "node_id": "70fde97c-7764-4444-a34d-925d9bec6d33"
+      },
+      {
+        "attributes": {
+          "label": "Chamber",
+          "label_description": "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).",
+          "labels": "Chamber:CustomAttributeOwner",
+          "lowerLimitDesignPressure": "-0.1 bar",
+          "lowerLimitDesignTemperature": "-45.0 \u00b0C",
+          "materialOfConstructionCode": "1.4305",
+          "nominalDiameter": "2.0 m",
+          "proteusId": "Chamber-2",
+          "subTagName": "Chamber 2",
+          "upperLimitDesignPressure": "0.1 bar",
+          "upperLimitDesignTemperature": "100.0 \u00b0C"
+        },
+        "fact_type": "node",
+        "node_id": "8dab345e-eaa1-41e2-9eed-fd8acf0c0d08"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "50",
+          "nominalDiameterRepresentation": "DN 50",
+          "nominalDiameterStandard": "DN 50 (DIN 2448)",
+          "nominalDiameterTypeRepresentation": "DN",
+          "proteusId": "PipingNode-4"
+        },
+        "fact_type": "node",
+        "node_id": "9ea9c235-2c95-47b5-90e0-be2e292aa00c"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "25",
+          "nominalDiameterRepresentation": "DN 25",
+          "nominalDiameterStandard": "DN 25 (DIN 2448)",
+          "nominalDiameterTypeRepresentation": "DN",
+          "proteusId": "PipingNode-5"
+        },
+        "fact_type": "node",
+        "node_id": "c641c213-5d2c-476c-a261-7f94e959140b"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-4",
+          "subTagName": "N-6"
+        },
+        "fact_type": "node",
+        "node_id": "cf61a128-024c-4b84-8353-a613dc9ddfe3"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "d7a6b847-97ca-41f7-a4b8-c57266f42f47"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-5",
+          "subTagName": "N-7"
+        },
+        "fact_type": "node",
+        "node_id": "f316615f-175c-42b5-a8b7-fcecb81d4536"
+      },
+      {
+        "attributes": {
+          "cylinderLength": "4.0 m",
+          "label": "Tank",
+          "label_description": "A vessel intended to contain fluid for storage. Typically a receiving or collecting function for further distribution. Typically with a vertical and cylindrical or square shape and a flat or conical bottom (from http://data.posccaesar.org/rdl/RDS445139).",
+          "labels": "Tank:Vessel:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "Tank-1",
+          "tagName": "T4750"
+        },
+        "fact_type": "node",
+        "node_id": "fa5188f3-e786-4080-9169-e070ecf414aa"
+      },
+      {
+        "attributes": {
+          "label": "PipingNode",
+          "label_description": "A possible connection point for a PipingConnection.",
+          "labels": "PipingNode:CustomAttributeOwner",
+          "nominalDiameterNumericalValueRepresentation": "80",
+          "nominalDiameterRepresentation": "DN 80",
+          "nominalDiameterStandard": "DN 80 (DIN 2448)",
+          "nominalDiameterTypeRepresentation": "DN",
+          "proteusId": "PipingNode-1"
+        },
+        "fact_type": "node",
+        "node_id": "fd81526f-410e-4af3-8dc3-defdf75ec82e"
+      }
+    ]
+  },
+  "fixture_id": "e02-tank-with-nozzles-e02v02-ver-ex01",
+  "graph": {
+    "edge_count": 13,
+    "node_count": 14
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E02 Tank with Nozzles/E02V02-VER.EX01.xml"
+}

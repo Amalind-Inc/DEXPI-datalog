@@ -1,0 +1,219 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "33d988f7-de2b-49bf-92e6-7d6eeabbd46d",
+        "target_id": "fb24f6af-9a29-4561-94df-c71028300d6e"
+      },
+      {
+        "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "8af42658-2d31-49a1-afbf-f975c0675cad",
+        "target_id": "65a18fc2-215c-4faa-8af0-3291cf93a6a8"
+      },
+      {
+        "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb",
+        "target_id": "1c88a40f-9b1f-40dc-9e18-642f4d14cc7d"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "11747290-513a-48b6-9d63-a12c844c37c7"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "4187c6e0-e3ce-4071-a052-e74f5a4e9b55"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "51579fc9-fc66-4673-8def-868532892c4a"
+      },
+      {
+        "attributes": {
+          "attr_name": "columnSections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "8af42658-2d31-49a1-afbf-f975c0675cad"
+      },
+      {
+        "attributes": {
+          "attr_name": "columnSections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
+        "target_id": "a2b6ea4f-e727-4524-b78d-341196a83657"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-3",
+          "subTagName": "N3"
+        },
+        "fact_type": "node",
+        "node_id": "11747290-513a-48b6-9d63-a12c844c37c7"
+      },
+      {
+        "attributes": {
+          "label": "ColumnTraysArrangement",
+          "label_description": "The trays of a column.",
+          "labels": "ColumnTraysArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "numberOfTrays": 8,
+          "proteusId": "ColumnTraysArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "1c88a40f-9b1f-40dc-9e18-642f4d14cc7d"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "33d988f7-de2b-49bf-92e6-7d6eeabbd46d"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-2",
+          "subTagName": "N2"
+        },
+        "fact_type": "node",
+        "node_id": "4187c6e0-e3ce-4071-a052-e74f5a4e9b55"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N1"
+        },
+        "fact_type": "node",
+        "node_id": "51579fc9-fc66-4673-8def-868532892c4a"
+      },
+      {
+        "attributes": {
+          "label": "ColumnPackingsArrangement",
+          "label_description": "The packings of a column.",
+          "labels": "ColumnPackingsArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "packingType": "rings",
+          "proteusId": "ColumnPackingsArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "65a18fc2-215c-4faa-8af0-3291cf93a6a8"
+      },
+      {
+        "attributes": {
+          "label": "SubTaggedColumnSection",
+          "label_description": "A sub tagged column section.",
+          "labels": "SubTaggedColumnSection:ColumnSection:CustomAttributeOwner",
+          "proteusId": "SubTaggedColumnSection-1",
+          "subTagName": "S1"
+        },
+        "fact_type": "node",
+        "node_id": "8af42658-2d31-49a1-afbf-f975c0675cad"
+      },
+      {
+        "attributes": {
+          "label": "SubTaggedColumnSection",
+          "label_description": "A sub tagged column section.",
+          "labels": "SubTaggedColumnSection:ColumnSection:CustomAttributeOwner",
+          "proteusId": "SubTaggedColumnSection-2",
+          "subTagName": "S2"
+        },
+        "fact_type": "node",
+        "node_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-4",
+          "subTagName": "N4"
+        },
+        "fact_type": "node",
+        "node_id": "a2b6ea4f-e727-4524-b78d-341196a83657"
+      },
+      {
+        "attributes": {
+          "label": "ProcessColumn",
+          "label_description": "A vertical vessel intended to enable chemical reactions or physical processes utilising differences in density of fluids and/or forced flow of fluid (from http://data.posccaesar.org/rdl/RDS4316825224).",
+          "labels": "ProcessColumn:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ProcessColumn-1",
+          "tagName": "PC321",
+          "tagNamePrefix": "PC",
+          "tagNameSequenceNumber": "321"
+        },
+        "fact_type": "node",
+        "node_id": "fb24f6af-9a29-4561-94df-c71028300d6e"
+      }
+    ]
+  },
+  "fixture_id": "e08-processcolumn-with-columnsections-e08v01-ver-ex01",
+  "graph": {
+    "edge_count": 9,
+    "node_count": 10
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E08 ProcessColumn with ColumnSections/E08V01-VER.EX01.xml"
+}

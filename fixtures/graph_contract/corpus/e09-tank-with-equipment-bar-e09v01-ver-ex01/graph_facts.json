@@ -1,0 +1,50 @@
+{
+  "facts": {
+    "edges": [
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "7019fc06-8c74-443e-8633-dfb24790502c",
+        "target_id": "db5d6079-ace3-490c-9dd3-4a91b473333c"
+      }
+    ],
+    "nodes": [
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "7019fc06-8c74-443e-8633-dfb24790502c"
+      },
+      {
+        "attributes": {
+          "cylinderLength": "2.0 m",
+          "label": "Tank",
+          "label_description": "A vessel intended to contain fluid for storage. Typically a receiving or collecting function for further distribution. Typically with a vertical and cylindrical or square shape and a flat or conical bottom (from http://data.posccaesar.org/rdl/RDS445139).",
+          "labels": "Tank:Vessel:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "Tank-1",
+          "tagName": "T-9"
+        },
+        "fact_type": "node",
+        "node_id": "db5d6079-ace3-490c-9dd3-4a91b473333c"
+      }
+    ]
+  },
+  "fixture_id": "e09-tank-with-equipment-bar-e09v01-ver-ex01",
+  "graph": {
+    "edge_count": 1,
+    "node_count": 2
+  },
+  "provenance": {
+    "extractor": "pyDEXPI",
+    "extractor_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/pyDEXPI/pydexpi/__init__.py",
+    "extractor_version": "1.2.0"
+  },
+  "source_path": "TrainingTestCases/dexpi 1.3/example pids/E09 Tank with equipment bar/E09V01-VER.EX01.xml"
+}

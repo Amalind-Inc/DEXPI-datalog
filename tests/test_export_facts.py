@@ -20,6 +20,10 @@ E03_FIXTURE = (
 )
 GOLDEN_FACTS_DIR = REPO_ROOT / "fixtures" / "graph_contract"
 GOLDEN_MANIFEST_PATH = GOLDEN_FACTS_DIR / "manifest.json"
+CORPUS_SUMMARY_PATH = GOLDEN_FACTS_DIR / "corpus" / "corpus_summary.json"
+DEXPI_13_FIXTURE_ROOT = (
+    REPO_ROOT / "TrainingTestCases" / "dexpi 1.3" / "example pids"
+)
 
 
 class ExportFactsCliTests(unittest.TestCase):
@@ -35,6 +39,25 @@ class ExportFactsCliTests(unittest.TestCase):
                 str(fixture_path),
                 "--fixture-id",
                 fixture_id,
+                "--output-dir",
+                str(output_dir),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def run_export_corpus(
+        self, fixture_root: Path, output_dir: Path
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pydexpi_datalog",
+                "export-corpus",
+                str(fixture_root),
                 "--output-dir",
                 str(output_dir),
             ],
@@ -63,6 +86,44 @@ class ExportFactsCliTests(unittest.TestCase):
             self.assertEqual(artifact["source_path"], str(E03_FIXTURE.resolve()))
             self.assertTrue(artifact["facts"]["nodes"])
             self.assertTrue(artifact["facts"]["edges"])
+
+    def test_export_corpus_persists_parse_coverage_summary_for_dexpi_13_fixtures(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "corpus-export"
+            summary_path = output_dir / "corpus_summary.json"
+            self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
+
+            result = self.run_export_corpus(DEXPI_13_FIXTURE_ROOT, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(summary_path.exists())
+
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            xml_fixture_count = len(sorted(DEXPI_13_FIXTURE_ROOT.glob("**/*.xml")))
+            self.assertEqual(summary["fixture_root"], str(DEXPI_13_FIXTURE_ROOT.resolve()))
+            self.assertEqual(summary["totals"]["discovered"], xml_fixture_count)
+            self.assertEqual(
+                summary["totals"]["discovered"],
+                summary["totals"]["parsed"]
+                + summary["totals"]["failed"]
+                + summary["totals"]["excluded"],
+            )
+            self.assertEqual(summary["excluded_fixtures"], [])
+
+            fixtures_by_path = {
+                fixture["relative_path"]: fixture for fixture in summary["fixtures"]
+            }
+            e03_summary = fixtures_by_path[
+                "E03 Pump With Nozzles/E03V01-VER.EX01.xml"
+            ]
+            self.assertEqual(e03_summary["status"], "parsed")
+            self.assertEqual(e03_summary["node_count"], 5)
+            self.assertEqual(e03_summary["edge_count"], 4)
+
+            artifact_path = output_dir / e03_summary["artifact_path"]
+            self.assertTrue(artifact_path.exists(), artifact_path)
 
     def test_export_facts_records_pinned_pydexpi_version_in_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -164,6 +225,25 @@ class ExportFactsCliTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_repo_persists_dexpi_13_corpus_coverage_summary(self) -> None:
+        self.assertTrue(CORPUS_SUMMARY_PATH.exists(), CORPUS_SUMMARY_PATH)
+
+        summary = json.loads(CORPUS_SUMMARY_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(
+            summary["fixture_root"],
+            "TrainingTestCases/dexpi 1.3/example pids",
+        )
+        self.assertEqual(
+            summary["totals"],
+            {
+                "discovered": 35,
+                "parsed": 35,
+                "failed": 0,
+                "excluded": 0,
+            },
+        )
+        self.assertEqual(summary["excluded_fixtures"], [])
 
 
 if __name__ == "__main__":
