@@ -1,245 +1,115 @@
 ## Problem Statement
 
-Process engineering teams need a deterministic, auditable way to validate
-Smart P&IDs exported as DEXPI XML, detect standards and safety anomalies, and
-propose concrete corrections without losing traceability. The current need is
-for a workflow that can operate on a single DEXPI source file, preserve the
-source-of-truth engineering context, and produce reviewable output that can be
-trusted by engineers and auditors.
+Process engineering teams need a deterministic substrate for logical
+programming over DEXPI 1.3 P&IDs before they can trust richer operator-facing
+verification workflows.
+
+The current repository already has useful scaffolding, a graph-mirrored export
+seed, and an initial tracer-bullet verifier. What it does not yet have is a
+fully explicit contract for turning the supported DEXPI 1.3 fixture corpus into
+graph-mirrored facts and then deriving reusable Souffle semantics from those
+facts. Without that substrate, later rule work risks drifting into ad hoc
+predicate design, fixture-specific shortcuts, or AI-generated rules without a
+stable deterministic execution boundary.
 
 ## Solution
 
-Build a manifest-driven P&ID verification pipeline that ingests one DEXPI XML
-source file, normalizes it into a lossless canonical engineering IR, evaluates
-versioned rule packs against the affected connected subgraph for each finding,
-and emits immutable review artifacts with full provenance. The workflow should
-support dry-run preflight validation, review-only raw rule hits, deterministic
-patch proposals, explicit waivers/suppressions, and stable human-readable
-console output rendered from a machine-readable source-of-truth artifact.
+Build the next verifier substrate slice around DEXPI 1.3 graph-mirrored facts
+and derived Souffle graph semantics.
+
+The solution should treat `pyDEXPI` as the trusted extraction dependency for
+DEXPI 1.3 XML-to-graph conversion, persist a verbose and generic canonical base
+fact layer over the `pyDEXPI` full graph, and add a hand-authored generic graph
+utility layer plus repo-owned edge-family classification policy in Souffle.
+
+This slice should prove the substrate over the parseable DEXPI 1.3 fixture
+corpus, document the contract sharply, and establish the behavioral test seams
+that later pump-specific rules, rule packs, and AI-assisted rule synthesis can
+rely on.
 
 ## User Stories
 
-1. As a process engineer, I want to provide a single run manifest for one DEXPI
-   source file, so that each evaluation run is explicit and reproducible.
-2. As a process engineer, I want the manifest to name the rule pack, version,
-   lifecycle state, execution mode, run ID, and output destination, so that the
-   run contract is fully declared up front.
-3. As a reviewer, I want the run manifest to be stored unchanged with the run,
-   so that I can later see exactly what intent produced the output.
-4. As a reviewer, I want each rerun to create a new immutable manifest copy,
-   so that prior runs remain reproducible.
-5. As a rules author, I want rule packs to be human-editable YAML or JSON with a
-   strict schema, so that policies can be maintained without editing engine
-   code.
-6. As a rules author, I want each rule to have a nested structure with separate
-   sections for scope, conditions, evidence, and patch intent, so that complex
-   logic remains readable.
-7. As a rules author, I want condition trees to support arbitrary nesting, so
-   that I can express real engineering logic without artificial limits.
-8. As a rules author, I want optional labels on condition tree nodes, so that
-   complex rules remain understandable to reviewers.
-9. As a rules author, I want a fixed, small core predicate set with no
-   extension predicates in the first version, so that the vocabulary stays
-   predictable.
-10. As a rules author, I want predicates to operate on typed entities after
-    normalization, so that matching is consistent and less error-prone.
-11. As a reviewer, I want ambiguous normalization to generate diagnostics, so
-    that I can see when canonical tags were inferred from imperfect input.
-12. As an engineer, I want the canonical engineering IR to preserve raw tag
-    variants alongside canonical forms, so that no source evidence is lost.
-13. As a reviewer, I want findings to carry severity values of hard violation,
-    soft advisory, or informational, so that I can triage issues correctly.
-14. As a reviewer, I want each finding to include a structured evidence trail,
-    so that I can understand why the rule fired.
-15. As a reviewer, I want each patch proposal to be a single concrete edit, so
-    that I can approve or reject a specific fix.
-16. As a reviewer, I want patch proposals to allow additive and modifying
-    changes but not deletions initially, so that the correction workflow stays
-    safe.
-17. As an operator, I want the engine to derive the affected connected
-    subgraph automatically using rule-specific required relations, so that the
-    review scope is focused and not hand-curated.
-18. As an operator, I want a dry-run mode that validates the manifest, source
-    file, compatibility, and subgraph shape without producing findings or
-    patches, so that I can preflight a run cheaply.
-19. As a reviewer, I want review-only mode to show raw findings with evidence
-    but no patch proposals, so that I can assess rule hits separately from
-    proposed fixes.
-20. As an operator, I want normal runs to apply waivers and suppressions only
-    after rule resolution, so that the underlying finding remains visible in
-    history.
-21. As an auditor, I want waived and suppressed findings to remain as historical
-    records, so that I can trace what was hidden and why.
-22. As an auditor, I want all artifacts to be append-only and immutable, so that
-    no run output can be silently rewritten.
-23. As an auditor, I want findings, patches, validation state, diagnostics, and
-    manifests to share a provenance chain, so that each result is explainable
-    end to end.
-24. As an engineer, I want the machine-readable artifact to be the source of
-    truth, so that the console report can be a pure rendering of the persisted
-    record.
-25. As an engineer, I want deterministic sorting of artifact lists, so that
-    diffs are stable and meaningful.
-26. As an operator, I want the console to present a fixed human-readable
-    multi-section report, so that I can read the run result without a machine
-    parser.
-27. As an operator, I want the console to group repeated findings by rule or
-    object family and show representative examples, so that large runs remain
-    readable.
-28. As an operator, I want stable exit codes and categorized failures, so that
-    automation can detect parse, validation, evaluation, and output problems.
-29. As a maintainer, I want the engine to cache source-derived canonical IR and
-    topology by content hash, so that repeated dry-runs and incremental work are
-    efficient.
-30. As a maintainer, I want cache cleanup to be manual at first, so that I can
-    control retention while the system is still small.
-31. As a maintainer, I want internal logs to be separate from persisted
-    artifacts, so that operational noise does not dilute the audit trail.
-32. As a maintainer, I want internal logs to be cleaned up automatically by a
-    retention policy, so that the workspace does not accumulate unnecessary
-    debugging output.
-33. As a maintainer, I want single-run exclusivity enforced for the full run
-    context, so that concurrent runs do not collide.
-34. As a maintainer, I want the engine to stop on conflicted findings until a
-    human resolves them, so that no hidden arbitration occurs.
-35. As a maintainer, I want a separate migration tool for manifest schema
-    updates, so that old manifests can be upgraded explicitly without runtime
-    ambiguity.
-36. As a maintainer, I want the manifest schema version to be explicit and
-    strictly validated, so that compatibility is auditable.
-37. As a maintainer, I want the rule pack, engine, and schema to each have
-    independent versioning, so that changes can be traced to the correct layer.
-38. As a maintainer, I want all diagnostics to use stable codes, so that
-    validation and normalization issues are searchable and testable.
-39. As a maintainer, I want extension fields in allowed namespaces to be
-    preserved verbatim end to end, so that future metadata is not lost.
-40. As a reviewer, I want the system to reject unknown predicates and unknown
-    vocabulary in execution, so that rule packs cannot drift silently.
+1. As a process engineer, I want DEXPI 1.3 to be the explicit authoritative input contract, so that the repository does not imply support for a different semantic ingestion model than the code actually uses.
+2. As a maintainer, I want `pyDEXPI` to be treated as the trusted DEXPI 1.3 XML-to-graph extraction dependency, so that the project boundary between extraction and interpretation stays explicit.
+3. As a rules author, I want the canonical base fact layer to mirror the `pyDEXPI` full graph, so that every downstream rule begins from a reproducible graph substrate.
+4. As a rules author, I want the base export to remain intentionally verbose and generic, so that I do not lose evidence through premature schema curation.
+5. As a maintainer, I want one persisted fact per extracted node, one per extracted edge, and one per attached attribute, so that the fact grain remains stable and auditable.
+6. As a maintainer, I want previously unseen upstream attributes to survive export automatically, so that new DEXPI 1.3 fixture shapes do not break the substrate.
+7. As a rules author, I want the base export to avoid convenience predicates such as `pump/1`, so that interpretation stays out of the persisted contract.
+8. As a maintainer, I want the contract to be defined over the parseable DEXPI 1.3 fixture corpus, so that the substrate proves itself against real fixture breadth rather than one narrow example.
+9. As a reviewer, I want the checked-in golden fixtures to be clearly documented as a seed set rather than the full contract boundary, so that future work does not mistake current goldens for full coverage.
+10. As a rules author, I want the first derived Souffle layer to be generic and reusable, so that later rule families can build on it without rewriting graph logic.
+11. As a rules author, I want reusable edge-family predicates such as `composition_edge/3` and `reference_edge/3`, so that downstream rules do not repeatedly join raw edge attributes by hand.
+12. As a rules author, I want a cautious `candidate_topology_edge/3` predicate, so that topology traversal can begin before the project commits to a stronger process-topology interpretation.
+13. As a rules author, I want family-specific direct adjacency helpers, so that each rule can choose the correct traversal semantics explicitly.
+14. As a rules author, I want a simple recursive `reachable/2` predicate over candidate topology edges, so that I can ask whether something is downstream without building full path provenance first.
+15. As a maintainer, I want the first utility layer to stay small and explicit, so that it does not accumulate broad helper predicates before real rules require them.
+16. As a maintainer, I want the edge-family classification policy to live in Souffle, so that interpretation can evolve without changing the persisted export format.
+17. As a reviewer, I want the derived graph semantics contract to name the initial predicate surface explicitly, so that the next implementation slice cannot drift into vague “some utilities later” language.
+18. As a process engineer, I want verification to be documented as downstream of graph export plus derived semantics, so that the architecture is understood as layered rather than verifier-first.
+19. As a maintainer, I want the contract docs to state clearly that convenience predicates and domain predicates belong in derived Souffle layers, so that no one silently moves interpretation into the exporter.
+20. As a maintainer, I want outdated `DEXPI 2.0 semantic IR` language removed from the active glossary and contract docs, so that the written architecture matches the implemented boundary.
+21. As a rules author, I want the first validation seam to be stable graph export over the DEXPI 1.3 corpus, so that later logic failures can be isolated from extraction/export failures.
+22. As a rules author, I want the second validation seam to be focused tests over representative fixtures such as `E03`, `E06`, and `C01`, so that recursive and classified predicates can be checked against real graph shapes.
+23. As a maintainer, I want synthetic examples to remain available for later isolated rule verification, so that future rule generation can be tested behaviorally and not only on noisy corpus fixtures.
+24. As a future operator, I want later trusted rules to execute deterministically over the fact layer instead of relying on ad hoc AI answers, so that verification remains reproducible and auditable.
+25. As a future AI-assisted rules author, I want a stable graph-mirrored substrate and reusable graph utilities, so that generated rules have a deterministic target surface to compile against.
+26. As a compliance engineer, I want rule packs to remain distinct from policy source documents, so that natural-language standards can later synthesize candidate rules without being confused for executable logic.
+27. As a reviewer, I want AI-generated rules to be treated as candidates that require behavioral examples, so that trust comes from deterministic execution rather than raw Datalog readability.
+28. As a maintainer, I want the next slice to defer policy-document-to-rule-pack synthesis, so that the foundational substrate work is not swallowed by a much larger AI problem.
+29. As a maintainer, I want the repo PRD and Beads issue record to describe the same substrate plan, so that future contributors do not read contradictory planning artifacts.
+30. As an engineer extending the verifier later, I want explicit derived graph semantics contracts in the docs, so that new rule families can reuse the same vocabulary and testing seams.
 
 ## Implementation Decisions
 
-- The run contract is a single-source manifest with explicit rule pack name,
-  version, lifecycle state, execution mode, run ID, and output destination.
-- The canonical engineering IR is a lossless superset of source DEXPI data and
-  preserves vendor/source IDs, engineering tags, raw tag variants, and
-  normalization diagnostics.
-- Rule packs are structured YAML/JSON documents with a nested rule schema,
-  strict validation, required short rationales, and no extension predicates in
-  the first version.
-- Rule conditions are represented as arbitrarily nested condition trees with
-  `all`, `any`, and `not` blocks plus optional human-readable labels.
-- Predicates operate primarily on typed entities and relations after
-  normalization; string-based predicates are intentionally limited.
-- The engine normalizes before rule evaluation and records ambiguity as
-  diagnostics while still preserving a single canonical tag per object.
-- Dry-run is a preflight structural validation mode only; it validates the
-  manifest, source file, compatibility, and subgraph shape without findings or
-  patches.
-- Review-only mode emits raw findings with evidence only and does not emit
-  patch proposals.
-- Normal evaluation uses rule-specific required relations to derive the
-  affected connected subgraph automatically.
-- Patch proposals are single atomic edits, concrete rather than abstract, and
-  may add or modify topology, attributes, and metadata but do not delete
-  objects initially.
-- Rule evaluation is deterministic: all eligible rules are evaluated and the
-  highest explicit numeric priority wins; conflicts block for human resolution.
-- Waivers and suppressions are applied after rule resolution in a separate
-  suppression layer, while raw findings remain in history.
-- The source-of-truth persisted artifact is machine-readable JSON or YAML with
-  a single unified schema and typed sections.
-- Console output is a pure human-readable rendering of the persisted artifact
-  with a fixed multi-section format and grouped repeated findings.
-- Artifacts are append-only and immutable, with deterministic ordering and
-  stable IDs/hashes for comparison.
-- The artifact store is separate from the source code tree and organized by a
-  run-based directory hierarchy with a simple file-based index first.
-- Internal logs are separate from persisted artifacts and are subject to
-  automatic retention cleanup; persisted artifacts are retained as historical
-  records.
-- The engine caches source-derived canonical IR and topology by content hash
-  and current parser/schema versions; cache cleanup is manual at first.
-- The first version supports single-run exclusivity on the full run context.
-- Failure handling uses a single primary category with optional secondary
-  tags, stable exit codes, and persisted diagnostics.
-- Manifest validation is schema-first and emits field-level diagnostics for
-  all errors before execution.
-- The schema supports unknown optional fields only in a namespaced extension
-  area, and those extension fields are preserved end to end.
+- The authoritative input contract for this slice is DEXPI 1.3 only.
+- `pyDEXPI` is the trusted extraction dependency for XML-to-graph conversion; this repository owns graph-to-facts export and Souffle-derived interpretation above that export.
+- The canonical persisted layer is a graph-mirrored base fact layer over the `pyDEXPI` full graph rather than a raw XML fact tree or an early domain-curated schema.
+- The canonical base fact layer is intentionally verbose and generic. It should preserve extracted nodes, extracted edges, and attached attributes without introducing rule-specific predicates.
+- Unknown or newly observed upstream attributes should survive export automatically through generic attribute facts rather than causing schema failures.
+- The canonical base layer should persist only the `pyDEXPI` full graph for now. Explicit raw XML containment facts are deferred unless a concrete future rule proves they are needed.
+- The intended regression surface for the substrate is the parseable DEXPI 1.3 fixture corpus, not only the current `E03`, `E06`, and `C01` golden seed set.
+- The first derived Souffle layer should be hand-authored rather than generated from observed graph schema.
+- The repo-owned classification policy should live in Souffle rather than in exporter code, so classified semantics can evolve without re-exporting the canonical fact layer.
+- The initial derived predicate surface should be explicit: `composition_edge/3`, `reference_edge/3`, `candidate_topology_edge/3`, `downstream_candidate/2`, `downstream_composition/2`, `downstream_reference/2`, and `reachable/2`.
+- `candidate_topology_edge/3` should be intentionally conservative rather than claiming that topology traversal is already fully trusted in every case.
+- Direct adjacency helpers should stay family-specific. Broader union predicates such as `downstream/2` should be introduced only when a real rule or operator-facing query needs them.
+- The first recursive utility should be `reachable/2` over `candidate_topology_edge/3`; ordered path reconstruction and full path provenance are deferred.
+- Pump discharge YAML rules should sit above the generic base fact layer and derived graph semantics layer rather than embedding graph semantics themselves.
+- Verification commands should be documented and treated as consumers of the export-plus-derived-semantics substrate, not as the primary architectural center.
+- The rule trust model for later AI-assisted work should be behavioral: candidate rules become trustworthy only after deterministic execution against positive and negative examples.
+- Single rules and rule packs remain distinct units. Individual rules are the unit of behavioral debugging; rule packs are the unit of versioned promotion and deployment.
+- Policy source documents, rule packs, and rule-pack synthesis are distinct concepts and should remain separate in the glossary and contract docs.
 
 ## Testing Decisions
 
-- Favor black-box tests at the highest practical seam: manifest validation,
-  source loading and normalization, rule evaluation, suppression handling,
-  patch synthesis, artifact serialization, and console rendering.
-- Good tests should assert externally visible behavior only: accepted versus
-  rejected manifests, emitted diagnostics, preserved provenance, deterministic
-  artifact ordering, and the presence or absence of patch proposals under each
-  mode.
-- Test the manifest schema validator with valid inputs, invalid field values,
-  missing required fields, schema version mismatches, execution-mode mismatch,
-  and extension-field preservation.
-- Test normalization at the canonical IR seam by asserting that raw variants
-  are preserved, canonical tags are produced, and ambiguity diagnostics are
-  recorded.
-- Test rule evaluation against the affected connected subgraph seam by using
-  representative source inputs that trigger local and topology-aware rules.
-- Test review-only and dry-run separately to ensure dry-run stays structural
-  only and review-only emits raw findings with evidence but no patch
-  proposals.
-- Test suppression and waiver handling as a post-resolution layer by verifying
-  that raw findings still exist in history even when hidden from normal output.
-- Test artifact generation by verifying stable IDs, stable ordering, grouped
-  console summaries, and the unified machine-readable artifact schema.
-- Test cache behavior at the source-derived structure boundary by using
-  content-hash changes to confirm cache hits, misses, and invalidation.
-- Prior art in this workspace is minimal, so the new tests should establish the
-  first set of behavior-driven seams for the manifest, normalization, rule
-  evaluation, and artifact layers.
+- Good tests should assert external behavior and stable contracts, not implementation details or private helper structure.
+- The highest seam for this slice is the `export-facts` behavior over the parseable DEXPI 1.3 fixture corpus. Tests at this seam should verify deterministic persisted graph-mirrored facts, provenance, and automatic preservation of observed attributes.
+- A second high seam should cover the derived graph semantics layer on representative fixtures such as `E03`, `E06`, and `C01`, validating classified edge families, family-specific downstream helpers, and recursive `reachable/2`.
+- Later synthetic examples should be used for isolated rule-shape verification, but the current substrate slice should prefer real DEXPI 1.3 fixtures wherever possible.
+- Tests should confirm that the base export does not emit convenience predicates or domain predicates in the persisted artifact contract.
+- Tests should verify that the current checked-in golden fixtures remain a seed set and that broader corpus coverage can be expanded without redefining the base contract.
+- Tests should confirm that the derived classification policy lives above the persisted export and can change without changing the base fact artifact shape.
+- Documentation-facing tests or fixture assertions should continue to use the repo’s existing black-box style around CLI commands and persisted artifacts rather than internal function mocks.
+- Prior art already exists in the repository for export-facts CLI tests, checked-in golden graph facts, compile-rule CLI tests, and verifier-suite artifact tests. The new tests should extend those existing seams instead of inventing lower-level unit seams.
+- Future AI-assisted rule verification should rely on positive and negative examples evaluated by the deterministic engine, not human review of raw Datalog syntax.
 
 ## Out of Scope
 
-- Computer vision or PDF digitization of scanned P&IDs.
-- Automatic deletion of objects or fully autonomous autocorrection.
-- Batch processing across multiple source files in one run.
-- Extension predicates and namespaced custom rule vocabulary in the first
-  version.
-- Free-form natural-language rule definitions as the source of truth.
-- Automatic retries for failed runs.
-- Automatic migration of manifests inside the runtime path.
-- Concurrent multi-run execution against the same run context.
-- Database-backed artifact indexing before the file-based index proves
-  necessary.
-- Advanced waiver approval workflows beyond structured waiver metadata.
-- Arbitrary user-defined output path templates.
-- Silent rule-pack upgrades or implicit execution-mode switching.
+- DEXPI 2.0 as an active ingestion contract.
+- A raw XML fact layer or XML-tree-first substrate.
+- Automatic generation of domain predicates from unseen graph shapes.
+- Full path reconstruction or ordered path evidence in the first derived utility slice.
+- Pump-specific or rule-specific domain predicates in the persisted base export.
+- DEXPI 1.2 as part of the current canonical substrate contract.
+- Policy-document-to-rule-pack synthesis.
+- Operator-facing dropdown UX for rule or rule-pack selection.
+- Trusting AI to answer operator verification questions directly without deterministic execution.
+- Human approval workflows for AI-generated rules beyond the defined behavioral-verification model.
 
 ## Further Notes
 
-- The design prioritizes freshness, traceability, reproducibility, and human
-  reviewability over raw throughput.
-- The most important early implementation seams are manifest validation,
-  normalization, affected connected subgraph derivation, rule evaluation,
-  suppression, patch synthesis, and artifact rendering.
-- The PRD assumes a local issue-tracking setup in this workspace and a
-  persistent artifact store separate from the source code tree.
-
-## Success Criteria
-
-- A single-source run manifest can be validated strictly before execution.
-- A canonical engineering IR can be produced from a DEXPI export while
-  preserving raw variants, provenance, and normalization diagnostics.
-- Rule packs can be loaded from structured YAML or JSON and validated against
-  the fixed core predicate vocabulary.
-- Dry-run can validate the run without producing findings or patches.
-- Review-only can produce raw findings with evidence but no patch proposals.
-- Normal runs can produce deterministic findings, patch proposals, and
-  persisted artifacts with stable ordering and provenance.
-- Waivers and suppressions can be applied after rule resolution while the raw
-  finding remains in history.
-- Console output can be rendered as a fixed human-readable report from the
-  persisted machine-readable artifact.
-- Artifacts can be stored immutably with content-hash-based reuse of source
-  derived structures.
-- Failure states can be categorized, surfaced in console output, and persisted
-  as artifacts.
+- The most important architectural protection in this slice is the boundary between generic persisted facts and derived Souffle interpretation.
+- The base fact layer should be allowed to be verbose if that preserves reproducibility and future extensibility.
+- The current checked-in documentation cleanup is part of the work because stale contract language would otherwise undermine the implementation slice.
+- This PRD intentionally narrows the next step to substrate work. Richer operator rules, compliance rule packs, and AI-assisted synthesis remain downstream consumers of this layer rather than part of it.

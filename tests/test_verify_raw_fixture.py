@@ -72,6 +72,7 @@ class VerifyRawFixtureCliTests(unittest.TestCase):
         doc = STABLE_COMMAND_DOC_PATH.read_text(encoding="utf-8")
         self.assertIn("verify-raw-fixture", doc)
         self.assertIn("verify-suite", doc)
+        self.assertIn("E06V01-VER.EX01.derived_graph_semantics.dl", doc)
         self.assertIn("pass_c01_local_segment.json", doc)
         self.assertIn("hard_violation_e06_natural.json", doc)
 

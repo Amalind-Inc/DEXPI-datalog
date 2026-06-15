@@ -1,7 +1,19 @@
 # Minimal Pump Discharge Rule Schema
 
 This schema is intentionally narrow. It exists only for the first tracer-bullet
-rule family and is not a general-purpose verifier rule language.
+pump discharge-path rule family and is not a general-purpose verifier rule
+language.
+
+## Architectural position
+
+This YAML surface sits above two lower layers:
+
+1. the persisted graph-mirrored base fact layer from
+   [Graph-to-Facts Contract](./graph_to_facts.md)
+2. the derived Souffle classification and utility predicates from
+   [Derived Graph Semantics Contract](./derived_graph_semantics.md)
+
+The pump discharge YAML does not replace those layers. It depends on them.
 
 ## Scope
 
@@ -52,6 +64,7 @@ severity: hard_violation
 ## Notes
 
 - This format is operator-facing YAML, not raw Datalog.
-- Compilation currently produces Souffle-style Datalog facts for the minimal
-  rule parameters.
-- Recursive rule semantics and graph evaluation are deferred to later slices.
+- Compilation currently produces Souffle-style facts for the minimal rule
+  parameters.
+- Generic graph classification and recursive traversal are not encoded in this
+  YAML shape. They belong to the lower derived Souffle layers.

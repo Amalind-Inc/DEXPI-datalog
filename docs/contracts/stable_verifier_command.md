@@ -1,6 +1,36 @@
-# Stable Verifier Command
+# Stable Verifier Seams
 
-The current stable product seam for the tracer-bullet verifier is:
+Verification is not the foundational contract seam in this repository.
+Verification sits on top of:
+
+1. a DEXPI 1.3 source fixture
+2. `pyDEXPI` full-graph extraction
+3. graph-mirrored fact export
+4. derived Souffle classification and graph utility layers
+
+## Foundational seam
+
+The foundational stable seam is the graph export flow:
+
+```bash
+python -m pydexpi_datalog export-facts \
+  "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml" \
+  --fixture-id e06-natural \
+  --output-dir /tmp/pydexpi-export-facts
+```
+
+This command runs from one DEXPI 1.3 source fixture to persisted
+graph-mirrored facts.
+
+## Derived-logic seam
+
+The next architectural seam is the derived Souffle layer that classifies edge
+families and provides generic graph utility predicates. That layer is specified
+separately in [Derived Graph Semantics Contract](./derived_graph_semantics.md).
+
+## Verifier seam
+
+The current stable verifier-facing command for the tracer-bullet workflow is:
 
 ```bash
 ./.venv/bin/python -m pydexpi_datalog verify-raw-fixture \
@@ -8,14 +38,15 @@ The current stable product seam for the tracer-bullet verifier is:
   --output-dir /tmp/pydexpi-verify-e06
 ```
 
-This command runs from one raw selected DEXPI XML input fixture to persisted
-report artifacts.
+This command should be understood as a consumer of the lower seams, not as the
+primary architectural center.
 
-## Persisted raw-input artifacts
+## Persisted verifier artifacts
 
 For the command above, the output directory contains:
 
 - `E06V01-VER.EX01.graph_facts.json`
+- `E06V01-VER.EX01.derived_graph_semantics.dl`
 - `E06V01-VER.EX01.result.json`
 
 ## Checked-in verifier examples
@@ -37,5 +68,3 @@ For the broader tracer-bullet suite, the stable suite command is:
   fixtures/verifier_suite/manifest.json \
   --output-dir /tmp/pydexpi-verify-suite
 ```
-
-This is the persisted artifact seam that later slices build on.
