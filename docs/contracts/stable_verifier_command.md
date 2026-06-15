@@ -13,7 +13,7 @@ Verification sits on top of:
 The foundational stable seam is the graph export flow:
 
 ```bash
-python -m pydexpi_datalog export-facts \
+./.venv/bin/python -m pydexpi_datalog export-facts \
   "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml" \
   --fixture-id e06-natural \
   --output-dir /tmp/pydexpi-export-facts

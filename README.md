@@ -20,12 +20,12 @@ The verifier sits on top of DEXPI 1.3 source input, `pyDEXPI` full-graph
 extraction, graph-mirrored fact export, and derived Souffle graph semantics.
 
 ```bash
-python -m pydexpi_datalog export-facts \
+./.venv/bin/python -m pydexpi_datalog export-facts \
   "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml" \
   --fixture-id e06-natural \
   --output-dir /tmp/pydexpi-export-facts
 
-python -m pydexpi_datalog derive-graph-semantics \
+./.venv/bin/python -m pydexpi_datalog derive-graph-semantics \
   /tmp/pydexpi-export-facts/e06-natural/graph_facts.json \
   --output-dir /tmp/pydexpi-derived-graph-semantics
 ```
