@@ -3,33 +3,33 @@
     "edges": [
       {
         "attributes": {
-          "attr_name": "chambers",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "6749f8f3-ecfc-4b3c-8866-a53277eaa498",
-        "target_id": "5c4ef8bf-972d-433f-bdfb-30cb534febb5"
-      },
-      {
-        "attributes": {
-          "attr_name": "chambers",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "6749f8f3-ecfc-4b3c-8866-a53277eaa498",
-        "target_id": "ce68b9f2-eb40-457f-9bdd-81e1f3874b1c"
-      },
-      {
-        "attributes": {
           "attr_name": "taggedPlantItems",
           "label": "composition"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "ca89e1b7-c4ad-4260-9270-3c712b4d043b",
-        "target_id": "6749f8f3-ecfc-4b3c-8866-a53277eaa498"
+        "source_id": "6cd1217c-59a6-48e9-9666-ebf7ede6d4bc",
+        "target_id": "956243f8-8436-457e-af14-2afee460f0f1"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "956243f8-8436-457e-af14-2afee460f0f1",
+        "target_id": "17f775a2-0a64-44eb-97f2-2abcaf99e196"
+      },
+      {
+        "attributes": {
+          "attr_name": "chambers",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "956243f8-8436-457e-af14-2afee460f0f1",
+        "target_id": "9835f469-df97-4234-9bf4-532d12820f0e"
       }
     ],
     "nodes": [
@@ -48,7 +48,16 @@
           "upperLimitDesignTemperature": "100.0 \u00b0C"
         },
         "fact_type": "node",
-        "node_id": "5c4ef8bf-972d-433f-bdfb-30cb534febb5"
+        "node_id": "17f775a2-0a64-44eb-97f2-2abcaf99e196"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "6cd1217c-59a6-48e9-9666-ebf7ede6d4bc"
       },
       {
         "attributes": {
@@ -60,16 +69,7 @@
           "tagName": "T4750"
         },
         "fact_type": "node",
-        "node_id": "6749f8f3-ecfc-4b3c-8866-a53277eaa498"
-      },
-      {
-        "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
-        },
-        "fact_type": "node",
-        "node_id": "ca89e1b7-c4ad-4260-9270-3c712b4d043b"
+        "node_id": "956243f8-8436-457e-af14-2afee460f0f1"
       },
       {
         "attributes": {
@@ -86,7 +86,7 @@
           "upperLimitDesignTemperature": "100.0 \u00b0C"
         },
         "fact_type": "node",
-        "node_id": "ce68b9f2-eb40-457f-9bdd-81e1f3874b1c"
+        "node_id": "9835f469-df97-4234-9bf4-532d12820f0e"
       }
     ]
   },

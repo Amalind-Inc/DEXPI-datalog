@@ -125,6 +125,15 @@ class ExportFactsCliTests(unittest.TestCase):
             artifact_path = output_dir / e03_summary["artifact_path"]
             self.assertTrue(artifact_path.exists(), artifact_path)
 
+            attribute_coverage = summary["attribute_coverage"]
+            self.assertIn(
+                "nominalDiameterNumericalValueRepresentation",
+                attribute_coverage["node_attribute_keys"],
+            )
+            self.assertIn("chamber", attribute_coverage["edge_attr_names"])
+            self.assertEqual(attribute_coverage["base_fact_collections"], ["edges", "nodes"])
+            self.assertNotIn("pump", attribute_coverage["base_fact_collections"])
+
     def test_export_facts_records_pinned_pydexpi_version_in_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "exported-facts"
@@ -244,6 +253,15 @@ class ExportFactsCliTests(unittest.TestCase):
             },
         )
         self.assertEqual(summary["excluded_fixtures"], [])
+        self.assertIn(
+            "nominalDiameterNumericalValueRepresentation",
+            summary["attribute_coverage"]["node_attribute_keys"],
+        )
+        self.assertIn("chamber", summary["attribute_coverage"]["edge_attr_names"])
+        self.assertEqual(
+            summary["attribute_coverage"]["base_fact_collections"],
+            ["edges", "nodes"],
+        )
 
 
 if __name__ == "__main__":

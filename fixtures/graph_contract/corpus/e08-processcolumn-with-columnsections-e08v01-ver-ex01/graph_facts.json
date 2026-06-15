@@ -3,33 +3,33 @@
     "edges": [
       {
         "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "29e8d196-a7d2-410e-aaab-bf5297162e87",
+        "target_id": "aebc2140-030d-49b5-bed4-121e96b14683"
+      },
+      {
+        "attributes": {
+          "attr_name": "internals",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "a8a377c6-3339-4f8b-ba14-d27d635b1dbe",
+        "target_id": "599440dd-e6eb-4e05-b19f-313375b4e41b"
+      },
+      {
+        "attributes": {
           "attr_name": "taggedPlantItems",
           "label": "composition"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "33d988f7-de2b-49bf-92e6-7d6eeabbd46d",
-        "target_id": "fb24f6af-9a29-4561-94df-c71028300d6e"
-      },
-      {
-        "attributes": {
-          "attr_name": "internals",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "8af42658-2d31-49a1-afbf-f975c0675cad",
-        "target_id": "65a18fc2-215c-4faa-8af0-3291cf93a6a8"
-      },
-      {
-        "attributes": {
-          "attr_name": "internals",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb",
-        "target_id": "1c88a40f-9b1f-40dc-9e18-642f4d14cc7d"
+        "source_id": "ba2b3888-8506-47e6-b1a7-8bd30bb95723",
+        "target_id": "c4e82730-1935-4581-b2bf-40394adabf21"
       },
       {
         "attributes": {
@@ -38,28 +38,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "11747290-513a-48b6-9d63-a12c844c37c7"
-      },
-      {
-        "attributes": {
-          "attr_name": "nozzles",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "4187c6e0-e3ce-4071-a052-e74f5a4e9b55"
-      },
-      {
-        "attributes": {
-          "attr_name": "nozzles",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "51579fc9-fc66-4673-8def-868532892c4a"
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "274ad79f-c27f-4b37-95a2-4580bb47a174"
       },
       {
         "attributes": {
@@ -68,18 +48,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "8af42658-2d31-49a1-afbf-f975c0675cad"
-      },
-      {
-        "attributes": {
-          "attr_name": "columnSections",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb"
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "29e8d196-a7d2-410e-aaab-bf5297162e87"
       },
       {
         "attributes": {
@@ -88,8 +58,38 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "fb24f6af-9a29-4561-94df-c71028300d6e",
-        "target_id": "a2b6ea4f-e727-4524-b78d-341196a83657"
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "759758ae-cb22-49df-94eb-1ea6a9f249a6"
+      },
+      {
+        "attributes": {
+          "attr_name": "columnSections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "a8a377c6-3339-4f8b-ba14-d27d635b1dbe"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "bd680198-8c93-431f-a37a-70937fc46336"
+      },
+      {
+        "attributes": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c4e82730-1935-4581-b2bf-40394adabf21",
+        "target_id": "f29270a5-9e1f-44b7-9c9c-838b4d50dfc3"
       }
     ],
     "nodes": [
@@ -98,75 +98,11 @@
           "label": "Nozzle",
           "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
           "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
-          "proteusId": "Nozzle-3",
-          "subTagName": "N3"
+          "proteusId": "Nozzle-4",
+          "subTagName": "N4"
         },
         "fact_type": "node",
-        "node_id": "11747290-513a-48b6-9d63-a12c844c37c7"
-      },
-      {
-        "attributes": {
-          "label": "ColumnTraysArrangement",
-          "label_description": "The trays of a column.",
-          "labels": "ColumnTraysArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
-          "numberOfTrays": 8,
-          "proteusId": "ColumnTraysArrangement-1"
-        },
-        "fact_type": "node",
-        "node_id": "1c88a40f-9b1f-40dc-9e18-642f4d14cc7d"
-      },
-      {
-        "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
-        },
-        "fact_type": "node",
-        "node_id": "33d988f7-de2b-49bf-92e6-7d6eeabbd46d"
-      },
-      {
-        "attributes": {
-          "label": "Nozzle",
-          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
-          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
-          "proteusId": "Nozzle-2",
-          "subTagName": "N2"
-        },
-        "fact_type": "node",
-        "node_id": "4187c6e0-e3ce-4071-a052-e74f5a4e9b55"
-      },
-      {
-        "attributes": {
-          "label": "Nozzle",
-          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
-          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
-          "proteusId": "Nozzle-1",
-          "subTagName": "N1"
-        },
-        "fact_type": "node",
-        "node_id": "51579fc9-fc66-4673-8def-868532892c4a"
-      },
-      {
-        "attributes": {
-          "label": "ColumnPackingsArrangement",
-          "label_description": "The packings of a column.",
-          "labels": "ColumnPackingsArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
-          "packingType": "rings",
-          "proteusId": "ColumnPackingsArrangement-1"
-        },
-        "fact_type": "node",
-        "node_id": "65a18fc2-215c-4faa-8af0-3291cf93a6a8"
-      },
-      {
-        "attributes": {
-          "label": "SubTaggedColumnSection",
-          "label_description": "A sub tagged column section.",
-          "labels": "SubTaggedColumnSection:ColumnSection:CustomAttributeOwner",
-          "proteusId": "SubTaggedColumnSection-1",
-          "subTagName": "S1"
-        },
-        "fact_type": "node",
-        "node_id": "8af42658-2d31-49a1-afbf-f975c0675cad"
+        "node_id": "274ad79f-c27f-4b37-95a2-4580bb47a174"
       },
       {
         "attributes": {
@@ -177,18 +113,71 @@
           "subTagName": "S2"
         },
         "fact_type": "node",
-        "node_id": "9d2aae39-fed7-4f49-8a20-00d0dd6da4bb"
+        "node_id": "29e8d196-a7d2-410e-aaab-bf5297162e87"
+      },
+      {
+        "attributes": {
+          "label": "ColumnPackingsArrangement",
+          "label_description": "The packings of a column.",
+          "labels": "ColumnPackingsArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "packingType": "rings",
+          "proteusId": "ColumnPackingsArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "599440dd-e6eb-4e05-b19f-313375b4e41b"
       },
       {
         "attributes": {
           "label": "Nozzle",
           "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
           "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
-          "proteusId": "Nozzle-4",
-          "subTagName": "N4"
+          "proteusId": "Nozzle-2",
+          "subTagName": "N2"
         },
         "fact_type": "node",
-        "node_id": "a2b6ea4f-e727-4524-b78d-341196a83657"
+        "node_id": "759758ae-cb22-49df-94eb-1ea6a9f249a6"
+      },
+      {
+        "attributes": {
+          "label": "SubTaggedColumnSection",
+          "label_description": "A sub tagged column section.",
+          "labels": "SubTaggedColumnSection:ColumnSection:CustomAttributeOwner",
+          "proteusId": "SubTaggedColumnSection-1",
+          "subTagName": "S1"
+        },
+        "fact_type": "node",
+        "node_id": "a8a377c6-3339-4f8b-ba14-d27d635b1dbe"
+      },
+      {
+        "attributes": {
+          "label": "ColumnTraysArrangement",
+          "label_description": "The trays of a column.",
+          "labels": "ColumnTraysArrangement:ColumnInternalsArrangement:CustomAttributeOwner",
+          "numberOfTrays": 8,
+          "proteusId": "ColumnTraysArrangement-1"
+        },
+        "fact_type": "node",
+        "node_id": "aebc2140-030d-49b5-bed4-121e96b14683"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "ba2b3888-8506-47e6-b1a7-8bd30bb95723"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-1",
+          "subTagName": "N1"
+        },
+        "fact_type": "node",
+        "node_id": "bd680198-8c93-431f-a37a-70937fc46336"
       },
       {
         "attributes": {
@@ -201,7 +190,18 @@
           "tagNameSequenceNumber": "321"
         },
         "fact_type": "node",
-        "node_id": "fb24f6af-9a29-4561-94df-c71028300d6e"
+        "node_id": "c4e82730-1935-4581-b2bf-40394adabf21"
+      },
+      {
+        "attributes": {
+          "label": "Nozzle",
+          "label_description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+          "labels": "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation",
+          "proteusId": "Nozzle-3",
+          "subTagName": "N3"
+        },
+        "fact_type": "node",
+        "node_id": "f29270a5-9e1f-44b7-9c9c-838b4d50dfc3"
       }
     ]
   },

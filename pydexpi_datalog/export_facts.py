@@ -28,6 +28,10 @@ def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
 
     excluded_fixtures: list[dict[str, str]] = []
     fixture_summaries: list[dict[str, object]] = []
+    node_attribute_keys: set[str] = set()
+    edge_attribute_keys: set[str] = set()
+    edge_attr_names: set[str] = set()
+    base_fact_collections: set[str] = set()
 
     for dexpi_xml_path in sorted(fixture_root.glob("**/*.xml")):
         relative_path = dexpi_xml_path.relative_to(fixture_root)
@@ -51,6 +55,15 @@ def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
             continue
 
         graph = artifact["graph"]
+        facts = artifact["facts"]
+        base_fact_collections.update(facts.keys())
+        for node in facts["nodes"]:
+            node_attribute_keys.update(node["attributes"].keys())
+        for edge in facts["edges"]:
+            edge_attribute_keys.update(edge["attributes"].keys())
+            attr_name = edge["attributes"].get("attr_name")
+            if attr_name is not None:
+                edge_attr_names.add(attr_name)
         fixture_summaries.append(
             {
                 "fixture_id": fixture_id,
@@ -66,6 +79,12 @@ def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
         fixture_root=fixture_root_for_summary,
         fixtures=fixture_summaries,
         excluded_fixtures=excluded_fixtures,
+        attribute_coverage={
+            "node_attribute_keys": sorted(node_attribute_keys),
+            "edge_attribute_keys": sorted(edge_attribute_keys),
+            "edge_attr_names": sorted(edge_attr_names),
+            "base_fact_collections": sorted(base_fact_collections),
+        },
     )
     (output_dir / "corpus_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
@@ -166,6 +185,7 @@ def build_corpus_summary(
     fixture_root: str,
     fixtures: list[dict[str, object]],
     excluded_fixtures: list[dict[str, str]],
+    attribute_coverage: dict[str, list[str]],
 ) -> dict[str, object]:
     parsed = [fixture for fixture in fixtures if fixture["status"] == "parsed"]
     failed = [fixture for fixture in fixtures if fixture["status"] == "failed"]
@@ -177,6 +197,7 @@ def build_corpus_summary(
             "failed": len(failed),
             "excluded": len(excluded_fixtures),
         },
+        "attribute_coverage": attribute_coverage,
         "fixtures": fixtures,
         "excluded_fixtures": excluded_fixtures,
     }

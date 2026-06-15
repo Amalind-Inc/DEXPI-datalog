@@ -8,20 +8,11 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "7019fc06-8c74-443e-8633-dfb24790502c",
-        "target_id": "db5d6079-ace3-490c-9dd3-4a91b473333c"
+        "source_id": "73f83000-7a40-4150-97a2-8491c153392a",
+        "target_id": "143c6611-b2e8-41ca-b856-7df62b243e03"
       }
     ],
     "nodes": [
-      {
-        "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
-        },
-        "fact_type": "node",
-        "node_id": "7019fc06-8c74-443e-8633-dfb24790502c"
-      },
       {
         "attributes": {
           "cylinderLength": "2.0 m",
@@ -32,7 +23,16 @@
           "tagName": "T-9"
         },
         "fact_type": "node",
-        "node_id": "db5d6079-ace3-490c-9dd3-4a91b473333c"
+        "node_id": "143c6611-b2e8-41ca-b856-7df62b243e03"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "73f83000-7a40-4150-97a2-8491c153392a"
       }
     ]
   },

@@ -8,11 +8,20 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "dec7448c-a495-4768-8d71-a736ebe51231",
-        "target_id": "d6fffbb9-8901-4656-ade4-10cd5dfc11e4"
+        "source_id": "40b96575-7572-4c10-bf3a-18a6598326f1",
+        "target_id": "69de91e5-3491-4a5c-b610-dd87e04be311"
       }
     ],
     "nodes": [
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "40b96575-7572-4c10-bf3a-18a6598326f1"
+      },
       {
         "attributes": {
           "label": "Tank",
@@ -22,16 +31,7 @@
           "tagName": "T1301"
         },
         "fact_type": "node",
-        "node_id": "d6fffbb9-8901-4656-ade4-10cd5dfc11e4"
-      },
-      {
-        "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
-        },
-        "fact_type": "node",
-        "node_id": "dec7448c-a495-4768-8d71-a736ebe51231"
+        "node_id": "69de91e5-3491-4a5c-b610-dd87e04be311"
       }
     ]
   },

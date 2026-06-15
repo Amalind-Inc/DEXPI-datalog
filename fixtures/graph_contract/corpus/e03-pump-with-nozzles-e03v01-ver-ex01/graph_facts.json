@@ -8,18 +8,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "67b7505c-fc43-4072-b86a-dc5b0a453736",
-        "target_id": "dec378c5-6897-463b-946a-9b8019911e6f"
-      },
-      {
-        "attributes": {
-          "attr_name": "taggedPlantItems",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "7ac9be40-d188-4b2c-b213-668992ca6ec6",
-        "target_id": "85408967-1220-4db5-af4d-d3c59c89417b"
+        "source_id": "45f9ee87-cafb-440d-b44d-f8a20f148545",
+        "target_id": "be4755ba-a507-44b4-8e39-83bd91fdc598"
       },
       {
         "attributes": {
@@ -28,8 +18,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "85408967-1220-4db5-af4d-d3c59c89417b",
-        "target_id": "67b7505c-fc43-4072-b86a-dc5b0a453736"
+        "source_id": "4ff53869-c0c2-4602-b52a-d907eb6fb601",
+        "target_id": "45f9ee87-cafb-440d-b44d-f8a20f148545"
       },
       {
         "attributes": {
@@ -38,8 +28,18 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "85408967-1220-4db5-af4d-d3c59c89417b",
-        "target_id": "d8fbc72d-e649-43d9-8a91-8a2b0e75c529"
+        "source_id": "4ff53869-c0c2-4602-b52a-d907eb6fb601",
+        "target_id": "73d1468a-1678-48ca-947a-9f704d2ffeef"
+      },
+      {
+        "attributes": {
+          "attr_name": "taggedPlantItems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "609ea3bb-32bf-43e5-8cc4-b92e0cb64a9a",
+        "target_id": "4ff53869-c0c2-4602-b52a-d907eb6fb601"
       }
     ],
     "nodes": [
@@ -52,16 +52,7 @@
           "subTagName": "N-1"
         },
         "fact_type": "node",
-        "node_id": "67b7505c-fc43-4072-b86a-dc5b0a453736"
-      },
-      {
-        "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
-        },
-        "fact_type": "node",
-        "node_id": "7ac9be40-d188-4b2c-b213-668992ca6ec6"
+        "node_id": "45f9ee87-cafb-440d-b44d-f8a20f148545"
       },
       {
         "attributes": {
@@ -74,7 +65,16 @@
           "tagNameSequenceNumber": "4713"
         },
         "fact_type": "node",
-        "node_id": "85408967-1220-4db5-af4d-d3c59c89417b"
+        "node_id": "4ff53869-c0c2-4602-b52a-d907eb6fb601"
+      },
+      {
+        "attributes": {
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
+        },
+        "fact_type": "node",
+        "node_id": "609ea3bb-32bf-43e5-8cc4-b92e0cb64a9a"
       },
       {
         "attributes": {
@@ -89,7 +89,7 @@
           "upperLimitDesignTemperature": "80.0 \u00b0C"
         },
         "fact_type": "node",
-        "node_id": "d8fbc72d-e649-43d9-8a91-8a2b0e75c529"
+        "node_id": "73d1468a-1678-48ca-947a-9f704d2ffeef"
       },
       {
         "attributes": {
@@ -99,7 +99,7 @@
           "proteusId": "PipingNode-1"
         },
         "fact_type": "node",
-        "node_id": "dec378c5-6897-463b-946a-9b8019911e6f"
+        "node_id": "be4755ba-a507-44b4-8e39-83bd91fdc598"
       }
     ]
   },

@@ -3,23 +3,13 @@
     "edges": [
       {
         "attributes": {
-          "attr_name": "processInstrumentationFunctions",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "163974c7-bd4e-4671-8fb3-c2defc687260",
-        "target_id": "9239837d-b668-477d-b262-ffe0bb11b86e"
-      },
-      {
-        "attributes": {
           "attr_name": "target",
           "label": "reference"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "3fc8962f-d3e9-4d62-a0ec-c7bac6c268a8",
-        "target_id": "9239837d-b668-477d-b262-ffe0bb11b86e"
+        "source_id": "8956e190-cfe9-4650-a2f6-67fb59d3bd44",
+        "target_id": "c0407591-4aeb-4493-9f97-eeb928605252"
       },
       {
         "attributes": {
@@ -28,78 +18,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "3fc8962f-d3e9-4d62-a0ec-c7bac6c268a8",
-        "target_id": "c653bcc7-5731-4e28-b17c-8101aec4a401"
-      },
-      {
-        "attributes": {
-          "attr_name": "segments",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "4dff4ebd-27e2-43d2-8ee0-12a1e68a4239",
-        "target_id": "793ca45e-4bbc-443d-9cdd-819199f2bf07"
-      },
-      {
-        "attributes": {
-          "attr_name": "connections",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "793ca45e-4bbc-443d-9cdd-819199f2bf07",
-        "target_id": "8ec6350b-040a-4142-a701-51bd48cbae73"
-      },
-      {
-        "attributes": {
-          "attr_name": "signalConveyingFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "9239837d-b668-477d-b262-ffe0bb11b86e",
-        "target_id": "3fc8962f-d3e9-4d62-a0ec-c7bac6c268a8"
-      },
-      {
-        "attributes": {
-          "attr_name": "processSignalGeneratingFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "9239837d-b668-477d-b262-ffe0bb11b86e",
-        "target_id": "c653bcc7-5731-4e28-b17c-8101aec4a401"
-      },
-      {
-        "attributes": {
-          "attr_name": "sensingLocation",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "c653bcc7-5731-4e28-b17c-8101aec4a401",
-        "target_id": "793ca45e-4bbc-443d-9cdd-819199f2bf07"
-      },
-      {
-        "attributes": {
-          "attr_name": "instrumentationLoopFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "dc8cabf4-0852-4e40-85a1-d8e00abec967",
-        "target_id": "163974c7-bd4e-4671-8fb3-c2defc687260"
-      },
-      {
-        "attributes": {
-          "attr_name": "pipingNetworkSystems",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "dc8cabf4-0852-4e40-85a1-d8e00abec967",
-        "target_id": "4dff4ebd-27e2-43d2-8ee0-12a1e68a4239"
+        "source_id": "8956e190-cfe9-4650-a2f6-67fb59d3bd44",
+        "target_id": "cd76fc23-7baa-4bff-913b-8373d685c758"
       },
       {
         "attributes": {
@@ -108,21 +28,99 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "dc8cabf4-0852-4e40-85a1-d8e00abec967",
-        "target_id": "9239837d-b668-477d-b262-ffe0bb11b86e"
+        "source_id": "a67f5309-9604-4fca-b9f1-a7effdaa7f9c",
+        "target_id": "c0407591-4aeb-4493-9f97-eeb928605252"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "a67f5309-9604-4fca-b9f1-a7effdaa7f9c",
+        "target_id": "ccb5d53d-1f48-451e-94ff-d4f122e00b41"
+      },
+      {
+        "attributes": {
+          "attr_name": "pipingNetworkSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "a67f5309-9604-4fca-b9f1-a7effdaa7f9c",
+        "target_id": "d64f8345-6fde-42a9-8365-0234396e5e50"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c0407591-4aeb-4493-9f97-eeb928605252",
+        "target_id": "8956e190-cfe9-4650-a2f6-67fb59d3bd44"
+      },
+      {
+        "attributes": {
+          "attr_name": "processSignalGeneratingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "c0407591-4aeb-4493-9f97-eeb928605252",
+        "target_id": "cd76fc23-7baa-4bff-913b-8373d685c758"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ccb5d53d-1f48-451e-94ff-d4f122e00b41",
+        "target_id": "c0407591-4aeb-4493-9f97-eeb928605252"
+      },
+      {
+        "attributes": {
+          "attr_name": "sensingLocation",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "cd76fc23-7baa-4bff-913b-8373d685c758",
+        "target_id": "ed50977e-d0f7-4f94-af24-6dc7d3ebbe83"
+      },
+      {
+        "attributes": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "d64f8345-6fde-42a9-8365-0234396e5e50",
+        "target_id": "ed50977e-d0f7-4f94-af24-6dc7d3ebbe83"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ed50977e-d0f7-4f94-af24-6dc7d3ebbe83",
+        "target_id": "17ec40d9-fc6a-44dc-9470-e9b792ec2419"
       }
     ],
     "nodes": [
       {
         "attributes": {
-          "instrumentationLoopFunctionNumber": "10",
-          "label": "InstrumentationLoopFunction",
-          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
-          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "InstrumentationLoopFunction-1"
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
         },
         "fact_type": "node",
-        "node_id": "163974c7-bd4e-4671-8fb3-c2defc687260"
+        "node_id": "17ec40d9-fc6a-44dc-9470-e9b792ec2419"
       },
       {
         "attributes": {
@@ -132,36 +130,16 @@
           "proteusId": "MeasuringLineFunction-1"
         },
         "fact_type": "node",
-        "node_id": "3fc8962f-d3e9-4d62-a0ec-c7bac6c268a8"
+        "node_id": "8956e190-cfe9-4650-a2f6-67fb59d3bd44"
       },
       {
         "attributes": {
-          "label": "PipingNetworkSystem",
-          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
-          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "PipingNetworkSystem-1"
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
         },
         "fact_type": "node",
-        "node_id": "4dff4ebd-27e2-43d2-8ee0-12a1e68a4239"
-      },
-      {
-        "attributes": {
-          "label": "PipingNetworkSegment",
-          "label_description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
-          "labels": "PipingNetworkSegment:ActuatingElectricalLocation:CustomAttributeOwner:SensingLocation",
-          "proteusId": "PipingNetworkSegment-1"
-        },
-        "fact_type": "node",
-        "node_id": "793ca45e-4bbc-443d-9cdd-819199f2bf07"
-      },
-      {
-        "attributes": {
-          "label": "Pipe",
-          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
-          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
-        },
-        "fact_type": "node",
-        "node_id": "8ec6350b-040a-4142-a701-51bd48cbae73"
+        "node_id": "a67f5309-9604-4fca-b9f1-a7effdaa7f9c"
       },
       {
         "attributes": {
@@ -175,7 +153,18 @@
           "proteusId": "ProcessInstrumentationFunction-1"
         },
         "fact_type": "node",
-        "node_id": "9239837d-b668-477d-b262-ffe0bb11b86e"
+        "node_id": "c0407591-4aeb-4493-9f97-eeb928605252"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "10",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "ccb5d53d-1f48-451e-94ff-d4f122e00b41"
       },
       {
         "attributes": {
@@ -185,16 +174,27 @@
           "proteusId": "ProcessSignalGeneratingFunction-1"
         },
         "fact_type": "node",
-        "node_id": "c653bcc7-5731-4e28-b17c-8101aec4a401"
+        "node_id": "cd76fc23-7baa-4bff-913b-8373d685c758"
       },
       {
         "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
+          "label": "PipingNetworkSystem",
+          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PipingNetworkSystem-1"
         },
         "fact_type": "node",
-        "node_id": "dc8cabf4-0852-4e40-85a1-d8e00abec967"
+        "node_id": "d64f8345-6fde-42a9-8365-0234396e5e50"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSegment",
+          "label_description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
+          "labels": "PipingNetworkSegment:ActuatingElectricalLocation:CustomAttributeOwner:SensingLocation",
+          "proteusId": "PipingNetworkSegment-1"
+        },
+        "fact_type": "node",
+        "node_id": "ed50977e-d0f7-4f94-af24-6dc7d3ebbe83"
       }
     ]
   },

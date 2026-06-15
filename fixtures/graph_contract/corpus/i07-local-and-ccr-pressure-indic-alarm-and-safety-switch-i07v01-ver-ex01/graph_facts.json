@@ -3,43 +3,13 @@
     "edges": [
       {
         "attributes": {
-          "attr_name": "sensingLocation",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "01fe58cb-7726-49bb-bc6c-694642923293",
-        "target_id": "c76f9b79-1335-45a2-8bf5-0fa4d4430896"
-      },
-      {
-        "attributes": {
-          "attr_name": "sensingLocation",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "0a1e971a-09a7-45ab-b11a-a615d68cbddd",
-        "target_id": "c76f9b79-1335-45a2-8bf5-0fa4d4430896"
-      },
-      {
-        "attributes": {
           "attr_name": "source",
           "label": "reference"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "0f5690c7-d1ff-4bba-8f8e-ee5cb82435fd",
-        "target_id": "01fe58cb-7726-49bb-bc6c-694642923293"
-      },
-      {
-        "attributes": {
-          "attr_name": "target",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "0f5690c7-d1ff-4bba-8f8e-ee5cb82435fd",
-        "target_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d"
+        "source_id": "1a4ca209-dd0e-475c-ab3c-7dc4903d1bb7",
+        "target_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
       },
       {
         "attributes": {
@@ -48,8 +18,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d",
-        "target_id": "01fe58cb-7726-49bb-bc6c-694642923293"
+        "source_id": "1f23bc3c-748d-4aa3-9127-129251460654",
+        "target_id": "385495a6-6dee-46d6-8850-8af6e010991c"
       },
       {
         "attributes": {
@@ -58,8 +28,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d",
-        "target_id": "0f5690c7-d1ff-4bba-8f8e-ee5cb82435fd"
+        "source_id": "1f23bc3c-748d-4aa3-9127-129251460654",
+        "target_id": "3a01cbd3-5dee-4db0-9109-74cb8baf77a8"
       },
       {
         "attributes": {
@@ -68,88 +38,18 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "21301060-35a5-4923-a237-fbb9b475de25",
-        "target_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d"
+        "source_id": "2dd82326-4d6f-49cf-868d-39baf9987f00",
+        "target_id": "1f23bc3c-748d-4aa3-9127-129251460654"
       },
       {
         "attributes": {
-          "attr_name": "processInstrumentationFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d"
-      },
-      {
-        "attributes": {
-          "attr_name": "instrumentationLoopFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "21301060-35a5-4923-a237-fbb9b475de25"
-      },
-      {
-        "attributes": {
-          "attr_name": "instrumentationLoopFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "575d202e-3129-4eb4-b448-e7680033120c"
-      },
-      {
-        "attributes": {
-          "attr_name": "processInstrumentationFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "6e42fdbc-9be6-4941-8fa2-e25842bd1779"
-      },
-      {
-        "attributes": {
-          "attr_name": "pipingNetworkSystems",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "a38c1869-6884-490e-a9a4-4dbd8f726fff"
-      },
-      {
-        "attributes": {
-          "attr_name": "instrumentationLoopFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "ab59a5a0-f683-4733-9b15-bbac974f4ecb"
-      },
-      {
-        "attributes": {
-          "attr_name": "processInstrumentationFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a",
-        "target_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
-      },
-      {
-        "attributes": {
-          "attr_name": "source",
+          "attr_name": "sensingLocation",
           "label": "reference"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "3c79c15a-0e66-46e9-bf0a-cd3e40f47629",
-        "target_id": "0a1e971a-09a7-45ab-b11a-a615d68cbddd"
+        "source_id": "385495a6-6dee-46d6-8850-8af6e010991c",
+        "target_id": "eb396e50-c4a0-47d7-9879-2b27199b144c"
       },
       {
         "attributes": {
@@ -158,18 +58,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "3c79c15a-0e66-46e9-bf0a-cd3e40f47629",
-        "target_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
-      },
-      {
-        "attributes": {
-          "attr_name": "target",
-          "label": "reference"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "4217043d-3713-41de-bc3c-69069db97772",
-        "target_id": "6e42fdbc-9be6-4941-8fa2-e25842bd1779"
+        "source_id": "3a01cbd3-5dee-4db0-9109-74cb8baf77a8",
+        "target_id": "1f23bc3c-748d-4aa3-9127-129251460654"
       },
       {
         "attributes": {
@@ -178,8 +68,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "4217043d-3713-41de-bc3c-69069db97772",
-        "target_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
+        "source_id": "3a01cbd3-5dee-4db0-9109-74cb8baf77a8",
+        "target_id": "385495a6-6dee-46d6-8850-8af6e010991c"
       },
       {
         "attributes": {
@@ -188,8 +78,78 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "575d202e-3129-4eb4-b448-e7680033120c",
-        "target_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
+        "source_id": "430ddc08-b23a-407c-9dad-8a12d501b0b2",
+        "target_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5aaf2abd-405a-4513-a429-076fd6026bc5",
+        "target_id": "1a4ca209-dd0e-475c-ab3c-7dc4903d1bb7"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5aaf2abd-405a-4513-a429-076fd6026bc5",
+        "target_id": "5dafbcae-9cb5-4ab3-bbf1-3e24a0cea0f5"
+      },
+      {
+        "attributes": {
+          "attr_name": "processSignalGeneratingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5aaf2abd-405a-4513-a429-076fd6026bc5",
+        "target_id": "b2badb46-dc32-4ea6-85b3-c18345d510e9"
+      },
+      {
+        "attributes": {
+          "attr_name": "signalConveyingFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5aaf2abd-405a-4513-a429-076fd6026bc5",
+        "target_id": "e4ed69a6-e94a-4f94-bb28-2e2cf8bc0b4f"
+      },
+      {
+        "attributes": {
+          "attr_name": "source",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5dafbcae-9cb5-4ab3-bbf1-3e24a0cea0f5",
+        "target_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
+      },
+      {
+        "attributes": {
+          "attr_name": "target",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "5dafbcae-9cb5-4ab3-bbf1-3e24a0cea0f5",
+        "target_id": "7e0e7072-f54b-41e9-a45c-e710750786b5"
+      },
+      {
+        "attributes": {
+          "attr_name": "sensingLocation",
+          "label": "reference"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "b2badb46-dc32-4ea6-85b3-c18345d510e9",
+        "target_id": "eb396e50-c4a0-47d7-9879-2b27199b144c"
       },
       {
         "attributes": {
@@ -198,8 +158,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "a38c1869-6884-490e-a9a4-4dbd8f726fff",
-        "target_id": "c76f9b79-1335-45a2-8bf5-0fa4d4430896"
+        "source_id": "bb5c1713-cba3-4fda-a870-4437dfa2633b",
+        "target_id": "eb396e50-c4a0-47d7-9879-2b27199b144c"
       },
       {
         "attributes": {
@@ -208,58 +168,18 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "ab59a5a0-f683-4733-9b15-bbac974f4ecb",
-        "target_id": "6e42fdbc-9be6-4941-8fa2-e25842bd1779"
+        "source_id": "be2d5b35-59fa-4210-97db-04fc4d1d8429",
+        "target_id": "7e0e7072-f54b-41e9-a45c-e710750786b5"
       },
       {
         "attributes": {
-          "attr_name": "processSignalGeneratingFunctions",
-          "label": "composition"
+          "attr_name": "target",
+          "label": "reference"
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d",
-        "target_id": "0a1e971a-09a7-45ab-b11a-a615d68cbddd"
-      },
-      {
-        "attributes": {
-          "attr_name": "signalConveyingFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d",
-        "target_id": "3c79c15a-0e66-46e9-bf0a-cd3e40f47629"
-      },
-      {
-        "attributes": {
-          "attr_name": "signalConveyingFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d",
-        "target_id": "4217043d-3713-41de-bc3c-69069db97772"
-      },
-      {
-        "attributes": {
-          "attr_name": "signalConveyingFunctions",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d",
-        "target_id": "cbaae293-5fe1-4b74-a927-f69e995ce5c9"
-      },
-      {
-        "attributes": {
-          "attr_name": "connections",
-          "label": "composition"
-        },
-        "edge_key": 0,
-        "fact_type": "edge",
-        "source_id": "c76f9b79-1335-45a2-8bf5-0fa4d4430896",
-        "target_id": "92b91076-28c9-403f-b085-ca4c88b1e1dc"
+        "source_id": "e4ed69a6-e94a-4f94-bb28-2e2cf8bc0b4f",
+        "target_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
       },
       {
         "attributes": {
@@ -268,40 +188,102 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "cbaae293-5fe1-4b74-a927-f69e995ce5c9",
-        "target_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
+        "source_id": "e4ed69a6-e94a-4f94-bb28-2e2cf8bc0b4f",
+        "target_id": "b2badb46-dc32-4ea6-85b3-c18345d510e9"
+      },
+      {
+        "attributes": {
+          "attr_name": "connections",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "eb396e50-c4a0-47d7-9879-2b27199b144c",
+        "target_id": "9c255f58-d2db-4f91-8d34-aee80b23a0c8"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "1f23bc3c-748d-4aa3-9127-129251460654"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "2dd82326-4d6f-49cf-868d-39baf9987f00"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "430ddc08-b23a-407c-9dad-8a12d501b0b2"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
+      },
+      {
+        "attributes": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "7e0e7072-f54b-41e9-a45c-e710750786b5"
+      },
+      {
+        "attributes": {
+          "attr_name": "pipingNetworkSystems",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "bb5c1713-cba3-4fda-a870-4437dfa2633b"
+      },
+      {
+        "attributes": {
+          "attr_name": "instrumentationLoopFunctions",
+          "label": "composition"
+        },
+        "edge_key": 0,
+        "fact_type": "edge",
+        "source_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5",
+        "target_id": "be2d5b35-59fa-4210-97db-04fc4d1d8429"
       }
     ],
     "nodes": [
       {
         "attributes": {
-          "label": "ProcessSignalGeneratingFunction",
-          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
-          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "ProcessSignalGeneratingFunction-2"
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "portStatus": "H",
+          "proteusId": "SignalLineFunction-2",
+          "signalProcessControlFunctions": "A"
         },
         "fact_type": "node",
-        "node_id": "01fe58cb-7726-49bb-bc6c-694642923293"
-      },
-      {
-        "attributes": {
-          "label": "ProcessSignalGeneratingFunction",
-          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
-          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "ProcessSignalGeneratingFunction-1"
-        },
-        "fact_type": "node",
-        "node_id": "0a1e971a-09a7-45ab-b11a-a615d68cbddd"
-      },
-      {
-        "attributes": {
-          "label": "MeasuringLineFunction",
-          "label_description": "Information flow function for measured values.",
-          "labels": "MeasuringLineFunction:SignalConveyingFunction:CustomAttributeOwner",
-          "proteusId": "MeasuringLineFunction-2"
-        },
-        "fact_type": "node",
-        "node_id": "0f5690c7-d1ff-4bba-8f8e-ee5cb82435fd"
+        "node_id": "1a4ca209-dd0e-475c-ab3c-7dc4903d1bb7"
       },
       {
         "attributes": {
@@ -315,7 +297,7 @@
           "proteusId": "ProcessInstrumentationFunction-3"
         },
         "fact_type": "node",
-        "node_id": "190d15c8-892c-43c6-8c4d-2a3fd195d05d"
+        "node_id": "1f23bc3c-748d-4aa3-9127-129251460654"
       },
       {
         "attributes": {
@@ -326,38 +308,27 @@
           "proteusId": "InstrumentationLoopFunction-3"
         },
         "fact_type": "node",
-        "node_id": "21301060-35a5-4923-a237-fbb9b475de25"
+        "node_id": "2dd82326-4d6f-49cf-868d-39baf9987f00"
       },
       {
         "attributes": {
-          "label": "ConceptualModel",
-          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
-          "labels": "ConceptualModel"
+          "label": "ProcessSignalGeneratingFunction",
+          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
+          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ProcessSignalGeneratingFunction-2"
         },
         "fact_type": "node",
-        "node_id": "22a28ca4-6818-4fb1-9a18-8714cb2ab73a"
+        "node_id": "385495a6-6dee-46d6-8850-8af6e010991c"
       },
       {
         "attributes": {
           "label": "MeasuringLineFunction",
           "label_description": "Information flow function for measured values.",
           "labels": "MeasuringLineFunction:SignalConveyingFunction:CustomAttributeOwner",
-          "proteusId": "MeasuringLineFunction-1"
+          "proteusId": "MeasuringLineFunction-2"
         },
         "fact_type": "node",
-        "node_id": "3c79c15a-0e66-46e9-bf0a-cd3e40f47629"
-      },
-      {
-        "attributes": {
-          "label": "SignalLineFunction",
-          "label_description": "Information flow function for signals.",
-          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
-          "portStatus": "HH",
-          "proteusId": "SignalLineFunction-1",
-          "signalProcessControlFunctions": "Z"
-        },
-        "fact_type": "node",
-        "node_id": "4217043d-3713-41de-bc3c-69069db97772"
+        "node_id": "3a01cbd3-5dee-4db0-9109-74cb8baf77a8"
       },
       {
         "attributes": {
@@ -368,51 +339,7 @@
           "proteusId": "InstrumentationLoopFunction-1"
         },
         "fact_type": "node",
-        "node_id": "575d202e-3129-4eb4-b448-e7680033120c"
-      },
-      {
-        "attributes": {
-          "label": "ProcessInstrumentationFunction",
-          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
-          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "location": "central",
-          "processInstrumentationFunctionCategory": "U",
-          "processInstrumentationFunctionNumber": "042",
-          "processInstrumentationFunctions": "Z",
-          "proteusId": "ProcessInstrumentationFunction-2"
-        },
-        "fact_type": "node",
-        "node_id": "6e42fdbc-9be6-4941-8fa2-e25842bd1779"
-      },
-      {
-        "attributes": {
-          "label": "Pipe",
-          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
-          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
-        },
-        "fact_type": "node",
-        "node_id": "92b91076-28c9-403f-b085-ca4c88b1e1dc"
-      },
-      {
-        "attributes": {
-          "label": "PipingNetworkSystem",
-          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
-          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "PipingNetworkSystem-1"
-        },
-        "fact_type": "node",
-        "node_id": "a38c1869-6884-490e-a9a4-4dbd8f726fff"
-      },
-      {
-        "attributes": {
-          "instrumentationLoopFunctionNumber": "042",
-          "label": "InstrumentationLoopFunction",
-          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
-          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
-          "proteusId": "InstrumentationLoopFunction-2"
-        },
-        "fact_type": "node",
-        "node_id": "ab59a5a0-f683-4733-9b15-bbac974f4ecb"
+        "node_id": "430ddc08-b23a-407c-9dad-8a12d501b0b2"
       },
       {
         "attributes": {
@@ -426,7 +353,83 @@
           "proteusId": "ProcessInstrumentationFunction-1"
         },
         "fact_type": "node",
-        "node_id": "b33cda90-cd7c-4899-8ae8-eb5ac736e71d"
+        "node_id": "5aaf2abd-405a-4513-a429-076fd6026bc5"
+      },
+      {
+        "attributes": {
+          "label": "SignalLineFunction",
+          "label_description": "Information flow function for signals.",
+          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "portStatus": "HH",
+          "proteusId": "SignalLineFunction-1",
+          "signalProcessControlFunctions": "Z"
+        },
+        "fact_type": "node",
+        "node_id": "5dafbcae-9cb5-4ab3-bbf1-3e24a0cea0f5"
+      },
+      {
+        "attributes": {
+          "label": "ProcessInstrumentationFunction",
+          "label_description": "A requirement for instrumentation and/or control structures relating to Process Engineering.",
+          "labels": "ProcessInstrumentationFunction:CustomAttributeOwner:SignalConveyingFunctionSource:SignalConveyingFunctionTarget:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "location": "central",
+          "processInstrumentationFunctionCategory": "U",
+          "processInstrumentationFunctionNumber": "042",
+          "processInstrumentationFunctions": "Z",
+          "proteusId": "ProcessInstrumentationFunction-2"
+        },
+        "fact_type": "node",
+        "node_id": "7e0e7072-f54b-41e9-a45c-e710750786b5"
+      },
+      {
+        "attributes": {
+          "label": "Pipe",
+          "label_description": "An elementary piece of piping, i.e., not interrupted by any item.",
+          "labels": "Pipe:CustomAttributeOwner:PipingConnection"
+        },
+        "fact_type": "node",
+        "node_id": "9c255f58-d2db-4f91-8d34-aee80b23a0c8"
+      },
+      {
+        "attributes": {
+          "label": "ProcessSignalGeneratingFunction",
+          "label_description": "A function for instrumentation and/or control structures relating to Process Engineering",
+          "labels": "ProcessSignalGeneratingFunction:CustomAttributeOwner:SignalConveyingFunctionSource:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "ProcessSignalGeneratingFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "b2badb46-dc32-4ea6-85b3-c18345d510e9"
+      },
+      {
+        "attributes": {
+          "label": "PipingNetworkSystem",
+          "label_description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+          "labels": "PipingNetworkSystem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "PipingNetworkSystem-1"
+        },
+        "fact_type": "node",
+        "node_id": "bb5c1713-cba3-4fda-a870-4437dfa2633b"
+      },
+      {
+        "attributes": {
+          "instrumentationLoopFunctionNumber": "042",
+          "label": "InstrumentationLoopFunction",
+          "label_description": "An identified collection of related ProcessInstrumentationFunctions that interact for a known purpose.",
+          "labels": "InstrumentationLoopFunction:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure",
+          "proteusId": "InstrumentationLoopFunction-2"
+        },
+        "fact_type": "node",
+        "node_id": "be2d5b35-59fa-4210-97db-04fc4d1d8429"
+      },
+      {
+        "attributes": {
+          "label": "MeasuringLineFunction",
+          "label_description": "Information flow function for measured values.",
+          "labels": "MeasuringLineFunction:SignalConveyingFunction:CustomAttributeOwner",
+          "proteusId": "MeasuringLineFunction-1"
+        },
+        "fact_type": "node",
+        "node_id": "e4ed69a6-e94a-4f94-bb28-2e2cf8bc0b4f"
       },
       {
         "attributes": {
@@ -436,19 +439,16 @@
           "proteusId": "PipingNetworkSegment-1"
         },
         "fact_type": "node",
-        "node_id": "c76f9b79-1335-45a2-8bf5-0fa4d4430896"
+        "node_id": "eb396e50-c4a0-47d7-9879-2b27199b144c"
       },
       {
         "attributes": {
-          "label": "SignalLineFunction",
-          "label_description": "Information flow function for signals.",
-          "labels": "SignalLineFunction:SignalConveyingFunction:CustomAttributeOwner",
-          "portStatus": "H",
-          "proteusId": "SignalLineFunction-2",
-          "signalProcessControlFunctions": "A"
+          "label": "ConceptualModel",
+          "label_description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+          "labels": "ConceptualModel"
         },
         "fact_type": "node",
-        "node_id": "cbaae293-5fe1-4b74-a927-f69e995ce5c9"
+        "node_id": "ec543d1b-21ba-49e9-b26a-700120ad94a5"
       }
     ]
   },

@@ -8,8 +8,8 @@
         },
         "edge_key": 0,
         "fact_type": "edge",
-        "source_id": "5ffb7f26-4124-4210-8397-93eb52d15183",
-        "target_id": "2070f7aa-6dbf-4e7a-b214-48287b71cd62"
+        "source_id": "6a4e17f7-5f5d-4a53-9f3c-1d7ce8889b07",
+        "target_id": "61a1d063-2929-4c1e-a730-c47d3bdf1817"
       }
     ],
     "nodes": [
@@ -22,7 +22,7 @@
           "tagName": "T1301"
         },
         "fact_type": "node",
-        "node_id": "2070f7aa-6dbf-4e7a-b214-48287b71cd62"
+        "node_id": "61a1d063-2929-4c1e-a730-c47d3bdf1817"
       },
       {
         "attributes": {
@@ -31,7 +31,7 @@
           "labels": "ConceptualModel"
         },
         "fact_type": "node",
-        "node_id": "5ffb7f26-4124-4210-8397-93eb52d15183"
+        "node_id": "6a4e17f7-5f5d-4a53-9f3c-1d7ce8889b07"
       }
     ]
   },
