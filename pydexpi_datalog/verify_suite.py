@@ -17,6 +17,7 @@ def run_verify_suite(*, suite_manifest_path: Path, output_dir: Path) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rule_ids = suite_manifest.get("rules", ["pump_discharge_check_valve"])
+    behavior_examples: list[dict[str, object]] = []
     for fixture in suite_manifest["fixtures"]:
         graph_facts = json.loads(
             Path(fixture["graph_facts_path"]).read_text(encoding="utf-8")
@@ -32,6 +33,12 @@ def run_verify_suite(*, suite_manifest_path: Path, output_dir: Path) -> int:
             artifact_path.write_text(
                 json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
             )
+            behavior_example = build_behavior_example(
+                fixture=fixture,
+                actual_result=result,
+            )
+            if behavior_example is not None:
+                behavior_examples.append(behavior_example)
             continue
 
         results = [evaluate_graph_fixture(graph_facts, rule_id=rule_id) for rule_id in rule_ids]
@@ -48,8 +55,84 @@ def run_verify_suite(*, suite_manifest_path: Path, output_dir: Path) -> int:
         }
         artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
 
+    if len(rule_ids) == 1:
+        summary = build_behavior_harness_summary(
+            rule_id=rule_ids[0], examples=behavior_examples
+        )
+        (output_dir / "behavior_harness_summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
+        )
+
     print(render_console_report(suite_manifest))
     return 0
+
+
+def build_behavior_example(
+    *, fixture: dict[str, object], actual_result: dict[str, object]
+) -> dict[str, object] | None:
+    expected_result_path = fixture.get("expected_result_path")
+    if not expected_result_path:
+        return None
+
+    expected_result = json.loads(Path(expected_result_path).read_text(encoding="utf-8"))
+    expected_behavior = behavior_for_result_type(expected_result["result_type"])
+    if expected_behavior == "diagnostic":
+        return {
+            "actual_result_type": actual_result["result_type"],
+            "expected_behavior": expected_behavior,
+            "expected_result_type": expected_result["result_type"],
+            "fixture_id": fixture["fixture_id"],
+            "status": "diagnostic",
+        }
+
+    actual_behavior = behavior_for_result_type(actual_result["result_type"])
+    status = "matched" if actual_behavior == expected_behavior else "mismatched"
+    return {
+        "actual_result_type": actual_result["result_type"],
+        "expected_behavior": expected_behavior,
+        "expected_result_type": expected_result["result_type"],
+        "fixture_id": fixture["fixture_id"],
+        "status": status,
+    }
+
+
+def behavior_for_result_type(result_type: str) -> str:
+    if result_type == "pass":
+        return "satisfying"
+    if result_type == "evaluation_diagnostic":
+        return "diagnostic"
+    return "rejecting"
+
+
+def build_behavior_harness_summary(
+    *, rule_id: str, examples: list[dict[str, object]]
+) -> dict[str, object]:
+    behavioral_examples = [
+        example for example in examples if example["expected_behavior"] != "diagnostic"
+    ]
+    return {
+        "schema_version": 1,
+        "execution": "deterministic_fact_layer",
+        "candidate_rules": [rule_id],
+        "examples": sorted(examples, key=lambda item: item["fixture_id"]),
+        "totals": {
+            "examples": len(behavioral_examples),
+            "satisfying_examples": sum(
+                1
+                for example in behavioral_examples
+                if example["expected_behavior"] == "satisfying"
+            ),
+            "rejecting_examples": sum(
+                1
+                for example in behavioral_examples
+                if example["expected_behavior"] == "rejecting"
+            ),
+            "diagnostic_examples": len(examples) - len(behavioral_examples),
+            "mismatches": sum(
+                1 for example in behavioral_examples if example["status"] == "mismatched"
+            ),
+        },
+    }
 
 
 def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> dict[str, object]:

@@ -84,6 +84,41 @@ class VerifySuiteCliTests(unittest.TestCase):
         self.assertEqual(counts["evaluation_diagnostic"], 1)
         self.assertGreaterEqual(adapted_count, 1)
 
+    def test_verify_suite_writes_behavioral_harness_summary_for_candidate_rule(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "suite-results"
+            self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
+
+            result = self.run_verify_suite(SUITE_MANIFEST_PATH, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary_path = output_dir / "behavior_harness_summary.json"
+            self.assertTrue(summary_path.exists(), summary_path)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(summary["schema_version"], 1)
+            self.assertEqual(summary["execution"], "deterministic_fact_layer")
+            self.assertEqual(summary["candidate_rules"], ["pump_discharge_check_valve"])
+            self.assertEqual(summary["totals"]["examples"], 5)
+            self.assertEqual(summary["totals"]["satisfying_examples"], 2)
+            self.assertEqual(summary["totals"]["rejecting_examples"], 3)
+            self.assertEqual(summary["totals"]["diagnostic_examples"], 1)
+            self.assertEqual(summary["totals"]["mismatches"], 0)
+
+            examples_by_fixture = {
+                example["fixture_id"]: example for example in summary["examples"]
+            }
+            self.assertEqual(
+                examples_by_fixture["pass_c01_local_segment"]["expected_behavior"],
+                "satisfying",
+            )
+            self.assertEqual(
+                examples_by_fixture["hard_violation_e06_natural"]["expected_behavior"],
+                "rejecting",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
