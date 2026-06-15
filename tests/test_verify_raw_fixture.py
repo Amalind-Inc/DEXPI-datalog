@@ -47,15 +47,25 @@ class VerifyRawFixtureCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "raw-verify"
             artifact_path = output_dir / "E06V01-VER.EX01.result.json"
+            derived_path = output_dir / "E06V01-VER.EX01.derived_graph_semantics.dl"
             self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
 
             result = self.run_verify_raw_fixture(E06_FIXTURE, output_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(artifact_path.exists())
+            self.assertTrue(derived_path.exists())
             artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
             self.assertEqual(artifact["result_type"], "hard_violation")
             self.assertEqual(artifact["rule_id"], "pump_discharge_check_valve")
+            self.assertEqual(
+                artifact["evidence"]["derived_graph_semantics"],
+                {
+                    "artifact": "E06V01-VER.EX01.derived_graph_semantics.dl",
+                    "traversal_predicate": "downstream_reference",
+                    "reachability_predicate": "reachable",
+                },
+            )
 
     def test_repo_documents_stable_verifier_command_and_example_artifacts(self) -> None:
         self.assertTrue(STABLE_COMMAND_DOC_PATH.exists(), STABLE_COMMAND_DOC_PATH)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydexpi.loaders import GraphLoader, ProteusSerializer
 
+from .derive_graph_semantics import build_derived_graph_semantics_datalog
 from .export_facts import build_graph_facts_artifact
 from .result_schemas import validate_result_schema
 from .verify_suite import evaluate_graph_fixture
@@ -20,6 +21,10 @@ def run_verify_raw_fixture(*, dexpi_xml_path: Path, output_dir: Path) -> int:
         graph=graph,
     )
     result = evaluate_graph_fixture(graph_facts, rule_id="pump_discharge_check_valve")
+    derived_semantics_filename = f"{dexpi_xml_path.stem}.derived_graph_semantics.dl"
+    result["evidence"]["derived_graph_semantics"][
+        "artifact"
+    ] = derived_semantics_filename
     diagnostics = validate_result_schema(result)
     if diagnostics:
         raise ValueError(f"invalid result schema: {diagnostics}")
@@ -27,7 +32,11 @@ def run_verify_raw_fixture(*, dexpi_xml_path: Path, output_dir: Path) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     graph_facts_path = output_dir / f"{dexpi_xml_path.stem}.graph_facts.json"
     result_path = output_dir / f"{dexpi_xml_path.stem}.result.json"
+    derived_semantics_path = output_dir / derived_semantics_filename
     graph_facts_path.write_text(json.dumps(graph_facts, indent=2, sort_keys=True), encoding="utf-8")
+    derived_semantics_path.write_text(
+        build_derived_graph_semantics_datalog(graph_facts), encoding="utf-8"
+    )
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(render_console_report(result_path))
     return 0

@@ -4,6 +4,10 @@
       "kind": "terminal_object",
       "object_id": "2accb8cf-7c3d-4563-8c22-5d817f464bd5"
     },
+    "derived_graph_semantics": {
+      "reachability_predicate": "reachable",
+      "traversal_predicate": "downstream_reference"
+    },
     "matched_objects": [],
     "traversed_edges": [
       {

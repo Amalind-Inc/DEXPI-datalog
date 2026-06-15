@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .derive_graph_semantics import derive_edge_families
 from .result_schemas import validate_result_schema
 
 
@@ -53,28 +54,35 @@ def run_verify_suite(*, suite_manifest_path: Path, output_dir: Path) -> int:
 
 def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> dict[str, object]:
     nodes = {node["node_id"]: node for node in graph_facts["facts"]["nodes"]}
-    edges = graph_facts["facts"]["edges"]
+    edge_families = derive_edge_families(graph_facts)
+    composition_edges = edge_families["composition_edge"]
+    reference_edges = edge_families["reference_edge"]
+    semantic_evidence = {
+        "traversal_predicate": "downstream_reference",
+        "reachability_predicate": "reachable",
+    }
 
     pump = next(
         node for node in graph_facts["facts"]["nodes"] if node["attributes"].get("label") == "CentrifugalPump"
     )
     pump_id = pump["node_id"]
     nozzle_ids = [
-        edge["target_id"]
-        for edge in edges
-        if edge["source_id"] == pump_id and edge["attributes"].get("attr_name") == "nozzles"
+        target_id
+        for source_id, target_id, attr_name in composition_edges
+        if source_id == pump_id and attr_name == "nozzles"
     ]
     discharge_candidates = [
         nozzle_id
         for nozzle_id in nozzle_ids
         if any(
-            edge["target_id"] == nozzle_id
-            and edge["attributes"].get("attr_name") == "sourceItem"
-            for edge in edges
+            target_id == nozzle_id and attr_name == "sourceItem"
+            for _, target_id, attr_name in reference_edges
         )
     ]
     if len(discharge_candidates) != 1:
-        return build_evaluation_diagnostic(pump_id=pump_id, rule_id=rule_id)
+        return build_evaluation_diagnostic(
+            pump_id=pump_id, rule_id=rule_id, semantic_evidence=semantic_evidence
+        )
 
     discharge_nozzle_id = discharge_candidates[0]
     traversed_objects = [
@@ -88,23 +96,22 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
 
     while True:
         outgoing_edges = [
-            edge
-            for edge in edges
-            if edge["target_id"] == current_id
-            and edge["attributes"].get("attr_name") == "sourceItem"
+            source_id
+            for source_id, target_id, attr_name in reference_edges
+            if target_id == current_id and attr_name == "sourceItem"
         ]
         next_ids = []
-        for edge in outgoing_edges:
-            container_id = edge["source_id"]
+        for container_id in outgoing_edges:
             next_ids.extend(
-                candidate["target_id"]
-                for candidate in edges
-                if candidate["source_id"] == container_id
-                and candidate["attributes"].get("attr_name") == "targetItem"
+                target_id
+                for source_id, target_id, attr_name in reference_edges
+                if source_id == container_id and attr_name == "targetItem"
             )
         next_ids = sorted(set(next_ids))
         if len(next_ids) != 1:
-            return build_evaluation_diagnostic(pump_id=pump_id)
+            return build_evaluation_diagnostic(
+                pump_id=pump_id, rule_id=rule_id, semantic_evidence=semantic_evidence
+            )
 
         next_id = next_ids[0]
         next_label = nodes[next_id]["attributes"]["label"]
@@ -129,6 +136,7 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
                         "discharge_nozzle_id": discharge_nozzle_id,
                     },
                     "evidence": {
+                        "derived_graph_semantics": semantic_evidence,
                         "traversed_objects": traversed_objects,
                         "traversed_edges": traversed_edges,
                         "matched_objects": [
@@ -150,6 +158,7 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
                     "discharge_nozzle_id": discharge_nozzle_id,
                 },
                 "evidence": {
+                    "derived_graph_semantics": semantic_evidence,
                     "traversed_objects": traversed_objects,
                     "traversed_edges": traversed_edges,
                     "matched_objects": [
@@ -175,6 +184,7 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
                     "discharge_nozzle_id": discharge_nozzle_id,
                 },
                 "evidence": {
+                    "derived_graph_semantics": semantic_evidence,
                     "traversed_objects": traversed_objects,
                     "traversed_edges": traversed_edges,
                     "matched_objects": [],
@@ -197,6 +207,7 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
                 "discharge_nozzle_id": discharge_nozzle_id,
             },
             "evidence": {
+                "derived_graph_semantics": semantic_evidence,
                 "traversed_objects": traversed_objects,
                 "traversed_edges": traversed_edges,
                 "matched_objects": [],
@@ -208,7 +219,9 @@ def evaluate_graph_fixture(graph_facts: dict[str, object], *, rule_id: str) -> d
         }
 
 
-def build_evaluation_diagnostic(*, pump_id: str, rule_id: str) -> dict[str, object]:
+def build_evaluation_diagnostic(
+    *, pump_id: str, rule_id: str, semantic_evidence: dict[str, str] | None = None
+) -> dict[str, object]:
     return {
         "schema_version": 1,
         "result_type": "evaluation_diagnostic",
@@ -219,6 +232,11 @@ def build_evaluation_diagnostic(*, pump_id: str, rule_id: str) -> dict[str, obje
             "discharge_nozzle_id": "unknown",
         },
         "evidence": {
+            "derived_graph_semantics": semantic_evidence
+            or {
+                "traversal_predicate": "downstream_reference",
+                "reachability_predicate": "reachable",
+            },
             "traversed_objects": [
                 {"object_id": pump_id, "class": "CentrifugalPump"}
             ],

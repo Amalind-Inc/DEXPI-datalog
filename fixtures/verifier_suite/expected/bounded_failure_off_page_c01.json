@@ -4,6 +4,10 @@
       "kind": "off_page_connector",
       "object_id": "FlowOutPipeOffPageConnector-1"
     },
+    "derived_graph_semantics": {
+      "reachability_predicate": "reachable",
+      "traversal_predicate": "downstream_reference"
+    },
     "matched_objects": [],
     "traversed_edges": [
       {

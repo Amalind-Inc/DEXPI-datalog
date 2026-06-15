@@ -34,23 +34,10 @@ def run_derive_graph_semantics(*, graph_facts_path: Path, output_dir: Path) -> i
 
 
 def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
-    composition_edges: list[tuple[str, str, str]] = []
-    reference_edges: list[tuple[str, str, str]] = []
-    candidate_topology_edges: list[tuple[str, str, str]] = []
-
-    for edge in artifact["facts"]["edges"]:
-        attributes = edge["attributes"]
-        attr_name = attributes.get("attr_name")
-        if attr_name is None:
-            continue
-
-        classified_edge = (edge["source_id"], edge["target_id"], attr_name)
-        if attributes.get("label") == "composition":
-            composition_edges.append(classified_edge)
-        if attributes.get("label") == "reference":
-            reference_edges.append(classified_edge)
-        if attr_name in TOPOLOGY_ATTR_NAMES:
-            candidate_topology_edges.append(classified_edge)
+    edge_families = derive_edge_families(artifact)
+    composition_edges = edge_families["composition_edge"]
+    reference_edges = edge_families["reference_edge"]
+    candidate_topology_edges = edge_families["candidate_topology_edge"]
 
     lines = [
         ".decl composition_edge(source:symbol, target:symbol, attr_name:symbol)",
@@ -76,6 +63,34 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def derive_edge_families(
+    artifact: dict[str, object]
+) -> dict[str, list[tuple[str, str, str]]]:
+    composition_edges: list[tuple[str, str, str]] = []
+    reference_edges: list[tuple[str, str, str]] = []
+    candidate_topology_edges: list[tuple[str, str, str]] = []
+
+    for edge in artifact["facts"]["edges"]:
+        attributes = edge["attributes"]
+        attr_name = attributes.get("attr_name")
+        if attr_name is None:
+            continue
+
+        classified_edge = (edge["source_id"], edge["target_id"], attr_name)
+        if attributes.get("label") == "composition":
+            composition_edges.append(classified_edge)
+        if attributes.get("label") == "reference":
+            reference_edges.append(classified_edge)
+        if attr_name in TOPOLOGY_ATTR_NAMES:
+            candidate_topology_edges.append(classified_edge)
+
+    return {
+        "composition_edge": composition_edges,
+        "reference_edge": reference_edges,
+        "candidate_topology_edge": candidate_topology_edges,
+    }
 
 
 def render_edge_facts(

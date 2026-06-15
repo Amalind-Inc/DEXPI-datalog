@@ -4,6 +4,10 @@
       "kind": "unresolved_discharge_nozzle",
       "object_id": "23f2479c-b70e-4966-a18d-e5ad7d8ccf76"
     },
+    "derived_graph_semantics": {
+      "reachability_predicate": "reachable",
+      "traversal_predicate": "downstream_reference"
+    },
     "matched_objects": [],
     "traversed_edges": [],
     "traversed_objects": [
