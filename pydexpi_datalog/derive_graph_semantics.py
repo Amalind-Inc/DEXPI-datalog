@@ -54,6 +54,7 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
         ".decl downstream_candidate(source:symbol, target:symbol)",
         ".decl downstream_composition(source:symbol, target:symbol)",
         ".decl downstream_reference(source:symbol, target:symbol)",
+        ".decl direct_process_connection(source:symbol, target:symbol)",
         ".decl reachable(source:symbol, target:symbol)",
         "",
     ]
@@ -70,6 +71,8 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
             "downstream_candidate(source, target) :- candidate_topology_edge(source, target, _).",
             "downstream_composition(source, target) :- composition_edge(source, target, _).",
             "downstream_reference(source, target) :- reference_edge(source, target, _).",
+            'direct_process_connection(source, target) :- reference_edge(source, target, "sourceItem").',
+            'direct_process_connection(source, target) :- reference_edge(source, target, "targetItem").',
             "reachable(source, target) :- candidate_topology_edge(source, target, _).",
             "reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).",
         ]

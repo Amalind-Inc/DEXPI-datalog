@@ -41,6 +41,7 @@ The initial documented predicate surface is:
 - `downstream_candidate/2`
 - `downstream_composition/2`
 - `downstream_reference/2`
+- `direct_process_connection/2`
 - `reachable/2`
 
 These predicates are derived. They are not part of the persisted base export.
@@ -77,6 +78,9 @@ union predicate.
   `candidate_topology_edge/3`
 - `downstream_composition/2` should be defined from `composition_edge/3`
 - `downstream_reference/2` should be defined from `reference_edge/3`
+- `direct_process_connection/2` is an experimental process-facing predicate
+  derived only from direct `sourceItem` and `targetItem` references. It is useful
+  for comparison queries, but is not yet trusted process-flow semantics.
 - `reachable/2` should initially compute recursive reachability over
   `candidate_topology_edge/3`
 

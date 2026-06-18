@@ -73,6 +73,26 @@ class QueryCorpusTests(unittest.TestCase):
         self.assertIn("classify_question", entry["llm_roles"]["allowed"])
         self.assertIn("produce_compliance_answer", entry["llm_roles"]["disallowed"])
 
+    def test_compare_direct_process_connections_entry_records_experimental_contract(
+        self,
+    ) -> None:
+        entry = self.load_entry("compare_direct_process_connections")
+
+        self.assertEqual(entry["id"], "compare_direct_process_connections")
+        self.assertEqual(entry["status"], "supported_deterministic")
+        self.assertEqual(entry["determinism"]["source_of_truth"], "deterministic_query_output")
+        self.assertEqual(entry["determinism"]["current_engine"], "souffle")
+        self.assertIn("ergoai", entry["determinism"]["future_engine_candidates"])
+        self.assertIn("direct_process_connection", entry["requires"]["predicates"])
+        self.assertIn("downstream_reference", entry["requires"]["predicates"])
+        self.assertIn("reachable", entry["requires"]["predicates"])
+        self.assertIn(
+            "direct_process_connection_targets", entry["outputs"]["result_sets"]
+        )
+        self.assertTrue(entry["outputs"]["comparison_summary"])
+        self.assertIn("classify_question", entry["llm_roles"]["allowed"])
+        self.assertIn("produce_compliance_answer", entry["llm_roles"]["disallowed"])
+
 
 if __name__ == "__main__":
     unittest.main()

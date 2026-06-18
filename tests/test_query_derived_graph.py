@@ -320,6 +320,187 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
                 (output_dir / "combined_query.dl").read_text(encoding="utf-8"),
             )
 
+    def test_query_command_persists_unsupported_missing_predicates_artifact(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "classify_pump_discharge_path",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-id",
+                    "3b212201-f8b6-47ed-9019-d7961f3276c8",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Status: unsupported_missing_predicates", result.stdout)
+            self.assertFalse((output_dir / "combined_query.dl").exists())
+            self.assertFalse((output_dir / "internal" / "souffle-output").exists())
+
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "unsupported")
+            self.assertEqual(artifact["query"]["id"], "classify_pump_discharge_path")
+            self.assertEqual(
+                artifact["query"]["status"], "unsupported_missing_predicates"
+            )
+            self.assertEqual(
+                artifact["source_id"],
+                "3b212201-f8b6-47ed-9019-d7961f3276c8",
+            )
+            self.assertEqual(
+                artifact["diagnostics"],
+                [
+                    {
+                        "code": "unsupported_missing_predicates",
+                        "message": "Query cannot run until required predicates are derived",
+                        "missing_predicates": [
+                            "discharge_nozzle",
+                            "first_unbranched_downstream_segment",
+                            "branch_boundary",
+                            "inline_continuity_item",
+                            "check_valve_on_discharge_segment",
+                        ],
+                    }
+                ],
+            )
+            self.assertEqual(artifact["result_sets"], {})
+
+    def test_query_command_persists_future_candidate_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "manual_valve_before_check_valve_with_exceptions",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-id",
+                    "3b212201-f8b6-47ed-9019-d7961f3276c8",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Status: future_candidate", result.stdout)
+            self.assertFalse((output_dir / "combined_query.dl").exists())
+            self.assertFalse((output_dir / "internal" / "souffle-output").exists())
+
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "future_candidate")
+            self.assertEqual(
+                artifact["query"]["id"],
+                "manual_valve_before_check_valve_with_exceptions",
+            )
+            self.assertEqual(artifact["query"]["status"], "future_candidate")
+            self.assertEqual(
+                artifact["diagnostics"],
+                [
+                    {
+                        "code": "future_candidate",
+                        "message": "Query is recorded for future deterministic promotion",
+                        "missing_predicates": [
+                            "ordered_path",
+                            "manual_valve",
+                            "check_valve",
+                            "valve_order_on_discharge_path",
+                            "exception_applies",
+                        ],
+                        "missing_facts_or_policy": [
+                            "exception_policy",
+                            "valve_classification_policy",
+                        ],
+                    }
+                ],
+            )
+            self.assertEqual(artifact["candidate_result_sets"], [
+                "ordered_discharge_path",
+                "valve_order_findings",
+                "applied_exceptions",
+            ])
+
+    def test_query_command_compares_direct_process_connections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_direct_process_connections",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-id",
+                    "3b212201-f8b6-47ed-9019-d7961f3276c8",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Query ID: compare_direct_process_connections", result.stdout)
+            self.assertIn("Direct process connection targets", result.stdout)
+            self.assertIn("Experimental predicate: direct_process_connection", result.stdout)
+            self.assertIn(
+                "direct_process_connection matches downstream_reference", result.stdout
+            )
+            self.assertIn("narrower than reachable", result.stdout)
+
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "success")
+            self.assertEqual(artifact["query"]["id"], "compare_direct_process_connections")
+            self.assertTrue(
+                artifact["result_sets"]["direct_process_connection_targets"]
+            )
+            self.assertEqual(
+                artifact["comparison_summary"],
+                {
+                    "direct_vs_downstream_reference": "same_targets",
+                    "direct_vs_reachable": "narrower_than_reachable",
+                    "experimental_note": "direct_process_connection is experimental and not yet trusted process-flow semantics",
+                },
+            )
+            self.assertTrue((output_dir / "combined_query.dl").exists())
+            self.assertTrue(
+                (
+                    output_dir
+                    / "internal"
+                    / "souffle-output"
+                    / "query_direct_process_connection.csv"
+                ).exists()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

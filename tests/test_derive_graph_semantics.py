@@ -114,6 +114,33 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
             )
             self.assertNotIn(".decl downstream(source:symbol, target:symbol)", datalog)
 
+    def test_derive_graph_semantics_emits_experimental_direct_process_connections(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "derived-graph-semantics"
+            datalog_path = output_dir / "e06-pump-hex" / "derived_graph_semantics.dl"
+            self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
+
+            result = self.run_derive_graph_semantics(E06_GRAPH_FACTS, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(datalog_path.exists(), datalog_path)
+
+            datalog = datalog_path.read_text(encoding="utf-8")
+            self.assertIn(
+                ".decl direct_process_connection(source:symbol, target:symbol)",
+                datalog,
+            )
+            self.assertIn(
+                'direct_process_connection(source, target) :- reference_edge(source, target, "sourceItem").',
+                datalog,
+            )
+            self.assertIn(
+                'direct_process_connection(source, target) :- reference_edge(source, target, "targetItem").',
+                datalog,
+            )
+
     def test_derive_graph_semantics_emits_object_identity_and_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "derived-graph-semantics"
@@ -185,6 +212,14 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
         )
         self.assertIn(
             'node_proteus_id("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "CentrifugalPump-1").',
+            datalog,
+        )
+        self.assertIn(
+            ".decl direct_process_connection(source:symbol, target:symbol)",
+            datalog,
+        )
+        self.assertIn(
+            'direct_process_connection(source, target) :- reference_edge(source, target, "sourceItem").',
             datalog,
         )
 
