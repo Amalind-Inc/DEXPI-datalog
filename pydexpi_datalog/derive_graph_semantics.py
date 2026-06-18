@@ -4,6 +4,11 @@ import json
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+GRAPH_TOPOLOGY_IDB_PATH = (
+    REPO_ROOT / "pydexpi_datalog" / "datalog" / "idb" / "graph_topology_semantics.dl"
+)
+
 TOPOLOGY_ATTR_NAMES = {
     "connections",
     "connectorReference",
@@ -25,6 +30,11 @@ def run_derive_graph_semantics(*, graph_facts_path: Path, output_dir: Path) -> i
     output_fixture_dir = output_dir / fixture_id
     output_fixture_dir.mkdir(parents=True, exist_ok=True)
 
+    graph_facts_datalog = build_graph_facts_datalog(artifact)
+    (output_fixture_dir / "graph_facts.dl").write_text(
+        graph_facts_datalog, encoding="utf-8"
+    )
+
     datalog = build_derived_graph_semantics_datalog(artifact)
     (output_fixture_dir / "derived_graph_semantics.dl").write_text(
         datalog, encoding="utf-8"
@@ -34,50 +44,28 @@ def run_derive_graph_semantics(*, graph_facts_path: Path, output_dir: Path) -> i
 
 
 def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
+    return build_graph_facts_datalog(artifact) + "\n" + load_graph_topology_idb()
+
+
+def build_graph_facts_datalog(artifact: dict[str, object]) -> str:
     nodes = derive_nodes(artifact)
-    node_labels = derive_node_labels(artifact)
-    node_tags = derive_node_attribute_aliases(artifact, "tagName")
-    node_proteus_ids = derive_node_attribute_aliases(artifact, "proteusId")
-    edge_families = derive_edge_families(artifact)
-    composition_edges = edge_families["composition_edge"]
-    reference_edges = edge_families["reference_edge"]
-    candidate_topology_edges = edge_families["candidate_topology_edge"]
 
     lines = [
         ".decl node(id:symbol)",
-        ".decl node_label(id:symbol, label:symbol)",
-        ".decl node_tag(id:symbol, tag:symbol)",
-        ".decl node_proteus_id(id:symbol, proteus_id:symbol)",
-        ".decl composition_edge(source:symbol, target:symbol, attr_name:symbol)",
-        ".decl reference_edge(source:symbol, target:symbol, attr_name:symbol)",
-        ".decl candidate_topology_edge(source:symbol, target:symbol, attr_name:symbol)",
-        ".decl downstream_candidate(source:symbol, target:symbol)",
-        ".decl downstream_composition(source:symbol, target:symbol)",
-        ".decl downstream_reference(source:symbol, target:symbol)",
-        ".decl direct_process_connection(source:symbol, target:symbol)",
-        ".decl reachable(source:symbol, target:symbol)",
+        ".decl node_attribute(id:symbol, attr_name:symbol, attr_value:symbol)",
+        ".decl graph_edge(source:symbol, target:symbol, edge_key:symbol)",
+        ".decl graph_edge_attribute(source:symbol, target:symbol, edge_key:symbol, attr_name:symbol, attr_value:symbol)",
         "",
     ]
     lines.extend(render_node_facts(nodes))
-    lines.extend(render_node_label_facts(node_labels))
-    lines.extend(render_node_alias_facts("node_tag", node_tags))
-    lines.extend(render_node_alias_facts("node_proteus_id", node_proteus_ids))
-    lines.extend(render_edge_facts("composition_edge", composition_edges))
-    lines.extend(render_edge_facts("reference_edge", reference_edges))
-    lines.extend(render_edge_facts("candidate_topology_edge", candidate_topology_edges))
-    lines.extend(
-        [
-            "",
-            "downstream_candidate(source, target) :- candidate_topology_edge(source, target, _).",
-            "downstream_composition(source, target) :- composition_edge(source, target, _).",
-            "downstream_reference(source, target) :- reference_edge(source, target, _).",
-            'direct_process_connection(source, target) :- reference_edge(source, target, "sourceItem").',
-            'direct_process_connection(source, target) :- reference_edge(source, target, "targetItem").',
-            "reachable(source, target) :- candidate_topology_edge(source, target, _).",
-            "reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).",
-        ]
-    )
+    lines.extend(render_node_attribute_facts(artifact))
+    lines.extend(render_graph_edge_facts(artifact))
+    lines.extend(render_graph_edge_attribute_facts(artifact))
     return "\n".join(lines) + "\n"
+
+
+def load_graph_topology_idb() -> str:
+    return GRAPH_TOPOLOGY_IDB_PATH.read_text(encoding="utf-8")
 
 
 def derive_nodes(artifact: dict[str, object]) -> list[str]:
@@ -133,7 +121,7 @@ def derive_edge_families(
 
 
 def render_node_facts(nodes: list[str]) -> list[str]:
-    return [f'node("{node_id}").' for node_id in sorted(nodes)]
+    return [f"node({souffle_symbol(node_id)})." for node_id in sorted(nodes)]
 
 
 def render_node_label_facts(node_labels: list[tuple[str, str]]) -> list[str]:
@@ -141,6 +129,40 @@ def render_node_label_facts(node_labels: list[tuple[str, str]]) -> list[str]:
         f'node_label("{node_id}", "{label}").'
         for node_id, label in sorted(node_labels)
     ]
+
+
+def render_node_attribute_facts(artifact: dict[str, object]) -> list[str]:
+    facts: list[str] = []
+    for node in artifact["facts"]["nodes"]:
+        node_id = node["node_id"]
+        for attr_name, attr_value in sorted(node["attributes"].items()):
+            facts.append(
+                f"node_attribute({souffle_symbol(node_id)}, {souffle_symbol(str(attr_name))}, {souffle_symbol(str(attr_value))})."
+            )
+    return facts
+
+
+def render_graph_edge_facts(artifact: dict[str, object]) -> list[str]:
+    return [
+        f"graph_edge({souffle_symbol(edge['source_id'])}, {souffle_symbol(edge['target_id'])}, {souffle_symbol(str(edge['edge_key']))})."
+        for edge in sorted(
+            artifact["facts"]["edges"],
+            key=lambda item: (item["source_id"], item["target_id"], str(item["edge_key"])),
+        )
+    ]
+
+
+def render_graph_edge_attribute_facts(artifact: dict[str, object]) -> list[str]:
+    facts: list[str] = []
+    for edge in sorted(
+        artifact["facts"]["edges"],
+        key=lambda item: (item["source_id"], item["target_id"], str(item["edge_key"])),
+    ):
+        for attr_name, attr_value in sorted(edge["attributes"].items()):
+            facts.append(
+                f"graph_edge_attribute({souffle_symbol(edge['source_id'])}, {souffle_symbol(edge['target_id'])}, {souffle_symbol(str(edge['edge_key']))}, {souffle_symbol(str(attr_name))}, {souffle_symbol(str(attr_value))})."
+            )
+    return facts
 
 
 def render_node_alias_facts(predicate: str, aliases: list[tuple[str, str]]) -> list[str]:
@@ -154,6 +176,10 @@ def render_edge_facts(
         f'{predicate}("{source_id}", "{target_id}", "{attr_name}").'
         for source_id, target_id, attr_name in sorted(edges)
     ]
+
+
+def souffle_symbol(value: str) -> str:
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
 def render_console_report(fixture_id: str) -> str:

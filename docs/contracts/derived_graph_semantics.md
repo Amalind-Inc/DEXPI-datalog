@@ -4,7 +4,9 @@ This contract defines the first derived Souffle layer that sits above the
 graph-mirrored base fact export.
 
 The derived layer is repo-owned interpretation logic. It is not part of the
-persisted export contract.
+persisted export contract. Python emits generated Datalog EDB from
+`graph_facts.json`; reusable graph topology semantics live as Datalog IDB in
+`pydexpi_datalog/datalog/idb/graph_topology_semantics.dl`.
 
 ## Inputs
 
@@ -16,13 +18,20 @@ The derived layer consumes the generic persisted facts from
 - generic node attributes
 - generic edge attributes
 
+`derive-graph-semantics` writes two generated artifacts for each fixture:
+
+- `graph_facts.dl`: generated EDB facts over graph objects, graph attributes,
+  graph edges, and graph edge attributes
+- `derived_graph_semantics.dl`: combined executable Datalog assembled from the
+  generated EDB plus the reusable graph topology IDB
+
 ## Responsibilities
 
 This layer owns three jobs:
 
 1. object identity and label exposure for deterministic query output
-2. edge-family classification over generic exported graph facts
-3. generic graph utility predicates for downstream rule layers
+2. edge-family classification over generated EDB facts
+3. graph topology IDB predicates for downstream rule layers
 
 This layer should remain domain-agnostic enough to support more than one rule
 family, while still being explicit about stable predicate names.
@@ -57,8 +66,8 @@ to use `node/1` identities.
 
 ## Classification policy
 
-Edge-family classification should be expressed in Souffle over generic facts,
-not baked into the exporter.
+Edge-family classification should be expressed in Souffle IDB over generated EDB
+facts, not baked into the exporter.
 
 The first policy should derive:
 

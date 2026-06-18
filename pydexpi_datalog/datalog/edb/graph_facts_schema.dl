@@ -1,0 +1,4 @@
+.decl node(id:symbol)
+.decl node_attribute(id:symbol, attr_name:symbol, attr_value:symbol)
+.decl graph_edge(source:symbol, target:symbol, edge_key:symbol)
+.decl graph_edge_attribute(source:symbol, target:symbol, edge_key:symbol, attr_name:symbol, attr_value:symbol)

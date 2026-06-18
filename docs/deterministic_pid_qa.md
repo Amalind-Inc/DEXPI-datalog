@@ -14,12 +14,19 @@ they do not answer compliance questions on their own.
 graph as stable graph-shaped facts: extracted nodes, extracted edges, and generic
 attributes. It remains the auditable boundary for extraction output.
 
-`derived_graph_semantics.dl` is the enriched derived graph semantics layer. It is
-executable Datalog generated from the canonical base fact layer. This layer
-exposes object identity and labels with predicates such as `node/1`,
-`node_label/2`, `node_tag/2`, and `node_proteus_id/2`; it also classifies graph
-edges into reusable utility predicates such as `reference_edge/3`,
+`graph_facts.dl` is the generated Datalog EDB artifact. It is produced from the
+canonical base fact layer and records graph-mirrored facts such as `node/1`,
+`node_attribute/3`, `graph_edge/3`, and `graph_edge_attribute/5`.
+
+`pydexpi_datalog/datalog/idb/graph_topology_semantics.dl` is the reusable
+Datalog IDB. It owns graph topology semantics over the generated EDB, including
+object aliases such as `node_label/2`, edge-family classification such as
+`reference_edge/3`, and graph utility predicates such as
 `candidate_topology_edge/3`, `reachable/2`, and `downstream_reference/2`.
+
+`derived_graph_semantics.dl` is the combined executable Datalog artifact for
+current callers. It assembles generated EDB plus reusable IDB so existing query
+commands can execute one file.
 
 The derived layer is repository-owned interpretation logic. It can evolve as the
 query library learns from real questions, but it does not replace
@@ -28,6 +35,7 @@ query library learns from real questions, but it does not replace
 ## Execution Seam
 
 Python is the Python orchestration Adapter. It loads query corpus metadata,
+generates Datalog EDB from `graph_facts.json`, assembles EDB plus reusable IDB,
 generates the narrow query Datalog for a supported query, combines that query
 with `derived_graph_semantics.dl`, invokes the deterministic engine, renders
 terminal output, and writes inspectable artifacts.
@@ -76,9 +84,9 @@ validation templates.
 ## Predicate-Library Roadmap
 
 `direct_process_connection/2` is the first CodeQL-style predicate-library
-experiment. It derives an experimental process-facing relation from direct
-`sourceItem` and `targetItem` references and can be compared against
-`downstream_reference/2` and recursive `reachable/2`.
+experiment in `graph_topology_semantics.dl`. It derives an experimental
+process-facing relation from direct `sourceItem` and `targetItem` references and
+can be compared against `downstream_reference/2` and recursive `reachable/2`.
 
 `direct_process_connection/2` is useful comparison evidence, but it is
 experimental and not yet trusted process-flow semantics. Current artifacts should
