@@ -34,12 +34,20 @@ def run_derive_graph_semantics(*, graph_facts_path: Path, output_dir: Path) -> i
 
 
 def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
+    nodes = derive_nodes(artifact)
+    node_labels = derive_node_labels(artifact)
+    node_tags = derive_node_attribute_aliases(artifact, "tagName")
+    node_proteus_ids = derive_node_attribute_aliases(artifact, "proteusId")
     edge_families = derive_edge_families(artifact)
     composition_edges = edge_families["composition_edge"]
     reference_edges = edge_families["reference_edge"]
     candidate_topology_edges = edge_families["candidate_topology_edge"]
 
     lines = [
+        ".decl node(id:symbol)",
+        ".decl node_label(id:symbol, label:symbol)",
+        ".decl node_tag(id:symbol, tag:symbol)",
+        ".decl node_proteus_id(id:symbol, proteus_id:symbol)",
         ".decl composition_edge(source:symbol, target:symbol, attr_name:symbol)",
         ".decl reference_edge(source:symbol, target:symbol, attr_name:symbol)",
         ".decl candidate_topology_edge(source:symbol, target:symbol, attr_name:symbol)",
@@ -49,6 +57,10 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
         ".decl reachable(source:symbol, target:symbol)",
         "",
     ]
+    lines.extend(render_node_facts(nodes))
+    lines.extend(render_node_label_facts(node_labels))
+    lines.extend(render_node_alias_facts("node_tag", node_tags))
+    lines.extend(render_node_alias_facts("node_proteus_id", node_proteus_ids))
     lines.extend(render_edge_facts("composition_edge", composition_edges))
     lines.extend(render_edge_facts("reference_edge", reference_edges))
     lines.extend(render_edge_facts("candidate_topology_edge", candidate_topology_edges))
@@ -63,6 +75,30 @@ def build_derived_graph_semantics_datalog(artifact: dict[str, object]) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def derive_nodes(artifact: dict[str, object]) -> list[str]:
+    return [node["node_id"] for node in artifact["facts"]["nodes"]]
+
+
+def derive_node_labels(artifact: dict[str, object]) -> list[tuple[str, str]]:
+    node_labels: list[tuple[str, str]] = []
+    for node in artifact["facts"]["nodes"]:
+        label = node["attributes"].get("label")
+        if label is not None:
+            node_labels.append((node["node_id"], label))
+    return node_labels
+
+
+def derive_node_attribute_aliases(
+    artifact: dict[str, object], attribute_name: str
+) -> list[tuple[str, str]]:
+    aliases: list[tuple[str, str]] = []
+    for node in artifact["facts"]["nodes"]:
+        value = node["attributes"].get(attribute_name)
+        if value is not None:
+            aliases.append((node["node_id"], value))
+    return aliases
 
 
 def derive_edge_families(
@@ -91,6 +127,21 @@ def derive_edge_families(
         "reference_edge": reference_edges,
         "candidate_topology_edge": candidate_topology_edges,
     }
+
+
+def render_node_facts(nodes: list[str]) -> list[str]:
+    return [f'node("{node_id}").' for node_id in sorted(nodes)]
+
+
+def render_node_label_facts(node_labels: list[tuple[str, str]]) -> list[str]:
+    return [
+        f'node_label("{node_id}", "{label}").'
+        for node_id, label in sorted(node_labels)
+    ]
+
+
+def render_node_alias_facts(predicate: str, aliases: list[tuple[str, str]]) -> list[str]:
+    return [f'{predicate}("{node_id}", "{value}").' for node_id, value in sorted(aliases)]
 
 
 def render_edge_facts(

@@ -18,10 +18,11 @@ The derived layer consumes the generic persisted facts from
 
 ## Responsibilities
 
-This layer owns two jobs:
+This layer owns three jobs:
 
-1. edge-family classification over generic exported graph facts
-2. generic graph utility predicates for downstream rule layers
+1. object identity and label exposure for deterministic query output
+2. edge-family classification over generic exported graph facts
+3. generic graph utility predicates for downstream rule layers
 
 This layer should remain domain-agnostic enough to support more than one rule
 family, while still being explicit about stable predicate names.
@@ -30,6 +31,10 @@ family, while still being explicit about stable predicate names.
 
 The initial documented predicate surface is:
 
+- `node/1`
+- `node_label/2`
+- `node_tag/2`
+- `node_proteus_id/2`
 - `composition_edge/3`
 - `reference_edge/3`
 - `candidate_topology_edge/3`
@@ -39,6 +44,15 @@ The initial documented predicate surface is:
 - `reachable/2`
 
 These predicates are derived. They are not part of the persisted base export.
+
+`node/1` exposes graph object identity directly in the Datalog layer.
+`node_label/2` exposes the graph object's DEXPI class label, when the generic
+node attributes include a `label` value.
+`node_tag/2` exposes a human-readable equipment tag, when the generic node
+attributes include a `tagName` value. `node_proteus_id/2` exposes the source
+Proteus identifier, when the generic node attributes include a `proteusId`
+value. These aliases are for selection and display; graph joins should continue
+to use `node/1` identities.
 
 ## Classification policy
 

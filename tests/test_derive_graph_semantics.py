@@ -114,6 +114,55 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
             )
             self.assertNotIn(".decl downstream(source:symbol, target:symbol)", datalog)
 
+    def test_derive_graph_semantics_emits_object_identity_and_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "derived-graph-semantics"
+            datalog_path = output_dir / "e06-pump-hex" / "derived_graph_semantics.dl"
+            self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
+
+            result = self.run_derive_graph_semantics(E06_GRAPH_FACTS, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(datalog_path.exists(), datalog_path)
+
+            datalog = datalog_path.read_text(encoding="utf-8")
+            self.assertIn(".decl node(id:symbol)", datalog)
+            self.assertIn(".decl node_label(id:symbol, label:symbol)", datalog)
+            self.assertIn(
+                'node("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb").',
+                datalog,
+            )
+            self.assertIn(
+                'node_label("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "CentrifugalPump").',
+                datalog,
+            )
+
+    def test_derive_graph_semantics_emits_human_readable_node_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "derived-graph-semantics"
+            datalog_path = output_dir / "e06-pump-hex" / "derived_graph_semantics.dl"
+            self.addCleanup(lambda: shutil.rmtree(output_dir, ignore_errors=True))
+
+            result = self.run_derive_graph_semantics(E06_GRAPH_FACTS, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(datalog_path.exists(), datalog_path)
+
+            datalog = datalog_path.read_text(encoding="utf-8")
+            self.assertIn(".decl node_tag(id:symbol, tag:symbol)", datalog)
+            self.assertIn(
+                ".decl node_proteus_id(id:symbol, proteus_id:symbol)",
+                datalog,
+            )
+            self.assertIn(
+                'node_tag("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "P-4713").',
+                datalog,
+            )
+            self.assertIn(
+                'node_proteus_id("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "CentrifugalPump-1").',
+                datalog,
+            )
+
     def test_repo_persists_representative_derived_graph_semantics_fixture(self) -> None:
         self.assertTrue(CHECKED_IN_E06_DERIVED.exists(), CHECKED_IN_E06_DERIVED)
 
@@ -124,6 +173,18 @@ class DeriveGraphSemanticsCliTests(unittest.TestCase):
         )
         self.assertIn(
             'reference_edge("3b212201-f8b6-47ed-9019-d7961f3276c8", "57c776dc-fc90-4276-bb53-f0bbdd01bb83", "sourceItem").',
+            datalog,
+        )
+        self.assertIn(
+            'node_label("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "CentrifugalPump").',
+            datalog,
+        )
+        self.assertIn(
+            'node_tag("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "P-4713").',
+            datalog,
+        )
+        self.assertIn(
+            'node_proteus_id("16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb", "CentrifugalPump-1").',
             datalog,
         )
 
