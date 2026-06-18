@@ -1,0 +1,44 @@
+id: classify_pump_discharge_path
+status: unsupported_missing_predicates
+unsupported_reason: unsupported_missing_predicates
+question: Classify the discharge path downstream of a centrifugal pump.
+description: >-
+  Determine the first unbranched downstream discharge segment for a centrifugal
+  pump and classify whether the path satisfies the expected discharge protection
+  shape. This is the near-term north-star query, but it needs additional derived
+  graph predicates before it can execute deterministically.
+determinism:
+  required: true
+  source_of_truth: deterministic_query_output
+  current_engine: souffle
+  future_engine_candidates:
+    - ergoai
+  llm_may_not_answer_without_deterministic_output: true
+requires:
+  facts:
+    - derived_graph_semantics.dl
+  available_predicates:
+    - node
+    - node_label
+    - node_tag
+    - node_proteus_id
+    - reachable
+    - downstream_reference
+  missing_predicates:
+    - discharge_nozzle
+    - first_unbranched_downstream_segment
+    - branch_boundary
+    - inline_continuity_item
+    - check_valve_on_discharge_segment
+outputs:
+  unsupported_diagnostic: true
+  explains_missing_capability: predicate_library_work_required
+llm_roles:
+  allowed:
+    - classify_question
+    - route_to_unsupported_diagnostic
+    - explain_missing_predicates
+  disallowed:
+    - produce_compliance_answer
+    - infer_discharge_path_without_query_output
+    - bypass_deterministic_execution

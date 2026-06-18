@@ -107,6 +107,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where persisted verifier artifacts will be written.",
     )
 
+    query_derived_graph = subparsers.add_parser(
+        "query-derived-graph",
+        help="Run a deterministic QA query over a derived graph semantics artifact.",
+    )
+    query_derived_graph.add_argument("query_id", help="Checked-in query corpus ID.")
+    query_derived_graph.add_argument(
+        "derived_graph_semantics",
+        type=Path,
+        help="Path to a derived_graph_semantics.dl artifact.",
+    )
+    query_derived_graph.add_argument(
+        "--source-id",
+        required=True,
+        help="Known source graph object ID for the query.",
+    )
+    query_derived_graph.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Directory where query artifacts will be written.",
+    )
+
     return parser
 
 
@@ -160,6 +181,15 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_verify_raw_fixture(
             dexpi_xml_path=args.dexpi_xml,
+            output_dir=args.output_dir,
+        )
+    if args.command == "query-derived-graph":
+        from .query_derived_graph import run_query_derived_graph
+
+        return run_query_derived_graph(
+            query_id=args.query_id,
+            derived_graph_semantics_path=args.derived_graph_semantics,
+            source_id=args.source_id,
             output_dir=args.output_dir,
         )
 
