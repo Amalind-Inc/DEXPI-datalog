@@ -268,6 +268,11 @@ def resolve_source_selection(
                     "code": "source_selector_no_match",
                     "message": "Source selector did not resolve to a graph node",
                 }
+            if len(selector_matches.get(selector_kind, set())) > 1:
+                return None, {
+                    "code": "source_selector_ambiguous",
+                    "message": "Source selector resolved to multiple graph nodes",
+                }
 
         if len(candidate_ids) != 1:
             return None, {

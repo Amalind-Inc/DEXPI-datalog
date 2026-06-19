@@ -311,6 +311,46 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             self.assertEqual(artifact["status"], "failed")
             self.assertEqual(artifact["diagnostics"][0]["code"], "source_selector_no_match")
 
+    def test_query_command_rejects_ambiguous_source_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            ambiguous_semantics = tmp_path / "ambiguous_derived_graph_semantics.dl"
+            ambiguous_semantics.write_text(
+                E06_DERIVED_GRAPH_SEMANTICS.read_text(encoding="utf-8")
+                + '\nnode("extra-pump-node").\n'
+                + 'node_label("extra-pump-node", "Pump").\n'
+                + 'node_tag("extra-pump-node", "P-4713").\n',
+                encoding="utf-8",
+            )
+            output_dir = tmp_path / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(ambiguous_semantics),
+                    "--source-tag",
+                    "P-4713",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Source selector resolved to multiple graph nodes", result.stdout)
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "failed")
+            self.assertEqual(artifact["diagnostics"][0]["code"], "source_selector_ambiguous")
+
     def test_query_command_persists_failed_diagnostic_when_souffle_is_missing(
         self,
     ) -> None:
