@@ -18,10 +18,17 @@ def run_query_derived_graph(
     *,
     query_id: str,
     derived_graph_semantics_path: Path,
-    source_id: str,
+    source_id: str | None,
+    source_tag: str | None = None,
+    source_proteus_id: str | None = None,
     output_dir: Path | None = None,
 ) -> int:
     query_entry = load_query_entry(query_id)
+    source_selection = build_source_selection(
+        source_id=source_id,
+        source_tag=source_tag,
+        source_proteus_id=source_proteus_id,
+    )
     if query_entry["status"] != "supported_deterministic":
         if output_dir is not None:
             persist_unsupported_query_result(
@@ -38,6 +45,26 @@ def run_query_derived_graph(
     }:
         print(f"Unsupported query implementation: {query_id}")
         return 2
+
+    if source_selection["selectors"] == {}:
+        print("Missing source selector: provide --source-id, --source-tag, or --source-proteus-id")
+        return 2
+
+    source_id, source_selection_diagnostic = resolve_source_selection(
+        derived_graph_semantics_path=derived_graph_semantics_path,
+        source_selection=source_selection,
+    )
+    if source_selection_diagnostic is not None:
+        if output_dir is not None:
+            persist_source_selection_failure(
+                output_dir=output_dir,
+                query_entry=query_entry,
+                source_selection=source_selection,
+                diagnostic=source_selection_diagnostic,
+            )
+        print(source_selection_diagnostic["message"])
+        return 1
+    source_selection["resolved_source_id"] = source_id
 
     if query_id == "compare_direct_process_connections":
         generated_query_datalog = build_compare_direct_process_connections_query_datalog(
@@ -142,6 +169,7 @@ def run_query_derived_graph(
                 downstream_reference_targets=downstream_reference_targets,
                 direct_process_connection_targets=direct_process_connection_targets,
                 comparison_summary=comparison_summary,
+                source_selection=source_selection,
                 diagnostics=diagnostics,
                 status="success",
             )
@@ -174,6 +202,98 @@ def run_query_derived_graph(
 def load_query_entry(query_id: str) -> dict[str, object]:
     entry_path = QUERY_CORPUS_DIR / f"{query_id}.yaml"
     return yaml.safe_load(entry_path.read_text(encoding="utf-8"))
+
+
+def build_source_selection(
+    *, source_id: str | None, source_tag: str | None, source_proteus_id: str | None
+) -> dict[str, object]:
+    selectors = {}
+    if source_id is not None:
+        selectors["source_id"] = source_id
+    if source_tag is not None:
+        selectors["source_tag"] = source_tag
+    if source_proteus_id is not None:
+        selectors["source_proteus_id"] = source_proteus_id
+    return {"resolved_source_id": source_id, "selectors": selectors}
+
+
+def resolve_source_selection(
+    *, derived_graph_semantics_path: Path, source_selection: dict[str, object]
+) -> tuple[str | None, dict[str, str] | None]:
+    selectors = source_selection["selectors"]
+    source_id = selectors.get("source_id")
+    candidate_ids = {source_id} if isinstance(source_id, str) else set()
+    if set(selectors) == {"source_id"}:
+        return source_id if isinstance(source_id, str) else None, None
+
+    generated_query_datalog = build_source_selector_query_datalog(selectors)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        raw_output_dir = tmp_path / "souffle-output"
+        raw_output_dir.mkdir(parents=True, exist_ok=True)
+        combined_program_path = tmp_path / "source_selector_query.dl"
+        combined_program_path.write_text(
+            build_compare_reachability_program(
+                derived_graph_semantics_path=derived_graph_semantics_path,
+                generated_query_datalog=generated_query_datalog,
+            ),
+            encoding="utf-8",
+        )
+        souffle_path = shutil.which("souffle")
+        if souffle_path is None:
+            return None, {
+                "code": "missing_souffle",
+                "message": "Missing required deterministic engine: souffle",
+            }
+        result = subprocess.run(
+            [souffle_path, str(combined_program_path), "-D", str(raw_output_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None, {
+                "code": "source_selector_resolution_failed",
+                "message": "Source selector resolution failed",
+            }
+        rows = read_symbol_pairs(raw_output_dir / "query_source_selector.csv")
+        selector_matches: dict[str, set[str]] = {}
+        for matched_source_id, selector_kind in rows:
+            selector_matches.setdefault(selector_kind, set()).add(matched_source_id)
+            candidate_ids.add(matched_source_id)
+
+        for selector_kind in ("source_tag", "source_proteus_id"):
+            if selector_kind in selectors and selector_kind not in selector_matches:
+                return None, {
+                    "code": "source_selector_no_match",
+                    "message": "Source selector did not resolve to a graph node",
+                }
+
+        if len(candidate_ids) != 1:
+            return None, {
+                "code": "source_selector_mismatch",
+                "message": "Source selectors resolve to different graph nodes",
+            }
+        return next(iter(candidate_ids)), None
+
+
+def build_source_selector_query_datalog(selectors: dict[str, str]) -> str:
+    lines = [
+        ".decl query_source_selector(source:symbol, selector_kind:symbol)",
+        ".output query_source_selector",
+    ]
+    source_tag = selectors.get("source_tag")
+    if source_tag is not None:
+        lines.append(
+            f"query_source_selector(source, \"source_tag\") :- node_tag(source, {souffle_symbol(source_tag)})."
+        )
+    source_proteus_id = selectors.get("source_proteus_id")
+    if source_proteus_id is not None:
+        lines.append(
+            f"query_source_selector(source, \"source_proteus_id\") :- node_proteus_id(source, {souffle_symbol(source_proteus_id)})."
+        )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def build_compare_reachability_program(
@@ -247,6 +367,7 @@ def persist_query_result(
     status: str,
     direct_process_connection_targets: list[tuple[str, str]] | None = None,
     comparison_summary: dict[str, str] | None = None,
+    source_selection: dict[str, object] | None = None,
 ) -> None:
     artifact = {
         "status": status,
@@ -273,6 +394,33 @@ def persist_query_result(
         )
     if comparison_summary is not None:
         artifact["comparison_summary"] = comparison_summary
+    if source_selection is not None:
+        artifact["source_selection"] = source_selection
+    (output_dir / "query_result.json").write_text(
+        json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
+def persist_source_selection_failure(
+    *,
+    output_dir: Path,
+    query_entry: dict[str, object],
+    source_selection: dict[str, object],
+    diagnostic: dict[str, str],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "status": "failed",
+        "query": {
+            "id": query_entry["id"],
+            "status": query_entry["status"],
+            "question": query_entry["question"],
+        },
+        "source_id": source_selection["resolved_source_id"],
+        "source_selection": source_selection,
+        "diagnostics": [diagnostic],
+        "result_sets": {},
+    }
     (output_dir / "query_result.json").write_text(
         json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8"
     )

@@ -35,6 +35,12 @@ class QueryCorpusTests(unittest.TestCase):
         self.assertIn("node_label", entry["requires"]["predicates"])
         self.assertIn("reachable", entry["requires"]["predicates"])
         self.assertIn("downstream_reference", entry["requires"]["predicates"])
+        self.assertEqual(entry["inputs"][0]["name"], "source_selector")
+        self.assertEqual(entry["inputs"][0]["kind"], "deterministic_node_selector")
+        self.assertEqual(
+            entry["inputs"][0]["accepted_selectors"],
+            ["source_id", "source_tag", "source_proteus_id"],
+        )
         self.assertIn("classify_question", entry["llm_roles"]["allowed"])
         self.assertIn("produce_compliance_answer", entry["llm_roles"]["disallowed"])
 
@@ -88,6 +94,12 @@ class QueryCorpusTests(unittest.TestCase):
         self.assertIn("reachable", entry["requires"]["predicates"])
         self.assertIn(
             "direct_process_connection_targets", entry["outputs"]["result_sets"]
+        )
+        self.assertEqual(entry["inputs"][0]["name"], "source_selector")
+        self.assertEqual(entry["inputs"][0]["kind"], "deterministic_node_selector")
+        self.assertEqual(
+            entry["inputs"][0]["accepted_selectors"],
+            ["source_id", "source_tag", "source_proteus_id"],
         )
         self.assertTrue(entry["outputs"]["comparison_summary"])
         self.assertIn("classify_question", entry["llm_roles"]["allowed"])

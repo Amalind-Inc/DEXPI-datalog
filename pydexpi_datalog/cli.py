@@ -119,8 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_derived_graph.add_argument(
         "--source-id",
-        required=True,
         help="Known source graph object ID for the query.",
+    )
+    query_derived_graph.add_argument(
+        "--source-tag",
+        help="Human-facing source equipment tag for the query.",
+    )
+    query_derived_graph.add_argument(
+        "--source-proteus-id",
+        help="Source Proteus ID for the query.",
     )
     query_derived_graph.add_argument(
         "--output-dir",
@@ -190,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
             query_id=args.query_id,
             derived_graph_semantics_path=args.derived_graph_semantics,
             source_id=args.source_id,
+            source_tag=args.source_tag,
+            source_proteus_id=args.source_proteus_id,
             output_dir=args.output_dir,
         )
 

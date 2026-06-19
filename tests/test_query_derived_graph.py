@@ -115,6 +115,202 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             self.assertTrue(artifact["result_sets"]["reachable_targets"])
             self.assertTrue(artifact["result_sets"]["downstream_reference_targets"])
 
+    def test_query_command_resolves_source_tag_through_datalog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-tag",
+                    "P-4713",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(
+                "Source ID: 16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+                result.stdout,
+            )
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                artifact["source_id"],
+                "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+            )
+            self.assertEqual(
+                artifact["source_selection"],
+                {
+                    "resolved_source_id": "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+                    "selectors": {"source_tag": "P-4713"},
+                },
+            )
+
+    def test_query_command_resolves_source_proteus_id_through_datalog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-proteus-id",
+                    "CentrifugalPump-1",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                artifact["source_id"],
+                "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+            )
+
+    def test_query_command_accepts_matching_source_selectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-id",
+                    "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+                    "--source-tag",
+                    "P-4713",
+                    "--source-proteus-id",
+                    "CentrifugalPump-1",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "success")
+            self.assertEqual(artifact["diagnostics"], [])
+            self.assertEqual(
+                artifact["source_selection"]["resolved_source_id"],
+                "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+            )
+
+    def test_query_command_rejects_mismatched_source_selectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-id",
+                    "3b212201-f8b6-47ed-9019-d7961f3276c8",
+                    "--source-tag",
+                    "P-4713",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Source selectors resolve to different graph nodes", result.stdout)
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "failed")
+            self.assertEqual(artifact["diagnostics"][0]["code"], "source_selector_mismatch")
+
+    def test_query_command_rejects_missing_source_selector(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pydexpi_datalog",
+                "query-derived-graph",
+                "compare_known_object_reachability",
+                str(E06_DERIVED_GRAPH_SEMANTICS),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Missing source selector", result.stdout)
+
+    def test_query_command_rejects_unresolved_source_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "compare_known_object_reachability",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--source-tag",
+                    "not-a-real-tag",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Source selector did not resolve to a graph node", result.stdout)
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "failed")
+            self.assertEqual(artifact["diagnostics"][0]["code"], "source_selector_no_match")
+
     def test_query_command_persists_failed_diagnostic_when_souffle_is_missing(
         self,
     ) -> None:

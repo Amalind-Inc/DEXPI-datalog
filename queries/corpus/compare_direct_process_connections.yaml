@@ -2,10 +2,11 @@ id: compare_direct_process_connections
 status: supported_deterministic
 question: Compare experimental direct_process_connection targets against downstream_reference and reachable targets from a known source object.
 description: >-
-  Given a source graph object ID, compare the experimental process-facing
-  direct_process_connection predicate with lower-level downstream_reference and
-  recursive reachable results so reviewers can judge whether the predicate is
-  narrower, broader, or equivalent on representative fixtures.
+  Given a deterministic source object selector, compare the experimental
+  process-facing direct_process_connection predicate with lower-level
+  downstream_reference and recursive reachable results so reviewers can judge
+  whether the predicate is narrower, broader, or equivalent on representative
+  fixtures.
 determinism:
   required: true
   source_of_truth: deterministic_query_output
@@ -23,9 +24,13 @@ requires:
     - downstream_reference
     - reachable
 inputs:
-  - name: source_id
-    kind: node_id
+  - name: source_selector
+    kind: deterministic_node_selector
     required: true
+    accepted_selectors:
+      - source_id
+      - source_tag
+      - source_proteus_id
 outputs:
   result_sets:
     - direct_process_connection_targets
