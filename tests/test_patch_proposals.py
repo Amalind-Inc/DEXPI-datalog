@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from pydexpi_datalog.canonical_ir import build_canonical_engineering_ir
+from pydexpi_datalog.legacy_xml_normalization import build_legacy_xml_normalization
 from pydexpi_datalog.patch_proposals import generate_patch_proposals
 from pydexpi_datalog.rule_evaluation import evaluate_rule_pack
 
@@ -45,9 +45,11 @@ class PatchProposalTests(unittest.TestCase):
             rule_pack_path = tmp_path / "rule_pack.json"
             write_rule_pack(rule_pack_path)
 
-            ir_result = build_canonical_engineering_ir(source_path)
-            evaluation_result = evaluate_rule_pack(rule_pack_path, ir_result)
-            return generate_patch_proposals(evaluation_result.findings, ir_result)
+            normalization_result = build_legacy_xml_normalization(source_path)
+            evaluation_result = evaluate_rule_pack(rule_pack_path, normalization_result)
+            return generate_patch_proposals(
+                evaluation_result.findings, normalization_result
+            )
 
     def test_generates_one_concrete_atomic_patch_proposal_for_supported_finding(
         self,
@@ -72,7 +74,7 @@ class PatchProposalTests(unittest.TestCase):
                             {
                                 "predicate": "has_tag",
                                 "object_id": "P-101",
-                                "canonical_tag": "P-101",
+                                "normalized_tag": "P-101",
                             }
                         ],
                     },
@@ -104,7 +106,7 @@ class PatchProposalTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            ir_result = build_canonical_engineering_ir(source_path)
+            normalization_result = build_legacy_xml_normalization(source_path)
             ambiguous_finding = {
                 "rule_id": "ambiguous-equipment-finding",
                 "severity": "soft advisory",
@@ -115,13 +117,15 @@ class PatchProposalTests(unittest.TestCase):
                         {
                             "predicate": "has_tag",
                             "object_id": "P-101",
-                            "canonical_tag": "P-101",
+                            "normalized_tag": "P-101",
                         }
                     ],
                 },
             }
 
-            patch_result = generate_patch_proposals([ambiguous_finding], ir_result)
+            patch_result = generate_patch_proposals(
+                [ambiguous_finding], normalization_result
+            )
 
             self.assertEqual(patch_result.diagnostics, [])
             self.assertEqual(patch_result.patch_proposals, [])

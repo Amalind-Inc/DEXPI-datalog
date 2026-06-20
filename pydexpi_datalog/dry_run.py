@@ -6,8 +6,8 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from .cache_execution import (
-    load_or_build_canonical_engineering_ir,
-    serialize_ir_result,
+    load_or_build_legacy_xml_normalization,
+    serialize_normalization_result,
 )
 from .execution_lock import acquire_run_context_lock
 from .manifest import (
@@ -37,7 +37,7 @@ def run_dry_run(manifest_path: Path) -> int:
         )
 
     summary: dict[str, object] | None = None
-    canonical_ir: dict[str, object] | None = None
+    legacy_xml_normalization: dict[str, object] | None = None
     cache: dict[str, str] | None = None
     run_lock = None
     if manifest is not None and not has_error_diagnostics(diagnostics):
@@ -57,8 +57,10 @@ def run_dry_run(manifest_path: Path) -> int:
             summary, source_diagnostics = summarize_source(manifest)
             diagnostics.extend(source_diagnostics)
             if not has_error_diagnostics(diagnostics):
-                cache_result = load_or_build_canonical_engineering_ir(manifest)
-                canonical_ir = serialize_ir_result(cache_result.ir_result)
+                cache_result = load_or_build_legacy_xml_normalization(manifest)
+                legacy_xml_normalization = serialize_normalization_result(
+                    cache_result.normalization_result
+                )
                 cache = {
                     "status": cache_result.cache_status,
                     "cache_key": cache_result.cache_key,
@@ -70,7 +72,7 @@ def run_dry_run(manifest_path: Path) -> int:
             manifest=manifest,
             diagnostics=diagnostics,
             summary=summary,
-            canonical_ir=canonical_ir,
+            legacy_xml_normalization=legacy_xml_normalization,
             cache=cache,
         )
         persist_artifact(artifact_dir, run_id, artifact, manifest_path)
@@ -154,7 +156,7 @@ def build_artifact(
     manifest: Manifest | None,
     diagnostics: list[Diagnostic],
     summary: dict[str, object] | None,
-    canonical_ir: dict[str, object] | None,
+    legacy_xml_normalization: dict[str, object] | None,
     cache: dict[str, str] | None,
 ) -> dict[str, object]:
     return {
@@ -170,7 +172,7 @@ def build_artifact(
         "diagnostics": [diag.to_dict() for diag in diagnostics],
         "cache": cache,
         "structural_summary": summary,
-        "canonical_engineering_ir": canonical_ir,
+        "legacy_xml_normalization": legacy_xml_normalization,
         "findings": [],
         "patch_proposals": [],
     }

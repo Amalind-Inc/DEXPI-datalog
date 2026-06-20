@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from pydexpi_datalog.canonical_ir import build_canonical_engineering_ir
+from pydexpi_datalog.legacy_xml_normalization import build_legacy_xml_normalization
 from pydexpi_datalog.rule_evaluation import evaluate_rule_pack
 
 
@@ -44,8 +44,8 @@ class RuleEvaluationTests(unittest.TestCase):
             rule_pack_path = tmp_path / "rule_pack.json"
             write_rule_pack(rule_pack_path)
 
-            ir_result = build_canonical_engineering_ir(source_path)
-            result = evaluate_rule_pack(rule_pack_path, ir_result)
+            normalization_result = build_legacy_xml_normalization(source_path)
+            result = evaluate_rule_pack(rule_pack_path, normalization_result)
 
             self.assertEqual(result.diagnostics, [])
             self.assertEqual(result.findings[0]["rule_id"], "equipment-tag-present")
@@ -61,8 +61,8 @@ class RuleEvaluationTests(unittest.TestCase):
             rule_pack_path = tmp_path / "rule_pack.json"
             write_rule_pack(rule_pack_path)
 
-            ir_result = build_canonical_engineering_ir(source_path)
-            result = evaluate_rule_pack(rule_pack_path, ir_result)
+            normalization_result = build_legacy_xml_normalization(source_path)
+            result = evaluate_rule_pack(rule_pack_path, normalization_result)
 
             self.assertEqual(result.diagnostics, [])
             self.assertEqual(len(result.findings), 1)
@@ -86,8 +86,8 @@ class RuleEvaluationTests(unittest.TestCase):
             rule_pack_path = tmp_path / "rule_pack.json"
             write_rule_pack(rule_pack_path)
 
-            ir_result = build_canonical_engineering_ir(source_path)
-            result = evaluate_rule_pack(rule_pack_path, ir_result)
+            normalization_result = build_legacy_xml_normalization(source_path)
+            result = evaluate_rule_pack(rule_pack_path, normalization_result)
 
             self.assertEqual(
                 [finding["affected_object_ids"] for finding in result.findings],
@@ -105,8 +105,8 @@ class RuleEvaluationTests(unittest.TestCase):
             rule_pack_path = tmp_path / "rule_pack.json"
             write_rule_pack(rule_pack_path)
 
-            ir_result = build_canonical_engineering_ir(source_path)
-            result = evaluate_rule_pack(rule_pack_path, ir_result)
+            normalization_result = build_legacy_xml_normalization(source_path)
+            result = evaluate_rule_pack(rule_pack_path, normalization_result)
 
             finding = result.findings[0]
             self.assertEqual(
@@ -117,7 +117,7 @@ class RuleEvaluationTests(unittest.TestCase):
                         {
                             "predicate": "has_tag",
                             "object_id": "P-101",
-                            "canonical_tag": "P-101",
+                            "normalized_tag": "P-101",
                         }
                     ],
                 },

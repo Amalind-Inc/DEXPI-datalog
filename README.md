@@ -51,6 +51,24 @@ Workflow modules enforce product policy.
 CLI modules parse arguments and write or print artifacts.
 ```
 
+## Project structure
+
+The codebase is organized around P&ID QA pipeline seams rather than one large
+command module:
+
+| Seam | Where to look | Notes |
+| --- | --- | --- |
+| CLI product surface | `pydexpi_datalog/cli.py` | Parses arguments and delegates to workflow/library entry points. |
+| OSS workflow policy | `pydexpi_datalog/workflow_policy.py`, `pydexpi_datalog/manifest.py` | Enforces one source file per run and BYOK model access assumptions. |
+| DEXPI extraction and base facts | `pydexpi_datalog/export_facts.py`, `pydexpi_datalog/pipeline.py` | Uses `pyDEXPI` to build the full graph, then exports `graph_facts.json`. |
+| Derived graph semantics | `pydexpi_datalog/derive_graph_semantics.py`, `pydexpi_datalog/datalog/idb/` | Builds `graph_facts.dl` and `derived_graph_semantics.dl`. |
+| Deterministic queries | `pydexpi_datalog/query_derived_graph.py`, `queries/corpus/` | Runs supported QA queries over derived graph semantics. |
+| Rule and review compatibility | `pydexpi_datalog/rule_evaluation.py`, `pydexpi_datalog/review_only.py`, `pydexpi_datalog/patch_proposals.py` | Legacy JSON rule and patch-proposal path retained for compatibility while graph-mirrored facts become the main model. |
+| Legacy XML normalization | `pydexpi_datalog/legacy_xml_normalization.py`, `pydexpi_datalog/cache_execution.py` | XML-direct normalization used only by dry-run/review compatibility paths; it is not the primary internal model. |
+| Logic requests and model access | `pydexpi_datalog/logic_requests.py`, `pydexpi_datalog/model_access.py` | Routes BYOK LLM-assisted logic requests while deterministic execution remains the answer source. |
+| Artifacts and run state | `pydexpi_datalog/artifact_set.py`, `pydexpi_datalog/validation_state.py`, `pydexpi_datalog/suppressions.py` | Persists inspectable outputs, validation state, and suppressions. |
+| Public library seams | `pydexpi_datalog/__init__.py`, `pydexpi_datalog/pipeline.py` | Exposes reusable stages for callers that do not want to shell out to the CLI. |
+
 ## Current command
 
 ```bash

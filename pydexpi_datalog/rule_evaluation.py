@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from .canonical_ir import CanonicalEngineeringIRResult
+from .legacy_xml_normalization import LegacyXmlNormalizationResult
 
 
 CORE_PREDICATES = {"has_tag"}
@@ -17,14 +17,14 @@ class RuleEvaluationResult:
 
 
 def evaluate_rule_pack(
-    rule_pack_path: Path, ir_result: CanonicalEngineeringIRResult
+    rule_pack_path: Path, normalization_result: LegacyXmlNormalizationResult
 ) -> RuleEvaluationResult:
     raw_rule_pack = json.loads(rule_pack_path.read_text(encoding="utf-8"))
     diagnostics = validate_rule_pack(raw_rule_pack)
     if diagnostics:
         return RuleEvaluationResult(findings=[], diagnostics=diagnostics)
 
-    findings = evaluate_rules(raw_rule_pack["rules"], ir_result)
+    findings = evaluate_rules(raw_rule_pack["rules"], normalization_result)
     return RuleEvaluationResult(findings=findings, diagnostics=[])
 
 
@@ -127,7 +127,7 @@ def validate_predicate(
 
 
 def evaluate_rules(
-    rules: list[dict[str, object]], ir_result: CanonicalEngineeringIRResult
+    rules: list[dict[str, object]], normalization_result: LegacyXmlNormalizationResult
 ) -> list[dict[str, object]]:
     findings: list[dict[str, object]] = []
 
@@ -140,21 +140,21 @@ def evaluate_rules(
         if predicate != "has_tag":
             continue
 
-        for canonical_object in ir_result.canonical_objects:
-            if not canonical_object.canonical_tag:
+        for normalized_object in normalization_result.normalized_objects:
+            if not normalized_object.normalized_tag:
                 continue
             findings.append(
                 {
                     "rule_id": rule_id,
                     "severity": severity,
-                    "affected_object_ids": [canonical_object.object_id],
+                    "affected_object_ids": [normalized_object.object_id],
                     "evidence_trail": {
                         "primary_rule": rule_id,
                         "supporting_facts": [
                             {
                                 "predicate": "has_tag",
-                                "object_id": canonical_object.object_id,
-                                "canonical_tag": canonical_object.canonical_tag,
+                                "object_id": normalized_object.object_id,
+                                "normalized_tag": normalized_object.normalized_tag,
                             }
                         ],
                     },

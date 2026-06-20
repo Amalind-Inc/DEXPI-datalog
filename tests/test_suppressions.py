@@ -23,7 +23,7 @@ class SuppressionTests(unittest.TestCase):
                     {
                         "predicate": "has_tag",
                         "object_id": "P-101",
-                        "canonical_tag": "P-101",
+                        "normalized_tag": "P-101",
                     }
                 ],
             },

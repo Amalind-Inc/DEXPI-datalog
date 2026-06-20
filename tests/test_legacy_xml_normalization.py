@@ -4,11 +4,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from pydexpi_datalog.canonical_ir import build_canonical_engineering_ir
+from pydexpi_datalog.legacy_xml_normalization import build_legacy_xml_normalization
 
 
-class CanonicalEngineeringIRTests(unittest.TestCase):
-    def test_builds_canonical_objects_from_one_dexpi_source(self) -> None:
+class LegacyXmlNormalizationTests(unittest.TestCase):
+    def test_builds_normalized_objects_from_one_dexpi_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             source_path = tmp_path / "plant.xml"
@@ -22,23 +22,23 @@ class CanonicalEngineeringIRTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = build_canonical_engineering_ir(source_path)
+            result = build_legacy_xml_normalization(source_path)
 
             self.assertEqual(result.diagnostics, [])
             self.assertEqual(
-                [obj.object_id for obj in result.canonical_objects],
+                [obj.object_id for obj in result.normalized_objects],
                 ["L-1", "P-101"],
             )
             self.assertEqual(
-                [obj.canonical_tag for obj in result.canonical_objects],
+                [obj.normalized_tag for obj in result.normalized_objects],
                 ["L-1", "P-101"],
             )
             self.assertEqual(
-                result.canonical_objects[1].source_attributes["componentClass"],
+                result.normalized_objects[1].source_attributes["componentClass"],
                 "Pump",
             )
 
-    def test_preserves_raw_tag_variants_for_each_canonical_object(self) -> None:
+    def test_preserves_raw_tag_variants_for_each_normalized_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             source_path = tmp_path / "plant.xml"
@@ -51,9 +51,9 @@ class CanonicalEngineeringIRTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = build_canonical_engineering_ir(source_path)
+            result = build_legacy_xml_normalization(source_path)
 
-            self.assertEqual(result.canonical_objects[0].canonical_tag, "P-101")
+            self.assertEqual(result.normalized_objects[0].normalized_tag, "P-101")
             self.assertEqual(
                 result.raw_tag_variants["P-101"],
                 ["P-101", "P101", "P-0101"],
@@ -72,18 +72,18 @@ class CanonicalEngineeringIRTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = build_canonical_engineering_ir(source_path)
+            result = build_legacy_xml_normalization(source_path)
 
-            self.assertEqual(result.canonical_objects[0].canonical_tag, "P-101")
+            self.assertEqual(result.normalized_objects[0].normalized_tag, "P-101")
             self.assertEqual(len(result.diagnostics), 1)
             self.assertEqual(
                 result.diagnostics[0]["code"],
-                "normalizer.ambiguous_canonical_tag",
+                "normalizer.ambiguous_normalized_tag",
             )
-            self.assertEqual(len(result.canonical_objects[0].diagnostics), 1)
+            self.assertEqual(len(result.normalized_objects[0].diagnostics), 1)
             self.assertEqual(
-                result.canonical_objects[0].diagnostics[0]["code"],
-                "normalizer.ambiguous_canonical_tag",
+                result.normalized_objects[0].diagnostics[0]["code"],
+                "normalizer.ambiguous_normalized_tag",
             )
 
 

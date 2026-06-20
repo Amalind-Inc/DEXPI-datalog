@@ -74,7 +74,7 @@ class DryRunCliTests(unittest.TestCase):
             ).encode("utf-8")
         ).hexdigest()
 
-    def test_dry_run_builds_and_persists_canonical_ir_cache_entry(self) -> None:
+    def test_dry_run_builds_and_persists_legacy_normalization_cache_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             source_path = tmp_path / "plant.xml"
@@ -105,7 +105,7 @@ class DryRunCliTests(unittest.TestCase):
             )
             self.assertTrue(cache_path.exists())
 
-    def test_dry_run_reuses_cached_canonical_ir_for_unchanged_source(self) -> None:
+    def test_dry_run_reuses_cached_legacy_normalization_for_unchanged_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             source_path = tmp_path / "plant.xml"
@@ -368,17 +368,17 @@ class DryRunCliTests(unittest.TestCase):
                 ["L-1", "P-101"],
             )
             self.assertEqual(
-                artifact["canonical_engineering_ir"]["canonical_objects"],
+                artifact["legacy_xml_normalization"]["normalized_objects"],
                 [
                     {
                         "object_id": "L-1",
-                        "canonical_tag": "L-1",
+                        "normalized_tag": "L-1",
                         "source_attributes": {"id": "L-1", "tag": "L-1"},
                         "diagnostics": [],
                     },
                     {
                         "object_id": "P-101",
-                        "canonical_tag": "P-101",
+                        "normalized_tag": "P-101",
                         "source_attributes": {
                             "id": "P-101",
                             "tag": "P-101",
@@ -387,9 +387,9 @@ class DryRunCliTests(unittest.TestCase):
                         },
                         "diagnostics": [
                             {
-                                "code": "normalizer.ambiguous_canonical_tag",
+                                "code": "normalizer.ambiguous_normalized_tag",
                                 "severity": "warning",
-                                "message": "Canonical tag 'P-101' for object 'P-101' has an ambiguous raw variant 'P101'.",
+                                "message": "Normalized tag 'P-101' for object 'P-101' has an ambiguous raw variant 'P101'.",
                                 "path": "P-101",
                             }
                         ],

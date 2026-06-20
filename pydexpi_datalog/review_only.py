@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from .artifact_set import persist_artifact_set
-from .cache_execution import load_or_build_canonical_engineering_ir
+from .cache_execution import load_or_build_legacy_xml_normalization
 from .execution_lock import acquire_run_context_lock
 from .manifest import (
     Diagnostic,
@@ -59,14 +59,14 @@ def run_review_only(manifest_path: Path) -> int:
                 )
 
         if manifest is not None and not has_error_diagnostics(diagnostics):
-            cache_result = load_or_build_canonical_engineering_ir(manifest)
+            cache_result = load_or_build_legacy_xml_normalization(manifest)
             cache = {
                 "status": cache_result.cache_status,
                 "cache_key": cache_result.cache_key,
                 "cache_path": str(cache_result.cache_path.resolve()),
             }
             evaluation_result = evaluate_rule_pack(
-                manifest.rule_pack_path, cache_result.ir_result
+                manifest.rule_pack_path, cache_result.normalization_result
             )
             findings = evaluation_result.findings
             diagnostics.extend(

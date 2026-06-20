@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .canonical_ir import CanonicalEngineeringIRResult
+from .legacy_xml_normalization import LegacyXmlNormalizationResult
 
 
 @dataclass(frozen=True)
@@ -13,10 +13,10 @@ class PatchProposalResult:
 
 def generate_patch_proposals(
     findings: list[dict[str, object]],
-    ir_result: CanonicalEngineeringIRResult,
+    normalization_result: LegacyXmlNormalizationResult,
 ) -> PatchProposalResult:
     proposals: list[dict[str, object]] = []
-    object_ids = {obj.object_id for obj in ir_result.canonical_objects}
+    object_ids = {obj.object_id for obj in normalization_result.normalized_objects}
 
     for finding in findings:
         affected_object_ids = finding["affected_object_ids"]
