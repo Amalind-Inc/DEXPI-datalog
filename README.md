@@ -2,7 +2,7 @@
 
 Prototype workspace for deterministic P&ID QA over DEXPI source files (version 1.3)
 
-The OSS version is intended to work both as a standalone CLI and as a set of
+This OSS version is intended to work both as a standalone CLI and as a set of
 small Python library modules that users can integrate into their own workflows.
 
 ## OSS scope
