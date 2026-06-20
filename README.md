@@ -1,9 +1,14 @@
-# pydexpi-datalog-1
+# DEXPI-datalog
 
-Prototype workspace for deterministic P&ID QA over DEXPI source files (version 1.3)
+An open source tool for deterministic P&ID QA over DEXPI source files (version 1.3)
 
-This OSS version is intended to work both as a standalone CLI and as a set of
+This OSS version is intended to work both as a standalone CLI/TUI/GUI tool and as a set of
 small Python library modules that users can integrate into their own workflows.
+
+`DEXPI-datalog` is a precursor to further professional and enterprise grade tools that
+`Amalind Inc.` plans to produce. This tool is simply a demo tool, and I would not recommend
+using it as a way to verify the validity of production P&ID documents. Try this out, see if 
+you like it, and let us know what you like, don't like, and what you would change. 
 
 ## OSS scope
 
