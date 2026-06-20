@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 import pydexpi_datalog
@@ -62,6 +65,36 @@ class LibraryPipelineTests(unittest.TestCase):
         self.assertEqual(graph_facts["fixture_id"], "library-example")
         self.assertEqual(graph_facts["graph"], {"node_count": 1, "edge_count": 1})
         self.assertEqual(graph_facts["facts"]["nodes"][0]["node_id"], "P-101")
+
+    def test_cli_derive_graph_semantics_matches_library_output(self) -> None:
+        graph_facts = self.load_e06_graph_facts()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "derived"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "derive-graph-semantics",
+                    str(E06_GRAPH_FACTS),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            cli_datalog = (
+                output_dir / "e06-pump-hex" / "derived_graph_semantics.dl"
+            ).read_text(encoding="utf-8")
+            self.assertEqual(
+                cli_datalog,
+                pydexpi_datalog.derive_graph_semantics_datalog(graph_facts),
+            )
 
 
 if __name__ == "__main__":

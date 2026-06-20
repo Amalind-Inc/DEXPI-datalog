@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 
@@ -9,6 +10,32 @@ from .model_access import (
     resolve_model_access_config,
 )
 from .query_derived_graph import build_source_selection, resolve_source_selection
+
+
+def run_draft_logic_request(
+    *,
+    logic_request: str,
+    output_dir: Path,
+    derived_graph_semantics_path: Path | None = None,
+    source_id: str | None = None,
+    source_tag: str | None = None,
+    source_proteus_id: str | None = None,
+    environ: dict[str, str] | None = None,
+) -> int:
+    artifact = draft_logic_request(
+        logic_request=logic_request,
+        derived_graph_semantics_path=derived_graph_semantics_path,
+        source_id=source_id,
+        source_tag=source_tag,
+        source_proteus_id=source_proteus_id,
+        environ=environ,
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "logic_request.json").write_text(
+        json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    print(render_logic_request_report(artifact))
+    return 0 if artifact["status"] != "failed" else 1
 
 
 def draft_logic_request(
@@ -83,6 +110,16 @@ def route_logic_request(logic_request: str) -> dict[str, str]:
     if any(term in normalized for term in ("what is", "explain", "document")):
         return {"kind": "documentation_answer"}
     return {"kind": "clarification"}
+
+
+def render_logic_request_report(artifact: dict[str, object]) -> str:
+    return "\n".join(
+        [
+            "Logic Request Draft",
+            f"Status: {artifact['status']}",
+            f"Route: {artifact['route']['kind']}",
+        ]
+    )
 
 
 def build_source_node_context(

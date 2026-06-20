@@ -135,6 +135,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where query artifacts will be written.",
     )
 
+    draft_logic_request = subparsers.add_parser(
+        "draft-logic-request",
+        help="Draft a BYOK logic request artifact without making the LLM the answer source.",
+    )
+    draft_logic_request.add_argument("logic_request", help="Natural-language logic request.")
+    draft_logic_request.add_argument(
+        "--derived-graph-semantics",
+        type=Path,
+        help="Path to a derived_graph_semantics.dl artifact used for optional source selection.",
+    )
+    draft_logic_request.add_argument(
+        "--source-id",
+        help="Known source graph object ID for the logic request.",
+    )
+    draft_logic_request.add_argument(
+        "--source-tag",
+        help="Human-facing source equipment tag for the logic request.",
+    )
+    draft_logic_request.add_argument(
+        "--source-proteus-id",
+        help="Source Proteus ID for the logic request.",
+    )
+    draft_logic_request.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where logic-request artifacts will be written.",
+    )
+
     return parser
 
 
@@ -195,6 +224,17 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_query_derived_graph(
             query_id=args.query_id,
+            derived_graph_semantics_path=args.derived_graph_semantics,
+            source_id=args.source_id,
+            source_tag=args.source_tag,
+            source_proteus_id=args.source_proteus_id,
+            output_dir=args.output_dir,
+        )
+    if args.command == "draft-logic-request":
+        from .logic_requests import run_draft_logic_request
+
+        return run_draft_logic_request(
+            logic_request=args.logic_request,
             derived_graph_semantics_path=args.derived_graph_semantics,
             source_id=args.source_id,
             source_tag=args.source_tag,

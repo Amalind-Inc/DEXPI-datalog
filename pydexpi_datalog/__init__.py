@@ -7,7 +7,7 @@ from .pipeline import (
     evaluate_rule,
     export_base_facts,
 )
-from .logic_requests import draft_logic_request
+from .logic_requests import draft_logic_request, run_draft_logic_request
 from .model_access import FakeModelProvider, resolve_model_access_config
 
 __all__ = [
@@ -19,4 +19,5 @@ __all__ = [
     "export_base_facts",
     "FakeModelProvider",
     "resolve_model_access_config",
+    "run_draft_logic_request",
 ]

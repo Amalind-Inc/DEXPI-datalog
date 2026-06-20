@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 import pydexpi_datalog
@@ -205,6 +209,38 @@ class ModelAccessTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_cli_draft_logic_request_matches_library_model_access_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "logic-request"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "draft-logic-request",
+                    "What is downstream of P-4713?",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                env={},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Logic Request Draft", result.stdout)
+            cli_artifact = json.loads(
+                (output_dir / "logic_request.json").read_text(encoding="utf-8")
+            )
+            library_artifact = pydexpi_datalog.draft_logic_request(
+                logic_request="What is downstream of P-4713?",
+                environ={},
+            )
+            self.assertEqual(cli_artifact, library_artifact)
 
 
 if __name__ == "__main__":
