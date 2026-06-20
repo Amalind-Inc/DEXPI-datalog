@@ -29,6 +29,11 @@ def run_query_derived_graph(
         source_tag=source_tag,
         source_proteus_id=source_proteus_id,
     )
+    query_scope = query_entry.get("query_scope", {"kind": "source_rooted"})
+    if query_scope == {"kind": "source_rooted"} and source_selection["selectors"] == {}:
+        print("Missing source selector: provide --source-id, --source-tag, or --source-proteus-id")
+        return 2
+
     if query_entry["status"] != "supported_deterministic":
         if output_dir is not None:
             persist_unsupported_query_result(
@@ -44,10 +49,6 @@ def run_query_derived_graph(
         "compare_direct_process_connections",
     }:
         print(f"Unsupported query implementation: {query_id}")
-        return 2
-
-    if source_selection["selectors"] == {}:
-        print("Missing source selector: provide --source-id, --source-tag, or --source-proteus-id")
         return 2
 
     source_id, source_selection_diagnostic = resolve_source_selection(

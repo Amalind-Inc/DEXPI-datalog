@@ -616,6 +616,27 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             )
             self.assertEqual(artifact["result_sets"], {})
 
+    def test_query_command_rejects_source_rooted_unsupported_query_without_source_selector(
+        self,
+    ) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pydexpi_datalog",
+                "query-derived-graph",
+                "classify_pump_discharge_path",
+                str(E06_DERIVED_GRAPH_SEMANTICS),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Missing source selector", result.stdout)
+
     def test_query_command_persists_future_candidate_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "query-output"
