@@ -153,6 +153,8 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             self.assertEqual(
                 artifact["source_selection"],
                 {
+                    "resolution_scope": {"kind": "single_dexpi_source_file"},
+                    "resolution_source": "derived_graph_semantics",
                     "resolved_source_id": "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
                     "selectors": {"source_tag": "P-4713"},
                 },
@@ -188,6 +190,15 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             self.assertEqual(
                 artifact["source_id"],
                 "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+            )
+            self.assertEqual(
+                artifact["source_selection"],
+                {
+                    "resolution_scope": {"kind": "single_dexpi_source_file"},
+                    "resolution_source": "derived_graph_semantics",
+                    "resolved_source_id": "16fcf71b-8fb3-4e0c-a6e9-5e9d46af77bb",
+                    "selectors": {"source_proteus_id": "CentrifugalPump-1"},
+                },
             )
 
     def test_query_command_accepts_matching_source_selectors(self) -> None:
@@ -260,6 +271,10 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
             )
             self.assertEqual(artifact["status"], "failed")
             self.assertEqual(artifact["diagnostics"][0]["code"], "source_selector_mismatch")
+            self.assertEqual(
+                artifact["source_selection"]["resolution_scope"],
+                {"kind": "single_dexpi_source_file"},
+            )
 
     def test_query_command_rejects_missing_source_selector(self) -> None:
         result = subprocess.run(

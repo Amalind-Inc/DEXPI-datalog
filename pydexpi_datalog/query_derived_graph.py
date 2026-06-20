@@ -215,7 +215,12 @@ def build_source_selection(
         selectors["source_tag"] = source_tag
     if source_proteus_id is not None:
         selectors["source_proteus_id"] = source_proteus_id
-    return {"resolved_source_id": source_id, "selectors": selectors}
+    return {
+        "resolution_scope": {"kind": "single_dexpi_source_file"},
+        "resolution_source": "derived_graph_semantics",
+        "resolved_source_id": source_id,
+        "selectors": selectors,
+    }
 
 
 def resolve_source_selection(

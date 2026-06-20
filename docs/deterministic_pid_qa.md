@@ -48,6 +48,22 @@ Souffle is the current deterministic engine. Query results are persisted as
 ErgoAI is documented only as a future engine candidate. It is not a current
 dependency, and no current answer depends on ErgoAI execution.
 
+## Source Node Selection
+
+OSS workflows process one DEXPI source file per run. Source-rooted queries may
+still target one selected source node inside that file by source ID, tag, or
+Proteus ID.
+
+`--source-id` is the exact graph object identifier for debugging and tests.
+`--source-tag` and `--source-proteus-id` are human-facing selectors resolved
+through the combined `derived_graph_semantics.dl` artifact using `node_tag/2` and
+`node_proteus_id/2`. Source selection does not introduce multi-file or multi-page
+context; artifacts record the resolution scope as a single DEXPI source file.
+
+Selector failures are structured diagnostics. Missing selectors, no matches,
+multiple matches, and conflicting selectors are reported without defaulting to an
+arbitrary first graph node.
+
 ## LLM Boundary
 
 LLMs are deferred. Future LLM integration may classify a natural-language
