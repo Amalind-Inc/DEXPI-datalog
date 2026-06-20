@@ -70,6 +70,77 @@ class ModelAccessTests(unittest.TestCase):
             "byok",
         )
 
+    def test_documentation_request_routes_without_model_credentials(self) -> None:
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="Explain direct process connections",
+            environ={},
+        )
+
+        self.assertEqual(artifact["status"], "routed")
+        self.assertEqual(artifact["route"], {"kind": "documentation_answer"})
+        self.assertEqual(
+            artifact["route_result"],
+            {
+                "kind": "documentation_answer",
+                "message": "This request can be answered from project or predicate documentation without model access.",
+            },
+        )
+        self.assertEqual(artifact["diagnostics"], [])
+
+    def test_metadata_request_routes_without_model_credentials(self) -> None:
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="Show the model and context policy used for this run",
+            environ={},
+        )
+
+        self.assertEqual(artifact["status"], "routed")
+        self.assertEqual(artifact["route"], {"kind": "metadata_lookup"})
+        self.assertEqual(
+            artifact["route_result"],
+            {
+                "kind": "metadata_lookup",
+                "message": "This request can be answered from persisted logic-request artifacts without model access.",
+            },
+        )
+
+    def test_unsupported_request_records_missing_capability_without_model_credentials(
+        self,
+    ) -> None:
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="Calculate the pump hydraulic head margin",
+            environ={},
+        )
+
+        self.assertEqual(artifact["status"], "unsupported")
+        self.assertEqual(artifact["route"], {"kind": "missing_capability"})
+        self.assertEqual(
+            artifact["diagnostics"],
+            [
+                {
+                    "code": "logic_request.missing_capability",
+                    "message": "This request needs facts, predicates, policy, or external tools that are not available in the OSS topology QA workflow.",
+                }
+            ],
+        )
+
+    def test_clarification_request_routes_without_model_credentials(self) -> None:
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="Check this thing",
+            environ={},
+        )
+
+        self.assertEqual(artifact["status"], "needs_clarification")
+        self.assertEqual(artifact["route"], {"kind": "clarification"})
+        self.assertEqual(
+            artifact["diagnostics"],
+            [
+                {
+                    "code": "logic_request.needs_clarification",
+                    "message": "The request is too vague to route safely. Clarify the object, relationship, and expected condition.",
+                }
+            ],
+        )
+
     def test_model_access_metadata_uses_neutral_capability_language(self) -> None:
         config = pydexpi_datalog.resolve_model_access_config(
             environ={"OPENAI_API_KEY": "test-key"}
@@ -144,7 +215,7 @@ class ModelAccessTests(unittest.TestCase):
         provider = pydexpi_datalog.FakeModelProvider(response="generated logic")
 
         artifact = pydexpi_datalog.draft_logic_request(
-            logic_request="Explain direct process connections",
+            logic_request="What equipment is reachable downstream?",
             derived_graph_semantics_path=E06_DERIVED_GRAPH_SEMANTICS,
             provider=provider,
             environ={"OPENAI_API_KEY": "test-key"},

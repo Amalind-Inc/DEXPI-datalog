@@ -48,7 +48,7 @@ def draft_logic_request(
     provider: ModelProvider | None = None,
     environ: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    model_access = resolve_model_access_config(environ=environ)
+    route = route_logic_request(logic_request)
     source_node_context = build_source_node_context(
         derived_graph_semantics_path=derived_graph_semantics_path,
         source_id=source_id,
@@ -58,11 +58,17 @@ def draft_logic_request(
     artifact: dict[str, object] = {
         "artifact_type": "logic_request_draft",
         "logic_request": logic_request,
-        "route": route_logic_request(logic_request),
-        "model_access": model_access.metadata(),
+        "route": route,
         "source_node_context": source_node_context,
         "diagnostics": [],
     }
+
+    if route["kind"] != "topology_logic":
+        artifact.update(route_without_model_access(route))
+        return artifact
+
+    model_access = resolve_model_access_config(environ=environ)
+    artifact["model_access"] = model_access.metadata()
 
     if source_node_context["diagnostics"] and source_node_context["scope"] != {
         "kind": "whole_pid"
@@ -107,9 +113,55 @@ def route_logic_request(logic_request: str) -> dict[str, str]:
     normalized = logic_request.lower()
     if any(term in normalized for term in ("downstream", "reachable", "connected", "source")):
         return {"kind": "topology_logic"}
-    if any(term in normalized for term in ("what is", "explain", "document")):
+    if any(term in normalized for term in ("model", "artifact", "run", "context policy")):
+        return {"kind": "metadata_lookup"}
+    if any(term in normalized for term in ("what is", "explain", "document", "predicate")):
         return {"kind": "documentation_answer"}
+    if any(
+        term in normalized
+        for term in ("hydraulic", "thermodynamic", "simulation", "biowin", "epa", "hazop")
+    ):
+        return {"kind": "missing_capability"}
     return {"kind": "clarification"}
+
+
+def route_without_model_access(route: dict[str, str]) -> dict[str, object]:
+    kind = route["kind"]
+    if kind == "documentation_answer":
+        return {
+            "status": "routed",
+            "route_result": {
+                "kind": kind,
+                "message": "This request can be answered from project or predicate documentation without model access.",
+            },
+        }
+    if kind == "metadata_lookup":
+        return {
+            "status": "routed",
+            "route_result": {
+                "kind": kind,
+                "message": "This request can be answered from persisted logic-request artifacts without model access.",
+            },
+        }
+    if kind == "missing_capability":
+        return {
+            "status": "unsupported",
+            "diagnostics": [
+                {
+                    "code": "logic_request.missing_capability",
+                    "message": "This request needs facts, predicates, policy, or external tools that are not available in the OSS topology QA workflow.",
+                }
+            ],
+        }
+    return {
+        "status": "needs_clarification",
+        "diagnostics": [
+            {
+                "code": "logic_request.needs_clarification",
+                "message": "The request is too vague to route safely. Clarify the object, relationship, and expected condition.",
+            }
+        ],
+    }
 
 
 def render_logic_request_report(artifact: dict[str, object]) -> str:
