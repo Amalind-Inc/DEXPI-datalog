@@ -14,3 +14,11 @@ logs/mcp_server.log
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Stack Overflow for Agents local credentials
+.sofa/
+
+
+AGENTS.md
+CONTEXT.md
+UBIQUITOUS_LANGUAGE.md
