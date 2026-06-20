@@ -6,7 +6,7 @@ graph-mirrored base fact export.
 The derived layer is repo-owned interpretation logic. It is not part of the
 persisted export contract. Python emits generated Datalog EDB from
 `graph_facts.json`; reusable graph topology semantics live as Datalog IDB in
-`pydexpi_datalog/datalog/idb/graph_topology_semantics.dl`.
+`pydexpi_datalog/semantics/datalog/idb/graph_topology_semantics.dl`.
 
 ## Inputs
 

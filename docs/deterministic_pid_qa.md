@@ -18,7 +18,7 @@ attributes. It remains the auditable boundary for extraction output.
 canonical base fact layer and records graph-mirrored facts such as `node/1`,
 `node_attribute/3`, `graph_edge/3`, and `graph_edge_attribute/5`.
 
-`pydexpi_datalog/datalog/idb/graph_topology_semantics.dl` is the reusable
+`pydexpi_datalog/semantics/datalog/idb/graph_topology_semantics.dl` is the reusable
 Datalog IDB. It owns graph topology semantics over the generated EDB, including
 object aliases such as `node_label/2`, edge-family classification such as
 `reference_edge/3`, and graph utility predicates such as
