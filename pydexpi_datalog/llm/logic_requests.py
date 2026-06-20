@@ -20,6 +20,7 @@ def run_draft_logic_request(
     source_id: str | None = None,
     source_tag: str | None = None,
     source_proteus_id: str | None = None,
+    allow_raw_attributes: bool = False,
     provider: ModelProvider | None = None,
     environ: dict[str, str] | None = None,
 ) -> int:
@@ -29,6 +30,7 @@ def run_draft_logic_request(
         source_id=source_id,
         source_tag=source_tag,
         source_proteus_id=source_proteus_id,
+        allow_raw_attributes=allow_raw_attributes,
         provider=provider,
         environ=environ,
     )
@@ -52,10 +54,13 @@ def draft_logic_request(
     source_id: str | None = None,
     source_tag: str | None = None,
     source_proteus_id: str | None = None,
+    allow_raw_attributes: bool = False,
     provider: ModelProvider | None = None,
     environ: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    route = route_logic_request(logic_request)
+    route = route_logic_request(
+        logic_request, allow_raw_attributes=allow_raw_attributes
+    )
     source_node_context = build_source_node_context(
         derived_graph_semantics_path=derived_graph_semantics_path,
         source_id=source_id,
@@ -66,6 +71,7 @@ def draft_logic_request(
         "artifact_type": "logic_request_draft",
         "logic_request": logic_request,
         "route": route,
+        "raw_attribute_mode": {"enabled": allow_raw_attributes},
         "source_node_context": source_node_context,
         "diagnostics": [],
     }
@@ -104,6 +110,7 @@ def draft_logic_request(
         context={
             "route": artifact["route"],
             "model_access": model_access.metadata(),
+            "raw_attribute_mode": artifact["raw_attribute_mode"],
             "source_node_context": source_node_context,
         },
     )
@@ -135,8 +142,12 @@ def parse_model_draft_response(response: str) -> dict[str, str]:
     return draft or {"text": response}
 
 
-def route_logic_request(logic_request: str) -> dict[str, str]:
+def route_logic_request(
+    logic_request: str, *, allow_raw_attributes: bool = False
+) -> dict[str, str]:
     normalized = logic_request.lower()
+    if uses_raw_attributes(normalized) and not allow_raw_attributes:
+        return {"kind": "raw_attribute_rejected"}
     if any(term in normalized for term in ("downstream", "reachable", "connected", "source")):
         return {"kind": "topology_logic"}
     if any(term in normalized for term in ("model", "artifact", "run", "context policy")):
@@ -149,6 +160,18 @@ def route_logic_request(logic_request: str) -> dict[str, str]:
     ):
         return {"kind": "missing_capability"}
     return {"kind": "clarification"}
+
+
+def uses_raw_attributes(normalized_logic_request: str) -> bool:
+    return any(
+        term in normalized_logic_request
+        for term in (
+            "node_attribute",
+            "graph_edge_attribute",
+            "raw attribute",
+            "raw attributes",
+        )
+    )
 
 
 def route_without_model_access(route: dict[str, str]) -> dict[str, object]:
@@ -176,6 +199,20 @@ def route_without_model_access(route: dict[str, str]) -> dict[str, object]:
                 {
                     "code": "logic_request.missing_capability",
                     "message": "This request needs facts, predicates, policy, or external tools that are not available in the OSS topology QA workflow.",
+                }
+            ],
+        }
+    if kind == "raw_attribute_rejected":
+        return {
+            "status": "unsupported",
+            "diagnostics": [
+                {
+                    "code": "logic_request.raw_attributes_disabled",
+                    "message": (
+                        "Generic raw attributes are disabled by default. Re-run with "
+                        "advanced raw-attribute mode only when messy source attribute "
+                        "names are intentional."
+                    ),
                 }
             ],
         }

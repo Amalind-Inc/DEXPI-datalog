@@ -201,6 +201,52 @@ class ModelAccessTests(unittest.TestCase):
             ],
         )
 
+    def test_raw_attribute_request_is_rejected_by_default(self) -> None:
+        provider = pydexpi_datalog.FakeModelProvider(response="should not be used")
+
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="What raw attribute values are reachable downstream of P-4713?",
+            provider=provider,
+            environ={"OPENAI_API_KEY": "test-key"},
+        )
+
+        self.assertEqual(artifact["status"], "unsupported")
+        self.assertEqual(artifact["route"], {"kind": "raw_attribute_rejected"})
+        self.assertEqual(artifact["raw_attribute_mode"], {"enabled": False})
+        self.assertEqual(provider.requests, [])
+        self.assertEqual(
+            artifact["diagnostics"],
+            [
+                {
+                    "code": "logic_request.raw_attributes_disabled",
+                    "message": (
+                        "Generic raw attributes are disabled by default. Re-run with "
+                        "advanced raw-attribute mode only when messy source attribute "
+                        "names are intentional."
+                    ),
+                }
+            ],
+        )
+
+    def test_raw_attribute_opt_in_reaches_provider_context(self) -> None:
+        provider = pydexpi_datalog.FakeModelProvider(
+            response="generated raw-attribute logic"
+        )
+
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="What raw attribute values are reachable downstream of P-4713?",
+            allow_raw_attributes=True,
+            provider=provider,
+            environ={"OPENAI_API_KEY": "test-key"},
+        )
+
+        self.assertEqual(artifact["status"], "drafted")
+        self.assertEqual(artifact["route"], {"kind": "topology_logic"})
+        self.assertEqual(artifact["raw_attribute_mode"], {"enabled": True})
+        self.assertEqual(
+            provider.requests[0]["context"]["raw_attribute_mode"], {"enabled": True}
+        )
+
     def test_model_access_metadata_uses_neutral_capability_language(self) -> None:
         config = pydexpi_datalog.resolve_model_access_config(
             environ={"OPENAI_API_KEY": "test-key"}

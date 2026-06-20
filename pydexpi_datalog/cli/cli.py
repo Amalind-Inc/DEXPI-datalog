@@ -110,6 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Source Proteus ID for the logic request.",
     )
     draft_logic_request.add_argument(
+        "--allow-raw-attributes",
+        action="store_true",
+        help="Allow advanced generic node_attribute/graph_edge_attribute use in generated logic.",
+    )
+    draft_logic_request.add_argument(
         "--output-dir",
         type=Path,
         required=True,
@@ -172,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
             source_id=args.source_id,
             source_tag=args.source_tag,
             source_proteus_id=args.source_proteus_id,
+            allow_raw_attributes=args.allow_raw_attributes,
             output_dir=args.output_dir,
         )
 
