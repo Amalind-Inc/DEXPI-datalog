@@ -65,7 +65,7 @@ All four result shapes use the same evidence backbone:
 
 ## Checked-in examples
 
-- `fixtures/report_examples/pass.json`
-- `fixtures/report_examples/hard_violation.json`
-- `fixtures/report_examples/bounded_failure_off_page.json`
-- `fixtures/report_examples/evaluation_diagnostic.json`
+- `testdata/report_examples/pass.json`
+- `testdata/report_examples/hard_violation.json`
+- `testdata/report_examples/bounded_failure_off_page.json`
+- `testdata/report_examples/evaluation_diagnostic.json`

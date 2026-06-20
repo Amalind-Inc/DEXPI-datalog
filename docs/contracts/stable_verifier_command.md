@@ -53,11 +53,11 @@ For the command above, the output directory contains:
 
 Passing example artifact:
 
-- `fixtures/verifier_suite/expected/pass_c01_local_segment.json`
+- `testdata/verifier_suite/expected/pass_c01_local_segment.json`
 
 Failing example artifact:
 
-- `fixtures/verifier_suite/expected/hard_violation_e06_natural.json`
+- `testdata/verifier_suite/expected/hard_violation_e06_natural.json`
 
 ## Fixture-suite command
 
@@ -65,6 +65,6 @@ For the broader tracer-bullet suite, the stable suite command is:
 
 ```bash
 ./.venv/bin/python -m pydexpi_datalog verify-suite \
-  fixtures/verifier_suite/manifest.json \
+  testdata/verifier_suite/manifest.json \
   --output-dir /tmp/pydexpi-verify-suite
 ```

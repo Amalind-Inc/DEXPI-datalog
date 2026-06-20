@@ -27,7 +27,7 @@ For multi-rule detection runs, `post_edit_reevaluation` is currently always
 
 The checked-in overlap example is:
 
-- `fixtures/verifier_suite/multi_rule_manifest.json`
+- `testdata/verifier_suite/multi_rule_manifest.json`
 
 It runs:
 

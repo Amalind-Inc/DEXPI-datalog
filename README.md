@@ -1,6 +1,55 @@
 # pydexpi-datalog-1
 
-Prototype workspace for a manifest-driven dry-run pipeline over DEXPI XML.
+Prototype workspace for deterministic P&ID QA over DEXPI source files (version 1.3)
+
+The OSS version is intended to work both as a standalone CLI and as a set of
+small Python library modules that users can integrate into their own workflows.
+
+## OSS scope
+
+OSS supports one DEXPI source file per run, but a run may target a selected
+source node or affected connected subgraph inside that file. This keeps the
+single-file product boundary explicit while leaving room for future multi-page
+or professional workflows.
+
+LLM-assisted logic requests are part of the OSS scope, but model access is BYOK:
+users supply their own provider credentials. Managed model access, app-managed
+credits, batch/multi-file workflows, and advanced professional techniques are
+future product work rather than assumptions in the OSS pipeline.
+
+## Pipeline
+
+The deterministic verifier and logic-request workflow sit on this substrate:
+
+```text
+DEXPI source file
+  -> pyDEXPI full graph
+  -> canonical base fact layer / graph_facts.json
+  -> graph-mirrored fact vocabulary / graph_facts.dl
+  -> derived graph semantics / derived_graph_semantics.dl
+  -> rule evaluation, deterministic queries, or logic-request execution
+  -> findings, diagnostics, and persisted artifacts
+```
+
+`pyDEXPI` owns DEXPI XML-to-graph extraction. This repository owns the
+graph-to-facts export, derived Souffle graph semantics, rule/query evaluation,
+logic-request orchestration, and persisted artifacts. We plan to implement
+our own DEXPI XML to facts engine, however at this time we use `pyDEXPI`.
+
+## Library and CLI use
+
+The CLI is a thin product surface over reusable Python workflows. OSS
+users who want the whole flow can run commands; users who want only part of the
+pipeline should be able to import the relevant library seam, such as fact export,
+derived graph semantics, rule evaluation, or logic-request orchestration.
+
+The architectural rule is:
+
+```text
+Core modules do engineering work.
+Workflow modules enforce product policy.
+CLI modules parse arguments and write or print artifacts.
+```
 
 ## Current command
 
@@ -18,6 +67,9 @@ python3 -m unittest discover -s tests
 
 The verifier sits on top of DEXPI 1.3 source input, `pyDEXPI` full-graph
 extraction, graph-mirrored fact export, and derived Souffle graph semantics.
+These commands show the current explicit artifact seam from a DEXPI source file
+to `graph_facts.json`, then from `graph_facts.json` to executable derived graph
+semantics.
 
 ```bash
 ./.venv/bin/python -m pydexpi_datalog export-facts \

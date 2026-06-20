@@ -10,8 +10,8 @@ import unittest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SUITE_MANIFEST_PATH = REPO_ROOT / "fixtures" / "verifier_suite" / "manifest.json"
-EXPECTED_DIR = REPO_ROOT / "fixtures" / "verifier_suite" / "expected"
+SUITE_MANIFEST_PATH = REPO_ROOT / "testdata" / "verifier_suite" / "manifest.json"
+EXPECTED_DIR = REPO_ROOT / "testdata" / "verifier_suite" / "expected"
 
 
 class VerifySuiteCliTests(unittest.TestCase):

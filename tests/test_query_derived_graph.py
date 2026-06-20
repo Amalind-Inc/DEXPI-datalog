@@ -12,7 +12,7 @@ import unittest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 E06_DERIVED_GRAPH_SEMANTICS = (
     REPO_ROOT
-    / "fixtures"
+    / "testdata"
     / "derived_graph_semantics"
     / "e06-pump-hex"
     / "derived_graph_semantics.dl"

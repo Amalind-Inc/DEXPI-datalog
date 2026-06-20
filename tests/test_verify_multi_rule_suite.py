@@ -11,7 +11,7 @@ import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MULTI_RULE_MANIFEST_PATH = (
-    REPO_ROOT / "fixtures" / "verifier_suite" / "multi_rule_manifest.json"
+    REPO_ROOT / "testdata" / "verifier_suite" / "multi_rule_manifest.json"
 )
 MULTI_RULE_DOC_PATH = REPO_ROOT / "docs" / "contracts" / "multi_rule_detection.md"
 

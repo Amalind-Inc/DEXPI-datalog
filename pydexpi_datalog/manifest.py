@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 
+from .workflow_policy import OSS_POLICY, count_manifest_source_files
+
 
 SCHEMA_VERSION = 1
 ALLOWED_EXECUTION_MODES = {"dry-run", "review-only", "normal"}
@@ -203,6 +205,19 @@ def validate_manifest(raw: object) -> tuple[Manifest | None, list[Diagnostic]]:
         )
 
     input_block = raw.get("input")
+    source_file_count = count_manifest_source_files(input_block)
+    if source_file_count > OSS_POLICY.max_source_files:
+        diagnostics.append(
+            Diagnostic(
+                code="workflow_policy.too_many_source_files",
+                severity="error",
+                message=(
+                    "OSS workflow policy supports one DEXPI source file per run. "
+                    f"Received {source_file_count}."
+                ),
+                path="input",
+            )
+        )
     dexpi_xml = _require_string_field(input_block, "dexpi_xml", "input", diagnostics)
 
     rule_pack = raw.get("rule_pack")

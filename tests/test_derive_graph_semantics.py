@@ -10,18 +10,18 @@ import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 E06_GRAPH_FACTS = (
-    REPO_ROOT / "fixtures" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
+    REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
 )
 CHECKED_IN_E06_DERIVED = (
     REPO_ROOT
-    / "fixtures"
+    / "testdata"
     / "derived_graph_semantics"
     / "e06-pump-hex"
     / "derived_graph_semantics.dl"
 )
 CHECKED_IN_E06_GRAPH_FACTS_DATALOG = (
     REPO_ROOT
-    / "fixtures"
+    / "testdata"
     / "derived_graph_semantics"
     / "e06-pump-hex"
     / "graph_facts.dl"

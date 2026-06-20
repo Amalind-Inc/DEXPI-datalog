@@ -18,7 +18,7 @@ E03_FIXTURE = (
     / "E03 Pump With Nozzles"
     / "E03V01-VER.EX01.xml"
 )
-GOLDEN_FACTS_DIR = REPO_ROOT / "fixtures" / "graph_contract"
+GOLDEN_FACTS_DIR = REPO_ROOT / "testdata" / "graph_contract"
 GOLDEN_MANIFEST_PATH = GOLDEN_FACTS_DIR / "manifest.json"
 CORPUS_SUMMARY_PATH = GOLDEN_FACTS_DIR / "corpus" / "corpus_summary.json"
 DEXPI_13_FIXTURE_ROOT = (

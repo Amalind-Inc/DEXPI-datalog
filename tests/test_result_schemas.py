@@ -8,16 +8,16 @@ from pydexpi_datalog.result_schemas import validate_result_schema
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PASS_EXAMPLE_PATH = REPO_ROOT / "fixtures" / "report_examples" / "pass.json"
+PASS_EXAMPLE_PATH = REPO_ROOT / "testdata" / "report_examples" / "pass.json"
 RESULT_SCHEMA_DOC_PATH = REPO_ROOT / "docs" / "contracts" / "rule_result_schemas.md"
 HARD_VIOLATION_EXAMPLE_PATH = (
-    REPO_ROOT / "fixtures" / "report_examples" / "hard_violation.json"
+    REPO_ROOT / "testdata" / "report_examples" / "hard_violation.json"
 )
 BOUNDED_FAILURE_EXAMPLE_PATH = (
-    REPO_ROOT / "fixtures" / "report_examples" / "bounded_failure_off_page.json"
+    REPO_ROOT / "testdata" / "report_examples" / "bounded_failure_off_page.json"
 )
 EVALUATION_DIAGNOSTIC_EXAMPLE_PATH = (
-    REPO_ROOT / "fixtures" / "report_examples" / "evaluation_diagnostic.json"
+    REPO_ROOT / "testdata" / "report_examples" / "evaluation_diagnostic.json"
 )
 
 

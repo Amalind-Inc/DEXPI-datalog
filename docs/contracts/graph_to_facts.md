@@ -76,10 +76,10 @@ fixture corpus in `TrainingTestCases/dexpi 1.3/example pids`.
 
 The current checked-in golden seed set is:
 
-- `fixtures/graph_contract/e03-pump/graph_facts.json`
-- `fixtures/graph_contract/e06-pump-hex/graph_facts.json`
-- `fixtures/graph_contract/c01-reference-pid/graph_facts.json`
-- `fixtures/graph_contract/manifest.json`
+- `testdata/graph_contract/e03-pump/graph_facts.json`
+- `testdata/graph_contract/e06-pump-hex/graph_facts.json`
+- `testdata/graph_contract/c01-reference-pid/graph_facts.json`
+- `testdata/graph_contract/manifest.json`
 
 Those goldens are a narrow seed set, not the full intended contract boundary.
 

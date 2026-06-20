@@ -443,6 +443,52 @@ class DryRunCliTests(unittest.TestCase):
             self.assertIn("manifest.invalid_integer", diagnostic_codes)
             self.assertIsNone(artifact["structural_summary"])
 
+    def test_dry_run_rejects_multiple_source_files_by_oss_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            first_source = tmp_path / "first.xml"
+            second_source = tmp_path / "second.xml"
+            first_source.write_text("<PlantModel />", encoding="utf-8")
+            second_source.write_text("<PlantModel />", encoding="utf-8")
+
+            run_id = "too-many-source-files"
+            manifest_path = tmp_path / "manifest.json"
+            manifest = {
+                "schema_version": 1,
+                "input": {"dexpi_xmls": [str(first_source), str(second_source)]},
+                "rule_pack": {
+                    "name": "pump-safety",
+                    "version": 4,
+                    "lifecycle_state": "active",
+                },
+                "execution": {"mode": "dry-run"},
+                "output": {"run_id": run_id},
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            artifact_path = REPO_ROOT / "artifacts" / run_id / "dry_run_summary.json"
+            run_artifact_dir = artifact_path.parent
+            if run_artifact_dir.exists():
+                shutil.rmtree(run_artifact_dir)
+            self.addCleanup(
+                lambda: shutil.rmtree(run_artifact_dir, ignore_errors=True)
+            )
+
+            result = subprocess.run(
+                [sys.executable, "-m", "pydexpi_datalog", "dry-run", str(manifest_path)],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("workflow_policy.too_many_source_files", result.stdout)
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            diagnostic_codes = {item["code"] for item in artifact["diagnostics"]}
+            self.assertIn("workflow_policy.too_many_source_files", diagnostic_codes)
+            self.assertIsNone(artifact["structural_summary"])
+
     def test_dry_run_rejects_non_dry_run_execution_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
