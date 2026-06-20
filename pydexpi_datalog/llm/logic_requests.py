@@ -20,6 +20,7 @@ def run_draft_logic_request(
     source_id: str | None = None,
     source_tag: str | None = None,
     source_proteus_id: str | None = None,
+    provider: ModelProvider | None = None,
     environ: dict[str, str] | None = None,
 ) -> int:
     artifact = draft_logic_request(
@@ -28,12 +29,18 @@ def run_draft_logic_request(
         source_id=source_id,
         source_tag=source_tag,
         source_proteus_id=source_proteus_id,
+        provider=provider,
         environ=environ,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "logic_request.json").write_text(
         json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8"
     )
+    generated_datalog = artifact.get("draft", {}).get("generated_datalog")
+    if isinstance(generated_datalog, str):
+        (output_dir / "generated_query.dl").write_text(
+            generated_datalog.rstrip() + "\n", encoding="utf-8"
+        )
     print(render_logic_request_report(artifact))
     return 0 if artifact["status"] != "failed" else 1
 
@@ -104,9 +111,28 @@ def draft_logic_request(
     artifact["draft"] = {
         "provider": provider.provider,
         "model": provider.model,
-        "text": response,
+        **parse_model_draft_response(response),
     }
     return artifact
+
+
+def parse_model_draft_response(response: str) -> dict[str, str]:
+    try:
+        parsed = json.loads(response)
+    except json.JSONDecodeError:
+        return {"text": response}
+
+    if not isinstance(parsed, dict):
+        return {"text": response}
+
+    draft: dict[str, str] = {}
+    generated_datalog = parsed.get("generated_datalog")
+    formal_restatement = parsed.get("formal_restatement")
+    if isinstance(generated_datalog, str):
+        draft["generated_datalog"] = generated_datalog
+    if isinstance(formal_restatement, str):
+        draft["formal_restatement"] = formal_restatement
+    return draft or {"text": response}
 
 
 def route_logic_request(logic_request: str) -> dict[str, str]:

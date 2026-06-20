@@ -70,6 +70,66 @@ class ModelAccessTests(unittest.TestCase):
             "byok",
         )
 
+    def test_structured_topology_draft_records_datalog_and_restatement(self) -> None:
+        provider = pydexpi_datalog.FakeModelProvider(
+            response=json.dumps(
+                {
+                    "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"P-4713\").",
+                    "formal_restatement": "Return each answer related to P-4713.",
+                }
+            )
+        )
+
+        artifact = pydexpi_datalog.draft_logic_request(
+            logic_request="What equipment is reachable downstream of P-4713?",
+            provider=provider,
+            environ={"OPENAI_API_KEY": "test-key"},
+        )
+
+        self.assertEqual(artifact["status"], "drafted")
+        self.assertEqual(
+            artifact["draft"],
+            {
+                "provider": "fake",
+                "model": "fake-model",
+                "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"P-4713\").",
+                "formal_restatement": "Return each answer related to P-4713.",
+            },
+        )
+
+    def test_run_draft_logic_request_writes_generated_query_sidecar(self) -> None:
+        provider = pydexpi_datalog.FakeModelProvider(
+            response=json.dumps(
+                {
+                    "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"P-4713\").",
+                    "formal_restatement": "Return each answer related to P-4713.",
+                }
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "logic-request"
+
+            exit_code = pydexpi_datalog.run_draft_logic_request(
+                logic_request="What equipment is reachable downstream of P-4713?",
+                output_dir=output_dir,
+                provider=provider,
+                environ={"OPENAI_API_KEY": "test-key"},
+            )
+
+            self.assertEqual(exit_code, 0)
+            artifact = json.loads(
+                (output_dir / "logic_request.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                artifact["draft"]["formal_restatement"],
+                "Return each answer related to P-4713.",
+            )
+            self.assertEqual(
+                (output_dir / "generated_query.dl").read_text(encoding="utf-8"),
+                ".decl answer(x:symbol)\n.output answer\nanswer(\"P-4713\").\n",
+            )
+
     def test_documentation_request_routes_without_model_credentials(self) -> None:
         artifact = pydexpi_datalog.draft_logic_request(
             logic_request="Explain direct process connections",
