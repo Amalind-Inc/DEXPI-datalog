@@ -24,6 +24,7 @@ class QueryCorpusTests(unittest.TestCase):
 
         self.assertEqual(entry["id"], "compare_known_object_reachability")
         self.assertEqual(entry["status"], "supported_deterministic")
+        self.assertEqual(entry["query_scope"], {"kind": "source_rooted"})
         self.assertEqual(
             entry["question"],
             "Compare reachable targets and downstream_reference targets from a known source object.",
@@ -86,6 +87,7 @@ class QueryCorpusTests(unittest.TestCase):
 
         self.assertEqual(entry["id"], "compare_direct_process_connections")
         self.assertEqual(entry["status"], "supported_deterministic")
+        self.assertEqual(entry["query_scope"], {"kind": "source_rooted"})
         self.assertEqual(entry["determinism"]["source_of_truth"], "deterministic_query_output")
         self.assertEqual(entry["determinism"]["current_engine"], "souffle")
         self.assertIn("ergoai", entry["determinism"]["future_engine_candidates"])
@@ -104,6 +106,21 @@ class QueryCorpusTests(unittest.TestCase):
         self.assertTrue(entry["outputs"]["comparison_summary"])
         self.assertIn("classify_question", entry["llm_roles"]["allowed"])
         self.assertIn("produce_compliance_answer", entry["llm_roles"]["disallowed"])
+
+    def test_classify_all_pump_discharge_paths_entry_records_whole_pid_scope(
+        self,
+    ) -> None:
+        entry = self.load_entry("classify_all_pump_discharge_paths")
+
+        self.assertEqual(entry["id"], "classify_all_pump_discharge_paths")
+        self.assertEqual(entry["status"], "future_candidate")
+        self.assertEqual(entry["query_scope"], {"kind": "whole_pid"})
+        self.assertEqual(entry["inputs"], [])
+        self.assertIn("centrifugal_pump", entry["requires"]["missing_predicates"])
+        self.assertIn(
+            "pump_discharge_path_classifications",
+            entry["outputs"]["candidate_result_sets"],
+        )
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ description: >-
   downstream_reference and recursive reachable results so reviewers can judge
   whether the predicate is narrower, broader, or equivalent on representative
   fixtures.
+query_scope:
+  kind: source_rooted
 determinism:
   required: true
   source_of_truth: deterministic_query_output

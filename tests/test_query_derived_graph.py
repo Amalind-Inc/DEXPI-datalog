@@ -679,6 +679,41 @@ class QueryDerivedGraphCliTests(unittest.TestCase):
                 "applied_exceptions",
             ])
 
+    def test_query_command_allows_whole_pid_future_candidate_without_source_selector(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "query-output"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pydexpi_datalog",
+                    "query-derived-graph",
+                    "classify_all_pump_discharge_paths",
+                    str(E06_DERIVED_GRAPH_SEMANTICS),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Status: future_candidate", result.stdout)
+            self.assertFalse((output_dir / "combined_query.dl").exists())
+
+            artifact = json.loads(
+                (output_dir / "query_result.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact["status"], "future_candidate")
+            self.assertEqual(artifact["query_scope"], {"kind": "whole_pid"})
+            self.assertNotIn("source_id", artifact)
+            self.assertNotIn("source_selection", artifact)
+
     def test_query_command_compares_direct_process_connections(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "query-output"

@@ -5,6 +5,8 @@ description: >-
   Evaluate valve ordering on a pump discharge path while respecting exception
   policy. This is intentionally recorded as a harder future candidate so the
   query corpus does not optimize only for easy reachability questions.
+query_scope:
+  kind: source_rooted
 determinism:
   required: true
   source_of_truth: deterministic_query_output

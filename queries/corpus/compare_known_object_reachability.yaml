@@ -6,6 +6,8 @@ description: >-
   candidate-topology reachability with direct downstream_reference targets so
   users can inspect whether the derived graph utility layer is too broad or too
   narrow.
+query_scope:
+  kind: source_rooted
 determinism:
   required: true
   source_of_truth: deterministic_query_output

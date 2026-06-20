@@ -7,6 +7,8 @@ description: >-
   pump and classify whether the path satisfies the expected discharge protection
   shape. This is the near-term north-star query, but it needs additional derived
   graph predicates before it can execute deterministically.
+query_scope:
+  kind: source_rooted
 determinism:
   required: true
   source_of_truth: deterministic_query_output

@@ -432,9 +432,10 @@ def persist_source_selection_failure(
 
 
 def persist_unsupported_query_result(
-    *, output_dir: Path, query_entry: dict[str, object], source_id: str
+    *, output_dir: Path, query_entry: dict[str, object], source_id: str | None
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    query_scope = query_entry.get("query_scope", {"kind": "source_rooted"})
     artifact = {
         "status": unsupported_artifact_status(query_entry),
         "query": {
@@ -442,10 +443,12 @@ def persist_unsupported_query_result(
             "status": query_entry["status"],
             "question": query_entry["question"],
         },
-        "source_id": source_id,
+        "query_scope": query_scope,
         "diagnostics": unsupported_diagnostics(query_entry),
         "result_sets": {},
     }
+    if query_scope != {"kind": "whole_pid"}:
+        artifact["source_id"] = source_id
     outputs = query_entry.get("outputs")
     if isinstance(outputs, dict) and "candidate_result_sets" in outputs:
         artifact["candidate_result_sets"] = outputs["candidate_result_sets"]
