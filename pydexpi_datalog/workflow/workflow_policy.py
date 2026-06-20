@@ -18,14 +18,12 @@ OSS_POLICY = WorkflowPolicy(
     allowed_commands=frozenset(
         {
             "dry-run",
-            "review-only",
             "export-facts",
             "export-corpus",
             "derive-graph-semantics",
-            "compile-rule",
             "verify-suite",
             "verify-raw-fixture",
-            "query-derived-graph",
+            "draft-logic-request",
         }
     ),
 )

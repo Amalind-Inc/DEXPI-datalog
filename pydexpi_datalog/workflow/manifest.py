@@ -8,7 +8,7 @@ from .workflow_policy import OSS_POLICY, count_manifest_source_files
 
 
 SCHEMA_VERSION = 1
-ALLOWED_EXECUTION_MODES = {"dry-run", "review-only", "normal"}
+ALLOWED_EXECUTION_MODES = {"dry-run", "normal"}
 ALLOWED_LIFECYCLE_STATES = {"draft", "active", "deprecated", "retired"}
 
 

@@ -62,16 +62,13 @@ command module:
 | OSS workflow policy | `pydexpi_datalog/workflow/` | Manifests, dry-run orchestration, run locks, and one-source-file/BYOK policy. |
 | DEXPI extraction and base facts | `pydexpi_datalog/export/` | Uses `pyDEXPI` to build the full graph, then exports `graph_facts.json`. |
 | Derived graph semantics | `pydexpi_datalog/semantics/` | Builds `graph_facts.dl` and `derived_graph_semantics.dl`; reusable IDB lives under `semantics/datalog/`. |
-| Deterministic queries | `pydexpi_datalog/queries/`, `queries/corpus/` | Runs current supported QA queries over derived graph semantics. `queries/corpus/` remains a compatibility fixture for the current CLI. |
-| Rule and review compatibility | `pydexpi_datalog/verification/`, `rules/` | Legacy JSON/YAML rule, review, verifier, and patch-proposal paths retained while graph-mirrored facts become the main model. |
-| Legacy XML normalization | `pydexpi_datalog/_legacy/` | XML-direct normalization used only by dry-run/review compatibility paths; it is not the primary internal model. |
+| Verification | `pydexpi_datalog/verification/` | Deterministic fixture verification over graph-mirrored facts and derived semantics. |
 | Logic requests and model access | `pydexpi_datalog/llm/` | Routes BYOK LLM-assisted logic requests while deterministic execution remains the answer source. |
 | Artifacts and schemas | `pydexpi_datalog/artifacts/` | Persists inspectable outputs and validates result schemas. |
 | Public library seams | `pydexpi_datalog/__init__.py`, `pydexpi_datalog/workflow/pipeline.py` | Exposes reusable stages for callers that do not want to shell out to the CLI. |
 
 Tests mirror the same seams under `tests/`: `workflow/`, `export/`,
-`semantics/`, `verification/`, `queries/`, `llm/`, `_legacy/`, and
-`artifacts/`.
+`semantics/`, `verification/`, `llm/`, and `artifacts/`.
 
 ## Current command
 

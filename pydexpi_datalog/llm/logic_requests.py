@@ -9,7 +9,7 @@ from .model_access import (
     missing_byok_credentials_diagnostic,
     resolve_model_access_config,
 )
-from ..queries.derived_graph import build_source_selection, resolve_source_selection
+from .source_selection import build_source_selection, resolve_source_selection
 
 
 def run_draft_logic_request(

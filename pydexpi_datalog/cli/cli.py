@@ -14,14 +14,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dry_run.add_argument("manifest", type=Path, help="Path to a JSON manifest file.")
 
-    review_only = subparsers.add_parser(
-        "review-only",
-        help="Evaluate one rule pack and persist raw findings with evidence only.",
-    )
-    review_only.add_argument(
-        "manifest", type=Path, help="Path to a JSON manifest file."
-    )
-
     export_facts = subparsers.add_parser(
         "export-facts",
         help="Export graph-mirrored base facts from one DEXPI XML fixture.",
@@ -67,18 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where derived graph semantics artifacts will be written.",
     )
 
-    compile_rule = subparsers.add_parser(
-        "compile-rule",
-        help="Validate one YAML discharge rule and compile it to Souffle-style Datalog.",
-    )
-    compile_rule.add_argument("rule_yaml", type=Path, help="Path to a YAML rule file.")
-    compile_rule.add_argument(
-        "--output-dir",
-        type=Path,
-        required=True,
-        help="Directory where compiled rule artifacts will be written.",
-    )
-
     verify_suite = subparsers.add_parser(
         "verify-suite",
         help="Run the tracer-bullet verifier over a checked-in fixture suite.",
@@ -105,34 +85,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="Directory where persisted verifier artifacts will be written.",
-    )
-
-    query_derived_graph = subparsers.add_parser(
-        "query-derived-graph",
-        help="Run a deterministic QA query over a derived graph semantics artifact.",
-    )
-    query_derived_graph.add_argument("query_id", help="Checked-in query corpus ID.")
-    query_derived_graph.add_argument(
-        "derived_graph_semantics",
-        type=Path,
-        help="Path to a derived_graph_semantics.dl artifact.",
-    )
-    query_derived_graph.add_argument(
-        "--source-id",
-        help="Known source graph object ID for the query.",
-    )
-    query_derived_graph.add_argument(
-        "--source-tag",
-        help="Human-facing source equipment tag for the query.",
-    )
-    query_derived_graph.add_argument(
-        "--source-proteus-id",
-        help="Source Proteus ID for the query.",
-    )
-    query_derived_graph.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Directory where query artifacts will be written.",
     )
 
     draft_logic_request = subparsers.add_parser(
@@ -175,10 +127,6 @@ def main(argv: list[str] | None = None) -> int:
         from ..workflow.dry_run import run_dry_run
 
         return run_dry_run(args.manifest)
-    if args.command == "review-only":
-        from ..verification.review_only import run_review_only
-
-        return run_review_only(args.manifest)
     if args.command == "export-facts":
         from ..export.pipeline import run_export_facts
 
@@ -201,10 +149,6 @@ def main(argv: list[str] | None = None) -> int:
             graph_facts_path=args.graph_facts,
             output_dir=args.output_dir,
         )
-    if args.command == "compile-rule":
-        from ..verification.compile_rule import run_compile_rule
-
-        return run_compile_rule(rule_yaml_path=args.rule_yaml, output_dir=args.output_dir)
     if args.command == "verify-suite":
         from ..verification.verify_suite import run_verify_suite
 
@@ -217,17 +161,6 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_verify_raw_fixture(
             dexpi_xml_path=args.dexpi_xml,
-            output_dir=args.output_dir,
-        )
-    if args.command == "query-derived-graph":
-        from ..queries.derived_graph import run_query_derived_graph
-
-        return run_query_derived_graph(
-            query_id=args.query_id,
-            derived_graph_semantics_path=args.derived_graph_semantics,
-            source_id=args.source_id,
-            source_tag=args.source_tag,
-            source_proteus_id=args.source_proteus_id,
             output_dir=args.output_dir,
         )
     if args.command == "draft-logic-request":
