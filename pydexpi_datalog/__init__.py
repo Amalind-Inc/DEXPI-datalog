@@ -7,6 +7,7 @@ from .workflow.pipeline import (
     evaluate_rule,
     export_base_facts,
 )
+from .workflow.review_session import ReviewSessionService
 from .llm.logic_requests import draft_logic_request, run_draft_logic_request
 from .llm.model_access import FakeModelProvider, resolve_model_access_config
 
@@ -18,6 +19,7 @@ __all__ = [
     "evaluate_rule",
     "export_base_facts",
     "FakeModelProvider",
+    "ReviewSessionService",
     "resolve_model_access_config",
     "run_draft_logic_request",
 ]

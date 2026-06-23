@@ -55,6 +55,15 @@ Core modules do engineering work.
 Workflow modules enforce product policy.
 CLI modules parse arguments and write or print artifacts.
 ```
+## Why Datalog over SQL?
+The primary reason is that our data is not tabular. Instead,
+it is graph-like. A lot of questions that we anticipate 
+plant operators and process engineers asking require recursion.
+SQL can perform recursion, but it is painful. We either change our
+data to be tabular, which honestly doesn't make much sense or we
+change our querying paradigm from that of a declaritive query language
+to a logic programming one. 
+
 
 ## Project structure
 

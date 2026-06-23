@@ -1,0 +1,282 @@
+from __future__ import annotations
+
+from pathlib import Path
+import shutil
+import tempfile
+import unittest
+
+from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+E06_FIXTURE = (
+    REPO_ROOT
+    / "TrainingTestCases"
+    / "dexpi 1.3"
+    / "example pids"
+    / "E06 Pump, HeatExchanger, Nozzles Connected With PNS"
+    / "E06V01-VER.EX01.xml"
+)
+ACCEPTANCE_DOCUMENTS = [
+    (
+        "c01-reference-pid",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "C01 DEXPI Reference P&ID"
+        / "C01V04-VER.EX01.xml",
+    ),
+    (
+        "c02-process-column-basf",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "C02 Process Column (BASF)"
+        / "C02V03-VER.EX02.xml",
+    ),
+    (
+        "c03-piping-equinor",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "C03 Piping (Equinor)"
+        / "C03V04-VER.EX02.xml",
+    ),
+    ("e06-pump-heat-exchanger-pns", E06_FIXTURE),
+    (
+        "i06-flow-control-valve",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "I06 CCR flow indication and high alarm, flow control, control valve"
+        / "I06V01-VER.EX01.xml",
+    ),
+    (
+        "p04-pipe-intersection",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "P04 Pipe With Intersection"
+        / "P04V01-VER.EX01.xml",
+    ),
+    (
+        "e03-pump-incomplete-review",
+        REPO_ROOT
+        / "TrainingTestCases"
+        / "dexpi 1.3"
+        / "example pids"
+        / "E03 Pump With Nozzles"
+        / "E03V01-VER.EX01.xml",
+    ),
+]
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 10.0
+
+    def __call__(self) -> float:
+        current = self.now
+        self.now += 0.25
+        return current
+
+
+class ChainlitReviewFlowTests(unittest.TestCase):
+    def test_upload_acceptance_document_reaches_ready_and_enables_query_controls(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            initial_state = flow.initial_state()
+            self.assertEqual(initial_state["status"], "awaiting_upload")
+            self.assertEqual(initial_state["query_controls"]["enabled"], False)
+
+            preparing_state = flow.preparing_state(session_id="chainlit-e06")
+            self.assertEqual(preparing_state["status"], "preparing")
+            self.assertEqual(preparing_state["query_controls"]["enabled"], False)
+            self.assertEqual(preparing_state["prompt_composer"]["enabled"], False)
+
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="chainlit-e06",
+            )
+
+            self.assertEqual(state["status"], "ready")
+            self.assertEqual(state["session_id"], "chainlit-e06")
+            self.assertEqual(state["query_controls"], {"enabled": True})
+            self.assertEqual(state["prompt_composer"]["enabled"], True)
+            self.assertGreater(state["timing"]["upload_to_ready_seconds"], 0)
+            self.assertEqual(state["timing"]["document_id"], "chainlit-e06")
+            self.assertTrue(state["topology_view"]["nodes"])
+
+    def test_failed_upload_keeps_query_controls_disabled_and_retry_can_reach_ready(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            flow = ChainlitReviewFlow(
+                artifact_root=tmp_path / "sessions",
+                clock=FakeClock(),
+            )
+            missing_xml = tmp_path / "later.xml"
+
+            failed = flow.prepare_upload(
+                dexpi_xml_path=missing_xml,
+                session_id="retryable",
+            )
+
+            self.assertEqual(failed["status"], "failed")
+            self.assertEqual(failed["query_controls"]["enabled"], False)
+            self.assertEqual(failed["prompt_composer"]["enabled"], False)
+            self.assertEqual(failed["diagnostics"][0]["code"], "upload.missing_file")
+
+            shutil.copyfile(E06_FIXTURE, missing_xml)
+            retried = flow.retry_upload(session_id="retryable")
+
+            self.assertEqual(retried["status"], "ready")
+            self.assertEqual(retried["query_controls"], {"enabled": True})
+            self.assertEqual(retried["prompt_composer"]["enabled"], True)
+            self.assertEqual(retried["timing"]["document_id"], "retryable")
+
+    def test_upload_to_ready_timing_is_recorded_for_each_acceptance_document(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            for session_id, dexpi_xml_path in ACCEPTANCE_DOCUMENTS:
+                with self.subTest(session_id=session_id):
+                    state = flow.prepare_upload(
+                        dexpi_xml_path=dexpi_xml_path,
+                        session_id=session_id,
+                    )
+
+                    self.assertEqual(state["status"], "ready")
+                    self.assertEqual(state["timing"]["document_id"], session_id)
+                    self.assertGreater(state["timing"]["upload_to_ready_seconds"], 0)
+                    topology_node_ids = {
+                        node["id"] for node in state["topology_view"]["nodes"]
+                    }
+                    panel = flow.topology_panel_state(session_id=session_id)
+                    selectable_node_ids = {
+                        item["id"]
+                        for item in panel["graph_objects"]
+                        if item["kind"] == "node" and item["selectable"]
+                    }
+                    self.assertGreaterEqual(
+                        len(selectable_node_ids & topology_node_ids)
+                        / len(topology_node_ids),
+                        0.95,
+                    )
+
+            self.assertEqual(
+                {item["document_id"] for item in flow.timing_records()},
+                {session_id for session_id, _ in ACCEPTANCE_DOCUMENTS},
+            )
+
+    def test_topology_selection_updates_visible_editable_source_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="selection-session",
+            )
+            topology_node_ids = [node["id"] for node in state["topology_view"]["nodes"]]
+
+            panel = flow.topology_panel_state(session_id="selection-session")
+            selectable_node_ids = [
+                item["id"]
+                for item in panel["graph_objects"]
+                if item["kind"] == "node" and item["selectable"]
+            ]
+            self.assertGreaterEqual(
+                len(selectable_node_ids) / len(topology_node_ids),
+                0.95,
+            )
+
+            selected = flow.select_topology_object(
+                session_id="selection-session",
+                topology_id=topology_node_ids[0],
+                latency_target_seconds=0.3,
+            )
+            self.assertEqual(
+                selected["visible_source_scope"]["ids"],
+                [topology_node_ids[0]],
+            )
+            self.assertLessEqual(
+                selected["selection_latency_seconds"],
+                selected["latency_target_seconds"],
+            )
+
+            edited = flow.edit_visible_source_scope(
+                session_id="selection-session",
+                source_scope_ids=[topology_node_ids[1]],
+            )
+            self.assertEqual(
+                edited["visible_source_scope"]["ids"],
+                [topology_node_ids[1]],
+            )
+
+            removed = flow.remove_visible_source_scope(
+                session_id="selection-session",
+                topology_id=topology_node_ids[1],
+            )
+            self.assertEqual(removed["visible_source_scope"]["ids"], [])
+
+    def test_logic_request_submission_uses_only_explicit_visible_source_scope(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="submit-session",
+            )
+            topology_node_ids = [node["id"] for node in state["topology_view"]["nodes"]]
+
+            flow.select_topology_object(
+                session_id="submit-session",
+                topology_id=topology_node_ids[0],
+                latency_target_seconds=0.3,
+            )
+            flow.edit_visible_source_scope(
+                session_id="submit-session",
+                source_scope_ids=[topology_node_ids[1]],
+            )
+
+            submission = flow.build_logic_request_submission(
+                session_id="submit-session",
+                prompt="What is downstream of the visible scope?",
+            )
+
+            self.assertEqual(
+                submission,
+                {
+                    "session_id": "submit-session",
+                    "prompt": "What is downstream of the visible scope?",
+                    "source_scope_ids": [topology_node_ids[1]],
+                },
+            )
+            self.assertNotIn(topology_node_ids[0], submission["source_scope_ids"])
+
+
+if __name__ == "__main__":
+    unittest.main()
