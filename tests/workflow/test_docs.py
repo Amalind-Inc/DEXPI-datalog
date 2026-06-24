@@ -7,6 +7,7 @@ import unittest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QA_SEAM_DOC = REPO_ROOT / "docs" / "deterministic_pid_qa.md"
 CHAINLIT_SPIKE_DOC = REPO_ROOT / "docs" / "chainlit_oss_v1_review_shell_spike.md"
+CHAINLIT_ADR_DOC = REPO_ROOT / "docs" / "adr" / "0001-web-review-shell.md"
 TOPOLOGY_VIEW_CONTRACT_DOC = REPO_ROOT / "docs" / "contracts" / "topology_view_model.md"
 
 
@@ -57,6 +58,31 @@ class DeterministicPidQaDocsTests(unittest.TestCase):
             "Action",
             "@chainlit/react-client",
             "not the primary OSS v1 product shell",
+        ]:
+            with self.subTest(required_text=required_text):
+                self.assertIn(required_text, doc)
+
+    def test_web_review_shell_adr_records_frontend_strategy(self) -> None:
+        self.assertTrue(CHAINLIT_ADR_DOC.exists(), CHAINLIT_ADR_DOC)
+
+        doc = CHAINLIT_ADR_DOC.read_text(encoding="utf-8")
+        for required_text in [
+            "Status: Accepted",
+            "Use a repository-owned Python backend API plus a React/TypeScript frontend as the primary OSS v1 product architecture.",
+            "Chainlit is allowed only as a minimal prototype shell",
+            "not the primary product frontend",
+            "repository-owned deterministic workflow seams",
+            "explicit session IDs",
+            "review workflow jobs",
+            "full-page P&ID acceptance corpus",
+            "topology panel",
+            "Cytoscape.js",
+            "provider-neutral BYOK",
+            "zero-secret-leak",
+            "Playwright",
+            "upload a real DEXPI XML file",
+            "migration path",
+            "dedicated frontend",
         ]:
             with self.subTest(required_text=required_text):
                 self.assertIn(required_text, doc)
