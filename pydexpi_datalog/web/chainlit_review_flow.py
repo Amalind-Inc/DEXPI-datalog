@@ -11,7 +11,10 @@ from ..llm.logic_requests import (
     route_without_model_access,
 )
 from ..llm.model_access import ModelProvider, supported_byok_provider
-from ..workflow.review_session import ReviewSessionService
+from ..workflow.review_session import (
+    ReviewSessionService,
+    build_evidence_highlight_payload,
+)
 
 
 class ChainlitReviewFlow:
@@ -28,6 +31,7 @@ class ChainlitReviewFlow:
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
+        self._evidence_highlight_by_session: dict[str, dict[str, object]] = {}
         self._visible_source_scope_by_session: dict[str, list[str]] = {}
         self._last_selected_by_session: dict[str, str] = {}
         self._provider_settings_by_session: dict[str, dict[str, object]] = {}
@@ -120,6 +124,7 @@ class ChainlitReviewFlow:
             "session_id": session_id,
             "graph_objects": graph_objects,
             "visible_source_scope": self._visible_source_scope(session_id),
+            "evidence_highlight": self._evidence_highlight(session_id),
         }
 
     def select_topology_object(
@@ -342,6 +347,13 @@ class ChainlitReviewFlow:
             request=request,
             generated_logic=generated_logic,
         )
+        evidence_highlight = build_evidence_highlight_payload(
+            topology_view=self._topology_for_session(session_id),
+            source_scope_ids=list(request["source_scope_ids"]),
+            matched_object_ids=[str(item["id"]) for item in evidence_items],
+            paths=[],
+        )
+        self._evidence_highlight_by_session[session_id] = evidence_highlight
         result_artifact = {
             "artifact_type": "deterministic_logic_request_result",
             "session_id": session_id,
@@ -349,6 +361,7 @@ class ChainlitReviewFlow:
             "generated_logic": generated_logic,
             "deterministic_inputs": self._artifacts_by_session[session_id],
             "evidence": evidence_items,
+            "evidence_highlight": evidence_highlight,
             "diagnostics": [],
         }
         result_path = self._write_logic_request_result_artifact(
@@ -375,7 +388,28 @@ class ChainlitReviewFlow:
                 "display": "expandable",
                 "items": evidence_items,
             },
+            "evidence_highlight": evidence_highlight,
             "diagnostics": [],
+        }
+
+    def apply_deterministic_evidence_highlight(
+        self,
+        *,
+        session_id: str,
+        source_scope_ids: list[str],
+        matched_object_ids: list[str],
+        paths: list[dict[str, object]],
+    ) -> dict[str, object]:
+        highlight = build_evidence_highlight_payload(
+            topology_view=self._topology_for_session(session_id),
+            source_scope_ids=source_scope_ids,
+            matched_object_ids=matched_object_ids,
+            paths=paths,
+        )
+        self._evidence_highlight_by_session[session_id] = highlight
+        return {
+            "session_id": session_id,
+            "evidence_highlight": self._evidence_highlight(session_id),
         }
 
     def configure_provider_settings(
@@ -455,6 +489,9 @@ class ChainlitReviewFlow:
             self._topology_by_session[str(result["session_id"])] = result["topology_view"]
             self._artifacts_by_session[str(result["session_id"])] = dict(
                 result["artifacts"]
+            )
+            self._evidence_highlight_by_session[str(result["session_id"])] = dict(
+                result["topology_view"]["evidence_highlight"]
             )
             self._visible_source_scope_by_session[str(result["session_id"])] = []
 
@@ -599,5 +636,26 @@ class ChainlitReviewFlow:
                     "evidence": evidence_map[topology_id],
                 }
                 for topology_id in ids
+            ],
+        }
+
+    def _evidence_highlight(self, session_id: str) -> dict[str, object]:
+        highlight = self._evidence_highlight_by_session.get(session_id)
+        if highlight is None:
+            return {
+                "source_scope_ids": [],
+                "matched_object_ids": [],
+                "paths": [],
+            }
+        return {
+            "source_scope_ids": list(highlight["source_scope_ids"]),
+            "matched_object_ids": list(highlight["matched_object_ids"]),
+            "paths": [
+                {
+                    "id": path["id"],
+                    "node_ids": list(path["node_ids"]),
+                    "edge_ids": list(path["edge_ids"]),
+                }
+                for path in highlight["paths"]
             ],
         }

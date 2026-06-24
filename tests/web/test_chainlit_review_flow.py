@@ -642,6 +642,103 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     confirmation=confirmation,
                 )
 
+    def test_executed_logic_request_updates_topology_highlight_from_deterministic_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="highlight-session",
+            )
+            source_id = state["topology_view"]["nodes"][0]["id"]
+            flow.configure_provider_settings(
+                session_id="highlight-session",
+                provider="openrouter",
+                model="openrouter/owl-alpha",
+                credential="sk-sentinel-secret-should-never-leak",
+            )
+            flow.edit_visible_source_scope(
+                session_id="highlight-session",
+                source_scope_ids=[source_id],
+            )
+            improvement = flow.improve_logic_request(
+                session_id="highlight-session",
+                prompt="Starting from this selected object, what downstream process objects are reachable?",
+            )
+            confirmation = flow.accept_logic_request_refinement(
+                session_id="highlight-session",
+                improvement=improvement,
+                provider=FakeModelProvider(
+                    response=json.dumps(
+                        {
+                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
+                        }
+                    )
+                ),
+            )
+
+            answer = flow.execute_confirmed_logic_request(
+                session_id="highlight-session",
+                confirmation=confirmation,
+            )
+            panel = flow.topology_panel_state(session_id="highlight-session")
+
+            highlighted_ids = set(panel["evidence_highlight"]["source_scope_ids"])
+            highlighted_ids.update(panel["evidence_highlight"]["matched_object_ids"])
+            for path in panel["evidence_highlight"]["paths"]:
+                highlighted_ids.update(path["node_ids"])
+                highlighted_ids.update(path["edge_ids"])
+            known_ids = {item["id"] for item in panel["graph_objects"]}
+
+            self.assertEqual(
+                panel["evidence_highlight"],
+                answer["evidence_highlight"],
+            )
+            self.assertEqual(
+                panel["evidence_highlight"]["source_scope_ids"],
+                [source_id],
+            )
+            self.assertEqual(
+                panel["evidence_highlight"]["matched_object_ids"],
+                [item["id"] for item in answer["evidence"]["items"]],
+            )
+            self.assertEqual(panel["evidence_highlight"]["paths"], [])
+            self.assertLessEqual(highlighted_ids, known_ids)
+
+    def test_absent_deterministic_evidence_id_is_not_highlighted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="absent-highlight-session",
+            )
+
+            with self.assertRaisesRegex(ValueError, "unknown topology id"):
+                flow.apply_deterministic_evidence_highlight(
+                    session_id="absent-highlight-session",
+                    source_scope_ids=[],
+                    matched_object_ids=["not-a-topology-id"],
+                    paths=[],
+                )
+
+            panel = flow.topology_panel_state(session_id="absent-highlight-session")
+            self.assertEqual(
+                panel["evidence_highlight"],
+                {
+                    "source_scope_ids": [],
+                    "matched_object_ids": [],
+                    "paths": [],
+                },
+            )
+
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
     ) -> None:
