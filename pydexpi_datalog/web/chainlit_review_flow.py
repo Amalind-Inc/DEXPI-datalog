@@ -4,8 +4,12 @@ from pathlib import Path
 import time
 from typing import Callable
 
-from ..llm.logic_requests import route_logic_request, route_without_model_access
-from ..llm.model_access import supported_byok_provider
+from ..llm.logic_requests import (
+    parse_model_draft_response,
+    route_logic_request,
+    route_without_model_access,
+)
+from ..llm.model_access import ModelProvider, supported_byok_provider
 from ..workflow.review_session import ReviewSessionService
 
 
@@ -219,6 +223,98 @@ class ChainlitReviewFlow:
             "diagnostics": [],
         }
 
+    def accept_logic_request_refinement(
+        self,
+        *,
+        session_id: str,
+        improvement: dict[str, object],
+        provider: ModelProvider,
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        if improvement.get("status") != "refinement_ready":
+            raise ValueError("only refinement_ready logic requests can be accepted")
+
+        refinement = improvement["refinement"]
+        if not isinstance(refinement, dict):
+            raise ValueError("accepted improvement is missing a refinement")
+
+        provider_settings = self.provider_settings_state(session_id)
+        if not provider_settings["configured"]:
+            return {
+                "artifact_type": "logic_request_confirmation",
+                "status": "failed",
+                "session_id": session_id,
+                "request": self._confirmation_request(
+                    improvement=improvement,
+                    refinement=refinement,
+                    provider_settings=provider_settings,
+                ),
+                "diagnostics": [
+                    {
+                        "code": "model_access.missing_byok_credentials",
+                        "message": "Configure a provider credential before accepting a refinement.",
+                    }
+                ],
+            }
+
+        response = provider.complete(
+            request=str(refinement["refined_prompt"]),
+            context={
+                "route": improvement["route"],
+                "provider": provider_settings,
+                "scope": refinement["scope"],
+                "source_scope_ids": list(refinement["source_scope_ids"]),
+            },
+        )
+        draft = parse_model_draft_response(response)
+        generated_datalog = draft.get("generated_datalog")
+        formal_restatement = draft.get("formal_restatement")
+        if not isinstance(generated_datalog, str) or not isinstance(
+            formal_restatement, str
+        ):
+            return {
+                "artifact_type": "logic_request_confirmation",
+                "status": "failed",
+                "session_id": session_id,
+                "request": self._confirmation_request(
+                    improvement=improvement,
+                    refinement=refinement,
+                    provider_settings=provider_settings,
+                ),
+                "diagnostics": [
+                    {
+                        "code": "logic_request.confirmation_incomplete",
+                        "message": "The model draft must include generated_datalog and formal_restatement.",
+                    }
+                ],
+            }
+
+        return {
+            "artifact_type": "logic_request_confirmation",
+            "status": "confirmation_ready",
+            "session_id": session_id,
+            "request": self._confirmation_request(
+                improvement=improvement,
+                refinement=refinement,
+                provider_settings=provider_settings,
+            ),
+            "primary_confirmation": "restatement",
+            "restatement": {
+                "kind": "datalog_grounded_restatement",
+                "text": formal_restatement,
+                "grounded_by": "generated_logic",
+            },
+            "generated_logic": {
+                "kind": "generated_datalog",
+                "language": "souffle_datalog",
+                "content": generated_datalog,
+                "inspectable": True,
+                "editable": False,
+            },
+            "direct_datalog_edit": self._direct_datalog_edit_unavailable(),
+            "diagnostics": [],
+        }
+
     def configure_provider_settings(
         self,
         *,
@@ -357,6 +453,30 @@ class ChainlitReviewFlow:
                 "filename": f"{session_id}-missing-capability.txt",
                 "content_type": "text/plain",
                 "content": copyable_text,
+            },
+        }
+
+    def _confirmation_request(
+        self,
+        *,
+        improvement: dict[str, object],
+        refinement: dict[str, object],
+        provider_settings: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "prompt": refinement["original_prompt"],
+            "route": improvement["route"],
+            "provider": provider_settings,
+            "scope": refinement["scope"],
+            "source_scope_ids": list(refinement["source_scope_ids"]),
+        }
+
+    def _direct_datalog_edit_unavailable(self) -> dict[str, object]:
+        return {
+            "available": False,
+            "rejection": {
+                "code": "generated_datalog.direct_edit_unavailable",
+                "message": "Generated Datalog is inspectable but direct editing is unavailable in OSS v1.",
             },
         }
 

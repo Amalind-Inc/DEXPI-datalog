@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
 
+from pydexpi_datalog import FakeModelProvider
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
 
 
@@ -385,6 +387,133 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     self.assertEqual(result["route"], route)
                     self.assertNotIn("refinement", result)
                     self.assertNotIn("generated_datalog", str(result))
+
+    def test_accepted_refinement_produces_restatement_first_confirmation_artifact(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="confirm-session",
+            )
+            topology_id = state["topology_view"]["nodes"][0]["id"]
+            flow.configure_provider_settings(
+                session_id="confirm-session",
+                provider="openai",
+                model="gpt-4.1",
+                credential="sk-sentinel-secret-should-never-leak",
+            )
+            flow.edit_visible_source_scope(
+                session_id="confirm-session",
+                source_scope_ids=[topology_id],
+            )
+            improvement = flow.improve_logic_request(
+                session_id="confirm-session",
+                prompt="Starting from this selected object, what downstream process objects are reachable?",
+            )
+            provider = FakeModelProvider(
+                response=json.dumps(
+                    {
+                        "generated_datalog": ".decl reachable(x:symbol)\n.output reachable\nreachable(\"P-4713\").",
+                        "formal_restatement": "Return process objects reachable downstream from the selected object.",
+                    }
+                )
+            )
+
+            artifact = flow.accept_logic_request_refinement(
+                session_id="confirm-session",
+                improvement=improvement,
+                provider=provider,
+            )
+
+            self.assertEqual(artifact["artifact_type"], "logic_request_confirmation")
+            self.assertEqual(artifact["status"], "confirmation_ready")
+            self.assertEqual(artifact["primary_confirmation"], "restatement")
+            self.assertEqual(
+                artifact["restatement"],
+                {
+                    "kind": "datalog_grounded_restatement",
+                    "text": "Return process objects reachable downstream from the selected object.",
+                    "grounded_by": "generated_logic",
+                },
+            )
+            self.assertEqual(
+                artifact["generated_logic"],
+                {
+                    "kind": "generated_datalog",
+                    "language": "souffle_datalog",
+                    "content": ".decl reachable(x:symbol)\n.output reachable\nreachable(\"P-4713\").",
+                    "inspectable": True,
+                    "editable": False,
+                },
+            )
+            self.assertEqual(
+                artifact["request"],
+                {
+                    "prompt": "Starting from this selected object, what downstream process objects are reachable?",
+                    "route": {"kind": "topology_logic"},
+                    "provider": {
+                        "provider": "openai",
+                        "model": "gpt-4.1",
+                        "configured": True,
+                    },
+                    "scope": {"kind": "visible_source_scope"},
+                    "source_scope_ids": [topology_id],
+                },
+            )
+            self.assertEqual(
+                artifact["direct_datalog_edit"],
+                {
+                    "available": False,
+                    "rejection": {
+                        "code": "generated_datalog.direct_edit_unavailable",
+                        "message": "Generated Datalog is inspectable but direct editing is unavailable in OSS v1.",
+                    },
+                },
+            )
+            self.assertEqual(artifact["diagnostics"], [])
+            self.assertNotIn("sk-sentinel-secret-should-never-leak", str(artifact))
+            self.assertEqual(len(provider.requests), 1)
+
+    def test_accepting_refinement_without_credentials_stops_before_provider_call(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="missing-credential-session",
+            )
+            improvement = flow.improve_logic_request(
+                session_id="missing-credential-session",
+                prompt="What process equipment is connected in this P&ID?",
+            )
+            provider = FakeModelProvider(response="should not be used")
+
+            artifact = flow.accept_logic_request_refinement(
+                session_id="missing-credential-session",
+                improvement=improvement,
+                provider=provider,
+            )
+
+            self.assertEqual(artifact["status"], "failed")
+            self.assertEqual(
+                artifact["diagnostics"],
+                [
+                    {
+                        "code": "model_access.missing_byok_credentials",
+                        "message": "Configure a provider credential before accepting a refinement.",
+                    }
+                ],
+            )
+            self.assertEqual(provider.requests, [])
 
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
