@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 import time
 from typing import Callable
 
@@ -38,6 +39,7 @@ class ChainlitReviewFlow:
         self._provider_settings_by_session: dict[str, dict[str, object]] = {}
         self._credentials_by_session: dict[str, str] = {}
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
+        self._missing_capabilities_by_session: dict[str, list[dict[str, object]]] = {}
 
     def initial_state(self) -> dict[str, object]:
         return {
@@ -205,10 +207,14 @@ class ChainlitReviewFlow:
                 **routed,
             }
             if route["kind"] == "missing_capability":
-                result["missing_capability"] = self._missing_capability_artifact(
+                missing_capability = self._missing_capability_artifact(
                     session_id=session_id,
                     prompt=prompt,
                     diagnostics=list(routed["diagnostics"]),
+                )
+                result["missing_capability"] = missing_capability
+                self._missing_capabilities_by_session.setdefault(session_id, []).append(
+                    missing_capability
                 )
             return result
 
@@ -541,6 +547,59 @@ class ChainlitReviewFlow:
             ],
         }
 
+    def export_session_artifacts(
+        self, *, session_id: str, export_dir: Path
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        prepared_artifacts = self._copy_prepared_artifacts(
+            session_id=session_id,
+            export_dir=export_dir / "prepared",
+        )
+        logic_request_results = self._copy_artifact_directory(
+            session_id=session_id,
+            source_dirname="logic_request_results",
+            export_dir=export_dir / "logic_request_results",
+        )
+        rule_pack_results = self._copy_artifact_directory(
+            session_id=session_id,
+            source_dirname="rule_pack_results",
+            export_dir=export_dir / "rule_pack_results",
+        )
+        missing_capabilities = self._write_missing_capability_exports(
+            session_id=session_id,
+            export_dir=export_dir / "missing_capabilities",
+        )
+        manifest = {
+            "artifact_type": "explicit_session_export",
+            "session_id": session_id,
+            "provider": self.provider_settings_state(session_id),
+            "visible_source_scope": self._visible_source_scope(session_id),
+            "evidence_highlight": self._evidence_highlight(session_id),
+            "timing": [
+                item
+                for item in self._timing_records
+                if item["session_id"] == session_id
+            ],
+            "prepared_artifacts": prepared_artifacts,
+            "logic_request_results": logic_request_results,
+            "rule_pack_results": rule_pack_results,
+            "missing_capabilities": missing_capabilities,
+        }
+        manifest_path = export_dir / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return {
+            "status": "exported",
+            "session_id": session_id,
+            "export_dir": str(export_dir),
+            "manifest_path": str(manifest_path),
+            "manifest": manifest,
+        }
+
     def local_credential_for_test(self, session_id: str) -> str | None:
         return self._credentials_by_session.get(session_id)
 
@@ -569,6 +628,7 @@ class ChainlitReviewFlow:
             )
             self._visible_source_scope_by_session[str(result["session_id"])] = []
             self._rule_pack_results_by_session[str(result["session_id"])] = []
+            self._missing_capabilities_by_session[str(result["session_id"])] = []
 
         disabled_reason = None
         if not is_ready:
@@ -766,6 +826,80 @@ class ChainlitReviewFlow:
             encoding="utf-8",
         )
         return result_path
+
+    def _copy_prepared_artifacts(
+        self, *, session_id: str, export_dir: Path
+    ) -> list[dict[str, object]]:
+        exported = []
+        public_kinds = {
+            "readiness_metadata": "readiness",
+            "topology_view_model": "topology_view",
+        }
+        for kind, source_path in sorted(self._artifacts_by_session[session_id].items()):
+            source = Path(str(source_path))
+            if not source.is_file():
+                continue
+            public_kind = public_kinds.get(kind, kind)
+            target = export_dir / f"{public_kind}{source.suffix}"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            exported.append(
+                {
+                    "kind": public_kind,
+                    "path": str(target),
+                }
+            )
+        return exported
+
+    def _copy_artifact_directory(
+        self,
+        *,
+        session_id: str,
+        source_dirname: str,
+        export_dir: Path,
+    ) -> list[dict[str, object]]:
+        source_dir = self._service.artifact_root / session_id / source_dirname
+        if not source_dir.is_dir():
+            return []
+
+        exported = []
+        export_dir.mkdir(parents=True, exist_ok=True)
+        for source in sorted(source_dir.glob("*.json")):
+            target = export_dir / source.name
+            shutil.copyfile(source, target)
+            exported.append(
+                {
+                    "kind": source_dirname[:-1],
+                    "path": str(target),
+                }
+            )
+        return exported
+
+    def _write_missing_capability_exports(
+        self, *, session_id: str, export_dir: Path
+    ) -> list[dict[str, object]]:
+        exported = []
+        missing_capabilities = self._missing_capabilities_by_session.get(session_id, [])
+        if not missing_capabilities:
+            return exported
+
+        export_dir.mkdir(parents=True, exist_ok=True)
+        for artifact in missing_capabilities:
+            download = artifact["download"]
+            if not isinstance(download, dict):
+                continue
+            filename = Path(str(download["filename"])).name
+            target = export_dir / filename
+            target.write_text(str(download["content"]), encoding="utf-8")
+            exported.append(
+                {
+                    "kind": "missing_capability",
+                    "code": artifact["code"],
+                    "message": artifact["message"],
+                    "path": str(target),
+                }
+            )
+        return exported
 
     def _visible_source_scope(self, session_id: str) -> dict[str, object]:
         ids = self._visible_source_scope_by_session.get(session_id, [])

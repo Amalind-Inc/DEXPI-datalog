@@ -909,6 +909,113 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             self.assertNotIn(sentinel, str(audit_record))
             self.assertNotIn(sentinel, str(export_bundle))
 
+    def test_explicit_export_writes_reproducible_session_artifacts_without_credentials(
+        self,
+    ) -> None:
+        sentinel = "sk-sentinel-secret-should-never-leak"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            flow = ChainlitReviewFlow(
+                artifact_root=tmp_path / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="explicit-export-session",
+            )
+            topology_id = state["topology_view"]["nodes"][0]["id"]
+            flow.configure_provider_settings(
+                session_id="explicit-export-session",
+                provider="openrouter",
+                model="openrouter/owl-alpha",
+                credential=sentinel,
+            )
+            flow.edit_visible_source_scope(
+                session_id="explicit-export-session",
+                source_scope_ids=[topology_id],
+            )
+            flow.improve_logic_request(
+                session_id="explicit-export-session",
+                prompt="Calculate the pressure drop and required pump head for this line.",
+            )
+            improvement = flow.improve_logic_request(
+                session_id="explicit-export-session",
+                prompt="Starting from this selected object, what downstream process objects are reachable?",
+            )
+            confirmation = flow.accept_logic_request_refinement(
+                session_id="explicit-export-session",
+                improvement=improvement,
+                provider=FakeModelProvider(
+                    response=json.dumps(
+                        {
+                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
+                        }
+                    )
+                ),
+            )
+            flow.execute_confirmed_logic_request(
+                session_id="explicit-export-session",
+                confirmation=confirmation,
+            )
+            flow.execute_selected_rule_pack_query(
+                session_id="explicit-export-session",
+                rule_id="pump_discharge_check_valve",
+            )
+            export_dir = tmp_path / "explicit-export"
+
+            self.assertFalse(export_dir.exists())
+
+            export = flow.export_session_artifacts(
+                session_id="explicit-export-session",
+                export_dir=export_dir,
+            )
+
+            self.assertEqual(export["status"], "exported")
+            self.assertTrue(export_dir.exists())
+            self.assertTrue(Path(str(export["manifest_path"])).exists())
+            manifest = export["manifest"]
+            self.assertEqual(manifest["session_id"], "explicit-export-session")
+            self.assertEqual(
+                manifest["provider"],
+                {
+                    "provider": "openrouter",
+                    "model": "openrouter/owl-alpha",
+                    "configured": True,
+                },
+            )
+            self.assertEqual(
+                {item["kind"] for item in manifest["prepared_artifacts"]},
+                {
+                    "readiness",
+                    "topology_view",
+                    "graph_facts_json",
+                    "graph_facts_datalog",
+                    "derived_graph_semantics_datalog",
+                },
+            )
+            self.assertEqual(len(manifest["logic_request_results"]), 1)
+            self.assertEqual(len(manifest["rule_pack_results"]), 1)
+            self.assertEqual(len(manifest["missing_capabilities"]), 1)
+
+            exported_paths = []
+            for group in [
+                "prepared_artifacts",
+                "logic_request_results",
+                "rule_pack_results",
+                "missing_capabilities",
+            ]:
+                exported_paths.extend(Path(item["path"]) for item in manifest[group])
+            self.assertTrue(exported_paths)
+            for path in exported_paths:
+                self.assertTrue(path.exists())
+
+            exported_text = json.dumps(export, sort_keys=True)
+            exported_text += Path(str(export["manifest_path"])).read_text(encoding="utf-8")
+            for path in exported_paths:
+                exported_text += path.read_text(encoding="utf-8")
+            self.assertEqual(exported_text.count(sentinel), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
