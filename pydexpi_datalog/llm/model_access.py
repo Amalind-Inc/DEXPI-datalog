@@ -7,6 +7,26 @@ from typing import Protocol
 from ..workflow.workflow_policy import OSS_POLICY, WorkflowPolicy
 
 
+SUPPORTED_BYOK_PROVIDERS = {
+    "openai": {
+        "api_key_env_var": "OPENAI_API_KEY",
+        "default_model": "gpt-4.1",
+    },
+    "anthropic": {
+        "api_key_env_var": "ANTHROPIC_API_KEY",
+        "default_model": "claude-sonnet-4",
+    },
+    "gemini": {
+        "api_key_env_var": "GEMINI_API_KEY",
+        "default_model": "gemini-2.5-pro",
+    },
+    "openrouter": {
+        "api_key_env_var": "OPENROUTER_API_KEY",
+        "default_model": "anthropic/claude-sonnet-4",
+    },
+}
+
+
 @dataclass(frozen=True)
 class ModelAccessConfig:
     access_mode: str
@@ -53,8 +73,9 @@ def resolve_model_access_config(
     model: str = "gpt-4.1",
     environ: dict[str, str] | None = None,
 ) -> ModelAccessConfig:
+    provider_config = supported_byok_provider(provider)
     env = os.environ if environ is None else environ
-    api_key_env_var = "OPENAI_API_KEY" if provider == "openai" else f"{provider.upper()}_API_KEY"
+    api_key_env_var = str(provider_config["api_key_env_var"])
     return ModelAccessConfig(
         access_mode=policy.model_access,
         provider=provider,
@@ -62,6 +83,16 @@ def resolve_model_access_config(
         api_key_env_var=api_key_env_var,
         has_credentials=bool(env.get(api_key_env_var)),
     )
+
+
+def supported_byok_provider(provider: str) -> dict[str, str]:
+    provider_config = SUPPORTED_BYOK_PROVIDERS.get(provider)
+    if provider_config is None:
+        allowed = ", ".join(sorted(SUPPORTED_BYOK_PROVIDERS))
+        raise ValueError(
+            f"unsupported model provider: {provider}. Supported providers: {allowed}"
+        )
+    return provider_config
 
 
 def missing_byok_credentials_diagnostic(

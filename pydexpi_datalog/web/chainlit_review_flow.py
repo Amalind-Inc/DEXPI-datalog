@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 from typing import Callable
 
+from ..llm.model_access import supported_byok_provider
 from ..workflow.review_session import ReviewSessionService
 
 
@@ -181,6 +182,7 @@ class ChainlitReviewFlow:
         credential: str,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
+        supported_byok_provider(provider)
         self._credentials_by_session[session_id] = credential
         self._provider_settings_by_session[session_id] = {
             "provider": provider,

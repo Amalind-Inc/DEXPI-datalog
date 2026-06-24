@@ -263,6 +263,36 @@ class ModelAccessTests(unittest.TestCase):
             },
         )
 
+    def test_model_access_uses_explicit_env_vars_for_supported_byok_providers(
+        self,
+    ) -> None:
+        expected_env_vars = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
+        }
+
+        for provider, env_var in expected_env_vars.items():
+            with self.subTest(provider=provider):
+                config = pydexpi_datalog.resolve_model_access_config(
+                    provider=provider,
+                    model="test-model",
+                    environ={env_var: "test-key"},
+                )
+
+                self.assertEqual(config.provider, provider)
+                self.assertEqual(config.model, "test-model")
+                self.assertEqual(config.api_key_env_var, env_var)
+                self.assertEqual(config.has_credentials, True)
+
+        with self.assertRaisesRegex(ValueError, "unsupported model provider"):
+            pydexpi_datalog.resolve_model_access_config(
+                provider="bedrock",
+                model="test-model",
+                environ={"BEDROCK_API_KEY": "test-key"},
+            )
+
     def test_logic_request_reports_missing_provider_adapter_after_credentials(self) -> None:
         artifact = pydexpi_datalog.draft_logic_request(
             logic_request="What is downstream of P-4713?",

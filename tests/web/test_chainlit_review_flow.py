@@ -311,6 +311,45 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             self.assertNotIn(sentinel, str(settings))
             self.assertNotIn(sentinel, str(flow.provider_settings_state("byok-session")))
 
+    def test_provider_settings_accept_only_explicit_byok_providers(self) -> None:
+        sentinel = "sk-sentinel-secret-should-never-leak"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="providers-session",
+            )
+
+            for provider, model in [
+                ("openai", "gpt-4.1"),
+                ("anthropic", "claude-sonnet-4"),
+                ("gemini", "gemini-2.5-pro"),
+                ("openrouter", "anthropic/claude-sonnet-4"),
+            ]:
+                with self.subTest(provider=provider):
+                    settings = flow.configure_provider_settings(
+                        session_id="providers-session",
+                        provider=provider,
+                        model=model,
+                        credential=sentinel,
+                    )
+
+                    self.assertEqual(settings["provider"], provider)
+                    self.assertEqual(settings["model"], model)
+                    self.assertEqual(settings["configured"], True)
+                    self.assertNotIn(sentinel, str(settings))
+
+            with self.assertRaisesRegex(ValueError, "unsupported model provider"):
+                flow.configure_provider_settings(
+                    session_id="providers-session",
+                    provider="bedrock",
+                    model="claude",
+                    credential=sentinel,
+                )
+
     def test_logic_request_audit_and_export_do_not_include_sentinel_credentials(
         self,
     ) -> None:
