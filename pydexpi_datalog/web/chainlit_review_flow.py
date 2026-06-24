@@ -22,6 +22,8 @@ class ChainlitReviewFlow:
         self._topology_by_session: dict[str, dict[str, object]] = {}
         self._visible_source_scope_by_session: dict[str, list[str]] = {}
         self._last_selected_by_session: dict[str, str] = {}
+        self._provider_settings_by_session: dict[str, dict[str, object]] = {}
+        self._credentials_by_session: dict[str, str] = {}
 
     def initial_state(self) -> dict[str, object]:
         return {
@@ -169,6 +171,63 @@ class ChainlitReviewFlow:
                 self._visible_source_scope_by_session.get(session_id, [])
             ),
         }
+
+    def configure_provider_settings(
+        self,
+        *,
+        session_id: str,
+        provider: str,
+        model: str,
+        credential: str,
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        self._credentials_by_session[session_id] = credential
+        self._provider_settings_by_session[session_id] = {
+            "provider": provider,
+            "model": model,
+            "configured": bool(credential),
+        }
+        return {
+            "session_id": session_id,
+            **self.provider_settings_state(session_id),
+        }
+
+    def provider_settings_state(self, session_id: str) -> dict[str, object]:
+        settings = self._provider_settings_by_session.get(session_id)
+        if settings is None:
+            return {
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "configured": False,
+            }
+        return dict(settings)
+
+    def build_logic_request_audit_record(
+        self, *, submission: dict[str, object]
+    ) -> dict[str, object]:
+        session_id = str(submission["session_id"])
+        return {
+            "session_id": session_id,
+            "prompt": submission["prompt"],
+            "source_scope_ids": list(submission["source_scope_ids"]),
+            "provider": self.provider_settings_state(session_id),
+        }
+
+    def export_session_state(self, *, session_id: str) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        return {
+            "session_id": session_id,
+            "provider": self.provider_settings_state(session_id),
+            "visible_source_scope": self._visible_source_scope(session_id),
+            "timing": [
+                item
+                for item in self._timing_records
+                if item["session_id"] == session_id
+            ],
+        }
+
+    def local_credential_for_test(self, session_id: str) -> str | None:
+        return self._credentials_by_session.get(session_id)
 
     def _state_from_preparation_result(
         self,

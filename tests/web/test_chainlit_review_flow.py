@@ -277,6 +277,83 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             )
             self.assertNotIn(topology_node_ids[0], submission["source_scope_ids"])
 
+    def test_provider_settings_are_visible_without_exposing_local_credentials(
+        self,
+    ) -> None:
+        sentinel = "sk-sentinel-secret-should-never-leak"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="byok-session",
+            )
+
+            settings = flow.configure_provider_settings(
+                session_id="byok-session",
+                provider="openai",
+                model="gpt-4.1",
+                credential=sentinel,
+            )
+
+            self.assertEqual(
+                settings,
+                {
+                    "session_id": "byok-session",
+                    "provider": "openai",
+                    "model": "gpt-4.1",
+                    "configured": True,
+                },
+            )
+            self.assertEqual(flow.local_credential_for_test("byok-session"), sentinel)
+            self.assertNotIn(sentinel, str(settings))
+            self.assertNotIn(sentinel, str(flow.provider_settings_state("byok-session")))
+
+    def test_logic_request_audit_and_export_do_not_include_sentinel_credentials(
+        self,
+    ) -> None:
+        sentinel = "sk-sentinel-secret-should-never-leak"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="audit-session",
+            )
+            topology_id = state["topology_view"]["nodes"][0]["id"]
+            flow.configure_provider_settings(
+                session_id="audit-session",
+                provider="openai",
+                model="gpt-4.1",
+                credential=sentinel,
+            )
+            flow.edit_visible_source_scope(
+                session_id="audit-session",
+                source_scope_ids=[topology_id],
+            )
+
+            submission = flow.build_logic_request_submission(
+                session_id="audit-session",
+                prompt="What is downstream of this object?",
+            )
+            audit_record = flow.build_logic_request_audit_record(
+                submission=submission,
+            )
+            export_bundle = flow.export_session_state(session_id="audit-session")
+
+            self.assertEqual(
+                audit_record["provider"],
+                {"provider": "openai", "model": "gpt-4.1", "configured": True},
+            )
+            self.assertNotIn("credential", str(audit_record).lower())
+            self.assertNotIn(sentinel, str(submission))
+            self.assertNotIn(sentinel, str(audit_record))
+            self.assertNotIn(sentinel, str(export_bundle))
+
 
 if __name__ == "__main__":
     unittest.main()
