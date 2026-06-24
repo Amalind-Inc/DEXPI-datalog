@@ -15,6 +15,7 @@ from ..workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
+from ..verification.verify_suite import evaluate_graph_fixture
 
 
 class ChainlitReviewFlow:
@@ -36,6 +37,7 @@ class ChainlitReviewFlow:
         self._last_selected_by_session: dict[str, str] = {}
         self._provider_settings_by_session: dict[str, dict[str, object]] = {}
         self._credentials_by_session: dict[str, str] = {}
+        self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
 
     def initial_state(self) -> dict[str, object]:
         return {
@@ -412,6 +414,78 @@ class ChainlitReviewFlow:
             "evidence_highlight": self._evidence_highlight(session_id),
         }
 
+    def rule_pack_results_state(self, *, session_id: str) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        return {
+            "session_id": session_id,
+            "results": list(self._rule_pack_results_by_session.get(session_id, [])),
+        }
+
+    def execute_selected_rule_pack_query(
+        self,
+        *,
+        session_id: str,
+        rule_id: str,
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        graph_facts_path = Path(
+            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        )
+        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
+        rule_result = evaluate_graph_fixture(graph_facts, rule_id=rule_id)
+        evidence_items = self._rule_pack_evidence_items(
+            session_id=session_id,
+            rule_result=rule_result,
+        )
+        matched_ids = [str(item["id"]) for item in evidence_items]
+        evidence_highlight = build_evidence_highlight_payload(
+            topology_view=self._topology_for_session(session_id),
+            source_scope_ids=[],
+            matched_object_ids=matched_ids,
+            paths=[],
+        )
+        self._evidence_highlight_by_session[session_id] = evidence_highlight
+
+        result_artifact = {
+            "artifact_type": "rule_pack_result",
+            "session_id": session_id,
+            "rule_id": rule_id,
+            "rule_result": rule_result,
+            "deterministic_inputs": self._artifacts_by_session[session_id],
+            "evidence": evidence_items,
+            "evidence_highlight": evidence_highlight,
+            "diagnostics": [],
+        }
+        result_path = self._write_result_artifact(
+            session_id=session_id,
+            result_artifact=result_artifact,
+            dirname="rule_pack_results",
+            filename_prefix="rule_pack_result",
+        )
+        result = {
+            "status": "answered",
+            "session_id": session_id,
+            "rule_id": rule_id,
+            "outcome": str(rule_result["result_type"]),
+            "confirmation": {"required": False},
+            "summary": {
+                "position": "first",
+                "text": f"{rule_id}: {rule_result['result_type']}. {rule_result['message']}",
+            },
+            "result_artifact": {
+                "kind": "rule_pack_result",
+                "path": str(result_path),
+            },
+            "evidence": {
+                "display": "expandable",
+                "items": evidence_items,
+            },
+            "evidence_highlight": evidence_highlight,
+            "diagnostics": [],
+        }
+        self._rule_pack_results_by_session.setdefault(session_id, []).append(result)
+        return result
+
     def configure_provider_settings(
         self,
         *,
@@ -494,6 +568,7 @@ class ChainlitReviewFlow:
                 result["topology_view"]["evidence_highlight"]
             )
             self._visible_source_scope_by_session[str(result["session_id"])] = []
+            self._rule_pack_results_by_session[str(result["session_id"])] = []
 
         disabled_reason = None
         if not is_ready:
@@ -618,6 +693,74 @@ class ChainlitReviewFlow:
         result_dir.mkdir(parents=True, exist_ok=True)
         result_index = len(list(result_dir.glob("logic_request_result_*.json"))) + 1
         result_path = result_dir / f"logic_request_result_{result_index}.json"
+        result_path.write_text(
+            json.dumps(result_artifact, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return result_path
+
+    def _rule_pack_evidence_items(
+        self,
+        *,
+        session_id: str,
+        rule_result: dict[str, object],
+    ) -> list[dict[str, object]]:
+        topology = self._topology_for_session(session_id)
+        topology_ids_by_node_id = self._topology_ids_by_source_node_id(topology)
+        evidence = rule_result["evidence"]
+        if not isinstance(evidence, dict):
+            return []
+
+        raw_objects = []
+        for item in evidence.get("matched_objects", []):
+            if isinstance(item, dict):
+                raw_objects.append(item)
+        for item in evidence.get("traversed_objects", []):
+            if isinstance(item, dict):
+                raw_objects.append(item)
+
+        evidence_items = []
+        seen_topology_ids = set()
+        for item in raw_objects:
+            topology_id = topology_ids_by_node_id.get(str(item["object_id"]))
+            if topology_id is None or topology_id in seen_topology_ids:
+                continue
+            seen_topology_ids.add(topology_id)
+            evidence_items.append(
+                {
+                    "id": topology_id,
+                    "source": "rule_pack_result",
+                    "rule_id": rule_result["rule_id"],
+                    "class": item.get("class"),
+                    "topology_evidence": topology["evidence_map"][topology_id],
+                }
+            )
+        return evidence_items
+
+    def _topology_ids_by_source_node_id(
+        self, topology: dict[str, object]
+    ) -> dict[str, str]:
+        ids_by_source_node_id = {}
+        for topology_id, evidence in topology["evidence_map"].items():
+            canonical_fact = evidence["canonical_fact"]
+            if canonical_fact["fact_type"] == "node":
+                ids_by_source_node_id[str(canonical_fact["node_id"])] = str(topology_id)
+        return ids_by_source_node_id
+
+    def _write_result_artifact(
+        self,
+        *,
+        session_id: str,
+        result_artifact: dict[str, object],
+        dirname: str,
+        filename_prefix: str,
+    ) -> Path:
+        session_dir = self._service.artifact_root / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+        result_dir = session_dir / dirname
+        result_dir.mkdir(parents=True, exist_ok=True)
+        result_index = len(list(result_dir.glob(f"{filename_prefix}_*.json"))) + 1
+        result_path = result_dir / f"{filename_prefix}_{result_index}.json"
         result_path.write_text(
             json.dumps(result_artifact, indent=2, sort_keys=True),
             encoding="utf-8",

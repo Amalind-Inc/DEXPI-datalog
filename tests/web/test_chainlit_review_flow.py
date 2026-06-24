@@ -76,6 +76,16 @@ ACCEPTANCE_DOCUMENTS = [
         / "E03V01-VER.EX01.xml",
     ),
 ]
+RULE_PACK_ACCEPTANCE_DOCUMENTS = [
+    item
+    for item in ACCEPTANCE_DOCUMENTS
+    if item[0]
+    in {
+        "c01-reference-pid",
+        "e06-pump-heat-exchanger-pns",
+        "e03-pump-incomplete-review",
+    }
+]
 
 
 class FakeClock:
@@ -738,6 +748,50 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     "paths": [],
                 },
             )
+
+    def test_selected_rule_pack_query_runs_only_when_selected_on_acceptance_documents(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            for session_id, dexpi_xml_path in RULE_PACK_ACCEPTANCE_DOCUMENTS:
+                with self.subTest(session_id=session_id):
+                    flow.prepare_upload(
+                        dexpi_xml_path=dexpi_xml_path,
+                        session_id=session_id,
+                    )
+
+                    self.assertEqual(
+                        flow.rule_pack_results_state(session_id=session_id),
+                        {"session_id": session_id, "results": []},
+                    )
+
+                    result = flow.execute_selected_rule_pack_query(
+                        session_id=session_id,
+                        rule_id="pump_discharge_check_valve",
+                    )
+                    panel = flow.topology_panel_state(session_id=session_id)
+
+                    self.assertEqual(result["status"], "answered")
+                    self.assertEqual(result["rule_id"], "pump_discharge_check_valve")
+                    self.assertEqual(result["confirmation"], {"required": False})
+                    self.assertEqual(result["summary"]["position"], "first")
+                    self.assertIn(result["outcome"], result["summary"]["text"])
+                    self.assertEqual(result["evidence"]["display"], "expandable")
+                    self.assertTrue(result["evidence"]["items"])
+                    self.assertTrue(Path(result["result_artifact"]["path"]).exists())
+                    self.assertEqual(
+                        result["evidence_highlight"],
+                        panel["evidence_highlight"],
+                    )
+                    self.assertEqual(
+                        flow.rule_pack_results_state(session_id=session_id)["results"],
+                        [result],
+                    )
 
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
