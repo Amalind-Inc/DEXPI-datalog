@@ -515,6 +515,133 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             )
             self.assertEqual(provider.requests, [])
 
+    def test_confirmed_logic_requests_execute_with_deterministic_evidence_on_acceptance_documents(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            for session_id, dexpi_xml_path in ACCEPTANCE_DOCUMENTS[:3]:
+                with self.subTest(session_id=session_id):
+                    state = flow.prepare_upload(
+                        dexpi_xml_path=dexpi_xml_path,
+                        session_id=session_id,
+                    )
+                    topology_id = state["topology_view"]["nodes"][0]["id"]
+                    flow.configure_provider_settings(
+                        session_id=session_id,
+                        provider="openrouter",
+                        model="openrouter/owl-alpha",
+                        credential="sk-sentinel-secret-should-never-leak",
+                    )
+
+                    for prompt, source_scope_ids in [
+                        (
+                            "What process equipment is connected in this P&ID?",
+                            [],
+                        ),
+                        (
+                            "Starting from this selected object, what downstream process objects are reachable?",
+                            [topology_id],
+                        ),
+                    ]:
+                        with self.subTest(prompt=prompt):
+                            flow.edit_visible_source_scope(
+                                session_id=session_id,
+                                source_scope_ids=source_scope_ids,
+                            )
+                            improvement = flow.improve_logic_request(
+                                session_id=session_id,
+                                prompt=prompt,
+                            )
+                            confirmation = flow.accept_logic_request_refinement(
+                                session_id=session_id,
+                                improvement=improvement,
+                                provider=FakeModelProvider(
+                                    response=json.dumps(
+                                        {
+                                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                                            "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
+                                        }
+                                    )
+                                ),
+                            )
+
+                            answer = flow.execute_confirmed_logic_request(
+                                session_id=session_id,
+                                confirmation=confirmation,
+                            )
+
+                            self.assertEqual(answer["status"], "answered")
+                            self.assertEqual(answer["summary"]["position"], "first")
+                            self.assertEqual(
+                                answer["summary"]["text"],
+                                "Deterministic execution produced 1 evidence item.",
+                            )
+                            self.assertEqual(
+                                answer["result_artifact"]["kind"],
+                                "deterministic_logic_request_result",
+                            )
+                            self.assertTrue(Path(answer["result_artifact"]["path"]).exists())
+                            self.assertEqual(
+                                answer["evidence"]["display"],
+                                "expandable",
+                            )
+                            self.assertTrue(answer["evidence"]["items"])
+                            self.assertEqual(
+                                answer["request"]["source_scope_ids"],
+                                source_scope_ids,
+                            )
+                            self.assertNotIn(
+                                "sk-sentinel-secret-should-never-leak",
+                                str(answer),
+                            )
+
+    def test_confirmed_logic_request_reuse_is_limited_to_active_session(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            for session_id in ["first-session", "second-session"]:
+                flow.prepare_upload(
+                    dexpi_xml_path=E06_FIXTURE,
+                    session_id=session_id,
+                )
+                flow.configure_provider_settings(
+                    session_id=session_id,
+                    provider="openrouter",
+                    model="openrouter/owl-alpha",
+                    credential="sk-sentinel-secret-should-never-leak",
+                )
+            improvement = flow.improve_logic_request(
+                session_id="first-session",
+                prompt="What process equipment is connected in this P&ID?",
+            )
+            confirmation = flow.accept_logic_request_refinement(
+                session_id="first-session",
+                improvement=improvement,
+                provider=FakeModelProvider(
+                    response=json.dumps(
+                        {
+                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
+                        }
+                    )
+                ),
+            )
+
+            with self.assertRaisesRegex(ValueError, "active session"):
+                flow.execute_confirmed_logic_request(
+                    session_id="second-session",
+                    confirmation=confirmation,
+                )
+
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
     ) -> None:

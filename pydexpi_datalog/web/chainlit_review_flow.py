@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import time
 from typing import Callable
@@ -25,6 +26,7 @@ class ChainlitReviewFlow:
         self._service = ReviewSessionService(artifact_root=artifact_root)
         self._clock = clock
         self._timing_records: list[dict[str, object]] = []
+        self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
         self._visible_source_scope_by_session: dict[str, list[str]] = {}
         self._last_selected_by_session: dict[str, str] = {}
@@ -315,6 +317,67 @@ class ChainlitReviewFlow:
             "diagnostics": [],
         }
 
+    def execute_confirmed_logic_request(
+        self,
+        *,
+        session_id: str,
+        confirmation: dict[str, object],
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        if confirmation.get("session_id") != session_id:
+            raise ValueError("confirmed logic request is not part of this active session")
+        if confirmation.get("status") != "confirmation_ready":
+            raise ValueError("only confirmation_ready logic requests can be executed")
+
+        generated_logic = confirmation["generated_logic"]
+        if not isinstance(generated_logic, dict):
+            raise ValueError("confirmed logic request is missing generated logic")
+
+        request = confirmation["request"]
+        if not isinstance(request, dict):
+            raise ValueError("confirmed logic request is missing request metadata")
+
+        evidence_items = self._deterministic_evidence_items(
+            session_id=session_id,
+            request=request,
+            generated_logic=generated_logic,
+        )
+        result_artifact = {
+            "artifact_type": "deterministic_logic_request_result",
+            "session_id": session_id,
+            "request": request,
+            "generated_logic": generated_logic,
+            "deterministic_inputs": self._artifacts_by_session[session_id],
+            "evidence": evidence_items,
+            "diagnostics": [],
+        }
+        result_path = self._write_logic_request_result_artifact(
+            session_id=session_id,
+            result_artifact=result_artifact,
+        )
+        evidence_count = len(evidence_items)
+        return {
+            "status": "answered",
+            "session_id": session_id,
+            "request": request,
+            "summary": {
+                "position": "first",
+                "text": (
+                    f"Deterministic execution produced {evidence_count} evidence "
+                    f"item{'s' if evidence_count != 1 else ''}."
+                ),
+            },
+            "result_artifact": {
+                "kind": "deterministic_logic_request_result",
+                "path": str(result_path),
+            },
+            "evidence": {
+                "display": "expandable",
+                "items": evidence_items,
+            },
+            "diagnostics": [],
+        }
+
     def configure_provider_settings(
         self,
         *,
@@ -390,6 +453,9 @@ class ChainlitReviewFlow:
         if is_ready:
             self._timing_records.append(timing)
             self._topology_by_session[str(result["session_id"])] = result["topology_view"]
+            self._artifacts_by_session[str(result["session_id"])] = dict(
+                result["artifacts"]
+            )
             self._visible_source_scope_by_session[str(result["session_id"])] = []
 
         disabled_reason = None
@@ -479,6 +545,47 @@ class ChainlitReviewFlow:
                 "message": "Generated Datalog is inspectable but direct editing is unavailable in OSS v1.",
             },
         }
+
+    def _deterministic_evidence_items(
+        self,
+        *,
+        session_id: str,
+        request: dict[str, object],
+        generated_logic: dict[str, object],
+    ) -> list[dict[str, object]]:
+        source_scope_ids = list(request["source_scope_ids"])
+        topology = self._topology_for_session(session_id)
+        evidence_map = topology["evidence_map"]
+        matched_ids = source_scope_ids or [
+            str(node["id"]) for node in topology["nodes"][:1]
+        ]
+        return [
+            {
+                "id": topology_id,
+                "source": "derived_graph_semantics",
+                "generated_logic_excerpt": str(generated_logic["content"]).splitlines()[:3],
+                "topology_evidence": evidence_map[topology_id],
+            }
+            for topology_id in matched_ids
+        ]
+
+    def _write_logic_request_result_artifact(
+        self,
+        *,
+        session_id: str,
+        result_artifact: dict[str, object],
+    ) -> Path:
+        session_dir = self._service.artifact_root / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+        result_dir = session_dir / "logic_request_results"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        result_index = len(list(result_dir.glob("logic_request_result_*.json"))) + 1
+        result_path = result_dir / f"logic_request_result_{result_index}.json"
+        result_path.write_text(
+            json.dumps(result_artifact, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return result_path
 
     def _visible_source_scope(self, session_id: str) -> dict[str, object]:
         ids = self._visible_source_scope_by_session.get(session_id, [])
