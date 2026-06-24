@@ -167,7 +167,7 @@ class ModelAccessTests(unittest.TestCase):
         self,
     ) -> None:
         artifact = pydexpi_datalog.draft_logic_request(
-            logic_request="Calculate the pump hydraulic head margin",
+            logic_request="Calculate the pressure drop and required pump head for this line.",
             environ={},
         )
 

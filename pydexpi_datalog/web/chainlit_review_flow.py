@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 from typing import Callable
 
+from ..llm.logic_requests import route_logic_request, route_without_model_access
 from ..llm.model_access import supported_byok_provider
 from ..workflow.review_session import ReviewSessionService
 
@@ -173,6 +174,51 @@ class ChainlitReviewFlow:
             ),
         }
 
+    def improve_logic_request(
+        self, *, session_id: str, prompt: str
+    ) -> dict[str, object]:
+        submission = self.build_logic_request_submission(
+            session_id=session_id,
+            prompt=prompt,
+        )
+        route = route_logic_request(prompt)
+        if route["kind"] != "topology_logic":
+            routed = route_without_model_access(route)
+            result = {
+                "session_id": session_id,
+                "prompt": prompt,
+                "source_scope_ids": submission["source_scope_ids"],
+                "route": route,
+                **routed,
+            }
+            if route["kind"] == "missing_capability":
+                result["missing_capability"] = self._missing_capability_artifact(
+                    session_id=session_id,
+                    prompt=prompt,
+                    diagnostics=list(routed["diagnostics"]),
+                )
+            return result
+
+        source_scope_ids = list(submission["source_scope_ids"])
+        scope_kind = "visible_source_scope" if source_scope_ids else "whole_pid"
+        return {
+            "session_id": session_id,
+            "status": "refinement_ready",
+            "route": route,
+            "refinement": {
+                "original_prompt": prompt,
+                "refined_prompt": prompt.strip(),
+                "scope": {"kind": scope_kind},
+                "source_scope_ids": source_scope_ids,
+                "provider": self.provider_settings_state(session_id),
+                "review_notes": [
+                    "Review the restated topology request before Datalog generation.",
+                    "Only visible source-scope identifiers are included when selected.",
+                ],
+            },
+            "diagnostics": [],
+        }
+
     def configure_provider_settings(
         self,
         *,
@@ -282,6 +328,37 @@ class ChainlitReviewFlow:
         topology = self._topology_for_session(session_id)
         if topology_id not in topology["evidence_map"]:
             raise ValueError(f"unknown topology id for visible source scope: {topology_id}")
+
+    def _missing_capability_artifact(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+        diagnostics: list[object],
+    ) -> dict[str, object]:
+        diagnostic = diagnostics[0]
+        message = ""
+        code = "logic_request.missing_capability"
+        if isinstance(diagnostic, dict):
+            code = str(diagnostic.get("code", code))
+            message = str(diagnostic.get("message", ""))
+        copyable_text = "\n".join(
+            [
+                f"Session: {session_id}",
+                f"Request: {prompt}",
+                f"Unsupported capability: {message}",
+            ]
+        )
+        return {
+            "code": code,
+            "message": message,
+            "copyable_text": copyable_text,
+            "download": {
+                "filename": f"{session_id}-missing-capability.txt",
+                "content_type": "text/plain",
+                "content": copyable_text,
+            },
+        }
 
     def _visible_source_scope(self, session_id: str) -> dict[str, object]:
         ids = self._visible_source_scope_by_session.get(session_id, [])

@@ -156,7 +156,16 @@ def route_logic_request(
         return {"kind": "documentation_answer"}
     if any(
         term in normalized
-        for term in ("hydraulic", "thermodynamic", "simulation", "biowin", "epa", "hazop")
+        for term in (
+            "hydraulic",
+            "pressure drop",
+            "pump head",
+            "thermodynamic",
+            "simulation",
+            "biowin",
+            "epa",
+            "hazop",
+        )
     ):
         return {"kind": "missing_capability"}
     return {"kind": "clarification"}

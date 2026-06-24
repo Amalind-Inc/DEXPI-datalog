@@ -277,6 +277,115 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             )
             self.assertNotIn(topology_node_ids[0], submission["source_scope_ids"])
 
+    def test_improve_routes_before_refinement_for_reviewable_and_unsupported_requests(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            state = flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="improve-session",
+            )
+            topology_id = state["topology_view"]["nodes"][0]["id"]
+
+            whole_file = flow.improve_logic_request(
+                session_id="improve-session",
+                prompt="What process equipment is connected in this P&ID?",
+            )
+
+            self.assertEqual(whole_file["status"], "refinement_ready")
+            self.assertEqual(whole_file["route"], {"kind": "topology_logic"})
+            self.assertEqual(whole_file["refinement"]["scope"], {"kind": "whole_pid"})
+            self.assertEqual(whole_file["refinement"]["source_scope_ids"], [])
+            self.assertNotIn("generated_datalog", str(whole_file))
+
+            flow.edit_visible_source_scope(
+                session_id="improve-session",
+                source_scope_ids=[topology_id],
+            )
+            selected_scope = flow.improve_logic_request(
+                session_id="improve-session",
+                prompt="Starting from this selected object, what downstream process objects are reachable?",
+            )
+
+            self.assertEqual(selected_scope["status"], "refinement_ready")
+            self.assertEqual(selected_scope["route"], {"kind": "topology_logic"})
+            self.assertEqual(
+                selected_scope["refinement"]["scope"],
+                {"kind": "visible_source_scope"},
+            )
+            self.assertEqual(
+                selected_scope["refinement"]["source_scope_ids"],
+                [topology_id],
+            )
+            self.assertNotIn("generated_datalog", str(selected_scope))
+
+            unsupported = flow.improve_logic_request(
+                session_id="improve-session",
+                prompt="Calculate the pressure drop and required pump head for this line.",
+            )
+
+            self.assertEqual(unsupported["status"], "unsupported")
+            self.assertEqual(unsupported["route"], {"kind": "missing_capability"})
+            self.assertEqual(
+                unsupported["missing_capability"]["code"],
+                "logic_request.missing_capability",
+            )
+            self.assertIn(
+                "Calculate the pressure drop",
+                unsupported["missing_capability"]["copyable_text"],
+            )
+            self.assertEqual(
+                unsupported["missing_capability"]["download"]["filename"],
+                "improve-session-missing-capability.txt",
+            )
+            self.assertNotIn("refinement", unsupported)
+            self.assertNotIn("generated_datalog", str(unsupported))
+
+    def test_improve_routed_non_topology_requests_do_not_become_datalog_refinements(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="route-session",
+            )
+
+            for prompt, status, route in [
+                (
+                    "Explain the direct process connection predicate.",
+                    "routed",
+                    {"kind": "documentation_answer"},
+                ),
+                (
+                    "Show the model and context policy used for this run.",
+                    "routed",
+                    {"kind": "metadata_lookup"},
+                ),
+                (
+                    "Check this thing.",
+                    "needs_clarification",
+                    {"kind": "clarification"},
+                ),
+            ]:
+                with self.subTest(route=route["kind"]):
+                    result = flow.improve_logic_request(
+                        session_id="route-session",
+                        prompt=prompt,
+                    )
+
+                    self.assertEqual(result["status"], status)
+                    self.assertEqual(result["route"], route)
+                    self.assertNotIn("refinement", result)
+                    self.assertNotIn("generated_datalog", str(result))
+
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
     ) -> None:
