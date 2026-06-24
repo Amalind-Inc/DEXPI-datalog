@@ -341,3 +341,116 @@ pre {
     grid-column: 1 / -1;
   }
 }
+
+.assistant-proof-shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.55fr) minmax(360px, 0.45fr);
+  min-height: 100vh;
+}
+
+.assistant-thread {
+  background: #ffffff;
+  border-right: 1px solid #d9dfd8;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100vh;
+}
+
+.assistant-thread-viewport {
+  overflow: auto;
+}
+
+.assistant-thread-messages {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.chat-message {
+  border: 1px solid #d9dfd8;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  max-width: 760px;
+  padding: 10px 12px;
+}
+
+.chat-message span {
+  color: #5c675f;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chat-message p {
+  margin-bottom: 0;
+}
+
+.chat-message.user {
+  background: #eef2ec;
+  justify-self: end;
+}
+
+.chat-message.assistant {
+  background: #ffffff;
+  justify-self: start;
+}
+
+.assistant-composer {
+  border-top: 1px solid #d9dfd8;
+  padding: 12px;
+}
+
+.proof-upload-control {
+  align-items: center;
+  background: #244f3b;
+  border: 1px solid #244f3b;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.proof-upload-control input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.proof-topology-panel {
+  padding: 18px;
+}
+
+.proof-topology-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.proof-topology-grid article {
+  background: #ffffff;
+  border: 1px solid #d9dfd8;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.proof-topology-grid span {
+  color: #5c675f;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  .assistant-proof-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-thread {
+    min-height: 60vh;
+  }
+}

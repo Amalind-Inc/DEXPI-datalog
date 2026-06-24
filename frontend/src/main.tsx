@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ReviewApp } from "./App";
+import { AssistantXmlProofApp } from "./AssistantXmlProofApp";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -8,7 +8,7 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <ReviewApp />
+      <AssistantXmlProofApp />
     </StrictMode>,
   );
 }
