@@ -5,13 +5,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PidNodeKind } from "@/components/pid/types";
-
-const positions: Record<string, { x: number; y: number }> = {
-  "pump-101": { x: 68, y: 120 },
-  "valve-102": { x: 220, y: 96 },
-  "flow-transmitter-101": { x: 350, y: 164 },
-  "line-101": { x: 248, y: 208 },
-};
+import { layoutGraphNodes } from "@/components/pid/graph-layout";
 
 const filters: Array<PidNodeKind | "All"> = [
   "All",
@@ -46,6 +40,7 @@ export function PidGraphPanel() {
     [filter, graph.nodes, query],
   );
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const positions = useMemo(() => layoutGraphNodes(graph), [graph]);
 
   return (
     <aside className="pid-panel" aria-label="P&ID graph panel">

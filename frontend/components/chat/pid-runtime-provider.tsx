@@ -11,7 +11,7 @@ import {
   type ThreadMessage,
   useLocalRuntime,
 } from "@assistant-ui/react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PidGraphProvider, usePidGraph } from "@/components/pid/graph-context";
 import type { PrepareResult } from "@/components/pid/types";
 
@@ -31,21 +31,26 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
     applyPrepareResult,
     selectedNode,
     selectedNodeId,
-    highlightedNodeIds,
     setHighlightedNodeIds,
   } = usePidGraph();
+  const graphContextRef = useRef({ selectedNode, selectedNodeId });
+
+  useEffect(() => {
+    graphContextRef.current = { selectedNode, selectedNodeId };
+  }, [selectedNode, selectedNodeId]);
 
   const modelAdapter = useMemo<ChatModelAdapter>(
     () => ({
       async run({ messages, abortSignal }) {
+        const graphContext = graphContextRef.current;
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: messages.map(toBackendMessage),
             sessionId,
-            selectedNode,
-            selectedNodeId,
+            selectedNode: graphContext.selectedNode,
+            selectedNodeId: graphContext.selectedNodeId,
           }),
           signal: abortSignal,
         });
@@ -62,7 +67,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         return { content: [{ type: "text", text: data.message }] };
       },
     }),
-    [selectedNode, selectedNodeId, sessionId, setHighlightedNodeIds],
+    [sessionId, setHighlightedNodeIds],
   );
 
   const attachments = useMemo<AttachmentAdapter>(
