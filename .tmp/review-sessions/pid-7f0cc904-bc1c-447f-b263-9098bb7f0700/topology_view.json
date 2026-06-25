@@ -1,0 +1,119 @@
+{
+  "edges": [
+    {
+      "canonical_fact_id": "edge-232e67b0cc582c2b",
+      "edge_family": "composition",
+      "id": "edge-232e67b0cc582c2b",
+      "relationship": "nodes",
+      "source_graph_edge": {
+        "edge_key": "0",
+        "source_id": "d4307a2b-3b95-4593-803b-b67b82095aba",
+        "target_id": "029a5253-66d0-4520-b216-7a8964d081a8"
+      },
+      "source_id": "node-8caf8b2fcf519ac4",
+      "target_id": "node-b4bec72bb6eb1cd3"
+    }
+  ],
+  "evidence_highlight": {
+    "matched_object_ids": [],
+    "paths": [],
+    "source_scope_ids": []
+  },
+  "evidence_map": {
+    "edge-232e67b0cc582c2b": {
+      "canonical_fact": {
+        "edge_key": "0",
+        "fact_type": "edge",
+        "source_id": "d4307a2b-3b95-4593-803b-b67b82095aba",
+        "target_id": "029a5253-66d0-4520-b216-7a8964d081a8"
+      },
+      "kind": "edge",
+      "topology_id": "edge-232e67b0cc582c2b"
+    },
+    "node-17f6356775b3d848": {
+      "canonical_fact": {
+        "fact_type": "node",
+        "node_id": "ce45413b-ac56-4a12-8b3d-7ae402126f59"
+      },
+      "kind": "node",
+      "topology_id": "node-17f6356775b3d848"
+    },
+    "node-887d6d6d6d11d3a9": {
+      "canonical_fact": {
+        "fact_type": "node",
+        "node_id": "3a863246-5e06-48ed-9df6-2e4bc113743f"
+      },
+      "kind": "node",
+      "topology_id": "node-887d6d6d6d11d3a9"
+    },
+    "node-8caf8b2fcf519ac4": {
+      "canonical_fact": {
+        "fact_type": "node",
+        "node_id": "d4307a2b-3b95-4593-803b-b67b82095aba"
+      },
+      "kind": "node",
+      "topology_id": "node-8caf8b2fcf519ac4"
+    },
+    "node-b4bec72bb6eb1cd3": {
+      "canonical_fact": {
+        "fact_type": "node",
+        "node_id": "029a5253-66d0-4520-b216-7a8964d081a8"
+      },
+      "kind": "node",
+      "topology_id": "node-b4bec72bb6eb1cd3"
+    },
+    "node-f13640359dd1d7b0": {
+      "canonical_fact": {
+        "fact_type": "node",
+        "node_id": "963d6d68-47ad-4def-ba34-dee38f53a055"
+      },
+      "kind": "node",
+      "topology_id": "node-f13640359dd1d7b0"
+    }
+  },
+  "nodes": [
+    {
+      "canonical_fact_id": "node-17f6356775b3d848",
+      "id": "node-17f6356775b3d848",
+      "label": "Chamber",
+      "proteus_id": "Chamber-1",
+      "source_graph_node_id": "ce45413b-ac56-4a12-8b3d-7ae402126f59",
+      "tag_name": null
+    },
+    {
+      "canonical_fact_id": "node-887d6d6d6d11d3a9",
+      "id": "node-887d6d6d6d11d3a9",
+      "label": "CentrifugalPump",
+      "proteus_id": "CentrifugalPump-1",
+      "source_graph_node_id": "3a863246-5e06-48ed-9df6-2e4bc113743f",
+      "tag_name": "P-4713"
+    },
+    {
+      "canonical_fact_id": "node-8caf8b2fcf519ac4",
+      "id": "node-8caf8b2fcf519ac4",
+      "label": "Nozzle",
+      "proteus_id": "Nozzle-1",
+      "source_graph_node_id": "d4307a2b-3b95-4593-803b-b67b82095aba",
+      "tag_name": null
+    },
+    {
+      "canonical_fact_id": "node-b4bec72bb6eb1cd3",
+      "id": "node-b4bec72bb6eb1cd3",
+      "label": "PipingNode",
+      "proteus_id": "PipingNode-1",
+      "source_graph_node_id": "029a5253-66d0-4520-b216-7a8964d081a8",
+      "tag_name": null
+    },
+    {
+      "canonical_fact_id": "node-f13640359dd1d7b0",
+      "id": "node-f13640359dd1d7b0",
+      "label": "ConceptualModel",
+      "proteus_id": null,
+      "source_graph_node_id": "963d6d68-47ad-4def-ba34-dee38f53a055",
+      "tag_name": null
+    }
+  ],
+  "schema_version": "topology-view.v1",
+  "session_id": "pid-7f0cc904-bc1c-447f-b263-9098bb7f0700",
+  "source_path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/.tmp/review-sessions/_uploads/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/E03V01-VER.EX01.xml"
+}

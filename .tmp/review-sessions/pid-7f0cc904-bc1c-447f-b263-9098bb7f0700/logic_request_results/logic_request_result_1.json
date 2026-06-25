@@ -1,0 +1,64 @@
+{
+  "artifact_type": "deterministic_logic_request_result",
+  "deterministic_inputs": {
+    "derived_graph_semantics_datalog": ".tmp/review-sessions/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/derived_graph_semantics.dl",
+    "graph_facts_datalog": ".tmp/review-sessions/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/graph_facts.dl",
+    "graph_facts_json": ".tmp/review-sessions/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/graph_facts.json",
+    "readiness_metadata": ".tmp/review-sessions/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/readiness.json",
+    "topology_view_model": ".tmp/review-sessions/pid-7f0cc904-bc1c-447f-b263-9098bb7f0700/topology_view.json"
+  },
+  "diagnostics": [],
+  "evidence": [
+    {
+      "generated_logic_excerpt": [
+        ".decl answer(x:symbol)",
+        ".output answer",
+        "answer(\"deterministic-evidence\")."
+      ],
+      "id": "node-8caf8b2fcf519ac4",
+      "source": "derived_graph_semantics",
+      "topology_evidence": {
+        "canonical_fact": {
+          "fact_type": "node",
+          "node_id": "d4307a2b-3b95-4593-803b-b67b82095aba"
+        },
+        "kind": "node",
+        "topology_id": "node-8caf8b2fcf519ac4"
+      }
+    }
+  ],
+  "evidence_highlight": {
+    "matched_object_ids": [
+      "node-8caf8b2fcf519ac4"
+    ],
+    "paths": [],
+    "source_scope_ids": [
+      "node-8caf8b2fcf519ac4"
+    ]
+  },
+  "generated_logic": {
+    "content": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+    "editable": false,
+    "inspectable": true,
+    "kind": "generated_datalog",
+    "language": "souffle_datalog"
+  },
+  "request": {
+    "prompt": "Starting from this selected object, what downstream process objects are reachable?",
+    "provider": {
+      "configured": true,
+      "model": "openrouter/owl-alpha",
+      "provider": "openrouter"
+    },
+    "route": {
+      "kind": "topology_logic"
+    },
+    "scope": {
+      "kind": "visible_source_scope"
+    },
+    "source_scope_ids": [
+      "node-8caf8b2fcf519ac4"
+    ]
+  },
+  "session_id": "pid-7f0cc904-bc1c-447f-b263-9098bb7f0700"
+}

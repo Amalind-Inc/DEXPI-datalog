@@ -1,0 +1,50 @@
+.decl node(id:symbol)
+.decl node_attribute(id:symbol, attr_name:symbol, attr_value:symbol)
+.decl graph_edge(source:symbol, target:symbol, edge_key:symbol)
+.decl graph_edge_attribute(source:symbol, target:symbol, edge_key:symbol, attr_name:symbol, attr_value:symbol)
+
+node("029a5253-66d0-4520-b216-7a8964d081a8").
+node("3a863246-5e06-48ed-9df6-2e4bc113743f").
+node("963d6d68-47ad-4def-ba34-dee38f53a055").
+node("ce45413b-ac56-4a12-8b3d-7ae402126f59").
+node("d4307a2b-3b95-4593-803b-b67b82095aba").
+node_attribute("029a5253-66d0-4520-b216-7a8964d081a8", "label", "PipingNode").
+node_attribute("029a5253-66d0-4520-b216-7a8964d081a8", "label_description", "A possible connection point for a PipingConnection.").
+node_attribute("029a5253-66d0-4520-b216-7a8964d081a8", "labels", "PipingNode:CustomAttributeOwner").
+node_attribute("029a5253-66d0-4520-b216-7a8964d081a8", "proteusId", "PipingNode-1").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "label", "CentrifugalPump").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "label_description", "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "labels", "CentrifugalPump:Pump:Equipment:ChamberOwner:NozzleOwner:TaggedPlantItem:CustomAttributeOwner:TechnicalItem:PlantAreaLocatedStructure:PlantSystemLocatedStructure:PlantTrainLocatedStructure").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "proteusId", "CentrifugalPump-1").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "tagName", "P-4713").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "tagNamePrefix", "P").
+node_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "tagNameSequenceNumber", "4713").
+node_attribute("963d6d68-47ad-4def-ba34-dee38f53a055", "label", "ConceptualModel").
+node_attribute("963d6d68-47ad-4def-ba34-dee38f53a055", "label_description", "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.").
+node_attribute("963d6d68-47ad-4def-ba34-dee38f53a055", "labels", "ConceptualModel").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "label", "Chamber").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "label_description", "A physical object that is an enclosed space (from http://data.posccaesar.org/rdl/RDS903151421).").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "labels", "Chamber:CustomAttributeOwner").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "lowerLimitDesignPressure", "-0.5 bar").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "lowerLimitDesignTemperature", "-45.0 °C").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "materialOfConstructionCode", "1.4306/8").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "proteusId", "Chamber-1").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "upperLimitDesignPressure", "60.0 bar").
+node_attribute("ce45413b-ac56-4a12-8b3d-7ae402126f59", "upperLimitDesignTemperature", "80.0 °C").
+node_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "label", "Nozzle").
+node_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "label_description", "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).").
+node_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "labels", "Nozzle:ActuatingElectricalLocation:CustomAttributeOwner:PipingNodeOwner:PipingSourceItem:PipingTargetItem:SensingLocation").
+node_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "proteusId", "Nozzle-1").
+node_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "subTagName", "N-1").
+graph_edge("3a863246-5e06-48ed-9df6-2e4bc113743f", "ce45413b-ac56-4a12-8b3d-7ae402126f59", "0").
+graph_edge("3a863246-5e06-48ed-9df6-2e4bc113743f", "d4307a2b-3b95-4593-803b-b67b82095aba", "0").
+graph_edge("963d6d68-47ad-4def-ba34-dee38f53a055", "3a863246-5e06-48ed-9df6-2e4bc113743f", "0").
+graph_edge("d4307a2b-3b95-4593-803b-b67b82095aba", "029a5253-66d0-4520-b216-7a8964d081a8", "0").
+graph_edge_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "ce45413b-ac56-4a12-8b3d-7ae402126f59", "0", "attr_name", "chambers").
+graph_edge_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "ce45413b-ac56-4a12-8b3d-7ae402126f59", "0", "label", "composition").
+graph_edge_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "d4307a2b-3b95-4593-803b-b67b82095aba", "0", "attr_name", "nozzles").
+graph_edge_attribute("3a863246-5e06-48ed-9df6-2e4bc113743f", "d4307a2b-3b95-4593-803b-b67b82095aba", "0", "label", "composition").
+graph_edge_attribute("963d6d68-47ad-4def-ba34-dee38f53a055", "3a863246-5e06-48ed-9df6-2e4bc113743f", "0", "attr_name", "taggedPlantItems").
+graph_edge_attribute("963d6d68-47ad-4def-ba34-dee38f53a055", "3a863246-5e06-48ed-9df6-2e4bc113743f", "0", "label", "composition").
+graph_edge_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "029a5253-66d0-4520-b216-7a8964d081a8", "0", "attr_name", "nodes").
+graph_edge_attribute("d4307a2b-3b95-4593-803b-b67b82095aba", "029a5253-66d0-4520-b216-7a8964d081a8", "0", "label", "composition").

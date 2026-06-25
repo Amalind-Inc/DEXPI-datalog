@@ -22,3 +22,6 @@ logs/mcp_server.log
 AGENTS.md
 CONTEXT.md
 UBIQUITOUS_LANGUAGE.md
+
+.env/*
+.env

@@ -1,0 +1,10 @@
+{
+  "diagnostics": [],
+  "graph": {
+    "edge_count": 376,
+    "node_count": 214
+  },
+  "session_id": "pid-780c8cf5-4d19-4ac8-993e-b9ae9d75d67e",
+  "state": "ready",
+  "topology_view_model_path": ".tmp/review-sessions/pid-780c8cf5-4d19-4ac8-993e-b9ae9d75d67e/topology_view.json"
+}
