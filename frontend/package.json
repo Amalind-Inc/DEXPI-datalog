@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
+    "test": "node --test --experimental-strip-types",
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "format": "oxfmt --check",

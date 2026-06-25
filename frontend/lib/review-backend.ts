@@ -1,0 +1,405 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { samplePidGraph } from "../components/pid/sample-graph.ts";
+import type { PidGraph, PidNode, PrepareResult } from "../components/pid/types.ts";
+
+export type ChatRequest = {
+  messages?: Array<{ role: string; content: string }>;
+  sessionId?: string;
+  selectedNode?: {
+    id: string;
+    label: string;
+    kind: string;
+    description: string;
+  } | null;
+};
+
+export type ChatResult = {
+  message: string;
+  highlightedNodeIds: string[];
+};
+
+type PrepareBody = {
+  filename?: string;
+  content?: string;
+};
+
+type BackendFetch = typeof fetch;
+type BackendProviderSettings = {
+  provider: "openrouter" | "openai" | "anthropic" | "gemini";
+  model: string;
+  credential: string;
+};
+
+export async function prepareReviewSession(
+  sessionId: string,
+  body: PrepareBody,
+  options: BackendOptions = {},
+): Promise<PrepareResult> {
+  const proxied = await prepareWithPythonBackend(sessionId, body, options);
+  if (proxied) return proxied;
+
+  const graph = graphFromXml(body.content ?? "");
+  return {
+    status: "ready",
+    filename: body.filename ?? "plant.xml",
+    graph,
+    sourceScopeIds: [graph.nodes[0]?.id ?? "pump-101"],
+  };
+}
+
+export async function answerChatWithReviewBackend(
+  body: ChatRequest,
+  options: BackendOptions = {},
+): Promise<ChatResult> {
+  const prompt = body.messages?.at(-1)?.content ?? "";
+  const selectedNode = body.selectedNode ?? null;
+  const backendAnswer = await runBackendLogicRequest(
+    body.sessionId,
+    prompt,
+    selectedNode?.id,
+    options,
+  );
+
+  if (backendAnswer) return backendAnswer;
+
+  const selectedText = selectedNode
+    ? `${selectedNode.label} (${selectedNode.kind})`
+    : "the currently selected topology scope";
+  return {
+    message:
+      `I am grounding this QA answer in ${selectedText}. ` +
+      `Upload a plant XML to replace the sample graph, then select nodes or paths ` +
+      `to focus deterministic checks. For this request I would inspect source scope, ` +
+      `derive the topology evidence, and return highlighted equipment/path evidence.`,
+    highlightedNodeIds: inferHighlights(prompt, selectedNode?.id),
+  };
+}
+
+async function prepareWithPythonBackend(
+  sessionId: string,
+  body: PrepareBody,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<PrepareResult | null> {
+  if (!baseUrl) return null;
+
+  try {
+    const response = await fetcher(
+      `${baseUrl}/api/review/sessions/${sessionId}/prepare`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    return {
+      status: readStatus(data),
+      filename: body.filename ?? "plant.xml",
+      graph: readTopology(data),
+      sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function runBackendLogicRequest(
+  sessionId: string | undefined,
+  prompt: string,
+  selectedNodeId: string | undefined,
+  {
+    baseUrl = backendBaseUrl(),
+    fetcher = fetch,
+    providerSettings = readProviderSettingsFromEnv(),
+  }: BackendOptions = {},
+): Promise<ChatResult | null> {
+  if (!baseUrl || !sessionId || prompt.trim() === "") return null;
+
+  try {
+    if (selectedNodeId) {
+      const scopeResponse = await fetcher(
+        `${baseUrl}/api/review/sessions/${sessionId}/source-scope`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_scope_ids: [selectedNodeId] }),
+        },
+      );
+      if (!scopeResponse.ok) return null;
+    }
+
+    if (providerSettings) {
+      const providerResponse = await fetcher(
+        `${baseUrl}/api/review/sessions/${sessionId}/provider-settings`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(providerSettings),
+        },
+      );
+      if (!providerResponse.ok) return null;
+    }
+
+    const improvement = await postJson(fetcher, {
+      url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/improve`,
+      body: { prompt },
+    });
+    if (!improvement) return null;
+
+    if (improvement.status !== "refinement_ready") {
+      return {
+        message: readNonRefinementMessage(improvement),
+        highlightedNodeIds: selectedNodeId ? [selectedNodeId] : [],
+      };
+    }
+
+    const confirmation = await postJson(fetcher, {
+      url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/confirm`,
+      body: { improvement },
+    });
+    if (!confirmation || confirmation.status !== "confirmation_ready") {
+      return null;
+    }
+
+    const answer = await postJson(fetcher, {
+      url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/execute`,
+      body: { confirmation },
+    });
+    if (!answer) return null;
+
+    return {
+      message: readAnswerText(answer),
+      highlightedNodeIds: readEvidenceHighlightIds(answer.evidence_highlight),
+    };
+  } catch {
+    return null;
+  }
+}
+
+type BackendOptions = {
+  baseUrl?: string;
+  fetcher?: BackendFetch;
+  providerSettings?: BackendProviderSettings | null;
+};
+
+async function postJson(
+  fetcher: BackendFetch,
+  { url, body }: { url: string; body: object },
+): Promise<Record<string, unknown> | null> {
+  const response = await fetcher(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as Record<string, unknown>;
+}
+
+function graphFromXml(content: string): PidGraph {
+  const graph = structuredClone(samplePidGraph);
+  const labels = Array.from(content.matchAll(/\b(P-\d+|V-\d+|FT-\d+)\b/gi)).map(
+    (match) => match[1].toUpperCase(),
+  );
+  if (labels.length === 0) return graph;
+
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) =>
+      labels.includes(node.label) ? { ...node, status: "selected" } : node,
+    ),
+  };
+}
+
+function readStatus(data: Record<string, unknown>) {
+  return data.status === "failed" ? "failed" : "ready";
+}
+
+function readTopology(data: Record<string, unknown>): PidGraph {
+  const topology = (data.topology_view ?? data.topology ?? data) as {
+    nodes?: Array<Record<string, unknown>>;
+    edges?: Array<Record<string, unknown>>;
+  };
+  const nodes =
+    topology.nodes?.map((node): PidNode => {
+      const id = String(node.id ?? node.label ?? "node");
+      const label = String(node.tag_name ?? node.label ?? id);
+      return {
+        id,
+        label,
+        kind: classifyNode(label),
+        description: `Prepared topology object ${label}.`,
+        status: "normal",
+      };
+    }) ?? samplePidGraph.nodes;
+  const edges =
+    topology.edges?.map((edge, index) => ({
+      id: String(edge.id ?? `edge-${index}`),
+      source: String(edge.source_id ?? edge.source ?? ""),
+      target: String(edge.target_id ?? edge.target ?? ""),
+      label: String(edge.relationship ?? edge.label ?? "connected to"),
+    })) ?? samplePidGraph.edges;
+  return { nodes, edges };
+}
+
+function readVisibleSourceScopeIds(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  if (isRecord(value) && Array.isArray(value.ids)) {
+    return value.ids.filter((item): item is string => typeof item === "string");
+  }
+  return [];
+}
+
+function readEvidenceHighlightIds(value: unknown) {
+  if (!isRecord(value)) return [];
+  return Array.from(
+    new Set([
+      ...readStringArray(value.source_scope_ids),
+      ...readStringArray(value.matched_object_ids),
+      ...readPathIds(value.paths),
+    ]),
+  );
+}
+
+function readPathIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((path) => {
+    if (!isRecord(path)) return [];
+    return [...readStringArray(path.node_ids), ...readStringArray(path.edge_ids)];
+  });
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readAnswerText(answer: Record<string, unknown>) {
+  const summary = answer.summary;
+  if (isRecord(summary) && typeof summary.text === "string") {
+    return summary.text;
+  }
+  return "Deterministic execution completed, but the backend response did not include a summary.";
+}
+
+function readNonRefinementMessage(improvement: Record<string, unknown>) {
+  const diagnostics = improvement.diagnostics;
+  if (Array.isArray(diagnostics) && isRecord(diagnostics[0])) {
+    const message = diagnostics[0].message;
+    if (typeof message === "string") return message;
+  }
+  const route = improvement.route;
+  if (isRecord(route) && typeof route.kind === "string") {
+    return `This request was routed as ${route.kind}; no deterministic topology refinement was created.`;
+  }
+  return "The backend did not create a reviewable topology refinement for this prompt.";
+}
+
+function classifyNode(label: string) {
+  if (label.startsWith("P-")) return "Pump";
+  if (label.startsWith("V-")) return "Valve";
+  if (label.startsWith("FT-")) return "Instrument";
+  if (label.startsWith("L-")) return "Line";
+  return "Equipment";
+}
+
+function inferHighlights(prompt: string, fallbackId: string | undefined) {
+  const normalized = prompt.toLowerCase();
+  const highlights = new Set<string>();
+  if (normalized.includes("p-101") || normalized.includes("pump")) {
+    highlights.add("pump-101");
+  }
+  if (normalized.includes("v-102") || normalized.includes("valve")) {
+    highlights.add("valve-102");
+  }
+  if (normalized.includes("ft-101") || normalized.includes("flow")) {
+    highlights.add("flow-transmitter-101");
+  }
+  if (fallbackId) highlights.add(fallbackId);
+  return Array.from(highlights);
+}
+
+function readProviderSettingsFromEnv(): BackendProviderSettings | null {
+  const openrouterKey = readEnvValue("OPENROUTER_API_KEY");
+  const openaiKey = readEnvValue("OPENAI_API_KEY");
+  const anthropicKey = readEnvValue("ANTHROPIC_API_KEY");
+  const geminiKey = readEnvValue("GEMINI_API_KEY");
+
+  if (openrouterKey) {
+    return {
+      provider: "openrouter",
+      model: readEnvValue("OPENROUTER_MODEL") ?? "openrouter/owl-alpha",
+      credential: openrouterKey,
+    };
+  }
+  if (openaiKey) {
+    return {
+      provider: "openai",
+      model: readEnvValue("OPENAI_MODEL") ?? "gpt-4.1",
+      credential: openaiKey,
+    };
+  }
+  if (anthropicKey) {
+    return {
+      provider: "anthropic",
+      model: readEnvValue("ANTHROPIC_MODEL") ?? "claude-sonnet-4",
+      credential: anthropicKey,
+    };
+  }
+  if (geminiKey) {
+    return {
+      provider: "gemini",
+      model: readEnvValue("GEMINI_MODEL") ?? "gemini-2.5-pro",
+      credential: geminiKey,
+    };
+  }
+  return null;
+}
+
+function backendBaseUrl() {
+  return readEnvValue("PYDEXPI_REVIEW_API_URL") ?? "http://127.0.0.1:8000";
+}
+
+function readEnvValue(key: string): string | undefined {
+  const direct = process.env[key];
+  if (direct) return direct;
+
+  for (const filePath of [
+    resolve(process.cwd(), ".env.local"),
+    resolve(process.cwd(), ".env"),
+    resolve(process.cwd(), "..", ".env"),
+  ]) {
+    const value = readDotEnvValue(filePath, key);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function readDotEnvValue(filePath: string, key: string): string | undefined {
+  if (!existsSync(filePath)) return undefined;
+  const prefix = `${key}=`;
+  for (const rawLine of readFileSync(filePath, "utf-8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#") || !line.startsWith(prefix)) continue;
+    return stripEnvQuotes(line.slice(prefix.length).trim());
+  }
+  return undefined;
+}
+
+function stripEnvQuotes(value: string) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
