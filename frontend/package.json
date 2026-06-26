@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
+    "test:e2e": "playwright test",
     "test": "node --test --experimental-strip-types",
     "typecheck": "tsc --noEmit",
     "start": "next start",
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@assistant-ui/next": "latest",
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
