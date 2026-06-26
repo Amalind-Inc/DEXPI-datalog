@@ -21,6 +21,27 @@ class TopologyAwareFakeModelProvider:
 
     def complete(self, *, request: str, context: dict[str, object]) -> str:
         self.requests.append({"request": request, "context": context})
+        if context.get("task") == "grounded_logic_answer":
+            evidence_items = context.get("evidence_items")
+            if isinstance(evidence_items, list) and evidence_items:
+                item = evidence_items[0]
+                if isinstance(item, dict):
+                    label = str(item.get("label") or item.get("id"))
+                    topology_id = str(item.get("id"))
+                    return json.dumps(
+                        {
+                            "answer_text": (
+                                "The deterministic Datalog result matches "
+                                f"{label} ({topology_id}) for this request."
+                            )
+                        }
+                    )
+            return json.dumps(
+                {
+                    "answer_text": "The deterministic Datalog result did not match any topology evidence."
+                }
+            )
+
         answer_id = self._answer_id(context)
         return json.dumps(
             {
@@ -148,6 +169,7 @@ def create_review_api_app(
             lambda: flow.execute_confirmed_logic_request(
                 session_id=session_id,
                 confirmation=confirmation,
+                provider=provider_factory(),
             )
         )
 

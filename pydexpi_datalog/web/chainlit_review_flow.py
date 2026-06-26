@@ -99,6 +99,21 @@ def _natural_logic_answer_summary(evidence_items: list[dict[str, object]]) -> st
     )
 
 
+def _parse_grounded_answer_response(response: str) -> str | None:
+    try:
+        parsed = json.loads(response)
+    except json.JSONDecodeError:
+        text = response.strip()
+        return text or None
+
+    if not isinstance(parsed, dict):
+        return None
+    answer_text = parsed.get("answer_text")
+    if isinstance(answer_text, str) and answer_text.strip():
+        return answer_text.strip()
+    return None
+
+
 class DatalogExecutionValidationError(ValueError):
     def __init__(self, diagnostics: list[dict[str, str]]) -> None:
         super().__init__(diagnostics[0]["message"])
@@ -430,6 +445,7 @@ class ChainlitReviewFlow:
         *,
         session_id: str,
         confirmation: dict[str, object],
+        provider: ModelProvider | None = None,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
         if confirmation.get("session_id") != session_id:
@@ -493,13 +509,19 @@ class ChainlitReviewFlow:
             session_id=session_id,
             result_artifact=result_artifact,
         )
+        answer_text = self._grounded_answer_text(
+            provider=provider,
+            request=request,
+            generated_logic=generated_logic,
+            evidence_items=evidence_items,
+        )
         return {
             "status": "answered",
             "session_id": session_id,
             "request": request,
             "summary": {
                 "position": "first",
-                "text": _natural_logic_answer_summary(evidence_items),
+                "text": answer_text,
             },
             "result_artifact": {
                 "kind": "deterministic_logic_request_result",
@@ -512,6 +534,33 @@ class ChainlitReviewFlow:
             "evidence_highlight": evidence_highlight,
             "diagnostics": [],
         }
+
+    def _grounded_answer_text(
+        self,
+        *,
+        provider: ModelProvider | None,
+        request: dict[str, object],
+        generated_logic: dict[str, object],
+        evidence_items: list[dict[str, object]],
+    ) -> str:
+        fallback = _natural_logic_answer_summary(evidence_items)
+        if provider is None:
+            return fallback
+
+        response = provider.complete(
+            request=str(request.get("prompt", "")),
+            context={
+                "task": "grounded_logic_answer",
+                "instructions": (
+                    "Answer the user's topology question directly using only the "
+                    "provided deterministic evidence. Do not mention raw JSON unless "
+                    "the user asks for it."
+                ),
+                "generated_logic": generated_logic,
+                "evidence_items": evidence_items,
+            },
+        )
+        return _parse_grounded_answer_response(response) or fallback
 
     def apply_deterministic_evidence_highlight(
         self,

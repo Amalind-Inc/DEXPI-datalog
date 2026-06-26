@@ -98,6 +98,19 @@ class FakeClock:
         return current
 
 
+class SequentialFakeModelProvider:
+    provider = "fake"
+    model = "fake-model"
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+        self.requests: list[dict[str, object]] = []
+
+    def complete(self, *, request: str, context: dict[str, object]) -> str:
+        self.requests.append({"request": request, "context": context})
+        return self.responses[len(self.requests) - 1]
+
+
 class ChainlitReviewFlowTests(unittest.TestCase):
     def test_upload_acceptance_document_reaches_ready_and_enables_query_controls(
         self,
@@ -575,30 +588,51 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                                 session_id=session_id,
                                 prompt=prompt,
                             )
-                            confirmation = flow.accept_logic_request_refinement(
-                                session_id=session_id,
-                                improvement=improvement,
-                                provider=FakeModelProvider(
-                                    response=json.dumps(
+                            provider = SequentialFakeModelProvider(
+                                responses=[
+                                    json.dumps(
                                         {
                                             "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{topology_id}").',
                                             "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
                                         }
-                                    )
-                                ),
+                                    ),
+                                    json.dumps(
+                                        {
+                                            "answer_text": f"The requested topology evidence resolves to {topology_id}."
+                                        }
+                                    ),
+                                ]
+                            )
+                            confirmation = flow.accept_logic_request_refinement(
+                                session_id=session_id,
+                                improvement=improvement,
+                                provider=provider,
                             )
 
                             answer = flow.execute_confirmed_logic_request(
                                 session_id=session_id,
                                 confirmation=confirmation,
+                                provider=provider,
                             )
 
                             self.assertEqual(answer["status"], "answered")
                             self.assertEqual(answer["summary"]["position"], "first")
-                            self.assertIn(topology_id, answer["summary"]["text"])
+                            self.assertEqual(
+                                answer["summary"]["text"],
+                                f"The requested topology evidence resolves to {topology_id}.",
+                            )
                             self.assertNotIn(
                                 "Deterministic execution produced",
                                 answer["summary"]["text"],
+                            )
+                            self.assertEqual(len(provider.requests), 2)
+                            self.assertEqual(
+                                provider.requests[1]["context"]["task"],
+                                "grounded_logic_answer",
+                            )
+                            self.assertEqual(
+                                provider.requests[1]["context"]["evidence_items"][0]["id"],
+                                topology_id,
                             )
                             self.assertEqual(
                                 answer["result_artifact"]["kind"],
