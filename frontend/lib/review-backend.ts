@@ -41,6 +41,13 @@ export class BackendExecutionUnavailableError extends Error {
   }
 }
 
+export class GeneratedDatalogExecutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeneratedDatalogExecutionError";
+  }
+}
+
 type PrepareBody = {
   filename?: string;
   content?: string;
@@ -112,6 +119,9 @@ export async function executeConfirmedDatalog(
     throw new BackendExecutionUnavailableError();
   }
   const normalized = answer;
+  if (normalized.status !== "answered") {
+    throw new GeneratedDatalogExecutionError(readExecutionFailureMessage(normalized));
+  }
   const highlightedNodeIds = readEvidenceHighlightIds(normalized.evidence_highlight);
   return {
     status: "answered",
@@ -414,6 +424,19 @@ function readConfirmationFailureMessage(confirmation: Record<string, unknown>) {
     if (typeof message === "string") return message;
   }
   return "The backend could not prepare a Datalog confirmation for this prompt.";
+}
+
+function readExecutionFailureMessage(answer: Record<string, unknown>) {
+  const diagnostics = answer.diagnostics;
+  if (Array.isArray(diagnostics) && isRecord(diagnostics[0])) {
+    const message = diagnostics[0].message;
+    if (typeof message === "string") return message;
+  }
+  const summary = answer.summary;
+  if (isRecord(summary) && typeof summary.text === "string") {
+    return summary.text;
+  }
+  return "The backend rejected the generated Datalog before execution.";
 }
 
 function isDatalogReasoningPrompt(prompt: string) {

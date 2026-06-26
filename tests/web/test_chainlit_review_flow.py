@@ -581,7 +581,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                                 provider=FakeModelProvider(
                                     response=json.dumps(
                                         {
-                                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                                            "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{topology_id}").',
                                             "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
                                         }
                                     )
@@ -610,6 +610,10 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                             )
                             self.assertTrue(answer["evidence"]["items"])
                             self.assertEqual(
+                                answer["evidence"]["items"][0]["id"],
+                                topology_id,
+                            )
+                            self.assertEqual(
                                 answer["request"]["source_scope_ids"],
                                 source_scope_ids,
                             )
@@ -626,11 +630,14 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 artifact_root=Path(tmp_dir) / "sessions",
                 clock=FakeClock(),
             )
+            first_topology_id = ""
             for session_id in ["first-session", "second-session"]:
-                flow.prepare_upload(
+                state = flow.prepare_upload(
                     dexpi_xml_path=E06_FIXTURE,
                     session_id=session_id,
                 )
+                if session_id == "first-session":
+                    first_topology_id = state["topology_view"]["nodes"][0]["id"]
                 flow.configure_provider_settings(
                     session_id=session_id,
                     provider="openrouter",
@@ -647,7 +654,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 provider=FakeModelProvider(
                     response=json.dumps(
                         {
-                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{first_topology_id}").',
                             "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
                         }
                     )
@@ -659,6 +666,58 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     session_id="second-session",
                     confirmation=confirmation,
                 )
+
+    def test_confirmed_logic_request_rejects_unresolved_answer_symbols(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="unresolved-answer-session",
+            )
+            flow.configure_provider_settings(
+                session_id="unresolved-answer-session",
+                provider="openrouter",
+                model="openrouter/owl-alpha",
+                credential="sk-sentinel-secret-should-never-leak",
+            )
+            improvement = flow.improve_logic_request(
+                session_id="unresolved-answer-session",
+                prompt="What process equipment is connected in this P&ID?",
+            )
+            confirmation = flow.accept_logic_request_refinement(
+                session_id="unresolved-answer-session",
+                improvement=improvement,
+                provider=FakeModelProvider(
+                    response=json.dumps(
+                        {
+                            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer("deterministic-evidence").',
+                            "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
+                        }
+                    )
+                ),
+            )
+
+            answer = flow.execute_confirmed_logic_request(
+                session_id="unresolved-answer-session",
+                confirmation=confirmation,
+            )
+
+            self.assertEqual(answer["status"], "execution_failed")
+            self.assertEqual(answer["evidence"]["items"], [])
+            self.assertEqual(
+                answer["diagnostics"],
+                [
+                    {
+                        "code": "generated_datalog.answer_unresolved",
+                        "message": "Generated Datalog answered unknown topology object(s): deterministic-evidence",
+                    }
+                ],
+            )
 
     def test_executed_logic_request_updates_topology_highlight_from_deterministic_evidence(
         self,
@@ -693,7 +752,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 provider=FakeModelProvider(
                     response=json.dumps(
                         {
-                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{source_id}").',
                             "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
                         }
                     )
@@ -956,7 +1015,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 provider=FakeModelProvider(
                     response=json.dumps(
                         {
-                            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
+                            "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{topology_id}").',
                             "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
                         }
                     )

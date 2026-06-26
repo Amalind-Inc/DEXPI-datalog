@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import shutil
 import time
 from typing import Callable
@@ -17,6 +18,45 @@ from ..workflow.review_session import (
     build_evidence_highlight_payload,
 )
 from ..verification.verify_suite import evaluate_graph_fixture
+
+
+ANSWER_FACT_RE = re.compile(r'^\s*answer\s*\(\s*"([^"]+)"\s*\)\s*\.\s*$')
+
+
+def _answer_symbols(generated_datalog: str) -> list[str]:
+    has_answer_decl = ".decl answer(x:symbol)" in generated_datalog
+    has_answer_output = ".output answer" in generated_datalog
+    if not has_answer_decl or not has_answer_output:
+        return []
+    symbols = []
+    for line in generated_datalog.splitlines():
+        match = ANSWER_FACT_RE.match(line)
+        if match:
+            symbols.append(match.group(1))
+    return symbols
+
+
+def _topology_ids_by_answer_symbol(topology: dict[str, object]) -> dict[str, str]:
+    ids_by_symbol = {}
+    for topology_id, evidence in topology["evidence_map"].items():
+        ids_by_symbol[str(topology_id)] = str(topology_id)
+        canonical_fact = evidence["canonical_fact"]
+        if canonical_fact["fact_type"] == "node":
+            ids_by_symbol[str(canonical_fact["node_id"])] = str(topology_id)
+
+    for node in topology["nodes"]:
+        topology_id = str(node["id"])
+        for key in ["label", "tag_name", "proteus_id", "canonical_fact_id"]:
+            value = node.get(key)
+            if value:
+                ids_by_symbol[str(value)] = topology_id
+    return ids_by_symbol
+
+
+class DatalogExecutionValidationError(ValueError):
+    def __init__(self, diagnostics: list[dict[str, str]]) -> None:
+        super().__init__(diagnostics[0]["message"])
+        self.diagnostics = diagnostics
 
 
 class ChainlitReviewFlow:
@@ -279,6 +319,10 @@ class ChainlitReviewFlow:
                 "provider": provider_settings,
                 "scope": refinement["scope"],
                 "source_scope_ids": list(refinement["source_scope_ids"]),
+                "topology_ids": [
+                    str(node["id"])
+                    for node in self._topology_for_session(session_id)["nodes"]
+                ],
             },
         )
         draft = parse_model_draft_response(response)
@@ -355,11 +399,33 @@ class ChainlitReviewFlow:
         if not isinstance(request, dict):
             raise ValueError("confirmed logic request is missing request metadata")
 
-        evidence_items = self._deterministic_evidence_items(
-            session_id=session_id,
-            request=request,
-            generated_logic=generated_logic,
-        )
+        try:
+            evidence_items = self._deterministic_evidence_items(
+                session_id=session_id,
+                request=request,
+                generated_logic=generated_logic,
+            )
+        except DatalogExecutionValidationError as error:
+            return {
+                "status": "execution_failed",
+                "session_id": session_id,
+                "request": request,
+                "summary": {
+                    "position": "first",
+                    "text": error.diagnostics[0]["message"],
+                },
+                "evidence": {
+                    "display": "expandable",
+                    "items": [],
+                },
+                "evidence_highlight": build_evidence_highlight_payload(
+                    topology_view=self._topology_for_session(session_id),
+                    source_scope_ids=list(request["source_scope_ids"]),
+                    matched_object_ids=[],
+                    paths=[],
+                ),
+                "diagnostics": error.diagnostics,
+            }
         evidence_highlight = build_evidence_highlight_payload(
             topology_view=self._topology_for_session(session_id),
             source_scope_ids=list(request["source_scope_ids"]),
@@ -730,12 +796,14 @@ class ChainlitReviewFlow:
         request: dict[str, object],
         generated_logic: dict[str, object],
     ) -> list[dict[str, object]]:
-        source_scope_ids = list(request["source_scope_ids"])
         topology = self._topology_for_session(session_id)
         evidence_map = topology["evidence_map"]
-        matched_ids = source_scope_ids or [
-            str(node["id"]) for node in topology["nodes"][:1]
-        ]
+        matched_ids, diagnostics = self._resolve_generated_answer_ids(
+            topology=topology,
+            generated_logic=generated_logic,
+        )
+        if diagnostics:
+            raise DatalogExecutionValidationError(diagnostics)
         return [
             {
                 "id": topology_id,
@@ -745,6 +813,44 @@ class ChainlitReviewFlow:
             }
             for topology_id in matched_ids
         ]
+
+    def _resolve_generated_answer_ids(
+        self,
+        *,
+        topology: dict[str, object],
+        generated_logic: dict[str, object],
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        answer_symbols = _answer_symbols(str(generated_logic.get("content", "")))
+        if not answer_symbols:
+            return [], [
+                {
+                    "code": "generated_datalog.answer_shape_invalid",
+                    "message": "Generated Datalog must declare, output, and populate answer(x:symbol).",
+                }
+            ]
+
+        topology_ids_by_symbol = _topology_ids_by_answer_symbol(topology)
+        matched_ids = []
+        unresolved_symbols = []
+        for symbol in answer_symbols:
+            topology_id = topology_ids_by_symbol.get(symbol)
+            if topology_id is None:
+                unresolved_symbols.append(symbol)
+                continue
+            if topology_id not in matched_ids:
+                matched_ids.append(topology_id)
+
+        if unresolved_symbols:
+            return [], [
+                {
+                    "code": "generated_datalog.answer_unresolved",
+                    "message": (
+                        "Generated Datalog answered unknown topology object(s): "
+                        + ", ".join(unresolved_symbols)
+                    ),
+                }
+            ]
+        return matched_ids, []
 
     def _write_logic_request_result_artifact(
         self,

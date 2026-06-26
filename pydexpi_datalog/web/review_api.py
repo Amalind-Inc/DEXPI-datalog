@@ -8,16 +8,47 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from ..llm.model_access import FakeModelProvider, ModelProvider
+from ..llm.model_access import ModelProvider
 from .chainlit_review_flow import ChainlitReviewFlow
 
 
-DEFAULT_MODEL_RESPONSE = json.dumps(
-    {
-        "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(\"deterministic-evidence\").",
-        "formal_restatement": "Return deterministic topology evidence for the confirmed request.",
-    }
-)
+class TopologyAwareFakeModelProvider:
+    provider = "fake"
+    model = "fake-model"
+
+    def __init__(self) -> None:
+        self.requests: list[dict[str, object]] = []
+
+    def complete(self, *, request: str, context: dict[str, object]) -> str:
+        self.requests.append({"request": request, "context": context})
+        answer_id = self._answer_id(context)
+        return json.dumps(
+            {
+                "generated_datalog": (
+                    ".decl answer(x:symbol)\n"
+                    ".output answer\n"
+                    f"answer({json.dumps(answer_id)})."
+                ),
+                "formal_restatement": (
+                    "Return deterministic topology evidence for the confirmed request."
+                ),
+            }
+        )
+
+    def _answer_id(self, context: dict[str, object]) -> str:
+        source_scope_ids = context.get("source_scope_ids")
+        if isinstance(source_scope_ids, list):
+            for item in source_scope_ids:
+                if isinstance(item, str) and item:
+                    return item
+
+        topology_ids = context.get("topology_ids")
+        if isinstance(topology_ids, list):
+            for item in topology_ids:
+                if isinstance(item, str) and item:
+                    return item
+
+        return "__missing_topology_answer__"
 
 
 def create_review_api_app(
@@ -29,9 +60,7 @@ def create_review_api_app(
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     flow = ChainlitReviewFlow(artifact_root=artifact_root)
-    provider_factory = model_provider_factory or (
-        lambda: FakeModelProvider(response=DEFAULT_MODEL_RESPONSE)
-    )
+    provider_factory = model_provider_factory or TopologyAwareFakeModelProvider
 
     @app.exception_handler(HTTPException)
     def http_exception_handler(

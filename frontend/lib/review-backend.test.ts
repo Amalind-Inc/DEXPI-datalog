@@ -246,3 +246,33 @@ test("executeConfirmedDatalog fails instead of fabricating local evidence when b
     /Python review backend did not execute the confirmed Datalog query/,
   );
 });
+
+test("executeConfirmedDatalog rejects backend execution diagnostics instead of rendering an answer", async () => {
+  const fetcher = async () =>
+    Response.json({
+      status: "execution_failed",
+      summary: {
+        text: "Generated Datalog answered unknown topology object(s): deterministic-evidence",
+      },
+      evidence: {
+        display: "expandable",
+        items: [],
+      },
+      diagnostics: [
+        {
+          code: "generated_datalog.answer_unresolved",
+          message: "Generated Datalog answered unknown topology object(s): deterministic-evidence",
+        },
+      ],
+    });
+
+  await assert.rejects(
+    () =>
+      executeConfirmedDatalog(
+        "session-1",
+        { status: "confirmation_ready" },
+        { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+      ),
+    /Generated Datalog answered unknown topology object/,
+  );
+});
