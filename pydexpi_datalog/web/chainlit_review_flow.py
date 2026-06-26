@@ -53,6 +53,52 @@ def _topology_ids_by_answer_symbol(topology: dict[str, object]) -> dict[str, str
     return ids_by_symbol
 
 
+def _topology_object_label(*, topology: dict[str, object], topology_id: str) -> str:
+    for node in topology["nodes"]:
+        if node["id"] == topology_id:
+            label = node.get("tag_name") or node.get("label") or topology_id
+            return str(label)
+    for edge in topology["edges"]:
+        if edge["id"] == topology_id:
+            source_label = _topology_object_label(
+                topology=topology, topology_id=str(edge["source_id"])
+            )
+            target_label = _topology_object_label(
+                topology=topology, topology_id=str(edge["target_id"])
+            )
+            return f"{source_label} {edge['relationship']} {target_label}"
+    return topology_id
+
+
+def _topology_object_kind(*, topology: dict[str, object], topology_id: str) -> str:
+    for node in topology["nodes"]:
+        if node["id"] == topology_id:
+            return "node"
+    for edge in topology["edges"]:
+        if edge["id"] == topology_id:
+            return "edge"
+    return "topology_object"
+
+
+def _natural_logic_answer_summary(evidence_items: list[dict[str, object]]) -> str:
+    if not evidence_items:
+        return "The confirmed Datalog query did not match any topology evidence."
+
+    names = [
+        f"{item['label']} ({item['id']})"
+        for item in evidence_items[:3]
+    ]
+    if len(evidence_items) == 1:
+        return f"The confirmed Datalog query matched {names[0]}."
+
+    remaining_count = len(evidence_items) - len(names)
+    suffix = f", and {remaining_count} more" if remaining_count > 0 else ""
+    return (
+        "The confirmed Datalog query matched "
+        f"{len(evidence_items)} topology objects: {', '.join(names)}{suffix}."
+    )
+
+
 class DatalogExecutionValidationError(ValueError):
     def __init__(self, diagnostics: list[dict[str, str]]) -> None:
         super().__init__(diagnostics[0]["message"])
@@ -447,17 +493,13 @@ class ChainlitReviewFlow:
             session_id=session_id,
             result_artifact=result_artifact,
         )
-        evidence_count = len(evidence_items)
         return {
             "status": "answered",
             "session_id": session_id,
             "request": request,
             "summary": {
                 "position": "first",
-                "text": (
-                    f"Deterministic execution produced {evidence_count} evidence "
-                    f"item{'s' if evidence_count != 1 else ''}."
-                ),
+                "text": _natural_logic_answer_summary(evidence_items),
             },
             "result_artifact": {
                 "kind": "deterministic_logic_request_result",
@@ -807,6 +849,8 @@ class ChainlitReviewFlow:
         return [
             {
                 "id": topology_id,
+                "kind": _topology_object_kind(topology=topology, topology_id=topology_id),
+                "label": _topology_object_label(topology=topology, topology_id=topology_id),
                 "source": "derived_graph_semantics",
                 "generated_logic_excerpt": str(generated_logic["content"]).splitlines()[:3],
                 "topology_evidence": evidence_map[topology_id],

@@ -27,6 +27,9 @@ test("uploads E06 XML and sends a review prompt through the assistant UI", async
   await workflow.confirmationCards.last().getByRole("button", { name: "Run" }).click();
   await page.getByTestId("grounded-logic-answer").waitFor({ state: "visible" });
   await expect(page.getByTestId("evidence-summary")).toContainText(
+    /The confirmed Datalog query matched/,
+  );
+  await expect(page.getByTestId("evidence-summary")).not.toContainText(
     /Deterministic execution produced/,
   );
   await expect(page.getByTestId("raw-evidence-details")).toBeVisible();

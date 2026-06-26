@@ -595,9 +595,10 @@ class ChainlitReviewFlowTests(unittest.TestCase):
 
                             self.assertEqual(answer["status"], "answered")
                             self.assertEqual(answer["summary"]["position"], "first")
-                            self.assertEqual(
+                            self.assertIn(topology_id, answer["summary"]["text"])
+                            self.assertNotIn(
+                                "Deterministic execution produced",
                                 answer["summary"]["text"],
-                                "Deterministic execution produced 1 evidence item.",
                             )
                             self.assertEqual(
                                 answer["result_artifact"]["kind"],
@@ -613,6 +614,8 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                                 answer["evidence"]["items"][0]["id"],
                                 topology_id,
                             )
+                            self.assertIn("label", answer["evidence"]["items"][0])
+                            self.assertIn("kind", answer["evidence"]["items"][0])
                             self.assertEqual(
                                 answer["request"]["source_scope_ids"],
                                 source_scope_ids,
