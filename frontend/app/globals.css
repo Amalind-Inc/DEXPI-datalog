@@ -241,7 +241,8 @@
   padding: 16px;
 }
 
-.datalog-confirmation-card {
+.datalog-confirmation-card,
+.grounded-logic-answer-card {
   background: #ffffff;
   border: 1px solid #cbd5ca;
   border-radius: 8px;
@@ -279,26 +280,30 @@
   white-space: nowrap;
 }
 
-.datalog-confirmation-card p {
+.datalog-confirmation-card p,
+.grounded-logic-answer-card p {
   color: #26342d;
   line-height: 1.5;
   margin: 0;
 }
 
-.datalog-confirmation-card details {
+.datalog-confirmation-card details,
+.grounded-logic-answer-card details {
   border: 1px solid #d7ded5;
   border-radius: 7px;
   overflow: hidden;
 }
 
-.datalog-confirmation-card summary {
+.datalog-confirmation-card summary,
+.grounded-logic-answer-card summary {
   background: #f4f6f2;
   cursor: pointer;
   font-weight: 800;
   padding: 9px 11px;
 }
 
-.datalog-confirmation-card pre {
+.datalog-confirmation-card pre,
+.grounded-logic-answer-card pre {
   background: #17201b;
   color: #ecf2ed;
   font-family: var(--font-mono);
@@ -330,6 +335,26 @@
 .datalog-confirmation-actions button:nth-child(3) {
   background: #ffffff;
   color: #17201b;
+}
+
+.datalog-confirmation-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.datalog-confirmation-note {
+  background: #fff7df;
+  border: 1px solid #dfc779;
+  border-radius: 7px;
+  padding: 9px 11px;
+}
+
+.datalog-confirmation-error {
+  background: #fff1f0;
+  border: 1px solid #e2a19b;
+  border-radius: 7px;
+  color: #8a2820;
+  padding: 9px 11px;
 }
 
 .pid-file-chip {

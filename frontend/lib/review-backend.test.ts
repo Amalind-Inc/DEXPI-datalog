@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerChatWithReviewBackend, prepareReviewSession } from "./review-backend.ts";
+import {
+  answerChatWithReviewBackend,
+  executeConfirmedDatalog,
+  prepareReviewSession,
+} from "./review-backend.ts";
 
 test("prepareReviewSession adapts backend topology_view into graph state", async () => {
   const calls: string[] = [];
@@ -185,4 +189,46 @@ test("answerChatWithReviewBackend keeps Datalog prompts in confirmation state wh
     result.confirmation?.plainLanguageMeaning,
     "Review a generated Datalog query for the requested topology reasoning before execution.",
   );
+});
+
+test("executeConfirmedDatalog proxies confirmed query execution and returns grounded answer envelope", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    calls.push({
+      method: init?.method ?? "GET",
+      path: parsedUrl.pathname,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({
+      status: "answered",
+      summary: { text: "Deterministic execution produced 1 evidence item." },
+      evidence: {
+        display: "expandable",
+        items: [{ id: "node-p101", label: "P-101" }],
+      },
+      evidence_highlight: {
+        source_scope_ids: ["node-p101"],
+        matched_object_ids: ["node-p101"],
+        paths: [],
+      },
+    });
+  };
+
+  const result = await executeConfirmedDatalog(
+    "session-1",
+    { status: "confirmation_ready" },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+  );
+
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    ["POST /api/review/sessions/session-1/logic-requests/execute"],
+  );
+  assert.deepEqual(calls[0].body, {
+    confirmation: { status: "confirmation_ready" },
+  });
+  assert.equal(result.status, "answered");
+  assert.match(result.message, /^pydexpi:logic-answer:/);
+  assert.deepEqual(result.highlightedNodeIds, ["node-p101"]);
 });

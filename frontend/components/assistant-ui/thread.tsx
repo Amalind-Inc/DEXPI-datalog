@@ -7,9 +7,12 @@ import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
+import { usePidGraph } from "@/components/pid/graph-context";
 import {
   parseDatalogConfirmationMessage,
+  parseGroundedLogicAnswerMessage,
   type DatalogConfirmationState,
+  type GroundedLogicAnswerState,
 } from "@/lib/datalog-confirmation";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +26,7 @@ import {
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -39,7 +43,7 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useState } from "react";
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -279,6 +283,10 @@ const AssistantMessage: FC = () => {
               if (confirmation) {
                 return <DatalogConfirmationCard confirmation={confirmation} />;
               }
+              const answer = parseGroundedLogicAnswerMessage(part.text);
+              if (answer) {
+                return <GroundedLogicAnswerCard answer={answer} />;
+              }
               return <MarkdownText />;
             }
             if (part.type === "tool-call") return part.toolUI ?? <ToolFallback {...part} />;
@@ -313,6 +321,46 @@ const AssistantMessage: FC = () => {
 const DatalogConfirmationCard: FC<{
   confirmation: DatalogConfirmationState;
 }> = ({ confirmation }) => {
+  const aui = useAui();
+  const { setHighlightedNodeIds } = usePidGraph();
+  const [state, setState] = useState<"ready" | "running" | "canceled" | "revise">("ready");
+  const [error, setError] = useState<string | null>(null);
+  const sessionId = readSessionId(confirmation.raw);
+
+  const run = async () => {
+    if (state === "running") return;
+    setState("running");
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmation: confirmation.raw }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`Execution failed: ${response.status}`);
+      }
+      const result = (await response.json()) as {
+        message: string;
+        highlightedNodeIds?: string[];
+      };
+      if (result.highlightedNodeIds) {
+        setHighlightedNodeIds(result.highlightedNodeIds);
+      }
+      aui.thread().append({
+        role: "assistant",
+        content: [{ type: "text", text: result.message }],
+      });
+      setState("ready");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Execution failed.");
+      setState("ready");
+    }
+  };
+
   return (
     <section
       className="datalog-confirmation-card"
@@ -337,21 +385,56 @@ const DatalogConfirmationCard: FC<{
       </details>
 
       <div className="datalog-confirmation-actions">
-        {confirmation.allowedActions.map((action) => (
-          <button key={action} type="button">
-            {actionLabel(action)}
-          </button>
-        ))}
+        <button type="button" disabled={state !== "ready"} onClick={run}>
+          {state === "running" ? "Running" : "Run"}
+        </button>
+        <button type="button" disabled={state !== "ready"} onClick={() => setState("revise")}>
+          Revise
+        </button>
+        <button type="button" disabled={state !== "ready"} onClick={() => setState("canceled")}>
+          Cancel
+        </button>
       </div>
+      {state === "revise" && (
+        <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
+          Revision is not wired yet. Edit your prompt and send a new request.
+        </p>
+      )}
+      {state === "canceled" && (
+        <p className="datalog-confirmation-note" data-testid="datalog-cancel-note">
+          Canceled. No Datalog query was executed.
+        </p>
+      )}
+      {error && (
+        <p className="datalog-confirmation-error" data-testid="datalog-run-error">
+          {error}
+        </p>
+      )}
     </section>
   );
 };
 
-function actionLabel(action: string) {
-  if (action === "run") return "Run";
-  if (action === "revise") return "Revise";
-  if (action === "cancel") return "Cancel";
-  return action;
+const GroundedLogicAnswerCard: FC<{ answer: GroundedLogicAnswerState }> = ({ answer }) => {
+  return (
+    <section
+      className="grounded-logic-answer-card"
+      data-testid="grounded-logic-answer"
+      aria-label="Grounded logic-request answer"
+    >
+      <p className="pid-eyebrow">Grounded answer</p>
+      <p data-testid="evidence-summary">{answer.summary}</p>
+      <details data-testid="raw-evidence-details">
+        <summary>Raw evidence details</summary>
+        <pre>
+          <code>{JSON.stringify(answer.rawEvidence, null, 2)}</code>
+        </pre>
+      </details>
+    </section>
+  );
+};
+
+function readSessionId(raw: Record<string, unknown>) {
+  return typeof raw.session_id === "string" ? raw.session_id : "local-confirmation";
 }
 
 const AssistantActionBar: FC = () => {

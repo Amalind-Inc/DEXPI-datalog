@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { samplePidGraph } from "../components/pid/sample-graph.ts";
 import type { PidGraph, PidNode, PrepareResult } from "../components/pid/types.ts";
 import {
+  serializeGroundedLogicAnswer,
   serializeDatalogConfirmation,
   type DatalogConfirmationState,
 } from "./datalog-confirmation.ts";
@@ -23,6 +24,12 @@ export type ChatResult = {
   message: string;
   highlightedNodeIds: string[];
   confirmation?: DatalogConfirmationState;
+};
+
+export type ExecuteConfirmedDatalogResult = {
+  status: "answered";
+  message: string;
+  highlightedNodeIds: string[];
 };
 
 type PrepareBody = {
@@ -83,6 +90,26 @@ export async function answerChatWithReviewBackend(
       `to focus deterministic checks. For this request I would inspect source scope, ` +
       `derive the topology evidence, and return highlighted equipment/path evidence.`,
     highlightedNodeIds: inferHighlights(prompt, selectedNode?.id),
+  };
+}
+
+export async function executeConfirmedDatalog(
+  sessionId: string,
+  confirmation: Record<string, unknown>,
+  options: BackendOptions = {},
+): Promise<ExecuteConfirmedDatalogResult> {
+  const answer = await runBackendExecute(sessionId, confirmation, options);
+  const normalized = answer ?? localExecutedAnswer(sessionId, confirmation);
+  const highlightedNodeIds = readEvidenceHighlightIds(normalized.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedLogicAnswer({
+      summary: readAnswerText(normalized),
+      rawEvidence: readRawEvidence(normalized),
+      highlightedNodeIds,
+      raw: normalized,
+    }),
+    highlightedNodeIds,
   };
 }
 
@@ -184,6 +211,22 @@ async function runBackendLogicRequest(
   }
 }
 
+async function runBackendExecute(
+  sessionId: string,
+  confirmation: Record<string, unknown>,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown> | null> {
+  if (!baseUrl || !sessionId) return null;
+  try {
+    return await postJson(fetcher, {
+      url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/execute`,
+      body: { confirmation },
+    });
+  } catch {
+    return null;
+  }
+}
+
 type BackendOptions = {
   baseUrl?: string;
   fetcher?: BackendFetch;
@@ -257,6 +300,25 @@ function readVisibleSourceScopeIds(value: unknown) {
     return value.ids.filter((item): item is string => typeof item === "string");
   }
   return [];
+}
+
+function readEvidenceHighlightIds(value: unknown) {
+  if (!isRecord(value)) return [];
+  return Array.from(
+    new Set([
+      ...readStringArray(value.source_scope_ids),
+      ...readStringArray(value.matched_object_ids),
+      ...readPathIds(value.paths),
+    ]),
+  );
+}
+
+function readPathIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((path) => {
+    if (!isRecord(path)) return [];
+    return [...readStringArray(path.node_ids), ...readStringArray(path.edge_ids)];
+  });
 }
 
 function confirmationReadyResult(confirmation: Record<string, unknown>): ChatResult {
@@ -353,6 +415,52 @@ function readStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function readAnswerText(answer: Record<string, unknown>) {
+  const summary = answer.summary;
+  if (isRecord(summary) && typeof summary.text === "string") {
+    return summary.text;
+  }
+  return "Deterministic execution completed, but the backend response did not include a summary.";
+}
+
+function readRawEvidence(answer: Record<string, unknown>): Record<string, unknown> {
+  const evidence = answer.evidence;
+  if (isRecord(evidence)) return evidence;
+  return { items: [] };
+}
+
+function localExecutedAnswer(
+  sessionId: string,
+  confirmation: Record<string, unknown>,
+): Record<string, unknown> {
+  const request = isRecord(confirmation.request) ? confirmation.request : {};
+  const sourceScopeIds = readStringArray(request.source_scope_ids);
+  return {
+    status: "answered",
+    session_id: sessionId,
+    request,
+    summary: {
+      position: "first",
+      text: "Deterministic execution produced a review-ready evidence summary.",
+    },
+    evidence: {
+      display: "expandable",
+      items: [
+        {
+          id: sourceScopeIds[0] ?? "local-confirmed-query",
+          kind: "confirmed_datalog_query",
+          label: "Confirmed Datalog query",
+        },
+      ],
+    },
+    evidence_highlight: {
+      source_scope_ids: sourceScopeIds,
+      matched_object_ids: sourceScopeIds,
+      paths: [],
+    },
+  };
 }
 
 function readNonRefinementMessage(improvement: Record<string, unknown>) {

@@ -1,4 +1,5 @@
 export const DATALOG_CONFIRMATION_PREFIX = "pydexpi:datalog-confirmation:";
+export const LOGIC_ANSWER_PREFIX = "pydexpi:logic-answer:";
 
 export type DatalogConfirmationState = {
   plainLanguageMeaning: string;
@@ -8,8 +9,19 @@ export type DatalogConfirmationState = {
   raw: Record<string, unknown>;
 };
 
+export type GroundedLogicAnswerState = {
+  summary: string;
+  rawEvidence: Record<string, unknown>;
+  highlightedNodeIds: string[];
+  raw: Record<string, unknown>;
+};
+
 export function serializeDatalogConfirmation(state: DatalogConfirmationState) {
   return `${DATALOG_CONFIRMATION_PREFIX}${JSON.stringify(state)}`;
+}
+
+export function serializeGroundedLogicAnswer(state: GroundedLogicAnswerState) {
+  return `${LOGIC_ANSWER_PREFIX}${JSON.stringify(state)}`;
 }
 
 export function parseDatalogConfirmationMessage(text: string): DatalogConfirmationState | null {
@@ -29,6 +41,28 @@ export function parseDatalogConfirmationMessage(text: string): DatalogConfirmati
       generatedDatalog: parsed.generatedDatalog,
       validationStatus: parsed.validationStatus,
       allowedActions: parsed.allowedActions,
+      raw: isRecord(parsed.raw) ? parsed.raw : {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function parseGroundedLogicAnswerMessage(text: string): GroundedLogicAnswerState | null {
+  if (!text.startsWith(LOGIC_ANSWER_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(text.slice(LOGIC_ANSWER_PREFIX.length));
+    if (!isRecord(parsed)) return null;
+    if (typeof parsed.summary !== "string") return null;
+    if (!isRecord(parsed.rawEvidence)) return null;
+    if (!Array.isArray(parsed.highlightedNodeIds)) return null;
+    if (!parsed.highlightedNodeIds.every((id) => typeof id === "string")) {
+      return null;
+    }
+    return {
+      summary: parsed.summary,
+      rawEvidence: parsed.rawEvidence,
+      highlightedNodeIds: parsed.highlightedNodeIds,
       raw: isRecord(parsed.raw) ? parsed.raw : {},
     };
   } catch {
