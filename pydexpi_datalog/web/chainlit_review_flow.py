@@ -373,6 +373,7 @@ class ChainlitReviewFlow:
                 ],
             }
 
+        topology = self._topology_for_session(session_id)
         response = provider.complete(
             request=str(refinement["refined_prompt"]),
             context={
@@ -380,9 +381,21 @@ class ChainlitReviewFlow:
                 "provider": provider_settings,
                 "scope": refinement["scope"],
                 "source_scope_ids": list(refinement["source_scope_ids"]),
-                "topology_ids": [
-                    str(node["id"])
-                    for node in self._topology_for_session(session_id)["nodes"]
+                "topology_nodes": [
+                    {
+                        "id": node["id"],
+                        "label": node.get("tag_name") or node.get("label") or node["id"],
+                        "class": node.get("label") or node["id"],
+                    }
+                    for node in topology["nodes"]
+                ],
+                "topology_edges": [
+                    {
+                        "source_id": edge["source_id"],
+                        "target_id": edge["target_id"],
+                        "relationship": edge["relationship"],
+                    }
+                    for edge in topology["edges"]
                 ],
             },
         )

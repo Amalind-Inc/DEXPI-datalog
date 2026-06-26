@@ -8,6 +8,7 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
+from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
 from .chainlit_review_flow import ChainlitReviewFlow
 
@@ -63,11 +64,13 @@ class TopologyAwareFakeModelProvider:
                 if isinstance(item, str) and item:
                     return item
 
-        topology_ids = context.get("topology_ids")
-        if isinstance(topology_ids, list):
-            for item in topology_ids:
-                if isinstance(item, str) and item:
-                    return item
+        topology_nodes = context.get("topology_nodes")
+        if isinstance(topology_nodes, list):
+            for item in topology_nodes:
+                if isinstance(item, dict):
+                    node_id = item.get("id")
+                    if isinstance(node_id, str) and node_id:
+                        return node_id
 
         return "__missing_topology_answer__"
 
@@ -81,7 +84,19 @@ def create_review_api_app(
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     flow = ChainlitReviewFlow(artifact_root=artifact_root)
-    provider_factory = model_provider_factory or TopologyAwareFakeModelProvider
+
+    def _resolve_provider(session_id: str) -> ModelProvider:
+        if model_provider_factory is not None:
+            return model_provider_factory()
+        settings = flow.provider_settings_state(session_id)
+        credential = flow.local_credential_for_test(session_id)
+        if credential and settings.get("configured"):
+            return create_byok_provider(
+                provider=str(settings["provider"]),
+                model=str(settings["model"]),
+                credential=credential,
+            )
+        return TopologyAwareFakeModelProvider()
 
     @app.exception_handler(HTTPException)
     def http_exception_handler(
@@ -154,7 +169,7 @@ def create_review_api_app(
             lambda: flow.accept_logic_request_refinement(
                 session_id=session_id,
                 improvement=improvement,
-                provider=provider_factory(),
+                provider=_resolve_provider(session_id),
             )
         )
 
@@ -169,7 +184,7 @@ def create_review_api_app(
             lambda: flow.execute_confirmed_logic_request(
                 session_id=session_id,
                 confirmation=confirmation,
-                provider=provider_factory(),
+                provider=_resolve_provider(session_id),
             )
         )
 

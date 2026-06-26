@@ -7,7 +7,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from pydexpi_datalog.web.review_api import create_review_api_app
+from pydexpi_datalog.web.review_api import TopologyAwareFakeModelProvider, create_review_api_app
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -69,7 +69,10 @@ class ReviewApiTests(unittest.TestCase):
         sentinel = "sk-sentinel-secret-should-never-leak"
         session_id = "api-e06-session"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(
+                artifact_root=Path(tmp_dir) / "sessions",
+                model_provider_factory=TopologyAwareFakeModelProvider,
+            )
             client = TestClient(app)
 
             def request(

@@ -96,6 +96,48 @@ python3 -m pydexpi_datalog dry-run path/to/manifest.json
 python3 -m unittest discover -s tests
 ```
 
+## Running the web UI
+
+The web UI is a Next.js frontend backed by a FastAPI server. You will need an
+LLM provider credential (OpenAI, OpenRouter, Anthropic, or Gemini) to use
+logic requests — store it in a `.env` file that the frontend reads at startup.
+
+**Start the backend:**
+
+```bash
+PYTHONPATH=. PYDEXPI_REVIEW_ARTIFACT_ROOT=.tmp/review-sessions \
+  .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app \
+  --host 127.0.0.1 --port 8000
+```
+
+**Start the frontend** (separate terminal):
+
+```bash
+cd frontend
+npm run dev
+```
+
+Then open `http://localhost:3000` in a browser.
+
+## End-to-end screenshot test
+
+`frontend/screenshot.mjs` drives the full logic-request flow with Playwright
+against the E06 training fixture (pump + heat exchanger P&ID). It uploads the
+file, sends a natural-language question, confirms the generated Datalog, runs
+it, and prints the evidence summary.
+
+Prerequisites: backend running on port 8000, frontend running on port 3000,
+and an LLM provider configured in the frontend `.env`.
+
+```bash
+cd frontend
+node screenshot.mjs
+```
+
+Screenshots are written to `frontend/03-confirmation.png` (after the Datalog
+confirmation card appears) and `frontend/04-after-run.png` (after the grounded
+answer appears).
+
 ## Verifier substrate
 
 The verifier sits on top of DEXPI 1.3 source input, `pyDEXPI` full-graph
