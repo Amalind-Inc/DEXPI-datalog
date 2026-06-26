@@ -32,6 +32,15 @@ export type ExecuteConfirmedDatalogResult = {
   highlightedNodeIds: string[];
 };
 
+export class BackendExecutionUnavailableError extends Error {
+  constructor() {
+    super(
+      "Python review backend did not execute the confirmed Datalog query. Start the review API and try Run again.",
+    );
+    this.name = "BackendExecutionUnavailableError";
+  }
+}
+
 type PrepareBody = {
   filename?: string;
   content?: string;
@@ -99,7 +108,10 @@ export async function executeConfirmedDatalog(
   options: BackendOptions = {},
 ): Promise<ExecuteConfirmedDatalogResult> {
   const answer = await runBackendExecute(sessionId, confirmation, options);
-  const normalized = answer ?? localExecutedAnswer(sessionId, confirmation);
+  if (!answer) {
+    throw new BackendExecutionUnavailableError();
+  }
+  const normalized = answer;
   const highlightedNodeIds = readEvidenceHighlightIds(normalized.evidence_highlight);
   return {
     status: "answered",
@@ -429,38 +441,6 @@ function readRawEvidence(answer: Record<string, unknown>): Record<string, unknow
   const evidence = answer.evidence;
   if (isRecord(evidence)) return evidence;
   return { items: [] };
-}
-
-function localExecutedAnswer(
-  sessionId: string,
-  confirmation: Record<string, unknown>,
-): Record<string, unknown> {
-  const request = isRecord(confirmation.request) ? confirmation.request : {};
-  const sourceScopeIds = readStringArray(request.source_scope_ids);
-  return {
-    status: "answered",
-    session_id: sessionId,
-    request,
-    summary: {
-      position: "first",
-      text: "Deterministic execution produced a review-ready evidence summary.",
-    },
-    evidence: {
-      display: "expandable",
-      items: [
-        {
-          id: sourceScopeIds[0] ?? "local-confirmed-query",
-          kind: "confirmed_datalog_query",
-          label: "Confirmed Datalog query",
-        },
-      ],
-    },
-    evidence_highlight: {
-      source_scope_ids: sourceScopeIds,
-      matched_object_ids: sourceScopeIds,
-      paths: [],
-    },
-  };
 }
 
 function readNonRefinementMessage(improvement: Record<string, unknown>) {

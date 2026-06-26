@@ -341,7 +341,10 @@ const DatalogConfirmationCard: FC<{
         },
       );
       if (!response.ok) {
-        throw new Error(`Execution failed: ${response.status}`);
+        const errorBody = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(errorBody?.error?.message ?? `Execution failed: ${response.status}`);
       }
       const result = (await response.json()) as {
         message: string;

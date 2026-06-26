@@ -232,3 +232,17 @@ test("executeConfirmedDatalog proxies confirmed query execution and returns grou
   assert.match(result.message, /^pydexpi:logic-answer:/);
   assert.deepEqual(result.highlightedNodeIds, ["node-p101"]);
 });
+
+test("executeConfirmedDatalog fails instead of fabricating local evidence when backend execution is unavailable", async () => {
+  const fetcher = async () => new Response("unavailable", { status: 503 });
+
+  await assert.rejects(
+    () =>
+      executeConfirmedDatalog(
+        "session-1",
+        { status: "confirmation_ready" },
+        { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+      ),
+    /Python review backend did not execute the confirmed Datalog query/,
+  );
+});
