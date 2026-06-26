@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { samplePidGraph } from "../components/pid/sample-graph.ts";
 import type { PidGraph, PidNode, PrepareResult } from "../components/pid/types.ts";
+import {
+  serializeDatalogConfirmation,
+  type DatalogConfirmationState,
+} from "./datalog-confirmation.ts";
 
 export type ChatRequest = {
   messages?: Array<{ role: string; content: string }>;
@@ -19,14 +23,6 @@ export type ChatResult = {
   message: string;
   highlightedNodeIds: string[];
   confirmation?: DatalogConfirmationState;
-};
-
-export type DatalogConfirmationState = {
-  plainLanguageMeaning: string;
-  generatedDatalog: string;
-  validationStatus: string;
-  allowedActions: string[];
-  raw: Record<string, unknown>;
 };
 
 type PrepareBody = {
@@ -267,11 +263,7 @@ function confirmationReadyResult(confirmation: Record<string, unknown>): ChatRes
   const state = readConfirmationState(confirmation);
   return {
     status: "confirmation_ready",
-    message: [
-      "Datalog confirmation ready.",
-      state.plainLanguageMeaning,
-      "Review and run this query explicitly before deterministic execution.",
-    ].join(" "),
+    message: serializeDatalogConfirmation(state),
     highlightedNodeIds: [],
     confirmation: state,
   };

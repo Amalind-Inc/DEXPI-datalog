@@ -24,6 +24,7 @@ export function reviewWorkflow(page: Page) {
     confirmationCards: page.locator('[data-testid="datalog-confirmation-card"]'),
     evidenceSummaries: page.locator('[data-testid="evidence-summary"]'),
     rawEvidenceDetails: page.locator('[data-testid="raw-evidence-details"]'),
+    datalogDetails: page.locator('[data-testid="datalog-details"]'),
 
     graphNode(label: string): Locator {
       return graphPanel.getByRole("button", { name: `Select ${label}` });
@@ -68,6 +69,21 @@ export function reviewWorkflow(page: Page) {
 
     async expandCollapsedSection(name: string | RegExp) {
       await page.getByRole("button", { name }).click();
+    },
+
+    async expectViewportHeightStable() {
+      const heights = [];
+      for (let index = 0; index < 5; index += 1) {
+        await page.waitForTimeout(250);
+        heights.push(
+          await page.evaluate(() => ({
+            body: document.body.scrollHeight,
+            shell: document.querySelector(".pid-app-shell")?.getBoundingClientRect().height,
+          })),
+        );
+      }
+      expect(new Set(heights.map((height) => height.body)).size).toBe(1);
+      expect(new Set(heights.map((height) => height.shell)).size).toBe(1);
     },
   };
 }

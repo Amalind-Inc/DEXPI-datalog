@@ -141,7 +141,7 @@ test("answerChatWithReviewBackend returns confirmation state without executing g
     credential: "sk-hidden",
   });
   assert.equal(result.status, "confirmation_ready");
-  assert.match(result.message, /Datalog confirmation ready/);
+  assert.match(result.message, /^pydexpi:datalog-confirmation:/);
   assert.equal(
     result.confirmation?.plainLanguageMeaning,
     "Return downstream reachable process objects.",
@@ -179,7 +179,7 @@ test("answerChatWithReviewBackend keeps Datalog prompts in confirmation state wh
   );
 
   assert.equal(result.status, "confirmation_ready");
-  assert.match(result.message, /Datalog confirmation ready/);
+  assert.match(result.message, /^pydexpi:datalog-confirmation:/);
   assert.doesNotMatch(result.message, /I am grounding this QA answer/);
   assert.equal(
     result.confirmation?.plainLanguageMeaning,

@@ -33,8 +33,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --animate-shimmer: shimmer-sweep var(--shimmer-duration, 1000ms) linear
-    infinite both;
+  --animate-shimmer: shimmer-sweep var(--shimmer-duration, 1000ms) linear infinite both;
   @keyframes shimmer-sweep {
     from {
       background-position: 150% 0;
@@ -117,13 +116,13 @@
 }
 
 .pid-app-shell {
-  background:
-    linear-gradient(90deg, rgba(30, 41, 59, 0.05), transparent 30%),
-    #f4f6f2;
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.05), transparent 30%), #f4f6f2;
   color: #17201b;
   display: grid;
   grid-template-columns: 260px minmax(430px, 1fr) 420px;
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
 }
 
 .conversation-sidebar {
@@ -132,6 +131,8 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -225,6 +226,8 @@
   background: #fbfcfa;
   border-right: 1px solid #d7ded5;
   min-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pid-panel {
@@ -233,7 +236,100 @@
   gap: 14px;
   grid-template-rows: auto auto minmax(250px, 1fr) auto;
   min-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px;
+}
+
+.datalog-confirmation-card {
+  background: #ffffff;
+  border: 1px solid #cbd5ca;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.08);
+  display: grid;
+  gap: 12px;
+  max-height: min(560px, calc(100dvh - 180px));
+  overflow: auto;
+  padding: 14px;
+}
+
+.datalog-confirmation-card header,
+.datalog-confirmation-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.datalog-confirmation-card h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.datalog-confirmation-card header span {
+  background: #edf3ed;
+  border: 1px solid #cbd5ca;
+  border-radius: 999px;
+  color: #415249;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.datalog-confirmation-card p {
+  color: #26342d;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.datalog-confirmation-card details {
+  border: 1px solid #d7ded5;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.datalog-confirmation-card summary {
+  background: #f4f6f2;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 9px 11px;
+}
+
+.datalog-confirmation-card pre {
+  background: #17201b;
+  color: #ecf2ed;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre;
+}
+
+.datalog-confirmation-actions {
+  justify-content: flex-start;
+}
+
+.datalog-confirmation-actions button {
+  background: #17201b;
+  border: 1px solid #17201b;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.datalog-confirmation-actions button:nth-child(2),
+.datalog-confirmation-actions button:nth-child(3) {
+  background: #ffffff;
+  color: #17201b;
 }
 
 .pid-file-chip {
@@ -282,8 +378,7 @@
 .pid-graph-canvas {
   background:
     linear-gradient(rgba(23, 32, 27, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 32, 27, 0.05) 1px, transparent 1px),
-    #ffffff;
+    linear-gradient(90deg, rgba(23, 32, 27, 0.05) 1px, transparent 1px), #ffffff;
   background-size: 22px 22px;
   border: 1px solid #cbd5ca;
   border-radius: 8px;

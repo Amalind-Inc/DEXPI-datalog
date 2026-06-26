@@ -15,7 +15,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PidGraphProvider, usePidGraph } from "@/components/pid/graph-context";
 import type { PrepareResult } from "@/components/pid/types";
 
-const HISTORY_KEY = "pydexpi.pidQa.threadHistory.v1";
+const HISTORY_KEY = "pydexpi.pidQa.threadHistory.v2";
 
 export function PidAssistantProviders({ children }: { children: ReactNode }) {
   return (
@@ -27,12 +27,7 @@ export function PidAssistantProviders({ children }: { children: ReactNode }) {
 
 function PidRuntimeProvider({ children }: { children: ReactNode }) {
   const [sessionId] = useState(() => `pid-${crypto.randomUUID()}`);
-  const {
-    applyPrepareResult,
-    selectedNode,
-    selectedNodeId,
-    setHighlightedNodeIds,
-  } = usePidGraph();
+  const { applyPrepareResult, selectedNode, selectedNodeId, setHighlightedNodeIds } = usePidGraph();
   const graphContextRef = useRef({ selectedNode, selectedNodeId });
 
   useEffect(() => {
@@ -125,11 +120,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      {children}
-    </AssistantRuntimeProvider>
-  );
+  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
 function createLocalHistory(): ThreadHistoryAdapter {
