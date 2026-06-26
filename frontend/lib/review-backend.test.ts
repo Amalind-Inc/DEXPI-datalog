@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  answerChatWithReviewBackend,
-  prepareReviewSession,
-} from "./review-backend.ts";
+import { answerChatWithReviewBackend, prepareReviewSession } from "./review-backend.ts";
 
 test("prepareReviewSession adapts backend topology_view into graph state", async () => {
   const calls: string[] = [];
@@ -35,9 +32,7 @@ test("prepareReviewSession adapts backend topology_view into graph state", async
     { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
   );
 
-  assert.deepEqual(calls, [
-    "http://backend.test/api/review/sessions/session-1/prepare",
-  ]);
+  assert.deepEqual(calls, ["http://backend.test/api/review/sessions/session-1/prepare"]);
   assert.equal(result.filename, "plant.xml");
   assert.equal(result.graph.nodes[0].id, "node-p101");
   assert.equal(result.graph.nodes[0].label, "P-101");
@@ -45,7 +40,7 @@ test("prepareReviewSession adapts backend topology_view into graph state", async
   assert.deepEqual(result.sourceScopeIds, ["node-p101"]);
 });
 
-test("answerChatWithReviewBackend updates scope, improves, confirms, executes, and returns evidence highlights", async () => {
+test("answerChatWithReviewBackend returns confirmation state without executing generated Datalog", async () => {
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
     const parsedUrl = new URL(String(url));
@@ -76,7 +71,17 @@ test("answerChatWithReviewBackend updates scope, improves, confirms, executes, a
       return Response.json({
         status: "confirmation_ready",
         session_id: "session-1",
-        generated_logic: {},
+        restatement: {
+          kind: "datalog_grounded_restatement",
+          text: "Return downstream reachable process objects.",
+        },
+        generated_logic: {
+          kind: "generated_datalog",
+          language: "souffle_datalog",
+          content: '.decl answer(x:symbol)\n.output answer\nanswer("P-101").',
+        },
+        validation: { status: "pending_safety_validation" },
+        allowed_actions: ["run", "revise", "cancel"],
       });
     }
     if (parsedUrl.pathname.endsWith("/logic-requests/execute")) {
@@ -127,7 +132,6 @@ test("answerChatWithReviewBackend updates scope, improves, confirms, executes, a
       "PUT /api/review/sessions/session-1/provider-settings",
       "POST /api/review/sessions/session-1/logic-requests/improve",
       "POST /api/review/sessions/session-1/logic-requests/confirm",
-      "POST /api/review/sessions/session-1/logic-requests/execute",
     ],
   );
   assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
@@ -136,7 +140,49 @@ test("answerChatWithReviewBackend updates scope, improves, confirms, executes, a
     model: "openrouter/owl-alpha",
     credential: "sk-hidden",
   });
-  assert.equal(result.message, "Deterministic execution produced 2 evidence items.");
+  assert.equal(result.status, "confirmation_ready");
+  assert.match(result.message, /Datalog confirmation ready/);
+  assert.equal(
+    result.confirmation?.plainLanguageMeaning,
+    "Return downstream reachable process objects.",
+  );
+  assert.equal(
+    result.confirmation?.generatedDatalog,
+    '.decl answer(x:symbol)\n.output answer\nanswer("P-101").',
+  );
+  assert.deepEqual(result.confirmation?.allowedActions, ["run", "revise", "cancel"]);
   assert.equal(JSON.stringify(result).includes("sk-hidden"), false);
-  assert.deepEqual(result.highlightedNodeIds, ["node-p101", "node-v102", "edge-p-v"]);
+  assert.deepEqual(result.highlightedNodeIds, []);
+});
+
+test("answerChatWithReviewBackend keeps Datalog prompts in confirmation state when backend is unavailable", async () => {
+  const result = await answerChatWithReviewBackend(
+    {
+      sessionId: "session-1",
+      selectedNode: {
+        id: "node-p101",
+        label: "P-101",
+        kind: "Pump",
+        description: "Pump",
+      },
+      messages: [
+        {
+          role: "user",
+          content: "What downstream process objects are reachable from P-101?",
+        },
+      ],
+    },
+    {
+      baseUrl: "",
+      providerSettings: null,
+    },
+  );
+
+  assert.equal(result.status, "confirmation_ready");
+  assert.match(result.message, /Datalog confirmation ready/);
+  assert.doesNotMatch(result.message, /I am grounding this QA answer/);
+  assert.equal(
+    result.confirmation?.plainLanguageMeaning,
+    "Review a generated Datalog query for the requested topology reasoning before execution.",
+  );
 });

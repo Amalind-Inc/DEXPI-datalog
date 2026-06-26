@@ -326,6 +326,11 @@ class ChainlitReviewFlow:
                 "inspectable": True,
                 "editable": False,
             },
+            "validation": {
+                "status": "pending_safety_validation",
+                "message": "Execution safety validation runs before the confirmed query can execute.",
+            },
+            "allowed_actions": ["run", "revise", "cancel"],
             "direct_datalog_edit": self._direct_datalog_edit_unavailable(),
             "diagnostics": [],
         }

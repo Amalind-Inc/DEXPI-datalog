@@ -11,5 +11,7 @@ test("uploads E06 XML and sends a review prompt through the assistant UI", async
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
   await workflow.sendPrompt("What downstream process objects are reachable from the pump?");
-  await workflow.expectAssistantReply(/grounding this QA answer|Deterministic execution/);
+  await workflow.expectAssistantReply(/Datalog confirmation ready/);
+  await workflow.expectAssistantReply(/Review and run this query explicitly/);
+  await workflow.expectLatestAssistantReplyNotToContain(/I am grounding this QA answer/);
 });

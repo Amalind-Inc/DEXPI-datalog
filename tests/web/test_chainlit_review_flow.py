@@ -462,6 +462,14 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 },
             )
             self.assertEqual(
+                artifact["validation"],
+                {
+                    "status": "pending_safety_validation",
+                    "message": "Execution safety validation runs before the confirmed query can execute.",
+                },
+            )
+            self.assertEqual(artifact["allowed_actions"], ["run", "revise", "cancel"])
+            self.assertEqual(
                 artifact["request"],
                 {
                     "prompt": "Starting from this selected object, what downstream process objects are reachable?",

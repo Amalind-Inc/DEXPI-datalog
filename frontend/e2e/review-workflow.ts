@@ -62,6 +62,10 @@ export function reviewWorkflow(page: Page) {
       await expect(page.locator('[data-role="assistant"]').last()).toContainText(text);
     },
 
+    async expectLatestAssistantReplyNotToContain(text: string | RegExp) {
+      await expect(page.locator('[data-role="assistant"]').last()).not.toContainText(text);
+    },
+
     async expandCollapsedSection(name: string | RegExp) {
       await page.getByRole("button", { name }).click();
     },

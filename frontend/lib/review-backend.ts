@@ -15,8 +15,18 @@ export type ChatRequest = {
 };
 
 export type ChatResult = {
+  status?: "answered" | "confirmation_ready" | "confirmation_failed";
   message: string;
   highlightedNodeIds: string[];
+  confirmation?: DatalogConfirmationState;
+};
+
+export type DatalogConfirmationState = {
+  plainLanguageMeaning: string;
+  generatedDatalog: string;
+  validationStatus: string;
+  allowedActions: string[];
+  raw: Record<string, unknown>;
 };
 
 type PrepareBody = {
@@ -63,6 +73,10 @@ export async function answerChatWithReviewBackend(
 
   if (backendAnswer) return backendAnswer;
 
+  if (body.sessionId && isDatalogReasoningPrompt(prompt)) {
+    return localConfirmationReady(prompt);
+  }
+
   const selectedText = selectedNode
     ? `${selectedNode.label} (${selectedNode.kind})`
     : "the currently selected topology scope";
@@ -84,14 +98,11 @@ async function prepareWithPythonBackend(
   if (!baseUrl) return null;
 
   try {
-    const response = await fetcher(
-      `${baseUrl}/api/review/sessions/${sessionId}/prepare`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
+    const response = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/prepare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!response.ok) return null;
     const data = (await response.json()) as Record<string, unknown>;
     return {
@@ -163,16 +174,15 @@ async function runBackendLogicRequest(
       return null;
     }
 
-    const answer = await postJson(fetcher, {
-      url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/execute`,
-      body: { confirmation },
-    });
-    if (!answer) return null;
+    if (confirmation.status !== "confirmation_ready") {
+      return {
+        status: "confirmation_failed",
+        message: readConfirmationFailureMessage(confirmation),
+        highlightedNodeIds: [],
+      };
+    }
 
-    return {
-      message: readAnswerText(answer),
-      highlightedNodeIds: readEvidenceHighlightIds(answer.evidence_highlight),
-    };
+    return confirmationReadyResult(confirmation);
   } catch {
     return null;
   }
@@ -199,8 +209,8 @@ async function postJson(
 
 function graphFromXml(content: string): PidGraph {
   const graph = structuredClone(samplePidGraph);
-  const labels = Array.from(content.matchAll(/\b(P-\d+|V-\d+|FT-\d+)\b/gi)).map(
-    (match) => match[1].toUpperCase(),
+  const labels = Array.from(content.matchAll(/\b(P-\d+|V-\d+|FT-\d+)\b/gi)).map((match) =>
+    match[1].toUpperCase(),
   );
   if (labels.length === 0) return graph;
 
@@ -253,37 +263,104 @@ function readVisibleSourceScopeIds(value: unknown) {
   return [];
 }
 
-function readEvidenceHighlightIds(value: unknown) {
-  if (!isRecord(value)) return [];
-  return Array.from(
-    new Set([
-      ...readStringArray(value.source_scope_ids),
-      ...readStringArray(value.matched_object_ids),
-      ...readPathIds(value.paths),
-    ]),
-  );
+function confirmationReadyResult(confirmation: Record<string, unknown>): ChatResult {
+  const state = readConfirmationState(confirmation);
+  return {
+    status: "confirmation_ready",
+    message: [
+      "Datalog confirmation ready.",
+      state.plainLanguageMeaning,
+      "Review and run this query explicitly before deterministic execution.",
+    ].join(" "),
+    highlightedNodeIds: [],
+    confirmation: state,
+  };
 }
 
-function readPathIds(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((path) => {
-    if (!isRecord(path)) return [];
-    return [...readStringArray(path.node_ids), ...readStringArray(path.edge_ids)];
+function localConfirmationReady(prompt: string): ChatResult {
+  const generatedDatalog = [
+    ".decl review_required(prompt:symbol)",
+    ".output review_required",
+    `review_required(${JSON.stringify(prompt)}).`,
+  ].join("\n");
+  return confirmationReadyResult({
+    status: "confirmation_ready",
+    restatement: {
+      text: "Review a generated Datalog query for the requested topology reasoning before execution.",
+    },
+    generated_logic: {
+      content: generatedDatalog,
+    },
+    validation: {
+      status: "pending_backend_confirmation",
+    },
+    allowed_actions: ["run", "revise", "cancel"],
   });
+}
+
+function readConfirmationState(confirmation: Record<string, unknown>): DatalogConfirmationState {
+  return {
+    plainLanguageMeaning: readPlainLanguageMeaning(confirmation),
+    generatedDatalog: readGeneratedDatalog(confirmation),
+    validationStatus: readValidationStatus(confirmation),
+    allowedActions: readAllowedActions(confirmation),
+    raw: confirmation,
+  };
+}
+
+function readPlainLanguageMeaning(confirmation: Record<string, unknown>) {
+  const restatement = confirmation.restatement;
+  if (isRecord(restatement) && typeof restatement.text === "string") {
+    return restatement.text;
+  }
+  const request = confirmation.request;
+  if (isRecord(request) && typeof request.prompt === "string") {
+    return request.prompt;
+  }
+  return "Review generated Datalog before execution.";
+}
+
+function readGeneratedDatalog(confirmation: Record<string, unknown>) {
+  const generatedLogic = confirmation.generated_logic;
+  if (isRecord(generatedLogic) && typeof generatedLogic.content === "string") {
+    return generatedLogic.content;
+  }
+  return "";
+}
+
+function readValidationStatus(confirmation: Record<string, unknown>) {
+  const validation = confirmation.validation;
+  if (isRecord(validation) && typeof validation.status === "string") {
+    return validation.status;
+  }
+  return "pending_safety_validation";
+}
+
+function readAllowedActions(confirmation: Record<string, unknown>) {
+  const actions = readStringArray(confirmation.allowed_actions);
+  return actions.length > 0 ? actions : ["run", "revise", "cancel"];
+}
+
+function readConfirmationFailureMessage(confirmation: Record<string, unknown>) {
+  const diagnostics = confirmation.diagnostics;
+  if (Array.isArray(diagnostics) && isRecord(diagnostics[0])) {
+    const message = diagnostics[0].message;
+    if (typeof message === "string") return message;
+  }
+  return "The backend could not prepare a Datalog confirmation for this prompt.";
+}
+
+function isDatalogReasoningPrompt(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  return ["downstream", "reachable", "connected", "source"].some((term) =>
+    normalized.includes(term),
+  );
 }
 
 function readStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function readAnswerText(answer: Record<string, unknown>) {
-  const summary = answer.summary;
-  if (isRecord(summary) && typeof summary.text === "string") {
-    return summary.text;
-  }
-  return "Deterministic execution completed, but the backend response did not include a summary.";
 }
 
 function readNonRefinementMessage(improvement: Record<string, unknown>) {
