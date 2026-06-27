@@ -159,17 +159,24 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
 
 test("answerChatWithReviewBackend forwards prior QA evidence as conversation state for follow-ups", async () => {
   let qaBody: { question?: string; conversation?: unknown } | null = null;
+  const paths: string[] = [];
   const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
     const parsedUrl = new URL(String(url));
+    paths.push(parsedUrl.pathname);
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     if (parsedUrl.pathname.endsWith("/source-scope")) {
       return Response.json({ visible_source_scope: { ids: [] } });
     }
     if (parsedUrl.pathname.endsWith("/logic-requests/improve")) {
       return Response.json({
-        status: "refinement_ready",
-        route: { kind: "topology_logic" },
-        refinement: { refined_prompt: body.prompt },
+        status: "needs_clarification",
+        diagnostics: [
+          {
+            code: "logic_request.needs_clarification",
+            message:
+              "The request is too vague to route safely. Clarify the object, relationship, and expected condition.",
+          },
+        ],
       });
     }
     if (parsedUrl.pathname.endsWith("/qa-turns")) {
@@ -195,7 +202,7 @@ test("answerChatWithReviewBackend forwards prior QA evidence as conversation sta
       messages: [
         { role: "user", content: "What is reachable from the nozzle?" },
         { role: "assistant", content: priorAnswer },
-        { role: "user", content: "What is reachable from those?" },
+        { role: "user", content: "What does that mean?" },
       ],
     },
     { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
@@ -204,7 +211,12 @@ test("answerChatWithReviewBackend forwards prior QA evidence as conversation sta
   assert.equal(result.status, "answered");
   const captured = qaBody as { question?: string; conversation?: unknown } | null;
   assert.ok(captured !== null);
-  assert.equal(captured?.question, "What is reachable from those?");
+  assert.equal(captured?.question, "What does that mean?");
+  assert.equal(
+    paths.some((path) => path.endsWith("/logic-requests/improve")),
+    false,
+    "a grounded follow-up must not be preempted by the legacy logic-request router",
+  );
   assert.ok(Array.isArray(captured?.conversation), "conversation must be forwarded");
   const conversation = captured?.conversation as Array<Record<string, unknown>>;
   assert.equal(conversation.length, 1);

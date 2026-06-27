@@ -69,9 +69,9 @@ test("ambiguous reference yields multiple candidates and a grounded follow-up re
     page.getByTestId("qa-interpretation").last().getByTestId("qa-interpretation-chip"),
   ).toHaveCount(3);
 
-  // Follow-up that refers back to "those" must be answered (grounded), reusing
-  // the prior evidence identities rather than re-resolving from scratch.
-  await workflow.sendPrompt("What is reachable from those?");
+  // A vague conversational follow-up must reach grounded QA with the prior
+  // evidence identities instead of being rejected by the legacy router.
+  await workflow.sendPrompt("What does that mean?");
   await expect(page.getByTestId("grounded-qa-answer")).toHaveCount(2);
   await expect(page.getByTestId("qa-answer-text").last()).toContainText(
     /Continuing with the previously identified/,

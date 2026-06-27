@@ -223,6 +223,10 @@ async function runBackendLogicRequest(
       if (!providerResponse.ok) return null;
     }
 
+    if (conversation.length > 0) {
+      return await answerWithGroundedQA(fetcher, baseUrl, sessionId, prompt, conversation);
+    }
+
     const improvement = await postJson(fetcher, {
       url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/improve`,
       body: { prompt },
