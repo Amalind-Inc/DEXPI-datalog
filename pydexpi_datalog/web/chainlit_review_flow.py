@@ -13,7 +13,21 @@ from ..llm.logic_requests import (
     route_without_model_access,
 )
 from ..llm.model_access import ModelProvider, supported_byok_provider
+from ..qa.flow_direction import (
+    classify_path_direction_basis,
+    detect_directed_intent,
+    direction_annotation_key,
+    effective_direction,
+    evaluation_boundary,
+)
+from ..qa.grounded_qa_harness import (
+    ConversationTurn,
+    QATurnProvider,
+    run_grounded_qa_turn,
+)
+from ..qa.topology_tools import TopologyTools
 from ..workflow.review_session import (
+    PreparationLimits,
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
@@ -127,9 +141,12 @@ class ChainlitReviewFlow:
         self,
         *,
         artifact_root: Path,
+        limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
-        self._service = ReviewSessionService(artifact_root=artifact_root)
+        self._service = ReviewSessionService(
+            artifact_root=artifact_root, limits=limits
+        )
         self._clock = clock
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
@@ -141,6 +158,9 @@ class ChainlitReviewFlow:
         self._credentials_by_session: dict[str, str] = {}
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
         self._missing_capabilities_by_session: dict[str, list[dict[str, object]]] = {}
+        self._direction_annotations_by_session: dict[
+            str, dict[str, dict[str, object]]
+        ] = {}
 
     def initial_state(self) -> dict[str, object]:
         return {
@@ -775,6 +795,296 @@ class ChainlitReviewFlow:
             "manifest": manifest,
         }
 
+    def run_qa_turn(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        qa_provider: QATurnProvider,
+        conversation: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        topology = self._topology_for_session(session_id)
+        answer = self._compute_qa_answer(
+            topology=topology,
+            session_id=session_id,
+            question=question,
+            qa_provider=qa_provider,
+            conversation=conversation,
+        )
+
+        directed = detect_directed_intent(question)
+        primary = self._primary_witness_path(answer["valid_paths"])
+        if directed is None or primary is None:
+            return self._answered_payload(session_id, answer)
+
+        edge_relationships = {
+            str(edge["id"]): str(edge["relationship"]) for edge in topology["edges"]
+        }
+        basis = classify_path_direction_basis(
+            [edge_relationships.get(eid, "") for eid in primary["edge_ids"]]
+        )
+        boundary = evaluation_boundary(directed)
+        source_id = topology.get("source_id")
+        review_key = direction_annotation_key(
+            source_id=str(source_id) if source_id else None,
+            evaluation_boundary=boundary,
+            node_ids=primary["node_ids"],
+            edge_ids=primary["edge_ids"],
+        )
+
+        if basis == "explicit":
+            direction = {
+                "proposed_direction": directed,
+                "effective_direction": directed,
+                "direction_basis": "explicit",
+                "review_status": "confirmed",
+                "evaluation_boundary": boundary,
+                "review_key": review_key,
+                "review_required": False,
+            }
+            return self._answered_payload(session_id, answer, direction=direction)
+
+        annotation = self._direction_annotations_by_session.get(session_id, {}).get(
+            review_key
+        )
+        if annotation is None:
+            return self._needs_direction_review_payload(
+                session_id=session_id,
+                question=question,
+                topology=topology,
+                proposed_direction=directed,
+                basis=basis,
+                boundary=boundary,
+                source_id=source_id,
+                review_key=review_key,
+                primary=primary,
+                answer=answer,
+            )
+
+        review_status = str(annotation["review_status"])
+        direction = {
+            "proposed_direction": directed,
+            "effective_direction": effective_direction(
+                proposed_direction=directed, review_status=review_status
+            ),
+            "direction_basis": basis,
+            "review_status": review_status,
+            "evaluation_boundary": boundary,
+            "review_key": review_key,
+            "review_required": False,
+        }
+        return self._answered_payload(session_id, answer, direction=direction)
+
+    def submit_direction_review(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        decision: str,
+        review_key: str,
+        qa_provider: QATurnProvider,
+        conversation: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        review_status = {
+            "confirm": "confirmed",
+            "reverse": "reversed",
+            "unknown": "unknown",
+        }.get(decision)
+        if review_status is None:
+            raise ValueError(
+                "direction review decision must be confirm, reverse, or unknown"
+            )
+        # Ensure the session is ready before recording the annotation.
+        self._topology_for_session(session_id)
+
+        # Persist the reviewer's judgement keyed to the exact witness identity the
+        # review card was raised for. The session annotation never mutates the graph.
+        self._direction_annotations_by_session.setdefault(session_id, {})[review_key] = {
+            "review_status": review_status,
+        }
+
+        # Resume the original question; run_qa_turn recomputes the same key from the
+        # (source, path, evaluation boundary) and applies the stored annotation.
+        return self.run_qa_turn(
+            session_id=session_id,
+            question=question,
+            qa_provider=qa_provider,
+            conversation=conversation,
+        )
+
+    def _compute_qa_answer(
+        self,
+        *,
+        topology: dict[str, object],
+        session_id: str,
+        question: str,
+        qa_provider: QATurnProvider,
+        conversation: list[dict[str, object]] | None,
+    ) -> dict[str, object]:
+        tools = TopologyTools(topology_view=topology, session_id=session_id)
+        prior_turns = [
+            ConversationTurn(
+                question=str(turn.get("question", "")),
+                answer_text=str(turn.get("answer_text", "")),
+                evidence_references=[
+                    str(ref)
+                    for ref in turn.get("evidence_references", [])
+                    if isinstance(ref, str)
+                ],
+            )
+            for turn in (conversation or [])
+            if isinstance(turn, dict)
+        ]
+        result = run_grounded_qa_turn(
+            question=question,
+            topology_tools=tools,
+            provider=qa_provider,
+            conversation=prior_turns,
+        )
+
+        paths = []
+        for trace_entry in result.tool_call_trace:
+            if trace_entry["tool_name"] == "get_reachable_equipment":
+                tool_result = trace_entry["tool_result"]
+                for reachable in tool_result.get("reachable", []):
+                    witness = reachable.get("witness", {})
+                    if witness.get("node_ids") or witness.get("edge_ids"):
+                        paths.append(
+                            {
+                                "id": reachable["evidence_id"],
+                                "node_ids": list(witness.get("node_ids", [])),
+                                "edge_ids": list(witness.get("edge_ids", [])),
+                            }
+                        )
+
+        known_ids = set(topology["evidence_map"].keys())
+        matched_object_ids = list(result.evidence_references)
+        valid_paths = [
+            p
+            for p in paths
+            if all(nid in known_ids for nid in p["node_ids"])
+            and all(eid in known_ids for eid in p["edge_ids"])
+            and p["id"] in known_ids
+            and p["id"] in matched_object_ids
+        ]
+        return {
+            "result": result,
+            "matched_object_ids": matched_object_ids,
+            "valid_paths": valid_paths,
+        }
+
+    @staticmethod
+    def _primary_witness_path(
+        valid_paths: list[dict[str, object]],
+    ) -> dict[str, object] | None:
+        # The most complete witness (most intervening structure) reviews best;
+        # tie-break on id for determinism across runs.
+        if not valid_paths:
+            return None
+        return sorted(
+            valid_paths,
+            key=lambda p: (-len(p["edge_ids"]), str(p["id"])),
+        )[0]
+
+    def _answered_payload(
+        self,
+        session_id: str,
+        answer: dict[str, object],
+        *,
+        direction: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        topology = self._topology_for_session(session_id)
+        result = answer["result"]
+        evidence_highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=[],
+            matched_object_ids=answer["matched_object_ids"],
+            paths=answer["valid_paths"],
+        )
+        self._evidence_highlight_by_session[session_id] = evidence_highlight
+
+        answer_text = result.answer_text
+        if direction is not None:
+            answer_text = self._direction_prefixed_answer(answer_text, direction)
+
+        payload = {
+            "status": "answered",
+            "session_id": session_id,
+            "answer_text": answer_text,
+            "evidence_references": list(result.evidence_references),
+            "rejected_references": list(result.rejected_references),
+            "interpreted_object_ids": list(result.interpreted_object_ids),
+            "evidence_highlight": evidence_highlight,
+        }
+        if direction is not None:
+            payload["direction"] = direction
+        return payload
+
+    @staticmethod
+    def _direction_prefixed_answer(
+        answer_text: str, direction: dict[str, object]
+    ) -> str:
+        status = direction["review_status"]
+        effective = direction["effective_direction"]
+        if status == "confirmed" and direction["direction_basis"] == "explicit":
+            prefix = f"Flow direction is explicit ({effective})."
+        elif status == "confirmed":
+            prefix = f"Confirmed {effective} flow direction."
+        elif status == "reversed":
+            prefix = f"Using reviewer-reversed flow direction ({effective})."
+        else:
+            prefix = "Flow direction marked unknown by reviewer."
+        return f"{prefix} {answer_text}"
+
+    def _needs_direction_review_payload(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        topology: dict[str, object],
+        proposed_direction: str,
+        basis: str,
+        boundary: str,
+        source_id: object,
+        review_key: str,
+        primary: dict[str, object],
+        answer: dict[str, object],
+    ) -> dict[str, object]:
+        witness_highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=[],
+            matched_object_ids=[str(primary["id"])],
+            paths=[primary],
+        )
+        self._evidence_highlight_by_session[session_id] = witness_highlight
+        return {
+            "status": "needs_direction_review",
+            "session_id": session_id,
+            "question": question,
+            "direction_review": {
+                "review_key": review_key,
+                "proposed_direction": proposed_direction,
+                "direction_basis": basis,
+                "review_status": "pending",
+                "evaluation_boundary": boundary,
+                "source_id": source_id,
+                "basis_explanation": (
+                    "Flow direction along this witness is "
+                    f"{basis}; confirm, reverse, or mark it unknown."
+                ),
+                "witness": {
+                    "node_ids": list(primary["node_ids"]),
+                    "edge_ids": list(primary["edge_ids"]),
+                },
+                "evidence_highlight": witness_highlight,
+                "actions": ["confirm", "reverse", "unknown"],
+            },
+            "answer_text": (
+                "Before answering, please review the inferred flow direction for "
+                "the highlighted witness."
+            ),
+        }
+
     def local_credential_for_test(self, session_id: str) -> str | None:
         return self._credentials_by_session.get(session_id)
 
@@ -818,6 +1128,7 @@ class ChainlitReviewFlow:
         return {
             "status": status,
             "session_id": result["session_id"],
+            "source_id": result.get("source_id"),
             "job": result["job"],
             "readiness": result["readiness"],
             "query_controls": query_controls,

@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 
 from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
+from ..qa.grounded_qa_harness import QATurnProvider, ScriptedQATurnProvider
+from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
 
 
@@ -79,11 +81,13 @@ def create_review_api_app(
     *,
     artifact_root: Path,
     model_provider_factory: Callable[[], ModelProvider] | None = None,
+    qa_provider_factory: Callable[[], QATurnProvider] | None = None,
+    preparation_limits: PreparationLimits | None = None,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API."""
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
-    flow = ChainlitReviewFlow(artifact_root=artifact_root)
+    flow = ChainlitReviewFlow(artifact_root=artifact_root, limits=preparation_limits)
 
     def _resolve_provider(session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
@@ -97,6 +101,11 @@ def create_review_api_app(
                 credential=credential,
             )
         return TopologyAwareFakeModelProvider()
+
+    def _resolve_qa_provider(_session_id: str) -> QATurnProvider:
+        if qa_provider_factory is not None:
+            return qa_provider_factory()
+        return ScriptedQATurnProvider()
 
     @app.exception_handler(HTTPException)
     def http_exception_handler(
@@ -196,6 +205,48 @@ def create_review_api_app(
             lambda: flow.execute_selected_rule_pack_query(
                 session_id=session_id,
                 rule_id=_required_string(body, "rule_id"),
+            )
+        )
+
+    @app.post("/api/review/sessions/{session_id}/qa-turns")
+    def run_qa_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
+        question = _required_string(body, "question")
+        conversation = body.get("conversation")
+        conversation_turns = (
+            [turn for turn in conversation if isinstance(turn, dict)]
+            if isinstance(conversation, list)
+            else None
+        )
+        return _call_ready(
+            lambda: flow.run_qa_turn(
+                session_id=session_id,
+                question=question,
+                qa_provider=_resolve_qa_provider(session_id),
+                conversation=conversation_turns,
+            )
+        )
+
+    @app.post("/api/review/sessions/{session_id}/direction-reviews")
+    def submit_direction_review(
+        session_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        question = _required_string(body, "question")
+        decision = _required_string(body, "decision")
+        review_key = _required_string(body, "review_key")
+        conversation = body.get("conversation")
+        conversation_turns = (
+            [turn for turn in conversation if isinstance(turn, dict)]
+            if isinstance(conversation, list)
+            else None
+        )
+        return _call_ready(
+            lambda: flow.submit_direction_review(
+                session_id=session_id,
+                question=question,
+                decision=decision,
+                review_key=review_key,
+                qa_provider=_resolve_qa_provider(session_id),
+                conversation=conversation_turns,
             )
         )
 

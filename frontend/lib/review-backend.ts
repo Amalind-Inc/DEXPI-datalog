@@ -7,6 +7,18 @@ import {
   serializeDatalogConfirmation,
   type DatalogConfirmationState,
 } from "./datalog-confirmation.ts";
+import {
+  parseGroundedQAAnswerMessage,
+  serializeGroundedQAAnswer,
+  type EvidenceHighlight,
+} from "./grounded-qa-answer.ts";
+import { serializeDirectionReview } from "./direction-review.ts";
+
+type QAConversationTurn = {
+  question: string;
+  answer_text: string;
+  evidence_references: string[];
+};
 
 export type ChatRequest = {
   messages?: Array<{ role: string; content: string }>;
@@ -20,10 +32,16 @@ export type ChatRequest = {
 };
 
 export type ChatResult = {
-  status?: "answered" | "confirmation_ready" | "confirmation_failed";
+  status?: "answered" | "confirmation_ready" | "confirmation_failed" | "needs_direction_review";
   message: string;
   highlightedNodeIds: string[];
   confirmation?: DatalogConfirmationState;
+};
+
+export type DirectionReviewResult = {
+  status: "answered";
+  message: string;
+  highlightedNodeIds: string[];
 };
 
 export type ExecuteConfirmedDatalogResult = {
@@ -83,17 +101,23 @@ export async function answerChatWithReviewBackend(
 ): Promise<ChatResult> {
   const prompt = body.messages?.at(-1)?.content ?? "";
   const selectedNode = body.selectedNode ?? null;
+  const conversation = buildQAConversation(body.messages ?? []);
   const backendAnswer = await runBackendLogicRequest(
     body.sessionId,
     prompt,
     selectedNode?.id,
+    conversation,
     options,
   );
 
   if (backendAnswer) return backendAnswer;
 
   if (body.sessionId && isDatalogReasoningPrompt(prompt)) {
-    return localConfirmationReady(prompt);
+    return {
+      message:
+        "Unable to reach the review backend. Make sure the API is running on port 8000 and send your message again.",
+      highlightedNodeIds: [],
+    };
   }
 
   const selectedText = selectedNode
@@ -165,6 +189,7 @@ async function runBackendLogicRequest(
   sessionId: string | undefined,
   prompt: string,
   selectedNodeId: string | undefined,
+  conversation: QAConversationTurn[],
   {
     baseUrl = backendBaseUrl(),
     fetcher = fetch,
@@ -211,6 +236,11 @@ async function runBackendLogicRequest(
       };
     }
 
+    const route = improvement.route;
+    if (isRecord(route) && route.kind === "topology_logic") {
+      return await answerWithGroundedQA(fetcher, baseUrl, sessionId, prompt, conversation);
+    }
+
     const confirmation = await postJson(fetcher, {
       url: `${baseUrl}/api/review/sessions/${sessionId}/logic-requests/confirm`,
       body: { improvement },
@@ -231,6 +261,137 @@ async function runBackendLogicRequest(
   } catch {
     return null;
   }
+}
+
+async function answerWithGroundedQA(
+  fetcher: BackendFetch,
+  baseUrl: string,
+  sessionId: string,
+  question: string,
+  conversation: QAConversationTurn[],
+): Promise<ChatResult | null> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/qa-turns`,
+    body: conversation.length > 0 ? { question, conversation } : { question },
+  });
+  if (!result) return null;
+
+  if (result.status === "needs_direction_review") {
+    return directionReviewResult(question, conversation, result);
+  }
+
+  const answerText = typeof result.answer_text === "string" ? result.answer_text : "";
+  const evidenceReferences = readStringArray(result.evidence_references);
+  const interpretedObjectIds = readStringArray(result.interpreted_object_ids);
+  const highlightRaw = result.evidence_highlight;
+  const highlight = readEvidenceHighlight(highlightRaw);
+  const highlightedNodeIds = readEvidenceHighlightIds(highlightRaw);
+
+  return {
+    status: "answered",
+    message: serializeGroundedQAAnswer({
+      answerText,
+      evidenceReferences,
+      interpretedObjectIds,
+      evidenceHighlight: highlight,
+      raw: result,
+    }),
+    highlightedNodeIds,
+  };
+}
+
+function directionReviewResult(
+  question: string,
+  conversation: QAConversationTurn[],
+  result: Record<string, unknown>,
+): ChatResult {
+  const review = isRecord(result.direction_review) ? result.direction_review : {};
+  const highlight = readEvidenceHighlight(review.evidence_highlight);
+  return {
+    status: "needs_direction_review",
+    message: serializeDirectionReview({
+      question,
+      reviewKey: typeof review.review_key === "string" ? review.review_key : "",
+      proposedDirection:
+        typeof review.proposed_direction === "string" ? review.proposed_direction : "",
+      directionBasis: typeof review.direction_basis === "string" ? review.direction_basis : "",
+      basisExplanation:
+        typeof review.basis_explanation === "string" ? review.basis_explanation : "",
+      evidenceHighlight: highlight,
+      conversation,
+      raw: result,
+    }),
+    highlightedNodeIds: readEvidenceHighlightIds(review.evidence_highlight),
+  };
+}
+
+export async function submitDirectionReview(
+  sessionId: string,
+  params: {
+    question: string;
+    decision: "confirm" | "reverse" | "unknown";
+    reviewKey: string;
+    conversation?: QAConversationTurn[];
+  },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<DirectionReviewResult> {
+  const body: Record<string, unknown> = {
+    question: params.question,
+    decision: params.decision,
+    review_key: params.reviewKey,
+  };
+  if (params.conversation && params.conversation.length > 0) {
+    body.conversation = params.conversation;
+  }
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/direction-reviews`,
+    body,
+  });
+  if (!result) {
+    throw new Error("The review backend did not resume the question after direction review.");
+  }
+  const answerText = typeof result.answer_text === "string" ? result.answer_text : "";
+  const evidenceReferences = readStringArray(result.evidence_references);
+  const interpretedObjectIds = readStringArray(result.interpreted_object_ids);
+  const highlight = readEvidenceHighlight(result.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedQAAnswer({
+      answerText,
+      evidenceReferences,
+      interpretedObjectIds,
+      evidenceHighlight: highlight,
+      raw: result,
+    }),
+    highlightedNodeIds: readEvidenceHighlightIds(result.evidence_highlight),
+  };
+}
+
+function buildQAConversation(
+  messages: Array<{ role: string; content: string }>,
+): QAConversationTurn[] {
+  const turns: QAConversationTurn[] = [];
+  // Pair each assistant QA answer with the user question that preceded it,
+  // excluding the final (current) user message.
+  for (let index = 0; index < messages.length - 1; index += 1) {
+    const message = messages[index];
+    if (message.role !== "assistant") continue;
+    const parsed = parseGroundedQAAnswerMessage(message.content);
+    if (!parsed) continue;
+    let question = "";
+    for (let back = index - 1; back >= 0; back -= 1) {
+      if (messages[back].role === "user") {
+        question = messages[back].content;
+        break;
+      }
+    }
+    turns.push({
+      question,
+      answer_text: parsed.answerText,
+      evidence_references: parsed.evidenceReferences,
+    });
+  }
+  return turns;
 }
 
 async function runBackendExecute(
@@ -335,6 +496,23 @@ function readEvidenceHighlightIds(value: unknown) {
   );
 }
 
+function readEvidenceHighlight(value: unknown): EvidenceHighlight {
+  if (!isRecord(value)) {
+    return { source_scope_ids: [], matched_object_ids: [], paths: [] };
+  }
+  return {
+    source_scope_ids: readStringArray(value.source_scope_ids),
+    matched_object_ids: readStringArray(value.matched_object_ids),
+    paths: Array.isArray(value.paths)
+      ? value.paths.filter(isRecord).map((p) => ({
+          id: typeof p.id === "string" ? p.id : "",
+          node_ids: readStringArray(p.node_ids),
+          edge_ids: readStringArray(p.edge_ids),
+        }))
+      : [],
+  };
+}
+
 function readPathIds(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.flatMap((path) => {
@@ -351,27 +529,6 @@ function confirmationReadyResult(confirmation: Record<string, unknown>): ChatRes
     highlightedNodeIds: [],
     confirmation: state,
   };
-}
-
-function localConfirmationReady(prompt: string): ChatResult {
-  const generatedDatalog = [
-    ".decl review_required(prompt:symbol)",
-    ".output review_required",
-    `review_required(${JSON.stringify(prompt)}).`,
-  ].join("\n");
-  return confirmationReadyResult({
-    status: "confirmation_ready",
-    restatement: {
-      text: "Review a generated Datalog query for the requested topology reasoning before execution.",
-    },
-    generated_logic: {
-      content: generatedDatalog,
-    },
-    validation: {
-      status: "pending_backend_confirmation",
-    },
-    allowed_actions: ["run", "revise", "cancel"],
-  });
 }
 
 function readConfirmationState(confirmation: Record<string, unknown>): DatalogConfirmationState {

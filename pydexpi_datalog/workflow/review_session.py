@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import hashlib
+import time
 import uuid
 import xml.etree.ElementTree as ET
+from typing import Callable
 
 from ..export.pipeline import export_graph_facts_artifact
 from ..semantics.derive_graph_semantics import (
@@ -14,12 +17,43 @@ from ..semantics.derive_graph_semantics import (
 )
 
 
+@dataclass(frozen=True)
+class PreparationLimits:
+    """Configurable boundaries for preparing a single DEXPI source.
+
+    Defaults accept every bundled DEXPI 1.3 example P&ID; individual limits can
+    be lowered to enforce stricter operational policy.
+    """
+
+    max_upload_bytes: int = 5_000_000
+    max_xml_elements: int = 50_000
+    max_xml_depth: int = 64
+    max_preparation_seconds: float = 30.0
+    max_graph_nodes: int = 5_000
+    max_graph_edges: int = 10_000
+    max_artifact_bytes: int = 50_000_000
+
+
+def compute_source_id(dexpi_xml_path: Path) -> str:
+    digest = hashlib.sha256(dexpi_xml_path.read_bytes()).hexdigest()[:16]
+    return f"source-{digest}"
+
+
 class ReviewSessionService:
     """Prepare one uploaded DEXPI source file for the web review workflow."""
 
-    def __init__(self, *, artifact_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        artifact_root: Path,
+        limits: PreparationLimits | None = None,
+        clock: Callable[[], float] = time.perf_counter,
+    ) -> None:
         self.artifact_root = artifact_root
+        self._limits = limits or PreparationLimits()
+        self._clock = clock
         self._requests_by_session: dict[str, Path] = {}
+        self._ready_source_by_session: dict[str, str] = {}
 
     def start_preparation(
         self, *, dexpi_xml_path: Path, session_id: str | None = None
@@ -54,11 +88,47 @@ class ReviewSessionService:
     def _run_preparation(
         self, *, dexpi_xml_path: Path, session_id: str, attempt: int
     ) -> dict[str, object]:
-        validation_diagnostics = validate_upload_input(dexpi_xml_path)
+        if not dexpi_xml_path.exists():
+            return self._failed_result(
+                session_id=session_id,
+                attempt=attempt,
+                diagnostics=[
+                    diagnostic(
+                        code="upload.missing_file",
+                        message=(
+                            "Uploaded DEXPI source file does not exist: "
+                            f"{dexpi_xml_path}"
+                        ),
+                    )
+                ],
+            )
+
+        source_id = compute_source_id(dexpi_xml_path)
+        prepared_source_id = self._ready_source_by_session.get(session_id)
+        if prepared_source_id is not None and prepared_source_id != source_id:
+            return self._failed_result(
+                session_id=session_id,
+                attempt=attempt,
+                source_id=prepared_source_id,
+                diagnostics=[
+                    diagnostic(
+                        code="source.already_prepared",
+                        message=(
+                            "This chat already prepared a source. Start a new chat "
+                            "to review a different DEXPI source."
+                        ),
+                    )
+                ],
+            )
+
+        validation_diagnostics = validate_upload_input(
+            dexpi_xml_path, limits=self._limits
+        )
         if validation_diagnostics:
             return self._failed_result(
                 session_id=session_id,
                 attempt=attempt,
+                source_id=source_id,
                 diagnostics=validation_diagnostics,
             )
 
@@ -71,12 +141,24 @@ class ReviewSessionService:
             stage("running", "extracting graph facts"),
         ]
         try:
+            started_at = self._clock()
             graph_facts = export_graph_facts_artifact(
                 dexpi_xml_path=dexpi_xml_path,
                 fixture_id=session_id,
                 output_dir=session_dir,
             )
             graph_facts_json_path = session_dir / session_id / "graph_facts.json"
+
+            graph_limit_diagnostics = check_graph_size_limits(
+                graph=graph_facts["graph"], limits=self._limits
+            )
+            if graph_limit_diagnostics:
+                return self._failed_result(
+                    session_id=session_id,
+                    attempt=attempt,
+                    source_id=source_id,
+                    diagnostics=graph_limit_diagnostics,
+                )
 
             stage_history.append(stage("running", "deriving graph facts datalog"))
             graph_facts_datalog = build_graph_facts_datalog(graph_facts)
@@ -94,6 +176,7 @@ class ReviewSessionService:
             topology_view = build_topology_view_model(
                 graph_facts=graph_facts,
                 session_id=session_id,
+                source_id=source_id,
             )
             topology_view_path = session_dir / "topology_view.json"
             topology_view_path.write_text(
@@ -104,6 +187,7 @@ class ReviewSessionService:
             readiness = {
                 "state": "ready",
                 "session_id": session_id,
+                "source_id": source_id,
                 "graph": graph_facts["graph"],
                 "diagnostics": [],
                 "topology_view_model_path": str(topology_view_path),
@@ -113,10 +197,44 @@ class ReviewSessionService:
                 json.dumps(readiness, indent=2, sort_keys=True),
                 encoding="utf-8",
             )
+
+            artifacts = {
+                "graph_facts_json": str(graph_facts_json_path),
+                "graph_facts_datalog": str(graph_facts_datalog_path),
+                "derived_graph_semantics_datalog": str(derived_graph_semantics_path),
+                "readiness_metadata": str(readiness_path),
+                "topology_view_model": str(topology_view_path),
+            }
+
+            elapsed_seconds = self._clock() - started_at
+            time_limit_diagnostics = check_preparation_time_limit(
+                elapsed_seconds=elapsed_seconds, limits=self._limits
+            )
+            if time_limit_diagnostics:
+                return self._failed_result(
+                    session_id=session_id,
+                    attempt=attempt,
+                    source_id=source_id,
+                    diagnostics=time_limit_diagnostics,
+                )
+
+            artifact_limit_diagnostics = check_artifact_size_limits(
+                artifacts=artifacts, limits=self._limits
+            )
+            if artifact_limit_diagnostics:
+                return self._failed_result(
+                    session_id=session_id,
+                    attempt=attempt,
+                    source_id=source_id,
+                    diagnostics=artifact_limit_diagnostics,
+                )
+
             stage_history.append(stage("succeeded", "ready"))
+            self._ready_source_by_session[session_id] = source_id
 
             return {
                 "session_id": session_id,
+                "source_id": source_id,
                 "job": {
                     "job_id": f"{session_id}:prepare:{attempt}",
                     "kind": "session_preparation",
@@ -127,19 +245,14 @@ class ReviewSessionService:
                 },
                 "readiness": readiness,
                 "topology_view": topology_view,
-                "artifacts": {
-                    "graph_facts_json": str(graph_facts_json_path),
-                    "graph_facts_datalog": str(graph_facts_datalog_path),
-                    "derived_graph_semantics_datalog": str(derived_graph_semantics_path),
-                    "readiness_metadata": str(readiness_path),
-                    "topology_view_model": str(topology_view_path),
-                },
+                "artifacts": artifacts,
                 "diagnostics": [],
             }
         except Exception as error:  # pyDEXPI has parser and conversion exceptions.
             return self._failed_result(
                 session_id=session_id,
                 attempt=attempt,
+                source_id=source_id,
                 diagnostics=[
                     diagnostic(
                         code="preparation.failed",
@@ -155,12 +268,14 @@ class ReviewSessionService:
         session_id: str,
         attempt: int,
         diagnostics: list[dict[str, object]],
+        source_id: str | None = None,
     ) -> dict[str, object]:
         session_dir = self.artifact_root / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         readiness = {
             "state": "failed",
             "session_id": session_id,
+            "source_id": source_id,
             "diagnostics": diagnostics,
         }
         readiness_path = session_dir / "readiness.json"
@@ -169,6 +284,7 @@ class ReviewSessionService:
         )
         return {
             "session_id": session_id,
+            "source_id": source_id,
             "job": {
                 "job_id": f"{session_id}:prepare:{attempt}",
                 "kind": "session_preparation",
@@ -187,7 +303,10 @@ class ReviewSessionService:
         }
 
 
-def validate_upload_input(dexpi_xml_path: Path) -> list[dict[str, object]]:
+def validate_upload_input(
+    dexpi_xml_path: Path, *, limits: PreparationLimits | None = None
+) -> list[dict[str, object]]:
+    limits = limits or PreparationLimits()
     if not dexpi_xml_path.exists():
         return [
             diagnostic(
@@ -200,6 +319,18 @@ def validate_upload_input(dexpi_xml_path: Path) -> list[dict[str, object]]:
             diagnostic(
                 code="upload.non_xml",
                 message="Uploaded P&ID source must be a DEXPI XML file.",
+            )
+        ]
+
+    upload_bytes = dexpi_xml_path.stat().st_size
+    if upload_bytes > limits.max_upload_bytes:
+        return [
+            diagnostic(
+                code="limit.upload_bytes_exceeded",
+                message=(
+                    f"Uploaded source is {upload_bytes} bytes, exceeding the "
+                    f"{limits.max_upload_bytes}-byte upload limit."
+                ),
             )
         ]
 
@@ -229,12 +360,108 @@ def validate_upload_input(dexpi_xml_path: Path) -> list[dict[str, object]]:
             )
         ]
 
+    element_count = sum(1 for _ in root.iter())
+    if element_count > limits.max_xml_elements:
+        return [
+            diagnostic(
+                code="limit.xml_elements_exceeded",
+                message=(
+                    f"Uploaded source has {element_count} XML elements, exceeding the "
+                    f"{limits.max_xml_elements}-element complexity limit."
+                ),
+            )
+        ]
+
+    element_depth = _xml_depth(root)
+    if element_depth > limits.max_xml_depth:
+        return [
+            diagnostic(
+                code="limit.xml_depth_exceeded",
+                message=(
+                    f"Uploaded source nests {element_depth} XML levels, exceeding the "
+                    f"{limits.max_xml_depth}-level complexity limit."
+                ),
+            )
+        ]
+
+    return []
+
+
+def _xml_depth(element: ET.Element) -> int:
+    return 1 + max((_xml_depth(child) for child in element), default=0)
+
+
+def check_graph_size_limits(
+    *, graph: dict[str, object], limits: PreparationLimits
+) -> list[dict[str, object]]:
+    node_count = int(graph.get("node_count", 0))
+    if node_count > limits.max_graph_nodes:
+        return [
+            diagnostic(
+                code="limit.graph_nodes_exceeded",
+                message=(
+                    f"Extracted graph has {node_count} nodes, exceeding the "
+                    f"{limits.max_graph_nodes}-node graph limit."
+                ),
+            )
+        ]
+    edge_count = int(graph.get("edge_count", 0))
+    if edge_count > limits.max_graph_edges:
+        return [
+            diagnostic(
+                code="limit.graph_edges_exceeded",
+                message=(
+                    f"Extracted graph has {edge_count} edges, exceeding the "
+                    f"{limits.max_graph_edges}-edge graph limit."
+                ),
+            )
+        ]
+    return []
+
+
+def check_preparation_time_limit(
+    *, elapsed_seconds: float, limits: PreparationLimits
+) -> list[dict[str, object]]:
+    if elapsed_seconds > limits.max_preparation_seconds:
+        return [
+            diagnostic(
+                code="limit.preparation_time_exceeded",
+                message=(
+                    f"Preparation took {elapsed_seconds:.3f}s, exceeding the "
+                    f"{limits.max_preparation_seconds}s processing-time limit."
+                ),
+            )
+        ]
+    return []
+
+
+def check_artifact_size_limits(
+    *, artifacts: dict[str, str], limits: PreparationLimits
+) -> list[dict[str, object]]:
+    for kind, artifact_path in sorted(artifacts.items()):
+        path = Path(artifact_path)
+        if not path.is_file():
+            continue
+        artifact_bytes = path.stat().st_size
+        if artifact_bytes > limits.max_artifact_bytes:
+            return [
+                diagnostic(
+                    code="limit.artifact_bytes_exceeded",
+                    message=(
+                        f"Prepared artifact '{kind}' is {artifact_bytes} bytes, "
+                        f"exceeding the {limits.max_artifact_bytes}-byte artifact limit."
+                    ),
+                )
+            ]
     return []
 
 
 def build_topology_view_model(
-    *, graph_facts: dict[str, object], session_id: str
+    *, graph_facts: dict[str, object], session_id: str, source_id: str | None = None
 ) -> dict[str, object]:
+    # Document-level provenance; kept distinct from per-edge graph endpoint ids
+    # (which also use the name "source_id") below.
+    document_source_id = source_id
     fact_nodes = graph_facts["facts"]["nodes"]
     fact_edges = graph_facts["facts"]["edges"]
 
@@ -258,6 +485,7 @@ def build_topology_view_model(
         evidence_map[stable_node_id] = {
             "kind": "node",
             "topology_id": stable_node_id,
+            "source_id": document_source_id,
             "canonical_fact": {
                 "fact_type": "node",
                 "node_id": node["node_id"],
@@ -308,6 +536,7 @@ def build_topology_view_model(
         evidence_map[edge_id] = {
             "kind": "edge",
             "topology_id": edge_id,
+            "source_id": document_source_id,
             "canonical_fact": {
                 "fact_type": "edge",
                 "source_id": edge["source_id"],
@@ -319,6 +548,7 @@ def build_topology_view_model(
     return {
         "schema_version": "topology-view.v1",
         "session_id": session_id,
+        "source_id": document_source_id,
         "source_path": graph_facts["source_path"],
         "nodes": nodes,
         "edges": topology_edges,

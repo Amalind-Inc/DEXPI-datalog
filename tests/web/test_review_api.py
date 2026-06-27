@@ -8,6 +8,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.web.review_api import TopologyAwareFakeModelProvider, create_review_api_app
+from pydexpi_datalog.workflow.review_session import PreparationLimits
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -198,6 +199,89 @@ class ReviewApiTests(unittest.TestCase):
                 sort_keys=True,
             )
             self.assertEqual(response_text.count(sentinel), 0)
+
+    def test_chat_accepts_one_source_and_rejects_a_second_distinct_source(self) -> None:
+        session_id = "api-single-source"
+        e03_fixture = (
+            REPO_ROOT
+            / "TrainingTestCases"
+            / "dexpi 1.3"
+            / "example pids"
+            / "E03 Pump With Nozzles"
+            / "E03V01-VER.EX01.xml"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+
+            first = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            first_body = first.json()
+            self.assertEqual(first_body["status"], "ready")
+            self.assertTrue(first_body["source_id"].startswith("source-"))
+
+            # A second, different source for the same chat is rejected.
+            second = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E03V01-VER.EX01.xml",
+                    "content": e03_fixture.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(second.status_code, 200)
+            second_body = second.json()
+            self.assertEqual(second_body["status"], "failed")
+            self.assertEqual(
+                second_body["diagnostics"][0]["code"], "source.already_prepared"
+            )
+
+            # The originally prepared source still answers topology queries.
+            topology = client.get(f"/api/review/sessions/{session_id}/topology")
+            self.assertEqual(topology.status_code, 200)
+            self.assertTrue(topology.json()["graph_objects"])
+
+    def test_configured_preparation_limit_is_enforced_through_http(self) -> None:
+        session_id = "api-limit"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(
+                artifact_root=Path(tmp_dir) / "sessions",
+                preparation_limits=PreparationLimits(max_upload_bytes=64),
+            )
+            client = TestClient(app)
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            ).json()
+            self.assertEqual(prepared["status"], "failed")
+            self.assertEqual(
+                prepared["diagnostics"][0]["code"], "limit.upload_bytes_exceeded"
+            )
+
+    def test_prepare_response_exposes_source_id_for_provenance(self) -> None:
+        session_id = "api-source-id"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            ).json()
+            self.assertEqual(prepared["status"], "ready")
+            self.assertEqual(
+                prepared["source_id"], prepared["topology_view"]["source_id"]
+            )
 
 
 if __name__ == "__main__":

@@ -14,6 +14,12 @@ import {
   type DatalogConfirmationState,
   type GroundedLogicAnswerState,
 } from "@/lib/datalog-confirmation";
+import {
+  parseGroundedQAAnswerMessage,
+  type GroundedQAAnswerState,
+  type EvidencePath,
+} from "@/lib/grounded-qa-answer";
+import { parseDirectionReviewMessage, type DirectionReviewState } from "@/lib/direction-review";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -283,6 +289,14 @@ const AssistantMessage: FC = () => {
               if (confirmation) {
                 return <DatalogConfirmationCard confirmation={confirmation} />;
               }
+              const directionReview = parseDirectionReviewMessage(part.text);
+              if (directionReview) {
+                return <DirectionReviewCard review={directionReview} />;
+              }
+              const qaAnswer = parseGroundedQAAnswerMessage(part.text);
+              if (qaAnswer) {
+                return <GroundedQAAnswerCard answer={qaAnswer} />;
+              }
               const answer = parseGroundedLogicAnswerMessage(part.text);
               if (answer) {
                 return <GroundedLogicAnswerCard answer={answer} />;
@@ -412,6 +426,217 @@ const DatalogConfirmationCard: FC<{
         <p className="datalog-confirmation-error" data-testid="datalog-run-error">
           {error}
         </p>
+      )}
+    </section>
+  );
+};
+
+const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) => {
+  const aui = useAui();
+  const { setHighlightedNodeIds } = usePidGraph();
+  const [state, setState] = useState<"ready" | "submitting" | "done">("ready");
+  const [error, setError] = useState<string | null>(null);
+
+  const witnessIds = Array.from(
+    new Set(review.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids])),
+  );
+
+  const submit = async (decision: "confirm" | "reverse" | "unknown") => {
+    if (state !== "ready") return;
+    setState("submitting");
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/review/sessions/${encodeURIComponent(readSessionIdFromRaw(review.raw))}/direction-reviews`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: review.question,
+            decision,
+            reviewKey: review.reviewKey,
+            conversation: review.conversation,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`Direction review failed: ${response.status}`);
+      }
+      const result = (await response.json()) as {
+        message: string;
+        highlightedNodeIds?: string[];
+      };
+      if (result.highlightedNodeIds) {
+        setHighlightedNodeIds(result.highlightedNodeIds);
+      }
+      aui.thread().append({
+        role: "assistant",
+        content: [{ type: "text", text: result.message }],
+      });
+      setState("done");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Direction review failed.");
+      setState("ready");
+    }
+  };
+
+  return (
+    <section
+      className="direction-review-card"
+      data-testid="direction-review-card"
+      aria-label="Flow direction review"
+    >
+      <header>
+        <p className="pid-eyebrow">Flow direction review</p>
+        <span data-testid="direction-basis">{review.directionBasis}</span>
+      </header>
+      <p data-testid="direction-proposed">
+        Proposed direction: <strong>{review.proposedDirection}</strong>
+      </p>
+      <p data-testid="direction-basis-explanation">{review.basisExplanation}</p>
+
+      {witnessIds.length > 0 && (
+        <button
+          type="button"
+          data-testid="direction-witness-chip"
+          className="qa-evidence-chip"
+          onClick={() => setHighlightedNodeIds(witnessIds)}
+          title="Highlight the structural witness"
+        >
+          Show witness
+        </button>
+      )}
+
+      <div className="direction-review-actions">
+        <button
+          type="button"
+          data-testid="direction-confirm"
+          disabled={state !== "ready"}
+          onClick={() => submit("confirm")}
+        >
+          Confirm
+        </button>
+        <button
+          type="button"
+          data-testid="direction-reverse"
+          disabled={state !== "ready"}
+          onClick={() => submit("reverse")}
+        >
+          Reverse
+        </button>
+        <button
+          type="button"
+          data-testid="direction-unknown"
+          disabled={state !== "ready"}
+          onClick={() => submit("unknown")}
+        >
+          Unknown
+        </button>
+      </div>
+      {error && (
+        <p className="direction-review-error" data-testid="direction-review-error">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+};
+
+function readSessionIdFromRaw(raw: Record<string, unknown>) {
+  return typeof raw.session_id === "string" ? raw.session_id : "local-session";
+}
+
+const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer }) => {
+  const { setHighlightedNodeIds } = usePidGraph();
+
+  const handleEvidenceChipClick = (path: EvidencePath) => {
+    const ids = Array.from(new Set([...path.node_ids, ...path.edge_ids]));
+    setHighlightedNodeIds(ids.length > 0 ? ids : [path.id].filter(Boolean));
+  };
+
+  const handleAllEvidenceClick = () => {
+    const { source_scope_ids, matched_object_ids, paths } = answer.evidenceHighlight;
+    const pathIds = paths.flatMap((p) => [...p.node_ids, ...p.edge_ids]);
+    const ids = Array.from(new Set([...source_scope_ids, ...matched_object_ids, ...pathIds]));
+    setHighlightedNodeIds(ids);
+  };
+
+  return (
+    <section
+      className="grounded-qa-answer-card"
+      data-testid="grounded-qa-answer"
+      aria-label="Grounded topology answer"
+    >
+      <p className="pid-eyebrow">Topology answer</p>
+      <p data-testid="qa-answer-text">{answer.answerText}</p>
+
+      {answer.interpretedObjectIds.length > 0 && (
+        <p className="qa-interpretation" data-testid="qa-interpretation">
+          Interpreted as{" "}
+          {answer.interpretedObjectIds.length === 1
+            ? "object"
+            : `${answer.interpretedObjectIds.length} objects`}
+          :{" "}
+          {answer.interpretedObjectIds.map((id) => (
+            <button
+              key={id}
+              type="button"
+              data-testid="qa-interpretation-chip"
+              data-evidence-id={id}
+              className="qa-evidence-chip qa-evidence-chip--interpretation"
+              onClick={() => setHighlightedNodeIds([id])}
+              title={`Highlight ${id}`}
+            >
+              {id}
+            </button>
+          ))}
+        </p>
+      )}
+
+      {answer.evidenceHighlight.paths.length > 0 && (
+        <div className="qa-evidence-chips" data-testid="qa-evidence-chips">
+          {answer.evidenceHighlight.paths.map((path) => (
+            <button
+              key={path.id}
+              type="button"
+              data-testid="qa-evidence-chip"
+              data-evidence-id={path.id}
+              className="qa-evidence-chip"
+              onClick={() => handleEvidenceChipClick(path)}
+              title={`Show witness path for ${path.id}`}
+            >
+              {path.id}
+            </button>
+          ))}
+          {answer.evidenceHighlight.paths.length > 1 && (
+            <button
+              type="button"
+              data-testid="qa-evidence-highlight-all"
+              className="qa-evidence-chip qa-evidence-chip--all"
+              onClick={handleAllEvidenceClick}
+            >
+              Highlight all
+            </button>
+          )}
+        </div>
+      )}
+
+      {answer.evidenceHighlight.paths.length === 0 && answer.evidenceReferences.length > 0 && (
+        <div className="qa-evidence-chips" data-testid="qa-evidence-chips">
+          {answer.evidenceReferences.map((ref) => (
+            <button
+              key={ref}
+              type="button"
+              data-testid="qa-evidence-chip"
+              data-evidence-id={ref}
+              className="qa-evidence-chip qa-evidence-chip--generic"
+              onClick={() => setHighlightedNodeIds([ref])}
+              title={`Inspect evidence: ${ref}`}
+            >
+              {ref}
+            </button>
+          ))}
+        </div>
       )}
     </section>
   );
