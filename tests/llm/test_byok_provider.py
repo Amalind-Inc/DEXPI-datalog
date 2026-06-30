@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import json
 import unittest
 from unittest.mock import MagicMock, patch
@@ -8,6 +9,7 @@ from pydexpi_datalog.llm.byok_provider import (
     build_system_prompt,
     create_byok_provider,
 )
+from pydexpi_datalog.llm.model_access import ModelCapabilityError
 
 
 def _mock_response(content: str) -> MagicMock:
@@ -182,6 +184,38 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
         )
         self.assertIn("P-4713", system_content)
         self.assertNotIn("TOPOLOGY NODES", system_content)
+
+    def test_native_tool_runtime_rejection_is_normalized(self) -> None:
+        for provider_name, model in [
+            ("openrouter", "anthropic/claude-sonnet-4"),
+            ("anthropic", "claude-sonnet-4"),
+            ("gemini", "gemini-2.5-pro"),
+        ]:
+            with self.subTest(provider=provider_name):
+                provider = create_byok_provider(
+                    provider=provider_name,
+                    model=model,
+                    credential="sk-test-key",
+                )
+                response = MagicMock()
+                response.text = "This model does not support tool_calls."
+                response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                    "400 Bad Request",
+                    request=MagicMock(),
+                    response=response,
+                )
+
+                with patch("httpx.post", return_value=response):
+                    with self.assertRaises(ModelCapabilityError) as caught:
+                        provider.complete(
+                            request="What is connected?", context=_DATALOG_CONTEXT
+                        )
+
+                self.assertEqual(
+                    caught.exception.code, "model_access.native_tools_rejected"
+                )
+                self.assertEqual(caught.exception.provider, provider_name)
+                self.assertIn("tool_calls", str(caught.exception))
 
 
 class AnthropicProviderTests(unittest.TestCase):

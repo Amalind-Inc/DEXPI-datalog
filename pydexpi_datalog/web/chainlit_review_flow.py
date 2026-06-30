@@ -12,7 +12,7 @@ from ..llm.logic_requests import (
     route_logic_request,
     route_without_model_access,
 )
-from ..llm.model_access import ModelProvider, supported_byok_provider
+from ..llm.model_access import ModelProvider, require_native_tool_capable_model
 from ..qa.flow_direction import (
     classify_path_direction_basis,
     detect_directed_intent,
@@ -702,7 +702,7 @@ class ChainlitReviewFlow:
         credential: str,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
-        supported_byok_provider(provider)
+        require_native_tool_capable_model(provider=provider, model=model)
         self._credentials_by_session[session_id] = credential
         self._provider_settings_by_session[session_id] = {
             "provider": provider,

@@ -118,7 +118,7 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
       fetcher: fetcher as typeof fetch,
       providerSettings: {
         provider: "openrouter",
-        model: "openrouter/owl-alpha",
+        model: "anthropic/claude-sonnet-4",
         credential: "sk-hidden",
       },
     },
@@ -136,7 +136,7 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
   assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
   assert.deepEqual(calls[1].body, {
     provider: "openrouter",
-    model: "openrouter/owl-alpha",
+    model: "anthropic/claude-sonnet-4",
     credential: "sk-hidden",
   });
   assert.deepEqual(calls[3].body, { question: "What downstream process objects are reachable?" });

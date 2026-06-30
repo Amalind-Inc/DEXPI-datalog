@@ -673,7 +673,7 @@ function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   if (openrouterKey) {
     return {
       provider: "openrouter",
-      model: readEnvValue("OPENROUTER_MODEL") ?? "openrouter/owl-alpha",
+      model: readEnvValue("OPENROUTER_MODEL") ?? "anthropic/claude-sonnet-4",
       credential: openrouterKey,
     };
   }

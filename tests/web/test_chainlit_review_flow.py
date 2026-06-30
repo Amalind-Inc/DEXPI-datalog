@@ -565,7 +565,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     flow.configure_provider_settings(
                         session_id=session_id,
                         provider="openrouter",
-                        model="openrouter/owl-alpha",
+                        model="anthropic/claude-sonnet-4",
                         credential="sk-sentinel-secret-should-never-leak",
                     )
 
@@ -678,7 +678,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 flow.configure_provider_settings(
                     session_id=session_id,
                     provider="openrouter",
-                    model="openrouter/owl-alpha",
+                    model="anthropic/claude-sonnet-4",
                     credential="sk-sentinel-secret-should-never-leak",
                 )
             improvement = flow.improve_logic_request(
@@ -719,7 +719,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="unresolved-answer-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential="sk-sentinel-secret-should-never-leak",
             )
             improvement = flow.improve_logic_request(
@@ -772,7 +772,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="highlight-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential="sk-sentinel-secret-should-never-leak",
             )
             flow.edit_visible_source_scope(
@@ -1031,7 +1031,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="explicit-export-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential=sentinel,
             )
             flow.edit_visible_source_scope(
@@ -1084,7 +1084,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 manifest["provider"],
                 {
                     "provider": "openrouter",
-                    "model": "openrouter/owl-alpha",
+                    "model": "anthropic/claude-sonnet-4",
                     "configured": True,
                 },
             )
