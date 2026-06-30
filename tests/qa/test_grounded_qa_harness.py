@@ -60,6 +60,64 @@ def make_tools(topology: dict = MINIMAL_TOPOLOGY) -> TopologyTools:
     return TopologyTools(topology_view=topology, session_id="test-session")
 
 
+def make_graph_facts_backed_tools() -> TopologyTools:
+    topology = {
+        **MINIMAL_TOPOLOGY,
+        "nodes": [
+            {**node, "source_graph_node_id": node["id"]}
+            for node in MINIMAL_TOPOLOGY["nodes"]
+        ],
+        "edges": [
+            {
+                **edge,
+                "source_graph_edge": {
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "edge_key": edge["id"],
+                },
+            }
+            for edge in MINIMAL_TOPOLOGY["edges"]
+        ],
+    }
+    graph_facts = {
+        "fixture_id": "minimal-topology-tools",
+        "source_path": "minimal.xml",
+        "graph": {"node_count": 4, "edge_count": 3},
+        "facts": {
+            "nodes": [
+                {
+                    "fact_type": "node",
+                    "node_id": node["id"],
+                    "attributes": {
+                        "label": node["label"],
+                        "tagName": node.get("tag_name", ""),
+                    },
+                }
+                for node in MINIMAL_TOPOLOGY["nodes"]
+            ],
+            "edges": [
+                {
+                    "fact_type": "edge",
+                    "source_id": edge["source_id"],
+                    "target_id": edge["target_id"],
+                    "edge_key": edge["id"],
+                    "attributes": {
+                        "label": "reference",
+                        "attr_name": "connections",
+                    },
+                }
+                for edge in MINIMAL_TOPOLOGY["edges"]
+            ],
+        },
+        "provenance": {"extractor": "test"},
+    }
+    return TopologyTools(
+        topology_view=topology,
+        session_id="test-session",
+        graph_facts=graph_facts,
+    )
+
+
 # ---------------------------------------------------------------------------
 # TopologyTools.find_equipment contracts
 # ---------------------------------------------------------------------------
@@ -102,6 +160,27 @@ def test_find_equipment_no_match_returns_empty():
     result = tools.execute("find_equipment", {"pattern": "DOES-NOT-EXIST"})
     assert result["count"] == 0
     assert result["matches"] == []
+
+
+def test_get_reachable_uses_graph_facts_for_raw_structural_witness():
+    """
+    Behavior: the model-facing topology tool still returns topology IDs for UI
+    highlighting, while its witness is backed by canonical graph-fact node and
+    edge identities.
+    """
+    tools = make_graph_facts_backed_tools()
+    result = tools.execute("get_reachable_equipment", {"equipment_id": PUMP_ID})
+
+    valve_entry = next(r for r in result["reachable"] if r["evidence_id"] == VALVE_ID)
+    witness = valve_entry["witness"]
+
+    assert witness["node_ids"] == [PUMP_ID, NOZZLE_ID, SEGMENT_ID, VALVE_ID]
+    assert witness["raw_node_ids"] == [PUMP_ID, NOZZLE_ID, SEGMENT_ID, VALVE_ID]
+    assert [edge["edge_key"] for edge in witness["raw_edges"]] == [
+        EDGE_PUMP_NOZZLE,
+        EDGE_NOZZLE_SEGMENT,
+        EDGE_SEGMENT_VALVE,
+    ]
 
 
 def test_find_equipment_match_includes_evidence_id_and_label():

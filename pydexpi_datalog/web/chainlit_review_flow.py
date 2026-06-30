@@ -231,7 +231,11 @@ class ChainlitReviewFlow:
             {
                 "id": node["id"],
                 "kind": "node",
-                "label": node["label"],
+                # Engineer-facing identifier (tag/line/qualified nozzle) when known.
+                "label": node.get("display_name") or node.get("label"),
+                "node_class": node.get("class_name") or node.get("label"),
+                "category": node.get("category", "other"),
+                "description": node.get("description", ""),
                 "selectable": True,
             }
             for node in topology["nodes"]
@@ -248,6 +252,8 @@ class ChainlitReviewFlow:
         return {
             "session_id": session_id,
             "graph_objects": graph_objects,
+            # Compressed P&ID-like view (equipment units + collapsed lines).
+            "pid_view": topology.get("pid_view", {"units": [], "lines": [], "hidden_topology_ids": []}),
             "visible_source_scope": self._visible_source_scope(session_id),
             "evidence_highlight": self._evidence_highlight(session_id),
         }
@@ -921,7 +927,15 @@ class ChainlitReviewFlow:
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None,
     ) -> dict[str, object]:
-        tools = TopologyTools(topology_view=topology, session_id=session_id)
+        graph_facts_path = Path(
+            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        )
+        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
+        tools = TopologyTools(
+            topology_view=topology,
+            session_id=session_id,
+            graph_facts=graph_facts,
+        )
         prior_turns = [
             ConversationTurn(
                 question=str(turn.get("question", "")),
