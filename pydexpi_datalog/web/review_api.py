@@ -258,6 +258,24 @@ def create_review_api_app(
             )
         )
 
+    @app.post("/api/review/sessions/{session_id}/temporary-datalog-reviews")
+    def submit_temporary_datalog_review(
+        session_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        question = _required_string(body, "question")
+        decision = _required_string(body, "decision")
+        proposal_result = body.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            raise _bad_request("request body must include a proposal_result object")
+        return _call_ready(
+            lambda: flow.submit_temporary_datalog_review(
+                session_id=session_id,
+                question=question,
+                decision=decision,
+                proposal_result=proposal_result,
+            )
+        )
+
     @app.post("/api/review/sessions/{session_id}/exports")
     def export_session(session_id: str) -> dict[str, object]:
         export_dir = (

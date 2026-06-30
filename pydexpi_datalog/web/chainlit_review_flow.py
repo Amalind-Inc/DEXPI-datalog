@@ -821,6 +821,13 @@ class ChainlitReviewFlow:
             qa_provider=qa_provider,
             conversation=conversation,
         )
+        datalog_confirmation = self._temporary_datalog_confirmation_payload(
+            session_id=session_id,
+            question=question,
+            answer=answer,
+        )
+        if datalog_confirmation is not None:
+            return datalog_confirmation
 
         directed = detect_directed_intent(question)
         primary = self._primary_witness_path(answer["valid_paths"])
@@ -921,6 +928,116 @@ class ChainlitReviewFlow:
             qa_provider=qa_provider,
             conversation=conversation,
         )
+
+    def submit_temporary_datalog_review(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        decision: str,
+        proposal_result: dict[str, object],
+    ) -> dict[str, object]:
+        topology = self._topology_for_session(session_id)
+        if decision == "cancel":
+            return {
+                "status": "canceled",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": [],
+            }
+        if decision != "confirm":
+            raise ValueError("temporary Datalog decision must be confirm or cancel")
+
+        graph_facts_path = Path(
+            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        )
+        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
+        tools = TopologyTools(
+            topology_view=topology,
+            session_id=session_id,
+            graph_facts=graph_facts,
+        )
+        execution = tools.execute_confirmed_temporary_datalog(proposal_result)
+        if execution.get("status") != "answered":
+            return {
+                "status": "execution_failed",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": list(execution.get("diagnostics", [])),
+            }
+        evidence = execution.get("evidence", {})
+        items = evidence.get("items", []) if isinstance(evidence, dict) else []
+        matched_ids = [
+            str(item.get("id"))
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
+        evidence_highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=[],
+            matched_object_ids=matched_ids,
+            paths=[],
+        )
+        self._evidence_highlight_by_session[session_id] = evidence_highlight
+        summary = execution.get("summary", {})
+        return {
+            "status": "answered",
+            "session_id": session_id,
+            "question": question,
+            "answer_text": str(summary.get("text", "Temporary Datalog executed."))
+            if isinstance(summary, dict)
+            else "Temporary Datalog executed.",
+            "evidence_references": matched_ids,
+            "rejected_references": [],
+            "interpreted_object_ids": [],
+            "evidence": evidence,
+            "evidence_highlight": evidence_highlight,
+            "tool_call_trace": [],
+            "diagnostics": [],
+        }
+
+    @staticmethod
+    def _temporary_datalog_confirmation_payload(
+        *,
+        session_id: str,
+        question: str,
+        answer: dict[str, object],
+    ) -> dict[str, object] | None:
+        result = answer["result"]
+        for trace_entry in result.tool_call_trace:
+            if trace_entry.get("tool_name") != "propose_temporary_datalog":
+                continue
+            proposal_result = trace_entry.get("tool_result")
+            if not isinstance(proposal_result, dict):
+                continue
+            proposal = proposal_result.get("proposal")
+            validation = proposal_result.get("validation")
+            confirmation = proposal_result.get("confirmation")
+            if not isinstance(proposal, dict):
+                continue
+            return {
+                "status": "needs_datalog_confirmation",
+                "session_id": session_id,
+                "question": question,
+                "datalog_confirmation": {
+                    "review_status": "pending",
+                    "allowed_actions": ["run", "cancel"],
+                    "plain_language_meaning": str(
+                        proposal.get("formal_restatement", question)
+                    ),
+                    "generated_datalog": str(proposal.get("generated_datalog", "")),
+                    "proposal_result": proposal_result,
+                    "proposal": proposal,
+                    "validation": validation if isinstance(validation, dict) else {},
+                    "confirmation": confirmation
+                    if isinstance(confirmation, dict)
+                    else {},
+                },
+                "diagnostics": [],
+            }
+        return None
 
     def _compute_qa_answer(
         self,

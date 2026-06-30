@@ -5,9 +5,11 @@ import {
   executeConfirmedDatalog,
   prepareReviewSession,
   submitDirectionReview,
+  submitTemporaryDatalogReview,
 } from "./review-backend.ts";
 import { QA_ANSWER_PREFIX, parseGroundedQAAnswerMessage } from "./grounded-qa-answer.ts";
 import { DIRECTION_REVIEW_PREFIX, parseDirectionReviewMessage } from "./direction-review.ts";
+import { DATALOG_CONFIRMATION_PREFIX, parseDatalogConfirmationMessage } from "./datalog-confirmation.ts";
 
 test("prepareReviewSession adapts backend topology_view into graph state", async () => {
   const calls: string[] = [];
@@ -342,6 +344,123 @@ test("submitDirectionReview resumes the original question and returns a grounded
   assert.match(result.message, new RegExp("^" + QA_ANSWER_PREFIX));
   const parsed = parseGroundedQAAnswerMessage(result.message);
   assert.match(parsed?.answerText ?? "", /Confirmed downstream flow direction/);
+});
+
+test("answerChatWithReviewBackend returns confirmation for rule-shaped Datalog prompts", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ method: init?.method ?? "GET", path: parsedUrl.pathname, body });
+    if (parsedUrl.pathname.endsWith("/logic-requests/improve")) {
+      return Response.json({
+        status: "refinement_ready",
+        route: { kind: "topology_logic" },
+        refinement: {
+          refined_prompt: "Must every connected object satisfy the temporary topology rule?",
+          scope: { kind: "whole_pid" },
+          source_scope_ids: [],
+        },
+      });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "needs_datalog_confirmation",
+        session_id: "session-1",
+        question: "Must every connected object satisfy the temporary topology rule?",
+        datalog_confirmation: {
+          review_status: "pending",
+          allowed_actions: ["run", "cancel"],
+          plain_language_meaning: "Return objects that satisfy the temporary topology rule.",
+          generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+          validation: { status: "safe_to_confirm" },
+          proposal_result: { executed: false },
+        },
+      });
+    }
+    return new Response("unexpected", { status: 500 });
+  };
+
+  const result = await answerChatWithReviewBackend(
+    {
+      sessionId: "session-1",
+      messages: [
+        {
+          role: "user",
+          content: "Must every connected object satisfy the temporary topology rule?",
+        },
+      ],
+    },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: null,
+    },
+  );
+
+  assert.equal(result.status, "confirmation_ready");
+  assert.match(result.message, new RegExp(`^${DATALOG_CONFIRMATION_PREFIX}`));
+  const confirmation = parseDatalogConfirmationMessage(result.message);
+  assert.ok(confirmation);
+  assert.equal(confirmation.validationStatus, "safe_to_confirm");
+  assert.equal(confirmation.plainLanguageMeaning, "Return objects that satisfy the temporary topology rule.");
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      "POST /api/review/sessions/session-1/logic-requests/improve",
+      "POST /api/review/sessions/session-1/qa-turns",
+    ],
+  );
+});
+
+test("submitTemporaryDatalogReview confirms native proposal through backend endpoint", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    calls.push({
+      method: init?.method ?? "GET",
+      path: parsedUrl.pathname,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({
+      status: "answered",
+      answer_text: "Return objects matching the temporary topology rule.",
+      evidence: {
+        display: "expandable",
+        items: [{ id: "node-p101", label: "P-101" }],
+      },
+      evidence_highlight: {
+        source_scope_ids: [],
+        matched_object_ids: ["node-p101"],
+        paths: [],
+      },
+    });
+  };
+
+  const result = await submitTemporaryDatalogReview(
+    "session-1",
+    {
+      question: "Must every connected object satisfy the temporary topology rule?",
+      decision: "confirm",
+      proposalResult: { proposal: { proposal_id: "abc" } },
+    },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+  );
+
+  assert.deepEqual(calls, [
+    {
+      method: "POST",
+      path: "/api/review/sessions/session-1/temporary-datalog-reviews",
+      body: {
+        question: "Must every connected object satisfy the temporary topology rule?",
+        decision: "confirm",
+        proposal_result: { proposal: { proposal_id: "abc" } },
+      },
+    },
+  ]);
+  assert.equal(result.status, "answered");
+  assert.match(result.message, /^pydexpi:logic-answer:/);
+  assert.deepEqual(result.highlightedNodeIds, ["node-p101"]);
 });
 
 test("answerChatWithReviewBackend returns an error message when backend is unavailable for Datalog prompts", async () => {

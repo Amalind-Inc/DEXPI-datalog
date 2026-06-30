@@ -45,7 +45,7 @@ export type DirectionReviewResult = {
 };
 
 export type ExecuteConfirmedDatalogResult = {
-  status: "answered";
+  status: "answered" | "canceled";
   message: string;
   highlightedNodeIds: string[];
 };
@@ -285,6 +285,10 @@ async function answerWithGroundedQA(
     return directionReviewResult(question, conversation, result);
   }
 
+  if (result.status === "needs_datalog_confirmation") {
+    return temporaryDatalogConfirmationResult(result);
+  }
+
   const answerText = typeof result.answer_text === "string" ? result.answer_text : "";
   const evidenceReferences = readStringArray(result.evidence_references);
   const interpretedObjectIds = readStringArray(result.interpreted_object_ids);
@@ -327,6 +331,68 @@ function directionReviewResult(
       raw: result,
     }),
     highlightedNodeIds: readEvidenceHighlightIds(review.evidence_highlight),
+  };
+}
+
+export async function submitTemporaryDatalogReview(
+  sessionId: string,
+  params: {
+    question: string;
+    decision: "confirm" | "cancel";
+    proposalResult: Record<string, unknown>;
+  },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<ExecuteConfirmedDatalogResult> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/temporary-datalog-reviews`,
+    body: {
+      question: params.question,
+      decision: params.decision,
+      proposal_result: params.proposalResult,
+    },
+  });
+  if (!result) {
+    throw new BackendExecutionUnavailableError();
+  }
+  if (result.status === "canceled") {
+    return {
+      status: "canceled",
+      message: "Canceled. No Datalog query was executed.",
+      highlightedNodeIds: [],
+    };
+  }
+  if (result.status !== "answered") {
+    throw new GeneratedDatalogExecutionError(readExecutionFailureMessage(result));
+  }
+  const highlightedNodeIds = readEvidenceHighlightIds(result.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedLogicAnswer({
+      summary: readAnswerText(result),
+      rawEvidence: readRawEvidence(result),
+      highlightedNodeIds,
+      raw: result,
+    }),
+    highlightedNodeIds,
+  };
+}
+
+function temporaryDatalogConfirmationResult(result: Record<string, unknown>): ChatResult {
+  const confirmation = result.datalog_confirmation;
+  const confirmationRecord = isRecord(confirmation) ? confirmation : {};
+  return {
+    status: "confirmation_ready",
+    message: serializeDatalogConfirmation({
+      plainLanguageMeaning: readTemporaryDatalogMeaning(confirmationRecord),
+      generatedDatalog: readTemporaryGeneratedDatalog(confirmationRecord),
+      validationStatus: readTemporaryValidationStatus(confirmationRecord),
+      allowedActions: readStringArray(confirmationRecord.allowed_actions),
+      raw: {
+        confirmation_kind: "temporary_datalog",
+        ...result,
+      },
+    }),
+    highlightedNodeIds: [],
   };
 }
 
@@ -586,6 +652,34 @@ function readConfirmationFailureMessage(confirmation: Record<string, unknown>) {
     if (typeof message === "string") return message;
   }
   return "The backend could not prepare a Datalog confirmation for this prompt.";
+}
+
+function readTemporaryDatalogMeaning(confirmation: Record<string, unknown>) {
+  const value = confirmation.plain_language_meaning;
+  if (typeof value === "string") return value;
+  const proposal = confirmation.proposal;
+  if (isRecord(proposal) && typeof proposal.formal_restatement === "string") {
+    return proposal.formal_restatement;
+  }
+  return "Review generated Datalog before execution.";
+}
+
+function readTemporaryGeneratedDatalog(confirmation: Record<string, unknown>) {
+  const value = confirmation.generated_datalog;
+  if (typeof value === "string") return value;
+  const proposal = confirmation.proposal;
+  if (isRecord(proposal) && typeof proposal.generated_datalog === "string") {
+    return proposal.generated_datalog;
+  }
+  return "";
+}
+
+function readTemporaryValidationStatus(confirmation: Record<string, unknown>) {
+  const validation = confirmation.validation;
+  if (isRecord(validation) && typeof validation.status === "string") {
+    return validation.status;
+  }
+  return "pending_safety_validation";
 }
 
 function readExecutionFailureMessage(answer: Record<string, unknown>) {

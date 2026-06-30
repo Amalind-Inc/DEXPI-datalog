@@ -340,6 +340,7 @@ const DatalogConfirmationCard: FC<{
   const [state, setState] = useState<"ready" | "running" | "canceled" | "revise">("ready");
   const [error, setError] = useState<string | null>(null);
   const sessionId = readSessionId(confirmation.raw);
+  const isTemporaryDatalog = confirmation.raw.confirmation_kind === "temporary_datalog";
 
   const run = async () => {
     if (state === "running") return;
@@ -347,11 +348,21 @@ const DatalogConfirmationCard: FC<{
     setError(null);
     try {
       const response = await fetch(
-        `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
+        isTemporaryDatalog
+          ? `/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`
+          : `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirmation: confirmation.raw }),
+          body: JSON.stringify(
+            isTemporaryDatalog
+              ? {
+                  question: confirmation.raw.question,
+                  decision: "confirm",
+                  proposalResult: readTemporaryProposalResult(confirmation.raw),
+                }
+              : { confirmation: confirmation.raw },
+          ),
         },
       );
       if (!response.ok) {
@@ -376,6 +387,29 @@ const DatalogConfirmationCard: FC<{
       setError(caught instanceof Error ? caught.message : "Execution failed.");
       setState("ready");
     }
+  };
+
+  const cancel = async () => {
+    if (state !== "ready") return;
+    if (!isTemporaryDatalog) {
+      setState("canceled");
+      return;
+    }
+    setError(null);
+    try {
+      await fetch(`/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: confirmation.raw.question,
+          decision: "cancel",
+          proposalResult: readTemporaryProposalResult(confirmation.raw),
+        }),
+      });
+    } catch {
+      // A cancel action is still locally final: no query is executed from this card.
+    }
+    setState("canceled");
   };
 
   return (
@@ -408,7 +442,7 @@ const DatalogConfirmationCard: FC<{
         <button type="button" disabled={state !== "ready"} onClick={() => setState("revise")}>
           Revise
         </button>
-        <button type="button" disabled={state !== "ready"} onClick={() => setState("canceled")}>
+        <button type="button" disabled={state !== "ready"} onClick={cancel}>
           Cancel
         </button>
       </div>
@@ -430,6 +464,21 @@ const DatalogConfirmationCard: FC<{
     </section>
   );
 };
+function readTemporaryProposalResult(raw: Record<string, unknown>) {
+  const confirmation = raw.datalog_confirmation;
+  if (
+    typeof confirmation === "object" &&
+    confirmation !== null &&
+    "proposal_result" in confirmation
+  ) {
+    const proposalResult = (confirmation as Record<string, unknown>).proposal_result;
+    if (typeof proposalResult === "object" && proposalResult !== null) {
+      return proposalResult;
+    }
+  }
+  return {};
+}
+
 
 const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) => {
   const aui = useAui();

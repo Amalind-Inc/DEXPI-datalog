@@ -134,3 +134,76 @@ test("reversing an inferred flow direction resumes with the opposite direction",
   await expect(page.getByTestId("grounded-qa-answer")).toHaveCount(2);
   await expect(page.getByTestId("direction-review-card")).toHaveCount(1);
 });
+
+test("temporary Datalog confirmation can be canceled or run from the chat card", async ({
+  page,
+}) => {
+  const confirmationMessage = `pydexpi:datalog-confirmation:${JSON.stringify({
+    plainLanguageMeaning: "Return objects matching the temporary topology rule.",
+    generatedDatalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+    validationStatus: "safe_to_confirm",
+    allowedActions: ["run", "cancel"],
+    raw: {
+      confirmation_kind: "temporary_datalog",
+      session_id: "session-1",
+      question: "Must every connected object satisfy the temporary topology rule?",
+      datalog_confirmation: {
+        proposal_result: {
+          executed: false,
+          proposal: {
+            proposal_id: "proposal-1",
+            generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+            formal_restatement: "Return objects matching the temporary topology rule.",
+          },
+          confirmation: { proposal_id: "proposal-1" },
+        },
+      },
+    },
+  })}`;
+  const logicAnswer = `pydexpi:logic-answer:${JSON.stringify({
+    summary: "Return objects matching the temporary topology rule.",
+    rawEvidence: { items: [{ id: "node-p101", label: "P-101" }] },
+    highlightedNodeIds: ["node-p101"],
+    raw: {},
+  })}`;
+  await page.route("**/api/chat", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ message: confirmationMessage, highlightedNodeIds: [] }),
+    });
+  });
+  await page.route("**/api/review/sessions/*/temporary-datalog-reviews", async (route) => {
+    const body = route.request().postDataJSON() as { decision?: string };
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        body.decision === "cancel"
+          ? {
+              status: "canceled",
+              message: "Canceled. No Datalog query was executed.",
+              highlightedNodeIds: [],
+            }
+          : { status: "answered", message: logicAnswer, highlightedNodeIds: ["node-p101"] },
+      ),
+    });
+  });
+
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
+  await expect(workflow.confirmationCards).toHaveCount(1);
+  await workflow.datalogDetails.locator("summary").click();
+  await expect(workflow.datalogDetails).toContainText("answer(\"node-p101\")");
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByTestId("datalog-cancel-note")).toContainText(
+    "No Datalog query was executed",
+  );
+
+  await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
+  await expect(workflow.confirmationCards).toHaveCount(2);
+  await workflow.confirmationCards.last().getByRole("button", { name: "Run" }).click();
+  await expect(page.getByTestId("evidence-summary")).toContainText(
+    "Return objects matching the temporary topology rule.",
+  );
+});
