@@ -700,15 +700,19 @@ class ChainlitReviewFlow:
         provider: str,
         model: str,
         credential: str,
+        base_url: str | None = None,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
         require_native_tool_capable_model(provider=provider, model=model)
         self._credentials_by_session[session_id] = credential
-        self._provider_settings_by_session[session_id] = {
+        settings: dict[str, object] = {
             "provider": provider,
             "model": model,
-            "configured": bool(credential),
+            "configured": provider == "ollama" or bool(credential),
         }
+        if base_url is not None:
+            settings["base_url"] = base_url
+        self._provider_settings_by_session[session_id] = settings
         return {
             "session_id": session_id,
             **self.provider_settings_state(session_id),

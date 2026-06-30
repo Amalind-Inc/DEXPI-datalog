@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
 from ..qa.grounded_qa_harness import QATurnProvider, ScriptedQATurnProvider
+from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
 
@@ -102,9 +103,15 @@ def create_review_api_app(
             )
         return TopologyAwareFakeModelProvider()
 
-    def _resolve_qa_provider(_session_id: str) -> QATurnProvider:
+    def _resolve_qa_provider(session_id: str) -> QATurnProvider:
         if qa_provider_factory is not None:
             return qa_provider_factory()
+        settings = flow.provider_settings_state(session_id)
+        if settings.get("provider") == "ollama" and settings.get("configured"):
+            return OllamaQATurnProvider(
+                model=str(settings["model"]),
+                base_url=str(settings.get("base_url", "http://localhost:11434/v1")),
+            )
         return ScriptedQATurnProvider()
 
     @app.exception_handler(HTTPException)
@@ -152,7 +159,8 @@ def create_review_api_app(
                 session_id=session_id,
                 provider=_required_string(body, "provider"),
                 model=_required_string(body, "model"),
-                credential=_required_string(body, "credential"),
+                credential=body.get("credential", ""),
+                base_url=body.get("base_url") if isinstance(body.get("base_url"), str) else None,
             )
         )
 

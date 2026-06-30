@@ -73,9 +73,10 @@ type PrepareBody = {
 
 type BackendFetch = typeof fetch;
 type BackendProviderSettings = {
-  provider: "openrouter" | "openai" | "anthropic" | "gemini";
+  provider: "openrouter" | "openai" | "anthropic" | "gemini" | "ollama";
   model: string;
   credential: string;
+  base_url?: string;
 };
 
 export async function prepareReviewSession(
@@ -665,11 +666,20 @@ function inferHighlights(prompt: string, fallbackId: string | undefined) {
 }
 
 function readProviderSettingsFromEnv(): BackendProviderSettings | null {
+  const ollamaModel = readEnvValue("OLLAMA_MODEL");
   const openrouterKey = readEnvValue("OPENROUTER_API_KEY");
   const openaiKey = readEnvValue("OPENAI_API_KEY");
   const anthropicKey = readEnvValue("ANTHROPIC_API_KEY");
   const geminiKey = readEnvValue("GEMINI_API_KEY");
 
+  if (ollamaModel) {
+    return {
+      provider: "ollama",
+      model: ollamaModel,
+      credential: "",
+      base_url: readEnvValue("OLLAMA_BASE_URL") ?? "http://localhost:11434/v1",
+    };
+  }
   if (openrouterKey) {
     return {
       provider: "openrouter",

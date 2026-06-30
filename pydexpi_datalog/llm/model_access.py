@@ -24,6 +24,10 @@ SUPPORTED_BYOK_PROVIDERS = {
         "api_key_env_var": "OPENROUTER_API_KEY",
         "default_model": "anthropic/claude-sonnet-4",
     },
+    "ollama": {
+        "api_key_env_var": "OLLAMA_BASE_URL",
+        "default_model": "ornith:35b",
+    },
 }
 
 NATIVE_TOOL_CAPABLE_MODELS = {
@@ -31,6 +35,7 @@ NATIVE_TOOL_CAPABLE_MODELS = {
     ("anthropic", "claude-sonnet-4"),
     ("gemini", "gemini-2.5-pro"),
     ("openrouter", "anthropic/claude-sonnet-4"),
+    ("ollama", "ornith:35b"),
 }
 
 
