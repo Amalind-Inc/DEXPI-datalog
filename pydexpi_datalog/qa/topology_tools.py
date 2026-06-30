@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_ALLOWED_READ_ONLY,
@@ -184,6 +185,42 @@ class TopologyTools:
                     "message": "Temporary Datalog cannot include files, declare inputs, or reference filesystem paths.",
                 }
             )
+        syntax_invalid = False
+        for line in stripped.splitlines():
+            candidate = line.strip()
+            if not candidate or candidate.startswith("//"):
+                continue
+            if not candidate.startswith(".") and not candidate.endswith("."):
+                syntax_invalid = True
+            if candidate.count('"') % 2 != 0:
+                syntax_invalid = True
+        if syntax_invalid:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.syntax_invalid",
+                    "message": "Temporary Datalog must use complete line-oriented Souffle declarations, outputs, facts, or rules.",
+                }
+            )
+        predicate_names = []
+        for line in stripped.splitlines():
+            candidate = line.strip()
+            if not candidate or candidate.startswith("."):
+                continue
+            predicate_names.extend(
+                re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", candidate)
+            )
+        approved_predicates = {"answer", "reachable"}
+        unapproved_predicates = sorted(
+            {predicate for predicate in predicate_names if predicate not in approved_predicates}
+        )
+        if unapproved_predicates:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.predicate_not_approved",
+                    "message": "Temporary Datalog used unapproved predicate(s): "
+                    + ", ".join(unapproved_predicates),
+                }
+            )
         output_lines = [
             line.strip() for line in stripped.splitlines() if line.strip().startswith(".output")
         ]
@@ -201,12 +238,12 @@ class TopologyTools:
                     "message": "Temporary Datalog must declare answer(x:symbol).",
                 }
             )
-        answer_facts = [
+        literal_answer_facts = [
             line.strip()
             for line in stripped.splitlines()
-            if line.strip().startswith("answer(")
+            if line.strip().startswith("answer(") and ":-" not in line
         ]
-        if len(answer_facts) > 100:
+        if len(literal_answer_facts) > 100:
             diagnostics.append(
                 {
                     "code": "temporary_datalog.row_limit",
@@ -216,7 +253,7 @@ class TopologyTools:
         known_ids = self.known_evidence_ids()
         unresolved = [
             fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
-            for fact in answer_facts
+            for fact in literal_answer_facts
             if fact.endswith(").")
             and fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
             not in known_ids
@@ -240,6 +277,37 @@ class TopologyTools:
             "diagnostics": [],
             "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
         }
+
+    def _temporary_datalog_answer_ids(self, generated_datalog: str) -> list[str]:
+        matched_ids: list[str] = []
+        for line in generated_datalog.splitlines():
+            candidate = line.strip()
+            if (
+                candidate.startswith("answer(")
+                and candidate.endswith(").")
+                and ":-" not in candidate
+            ):
+                topology_id = (
+                    candidate.removeprefix("answer(")
+                    .removesuffix(").")
+                    .strip()
+                    .strip('"')
+                )
+                if topology_id in self._evidence_map and topology_id not in matched_ids:
+                    matched_ids.append(topology_id)
+                continue
+            reachable_match = re.fullmatch(
+                r'answer\(x\)\s*:-\s*reachable\("([^"]+)",\s*x\)\.',
+                candidate,
+            )
+            if reachable_match:
+                result = self._interpretation.reachable_from(
+                    reachable_match.group(1), max_hops=6
+                )
+                for reachable in result.reachable:
+                    if reachable.topology_id not in matched_ids:
+                        matched_ids.append(reachable.topology_id)
+        return matched_ids
 
     def execute_confirmed_temporary_datalog(
         self, proposal_result: dict[str, object]
@@ -298,11 +366,7 @@ class TopologyTools:
                 "confirmation": confirmation,
                 "diagnostics": validation["diagnostics"],
             }
-        matched_ids = [
-            fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
-            for fact in generated_datalog.splitlines()
-            if fact.strip().startswith("answer(") and fact.strip().endswith(").")
-        ]
+        matched_ids = self._temporary_datalog_answer_ids(generated_datalog)
         evidence_items = [
             {
                 "id": topology_id,
