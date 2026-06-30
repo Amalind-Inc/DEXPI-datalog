@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from pydexpi_datalog.qa.capability_manifest import (
+    PERMISSION_ALLOWED_READ_ONLY,
+    PERMISSION_CONFIRMATION_REQUIRED,
+    PERMISSION_DENIED,
+    default_grounded_qa_manifest,
+)
+
 from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 
@@ -22,6 +29,7 @@ class TopologyTools:
         self._nodes: list[dict[str, object]] = list(topology_view.get("nodes", []))  # type: ignore[arg-type]
         self._edges: list[dict[str, object]] = list(topology_view.get("edges", []))  # type: ignore[arg-type]
         self._evidence_map: dict[str, object] = dict(topology_view.get("evidence_map", {}))  # type: ignore[arg-type]
+        self._capability_manifest = default_grounded_qa_manifest()
         self._uses_topology_adapter = graph_facts is None
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
         self._interpretation = TopologyInterpretation(
@@ -33,61 +41,40 @@ class TopologyTools:
 
 
     def tool_definitions(self) -> list[dict[str, object]]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "find_equipment",
-                    "description": (
-                        "Search for objects by tag, line number, label, or class "
-                        "(e.g. 'P-4713', '47132', 'pump', 'nozzle'). Use an empty "
-                        "pattern to list everything. Results are ordered with "
-                        "process equipment, nozzles, and lines before internal "
-                        "connection nodes, and each carries label/category/description."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": (
-                                    "Search term matched against tag name or label. "
-                                    "Empty string returns all equipment."
-                                ),
-                            }
-                        },
-                        "required": ["pattern"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_reachable_equipment",
-                    "description": (
-                        "Find topology objects reachable from a given equipment via graph edges, "
-                        "with the complete ordered structural path witness for each result."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "equipment_id": {
-                                "type": "string",
-                                "description": "The evidence_id of the source equipment node.",
-                            },
-                            "max_hops": {
-                                "type": "integer",
-                                "description": "Maximum traversal depth (default 6).",
-                                "default": 6,
-                            },
-                        },
-                        "required": ["equipment_id"],
-                    },
-                },
-            },
-        ]
+        return self._capability_manifest.provider_tool_definitions()
 
     def execute(self, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
+        capability = self._capability_manifest.get(tool_name)
+        if capability is None:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.unknown",
+                message=f"unknown tool: {tool_name}",
+            )
+        if capability.permission_class == PERMISSION_DENIED:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.denied",
+                message=capability.denied_reason or f"denied tool: {tool_name}",
+            )
+        if capability.permission_class == PERMISSION_CONFIRMATION_REQUIRED:
+            return {
+                "status": "confirmation_required",
+                "code": "tool.confirmation_required",
+                "tool_name": tool_name,
+                "message": (
+                    f"{tool_name} requires explicit user confirmation before execution."
+                ),
+                "permission_class": capability.permission_class,
+                "matches": [],
+                "reachable": [],
+            }
+        if capability.permission_class != PERMISSION_ALLOWED_READ_ONLY:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.unsupported_permission",
+                message=f"unsupported permission class: {capability.permission_class}",
+            )
         if tool_name == "find_equipment":
             return self._find_equipment(str(tool_input.get("pattern", "")))
         if tool_name == "get_reachable_equipment":
@@ -95,7 +82,24 @@ class TopologyTools:
                 str(tool_input.get("equipment_id", "")),
                 int(tool_input.get("max_hops", 6)),
             )
-        return {"error": f"unknown tool: {tool_name}", "reachable": [], "matches": []}
+        return self._tool_rejection(
+            tool_name=tool_name,
+            code="tool.unimplemented",
+            message=f"no adapter registered for tool: {tool_name}",
+        )
+
+    @staticmethod
+    def _tool_rejection(
+        *, tool_name: str, code: str, message: str
+    ) -> dict[str, object]:
+        return {
+            "status": "rejected",
+            "code": code,
+            "tool_name": tool_name,
+            "message": message,
+            "matches": [],
+            "reachable": [],
+        }
 
     def known_evidence_ids(self) -> set[str]:
         return set(self._evidence_map.keys())

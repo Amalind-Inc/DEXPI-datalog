@@ -395,8 +395,9 @@ def test_harness_raises_on_unknown_tool_name_error():
         provider=UnknownToolThenAnswerProvider(),
     )
     assert result.answer_text == "done"
-    # The unknown tool call should appear in the trace
-    assert any(t["tool_name"] == "nonexistent_tool" for t in result.tool_call_trace)
+    rejected = next(t for t in result.tool_call_trace if t["tool_name"] == "nonexistent_tool")
+    assert rejected["tool_result"]["status"] == "rejected"
+    assert rejected["tool_result"]["code"] == "tool.unknown"
 
 
 # ---------------------------------------------------------------------------
