@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_ALLOWED_READ_ONLY,
     PERMISSION_CONFIRMATION_REQUIRED,
@@ -58,6 +60,8 @@ class TopologyTools:
                 message=capability.denied_reason or f"denied tool: {tool_name}",
             )
         if capability.permission_class == PERMISSION_CONFIRMATION_REQUIRED:
+            if tool_name == "propose_temporary_datalog":
+                return self._propose_temporary_datalog(tool_input)
             return {
                 "status": "confirmation_required",
                 "code": "tool.confirmation_required",
@@ -99,6 +103,228 @@ class TopologyTools:
             "message": message,
             "matches": [],
             "reachable": [],
+        }
+
+    def _propose_temporary_datalog(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        request = str(tool_input.get("request", "")).strip()
+        generated_datalog = str(tool_input.get("generated_datalog", ""))
+        formal_restatement = str(tool_input.get("formal_restatement", "")).strip()
+        resolved_identity_ids = [
+            identity
+            for identity in tool_input.get("resolved_identity_ids", [])
+            if isinstance(identity, str)
+        ]
+        validation = self._validate_temporary_datalog(
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        proposal_id = self._temporary_datalog_proposal_id(
+            request=request,
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        return {
+            "status": "confirmation_required",
+            "code": "tool.confirmation_required",
+            "tool_name": "propose_temporary_datalog",
+            "executed": False,
+            "proposal": {
+                "proposal_id": proposal_id,
+                "request": request,
+                "generated_datalog": generated_datalog,
+                "formal_restatement": formal_restatement,
+                "resolved_identity_ids": resolved_identity_ids,
+            },
+            "validation": validation,
+            "confirmation": {
+                "required": True,
+                "grant": "execute_temporary_datalog_pair",
+                "proposal_id": proposal_id,
+            },
+            "matches": [],
+            "reachable": [],
+        }
+
+    @staticmethod
+    def _temporary_datalog_proposal_id(
+        *, request: str, generated_datalog: str, formal_restatement: str
+    ) -> str:
+        return hashlib.sha256(
+            (request + "\n" + generated_datalog + "\n" + formal_restatement).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:16]
+
+    def _validate_temporary_datalog(
+        self, *, generated_datalog: str, formal_restatement: str
+    ) -> dict[str, object]:
+        diagnostics = []
+        stripped = generated_datalog.strip()
+        if not stripped or not formal_restatement:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.missing_pair",
+                    "message": "Temporary Datalog proposals require generated_datalog and formal_restatement.",
+                }
+            )
+        if len(stripped) > 4_000:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.size_limit",
+                    "message": "Temporary Datalog proposal exceeds the 4000 character size limit.",
+                }
+            )
+        lowered = stripped.lower()
+        if any(token in lowered for token in (".include", ".input", "file://", "../")):
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.filesystem_forbidden",
+                    "message": "Temporary Datalog cannot include files, declare inputs, or reference filesystem paths.",
+                }
+            )
+        output_lines = [
+            line.strip() for line in stripped.splitlines() if line.strip().startswith(".output")
+        ]
+        if output_lines != [".output answer"]:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.output_shape",
+                    "message": "Temporary Datalog must output exactly answer(x:symbol).",
+                }
+            )
+        if ".decl answer(x:symbol)" not in stripped:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.answer_decl_missing",
+                    "message": "Temporary Datalog must declare answer(x:symbol).",
+                }
+            )
+        answer_facts = [
+            line.strip()
+            for line in stripped.splitlines()
+            if line.strip().startswith("answer(")
+        ]
+        if len(answer_facts) > 100:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.row_limit",
+                    "message": "Temporary Datalog answer facts exceed the 100 row limit.",
+                }
+            )
+        known_ids = self.known_evidence_ids()
+        unresolved = [
+            fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
+            for fact in answer_facts
+            if fact.endswith(").")
+            and fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
+            not in known_ids
+        ]
+        if unresolved:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.unresolved_identity",
+                    "message": "Temporary Datalog answered unknown evidence IDs: "
+                    + ", ".join(unresolved),
+                }
+            )
+        if diagnostics:
+            return {
+                "status": "rejected",
+                "diagnostics": diagnostics,
+                "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
+            }
+        return {
+            "status": "safe_to_confirm",
+            "diagnostics": [],
+            "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
+        }
+
+    def execute_confirmed_temporary_datalog(
+        self, proposal_result: dict[str, object]
+    ) -> dict[str, object]:
+        proposal = proposal_result.get("proposal")
+        confirmation = proposal_result.get("confirmation")
+        validation = proposal_result.get("validation")
+        if not isinstance(proposal, dict) or not isinstance(confirmation, dict):
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.confirmation_missing",
+                        "message": "Temporary Datalog execution requires the exact confirmed proposal pair.",
+                    }
+                ],
+            }
+        if not isinstance(validation, dict) or validation.get("status") != "safe_to_confirm":
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": list(validation.get("diagnostics", []))
+                if isinstance(validation, dict)
+                else [],
+            }
+        request = str(proposal.get("request", ""))
+        generated_datalog = str(proposal.get("generated_datalog", ""))
+        formal_restatement = str(proposal.get("formal_restatement", ""))
+        expected_proposal_id = self._temporary_datalog_proposal_id(
+            request=request,
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        if confirmation.get("proposal_id") != expected_proposal_id:
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.confirmation_mismatch",
+                        "message": "Temporary Datalog execution requires the exact confirmed query/restatement pair.",
+                    }
+                ],
+            }
+        validation = self._validate_temporary_datalog(
+            generated_datalog=generated_datalog,
+            formal_restatement=str(proposal.get("formal_restatement", "")),
+        )
+        if validation["status"] != "safe_to_confirm":
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": validation["diagnostics"],
+            }
+        matched_ids = [
+            fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
+            for fact in generated_datalog.splitlines()
+            if fact.strip().startswith("answer(") and fact.strip().endswith(").")
+        ]
+        evidence_items = [
+            {
+                "id": topology_id,
+                "label": self._node_label(topology_id),
+                "source": "temporary_datalog",
+                "topology_evidence": self._evidence_map[topology_id],
+            }
+            for topology_id in matched_ids
+            if topology_id in self._evidence_map
+        ]
+        return {
+            "status": "answered",
+            "executed": True,
+            "confirmation": confirmation,
+            "summary": {
+                "text": str(proposal.get("formal_restatement", "")),
+            },
+            "evidence": {
+                "display": "expandable",
+                "items": evidence_items,
+            },
+            "diagnostics": [],
         }
 
     def known_evidence_ids(self) -> set[str]:

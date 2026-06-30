@@ -187,13 +187,21 @@ def default_grounded_qa_manifest() -> GroundedQACapabilityManifest:
                             "type": "string",
                             "description": "The user request requiring generated Datalog.",
                         },
+                        "generated_datalog": {
+                            "type": "string",
+                            "description": "The exact temporary Souffle Datalog program proposed for confirmation.",
+                        },
+                        "formal_restatement": {
+                            "type": "string",
+                            "description": "Engineer-readable restatement of what the temporary query returns.",
+                        },
                         "resolved_identity_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Evidence IDs already resolved through read-only retrieval.",
                         },
                     },
-                    "required": ["request"],
+                    "required": ["request", "generated_datalog", "formal_restatement"],
                 },
             ),
             GroundedQACapability(
