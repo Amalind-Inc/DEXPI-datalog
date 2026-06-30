@@ -118,6 +118,132 @@ def make_graph_facts_backed_tools() -> TopologyTools:
     )
 
 
+class LookupOnlyThenWitnessProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": "P-101"},
+                tool_call_id="find-only",
+            )
+        if step == 1:
+            return FinalAnswer(
+                answer_text="Pump P-101 is connected downstream.",
+                evidence_references=[PUMP_ID],
+            )
+        if step == 2:
+            return ToolCall(
+                tool_name="get_reachable_equipment",
+                tool_input={"equipment_id": PUMP_ID},
+                tool_call_id="retrieve-witness",
+            )
+        return FinalAnswer(
+            answer_text="Pump P-101 has a witnessed structural path.",
+            evidence_references=[PUMP_ID, VALVE_ID],
+        )
+
+
+class SampledPathThenDatalogProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="get_reachable_equipment",
+                tool_input={"equipment_id": PUMP_ID},
+                tool_call_id="sample-one-path",
+            )
+        if step == 1:
+            return FinalAnswer(
+                answer_text="All pumps have reachable valves.",
+                evidence_references=[PUMP_ID, VALVE_ID],
+            )
+        if step == 2:
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Check whether every pump has a reachable valve.",
+                    "resolved_identity_ids": [PUMP_ID],
+                },
+                tool_call_id="escalate-datalog",
+            )
+        return FinalAnswer(answer_text="This needs confirmed generated logic.")
+
+
+class ImmediateConversationProvider:
+    def complete_with_tools(self, *, messages, tools):
+        return FinalAnswer(answer_text="Happy to help.")
+
+
+class UnexpectedProviderCall:
+    def complete_with_tools(self, *, messages, tools):
+        raise AssertionError("source mutation requests should be denied before model use")
+
+
+def test_topology_relationship_answer_requires_structural_witness_before_acceptance():
+    result = run_grounded_qa_turn(
+        question="What is connected downstream of P-101?",
+        topology_tools=make_tools(),
+        provider=LookupOnlyThenWitnessProvider(),
+    )
+
+    assert result.answer_text == "Pump P-101 has a witnessed structural path."
+    assert VALVE_ID in result.evidence_references
+    sufficiency_events = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "__evidence_sufficiency__"
+    ]
+    assert sufficiency_events
+    assert sufficiency_events[0]["tool_result"]["suggested_next_tools"] == [
+        "get_reachable_equipment"
+    ]
+
+
+def test_universal_claim_from_sampled_path_escalates_to_confirmed_logic():
+    result = run_grounded_qa_turn(
+        question="Do all pumps have a reachable valve?",
+        topology_tools=make_tools(),
+        provider=SampledPathThenDatalogProvider(),
+    )
+
+    assert result.answer_text == "This needs confirmed generated logic."
+    tool_names = [trace["tool_name"] for trace in result.tool_call_trace]
+    assert "__evidence_sufficiency__" in tool_names
+    assert "propose_temporary_datalog" in tool_names
+
+
+def test_conversational_answer_does_not_require_evidence():
+    result = run_grounded_qa_turn(
+        question="hi, what can you help with?",
+        topology_tools=make_tools(),
+        provider=ImmediateConversationProvider(),
+    )
+
+    assert result.answer_text == "Happy to help."
+    assert result.tool_call_trace == []
+
+
+def test_source_mutation_request_is_denied_without_model_planning():
+    result = run_grounded_qa_turn(
+        question="Delete pump P-101 from the drawing.",
+        topology_tools=make_tools(),
+        provider=UnexpectedProviderCall(),
+    )
+
+    assert "cannot modify" in result.answer_text
+    assert result.tool_call_trace[0]["tool_name"] == "mutate_source_graph"
+    assert result.tool_call_trace[0]["tool_result"]["status"] == "rejected"
+
+
 # ---------------------------------------------------------------------------
 # TopologyTools.find_equipment contracts
 # ---------------------------------------------------------------------------
@@ -484,7 +610,17 @@ def test_prior_prose_is_rejected_as_engineering_evidence():
     is rejected and never becomes evidence or interpretation."""
 
     class ProseCitingProvider:
+        def __init__(self):
+            self._step = 0
+
         def complete_with_tools(self, *, messages, tools):
+            if self._step == 0:
+                self._step += 1
+                return ToolCall(
+                    tool_name="get_reachable_equipment",
+                    tool_input={"equipment_id": PUMP_ID},
+                    tool_call_id="witness-before-citing-prose",
+                )
             return FinalAnswer(
                 answer_text="As I said earlier, the pump is connected.",
                 evidence_references=[VALVE_ID, "the pump is connected"],
@@ -524,7 +660,7 @@ def test_conversation_state_cannot_smuggle_prose_through_prior_evidence():
         )
     ]
     run_grounded_qa_turn(
-        question="And the valve?",
+        question="Thanks",
         topology_tools=tools,
         provider=InspectingProvider(),
         conversation=conversation,
