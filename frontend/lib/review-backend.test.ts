@@ -458,3 +458,101 @@ test("executeConfirmedDatalog rejects backend execution diagnostics instead of r
     /Generated Datalog answered unknown topology object/,
   );
 });
+
+test("OLLAMA_MODEL env routes provider-settings PUT to ollama with base_url", async () => {
+  const prev = {
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  };
+  process.env.OLLAMA_MODEL = "ornith:35b";
+  delete process.env.OPENROUTER_API_KEY;
+
+  const calls: Array<{ body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (init?.method === "PUT" && parsedUrl.pathname.endsWith("/provider-settings")) {
+      calls.push({ body });
+      return Response.json({ provider: body.provider, model: body.model, configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        answer_text: "ok",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return Response.json({});
+  };
+
+  try {
+    await answerChatWithReviewBackend(
+      {
+        sessionId: "session-1",
+        messages: [{ role: "user", content: "What is connected to the pump?" }],
+      },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+    );
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0].body as Record<string, unknown>;
+    assert.equal(sent.provider, "ollama");
+    assert.equal(sent.model, "ornith:35b");
+    assert.equal(sent.credential, "");
+    assert.equal(sent.base_url, "http://localhost:11434/v1");
+  } finally {
+    if (prev.OLLAMA_MODEL === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = prev.OLLAMA_MODEL;
+    if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
+  }
+});
+
+test("OLLAMA_MODEL takes precedence over OPENROUTER_API_KEY in env routing", async () => {
+  const prev = {
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  };
+  process.env.OLLAMA_MODEL = "ornith:35b";
+  process.env.OPENROUTER_API_KEY = "sk-or-fake";
+
+  const calls: Array<{ body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (init?.method === "PUT" && parsedUrl.pathname.endsWith("/provider-settings")) {
+      calls.push({ body });
+      return Response.json({ provider: body.provider, model: body.model, configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        answer_text: "ok",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return Response.json({});
+  };
+
+  try {
+    await answerChatWithReviewBackend(
+      {
+        sessionId: "session-1",
+        messages: [{ role: "user", content: "What is connected to the pump?" }],
+      },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+    );
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0].body as Record<string, unknown>;
+    assert.equal(sent.provider, "ollama", "ollama must win over openrouter when OLLAMA_MODEL set");
+    assert.notEqual(sent.provider, "openrouter");
+  } finally {
+    if (prev.OLLAMA_MODEL === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = prev.OLLAMA_MODEL;
+    if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
+  }
+});
