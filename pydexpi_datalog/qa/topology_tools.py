@@ -46,6 +46,10 @@ class TopologyTools:
     def tool_definitions(self) -> list[dict[str, object]]:
         return self._capability_manifest.provider_tool_definitions()
 
+    def system_prompt(self) -> str:
+        """Model-facing system prompt derived from the capability manifest."""
+        return self._capability_manifest.system_prompt()
+
     def execute(self, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
         capability = self._capability_manifest.get(tool_name)
         if capability is None:

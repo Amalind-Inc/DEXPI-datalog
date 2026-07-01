@@ -4,7 +4,24 @@ import json
 
 import httpx
 
-from .grounded_qa_harness import FinalAnswer, ToolCall
+from .grounded_qa_harness import (
+    POSTURE_GENERAL_KNOWLEDGE,
+    POSTURE_OUT_OF_SCOPE,
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    POSTURE_SOURCE_GROUNDED,
+    POSTURE_UNSPECIFIED,
+    FinalAnswer,
+    ToolCall,
+)
+
+_VALID_POSTURES = frozenset(
+    {
+        POSTURE_SOURCE_GROUNDED,
+        POSTURE_GENERAL_KNOWLEDGE,
+        POSTURE_SOURCE_DATA_UNAVAILABLE,
+        POSTURE_OUT_OF_SCOPE,
+    }
+)
 
 _DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
@@ -42,6 +59,21 @@ _PROVIDE_ANSWER_TOOL: dict[str, object] = {
                     "description": (
                         "evidence_id values you interpreted the question to refer to, "
                         "when the reference was ambiguous."
+                    ),
+                },
+                "grounding_posture": {
+                    "type": "string",
+                    "enum": [
+                        POSTURE_SOURCE_GROUNDED,
+                        POSTURE_GENERAL_KNOWLEDGE,
+                        POSTURE_SOURCE_DATA_UNAVAILABLE,
+                        POSTURE_OUT_OF_SCOPE,
+                    ],
+                    "description": (
+                        "How this answer relates to the loaded source. Use "
+                        "source_grounded only with cited evidence; use "
+                        "general_knowledge, source_data_unavailable, or out_of_scope "
+                        "for answers not derived from the loaded source."
                     ),
                 },
             },
@@ -156,8 +188,15 @@ def _final_answer_from_args(arguments: dict[str, object]) -> FinalAnswer:
         for x in arguments.get("interpreted_object_ids", [])
         if isinstance(x, str)
     ]
+    declared_posture = arguments.get("grounding_posture")
+    posture = (
+        declared_posture
+        if isinstance(declared_posture, str) and declared_posture in _VALID_POSTURES
+        else POSTURE_UNSPECIFIED
+    )
     return FinalAnswer(
         answer_text=answer_text,
         evidence_references=evidence,
         interpreted_object_ids=interpreted,
+        grounding_posture=posture,
     )

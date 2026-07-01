@@ -101,3 +101,26 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
     assert result["status"] == "confirmation_required"
     assert result["code"] == "tool.confirmation_required"
     assert result["tool_name"] == "propose_temporary_datalog"
+
+
+def test_system_prompt_includes_grounding_disclosure_policy() -> None:
+    manifest = default_grounded_qa_manifest()
+
+    prompt = manifest.system_prompt()
+
+    # Tool guidance and the grounding policy come from one shared projection.
+    assert "find_equipment" in prompt
+    for posture in (
+        "source_grounded",
+        "general_knowledge",
+        "source_data_unavailable",
+        "out_of_scope",
+    ):
+        assert posture in prompt
+    assert "never invent values" in prompt.lower()
+
+
+def test_topology_tools_expose_manifest_system_prompt() -> None:
+    tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
+
+    assert tools.system_prompt() == default_grounded_qa_manifest().system_prompt()

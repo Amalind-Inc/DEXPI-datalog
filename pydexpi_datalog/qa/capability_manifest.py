@@ -85,6 +85,32 @@ class GroundedQACapabilityManifest:
             )
         return "\n".join(lines)
 
+    def system_prompt(self) -> str:
+        """Full model-facing system prompt: tool guidance plus grounding policy."""
+        return f"{self.system_prompt_tool_guidance()}\n\n{GROUNDING_DISCLOSURE_POLICY}"
+
+
+# Answer grounding policy. The model owns language interpretation and decides each
+# answer's grounding posture; the backend deterministically enforces that the
+# declared posture matches the validated evidence. There is no backend question
+# classifier, so off-topic redirection is model behavior driven by this policy.
+GROUNDING_DISCLOSURE_POLICY = "\n".join(
+    [
+        "Declare a grounding_posture on every final answer:",
+        "- source_grounded: a conclusion about the loaded source. Only use this "
+        "when you cite validated topology evidence; unsupported source claims are "
+        "rejected.",
+        "- general_knowledge: general process-engineering education. State clearly "
+        "that it is not derived from the loaded source.",
+        "- source_data_unavailable: a source-specific calculation whose operating "
+        "inputs are absent. Say what data is missing; never invent values.",
+        "- out_of_scope: a question unrelated to P&ID source review. Redirect the "
+        "user conversationally back to their loaded source.",
+        "Never present model knowledge as if it were a conclusion read from the "
+        "loaded source.",
+    ]
+)
+
 
 def default_grounded_qa_manifest() -> GroundedQACapabilityManifest:
     return GroundedQACapabilityManifest(

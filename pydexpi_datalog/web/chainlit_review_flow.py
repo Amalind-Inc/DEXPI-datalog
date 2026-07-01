@@ -1139,6 +1139,8 @@ class ChainlitReviewFlow:
         self._evidence_highlight_by_session[session_id] = evidence_highlight
 
         answer_text = result.answer_text
+        if result.disclosure:
+            answer_text = f"{result.disclosure} {answer_text}"
         if direction is not None:
             answer_text = self._direction_prefixed_answer(answer_text, direction)
 
@@ -1149,6 +1151,9 @@ class ChainlitReviewFlow:
             "evidence_references": list(result.evidence_references),
             "rejected_references": list(result.rejected_references),
             "interpreted_object_ids": list(result.interpreted_object_ids),
+            "grounding_posture": result.grounding_posture,
+            "source_grounded": result.source_grounded,
+            "disclosure": result.disclosure,
             "evidence_highlight": evidence_highlight,
         }
         if direction is not None:

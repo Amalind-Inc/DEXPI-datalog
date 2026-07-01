@@ -185,6 +185,61 @@ class OllamaQATurnProviderTests(unittest.TestCase):
         for msg in sent:
             self.assertNotIn("grounded_evidence_ids", msg)
 
+    def test_grounding_posture_is_parsed_from_provide_answer(self) -> None:
+        provider = self._make_provider()
+        response = _tool_call_response(
+            "provide_answer",
+            {
+                "answer_text": "A centrifugal pump uses an impeller.",
+                "evidence_object_ids": [],
+                "grounding_posture": "general_knowledge",
+            },
+        )
+        with patch("httpx.post", return_value=response):
+            result = provider.complete_with_tools(
+                messages=[{"role": "user", "content": "what is a pump?"}],
+                tools=SAMPLE_TOOLS,
+            )
+
+        assert isinstance(result, FinalAnswer)
+        self.assertEqual(result.grounding_posture, "general_knowledge")
+
+    def test_invalid_grounding_posture_falls_back_to_unspecified(self) -> None:
+        provider = self._make_provider()
+        response = _tool_call_response(
+            "provide_answer",
+            {"answer_text": "ok", "grounding_posture": "totally-made-up"},
+        )
+        with patch("httpx.post", return_value=response):
+            result = provider.complete_with_tools(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=SAMPLE_TOOLS,
+            )
+
+        assert isinstance(result, FinalAnswer)
+        self.assertEqual(result.grounding_posture, "unspecified")
+
+    def test_grounding_posture_is_offered_in_provide_answer_schema(self) -> None:
+        provider = self._make_provider()
+        with patch("httpx.post", return_value=_text_response("ok")) as mock_post:
+            provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
+
+        payload = mock_post.call_args[1]["json"]
+        provide_answer = next(
+            t for t in payload["tools"] if t["function"]["name"] == "provide_answer"
+        )
+        properties = provide_answer["function"]["parameters"]["properties"]
+        self.assertIn("grounding_posture", properties)
+        self.assertEqual(
+            set(properties["grounding_posture"]["enum"]),
+            {
+                "source_grounded",
+                "general_knowledge",
+                "source_data_unavailable",
+                "out_of_scope",
+            },
+        )
+
     def test_custom_base_url(self) -> None:
         provider = OllamaQATurnProvider(model="ornith:35b", base_url="http://remote-host:11434")
         with patch("httpx.post", return_value=_text_response("ok")) as mock_post:

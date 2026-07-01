@@ -14,11 +14,46 @@ class ToolCall:
     tool_call_id: str
 
 
+# Grounding posture: the model declares how a final answer relates to the loaded
+# source. The backend never classifies the question; it only enforces that the
+# declared posture is consistent with the validated evidence the answer carries.
+POSTURE_UNSPECIFIED = "unspecified"
+POSTURE_SOURCE_GROUNDED = "source_grounded"
+POSTURE_GENERAL_KNOWLEDGE = "general_knowledge"
+POSTURE_SOURCE_DATA_UNAVAILABLE = "source_data_unavailable"
+POSTURE_OUT_OF_SCOPE = "out_of_scope"
+# Backend-assigned only: the model declared a source-grounded conclusion but no
+# evidence reference survived validation, so the claim cannot be presented as grounded.
+POSTURE_UNSUPPORTED_SOURCE_CLAIM = "unsupported_source_claim"
+
+# Backend-authoritative disclosures attached when an answer is not a validated
+# conclusion derived from the loaded source.
+_POSTURE_DISCLOSURES: dict[str, str] = {
+    POSTURE_GENERAL_KNOWLEDGE: (
+        "This is general process-engineering knowledge, not a conclusion derived "
+        "from your loaded source."
+    ),
+    POSTURE_SOURCE_DATA_UNAVAILABLE: (
+        "This depends on operating data that is not present in your loaded source, "
+        "so the required inputs are unavailable."
+    ),
+    POSTURE_OUT_OF_SCOPE: (
+        "That is outside grounded P&ID source review. I can answer questions about "
+        "your loaded source."
+    ),
+    POSTURE_UNSUPPORTED_SOURCE_CLAIM: (
+        "This answer is not backed by validated evidence from your loaded source and "
+        "should not be treated as a source conclusion."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class FinalAnswer:
     answer_text: str
     evidence_references: list[str] = field(default_factory=list)
     interpreted_object_ids: list[str] = field(default_factory=list)
+    grounding_posture: str = POSTURE_UNSPECIFIED
 
 
 @dataclass(frozen=True)
@@ -52,6 +87,9 @@ class QATurnResult:
     rejected_references: list[str]
     interpreted_object_ids: list[str]
     tool_call_trace: list[dict[str, object]]
+    grounding_posture: str = POSTURE_UNSPECIFIED
+    source_grounded: bool = False
+    disclosure: str | None = None
 
 
 @dataclass(frozen=True)
@@ -440,9 +478,14 @@ def run_grounded_qa_turn(
             rejected_references=[],
             interpreted_object_ids=[],
             tool_call_trace=trace,
+            grounding_posture=POSTURE_OUT_OF_SCOPE,
+            source_grounded=False,
+            disclosure=None,
         )
     known_ids = topology_tools.known_evidence_ids()
-    messages: list[dict[str, object]] = []
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": topology_tools.system_prompt()}
+    ]
     for turn in conversation or []:
         valid_prior = [ref for ref in turn.evidence_references if ref in known_ids]
         messages.append({"role": "user", "content": turn.question})
@@ -557,10 +600,51 @@ def _finalize(
         if reference in known_ids and reference not in interpreted:
             interpreted.append(reference)
 
+    posture, source_grounded, disclosure = _resolve_grounding(
+        response.grounding_posture, valid_references
+    )
+
     return QATurnResult(
         answer_text=response.answer_text,
         evidence_references=valid_references,
         rejected_references=rejected_references,
         interpreted_object_ids=interpreted,
         tool_call_trace=tool_call_trace,
+        grounding_posture=posture,
+        source_grounded=source_grounded,
+        disclosure=disclosure,
     )
+
+
+def _resolve_grounding(
+    declared_posture: str, valid_references: list[str]
+) -> tuple[str, bool, str | None]:
+    """Enforce the posture <-> evidence boundary deterministically.
+
+    The backend never decides what a question is about. It only checks that a
+    model-declared grounding posture is consistent with the evidence references
+    that survived validation, and attaches an authoritative disclosure whenever
+    the answer is not a validated conclusion derived from the loaded source.
+    """
+    has_evidence = bool(valid_references)
+
+    if declared_posture == POSTURE_SOURCE_GROUNDED:
+        if has_evidence:
+            return POSTURE_SOURCE_GROUNDED, True, None
+        # A source conclusion was claimed but nothing was validated: it cannot be
+        # presented as grounded.
+        return (
+            POSTURE_UNSUPPORTED_SOURCE_CLAIM,
+            False,
+            _POSTURE_DISCLOSURES[POSTURE_UNSUPPORTED_SOURCE_CLAIM],
+        )
+
+    if declared_posture in _POSTURE_DISCLOSURES:
+        # Explicitly non-source postures (general knowledge, missing source data,
+        # out of scope) are always disclosed as not derived from the source.
+        return declared_posture, False, _POSTURE_DISCLOSURES[declared_posture]
+
+    # Legacy / unspecified posture preserves prior behavior: an answer is treated
+    # as source-grounded exactly when it carries validated evidence, with no
+    # backend-authored disclosure.
+    return POSTURE_UNSPECIFIED, has_evidence, None

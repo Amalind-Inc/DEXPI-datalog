@@ -10,6 +10,12 @@ import pytest
 
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_GENERAL_KNOWLEDGE,
+    POSTURE_OUT_OF_SCOPE,
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    POSTURE_SOURCE_GROUNDED,
+    POSTURE_UNSPECIFIED,
+    POSTURE_UNSUPPORTED_SOURCE_CLAIM,
     ConversationTurn,
     FinalAnswer,
     QATurnResult,
@@ -242,6 +248,174 @@ def test_source_mutation_request_is_denied_without_model_planning():
     assert "cannot modify" in result.answer_text
     assert result.tool_call_trace[0]["tool_name"] == "mutate_source_graph"
     assert result.tool_call_trace[0]["tool_result"]["status"] == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# Grounding-posture disclosure boundary (37x.22.21)
+#
+# The model declares each answer's grounding posture; the backend deterministically
+# enforces that the posture is consistent with validated evidence and attaches an
+# authoritative disclosure whenever an answer is not a validated source conclusion.
+# The backend never classifies the question itself.
+# ---------------------------------------------------------------------------
+
+
+class SinglePostureProvider:
+    """Returns one FinalAnswer with a declared posture and no tool calls."""
+
+    def __init__(self, answer: FinalAnswer) -> None:
+        self._answer = answer
+
+    def complete_with_tools(self, *, messages, tools):
+        return self._answer
+
+
+class FindThenPostureProvider:
+    """Satisfies the object-lookup evidence gate, then answers with a posture."""
+
+    def __init__(self, answer: FinalAnswer, *, pattern: str = "P-101") -> None:
+        self._answer = answer
+        self._pattern = pattern
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": self._pattern},
+                tool_call_id="posture-find",
+            )
+        return self._answer
+
+
+def test_general_knowledge_answer_is_disclosed_as_not_from_source():
+    result = run_grounded_qa_turn(
+        question="Explain in general how process flow direction is determined.",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text="Flow direction generally follows pressure gradients.",
+                grounding_posture=POSTURE_GENERAL_KNOWLEDGE,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_GENERAL_KNOWLEDGE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert "not" in result.disclosure.lower()
+    assert "loaded source" in result.disclosure.lower()
+    assert result.evidence_references == []
+
+
+def test_source_specific_calculation_with_missing_data_states_unavailable():
+    result = run_grounded_qa_turn(
+        question="Compute the operating Reynolds number for this line.",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text=(
+                    "I cannot compute it: flow rate, fluid viscosity, and density "
+                    "are not present in the loaded source."
+                ),
+                grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_SOURCE_DATA_UNAVAILABLE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert "unavailable" in result.disclosure.lower()
+
+
+def test_unrelated_question_is_redirected_without_backend_classifier():
+    result = run_grounded_qa_turn(
+        question="What is the capital of France?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text=(
+                    "That is unrelated to your P&ID. Ask me about the loaded source."
+                ),
+                grounding_posture=POSTURE_OUT_OF_SCOPE,
+            )
+        ),
+    )
+
+    # The redirect is model behavior: the backend planned no tool calls and ran no
+    # deterministic intent classifier to detect off-topic input.
+    assert result.tool_call_trace == []
+    assert result.grounding_posture == POSTURE_OUT_OF_SCOPE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+
+
+def test_source_grounded_answer_with_validated_evidence_has_no_disclosure():
+    result = run_grounded_qa_turn(
+        question="Find pump P-101 in the source.",
+        topology_tools=make_tools(),
+        provider=FindThenPostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 is present in the loaded source.",
+                evidence_references=[PUMP_ID],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_SOURCE_GROUNDED
+    assert result.source_grounded is True
+    assert result.disclosure is None
+    assert PUMP_ID in result.evidence_references
+
+
+def test_declared_source_grounding_without_validated_evidence_is_downgraded():
+    result = run_grounded_qa_turn(
+        question="What is the capital of France?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 feeds valve V-102.",
+                evidence_references=["node-not-in-source"],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_UNSUPPORTED_SOURCE_CLAIM
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert result.evidence_references == []
+    assert "node-not-in-source" in result.rejected_references
+
+
+def test_unspecified_posture_preserves_legacy_grounding():
+    grounded = run_grounded_qa_turn(
+        question="Find pump P-101 in the source.",
+        topology_tools=make_tools(),
+        provider=FindThenPostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 is present.",
+                evidence_references=[PUMP_ID],
+            )
+        ),
+    )
+    assert grounded.grounding_posture == POSTURE_UNSPECIFIED
+    assert grounded.source_grounded is True
+    assert grounded.disclosure is None
+
+    conversational = run_grounded_qa_turn(
+        question="hi, what can you help with?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(FinalAnswer(answer_text="Happy to help.")),
+    )
+    assert conversational.grounding_posture == POSTURE_UNSPECIFIED
+    assert conversational.source_grounded is False
+    assert conversational.disclosure is None
+    assert conversational.answer_text == "Happy to help."
 
 
 # ---------------------------------------------------------------------------
