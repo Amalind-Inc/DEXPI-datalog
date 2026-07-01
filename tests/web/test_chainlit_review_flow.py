@@ -882,6 +882,13 @@ class ChainlitReviewFlowTests(unittest.TestCase):
 
                     self.assertEqual(result["status"], "answered")
                     self.assertEqual(result["rule_id"], "pump_discharge_check_valve")
+                    self.assertIn(
+                        result["outcome"],
+                        {"satisfied", "violated", "indeterminate"},
+                    )
+                    self.assertEqual(result["pack"]["pack_id"], "demo-process-safety")
+                    self.assertFalse(result["pack"]["authoritative"])
+                    self.assertIn("not", result["pack"]["trust_notice"].lower())
                     self.assertEqual(result["confirmation"], {"required": False})
                     self.assertEqual(result["summary"]["position"], "first")
                     self.assertIn(result["outcome"], result["summary"]["text"])

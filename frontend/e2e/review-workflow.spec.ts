@@ -51,6 +51,29 @@ test("QA answer evidence chips open the topology panel and highlight structural 
   await expect(graphPanel.locator("rect.highlighted").first()).toBeVisible({ timeout: 3000 });
 });
 
+test("bundled pump discharge check renders tri-state result and inspectable evidence", async ({
+  page,
+}) => {
+  const workflow = reviewWorkflow(page);
+
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await workflow.sendPrompt("Run the bundled pump discharge check.");
+
+  const result = page.getByTestId("grounded-logic-answer").last();
+  await expect(result).toBeVisible();
+  await expect(result.getByTestId("evidence-summary")).toContainText(
+    /satisfied|violated|indeterminate/,
+  );
+  await expect(result.getByTestId("evidence-summary")).toContainText(
+    /not\s+(an\s+)?authoritative/i,
+  );
+  await result.getByTestId("raw-evidence-details").locator("summary").click();
+  await expect(result.getByTestId("raw-evidence-details")).toContainText(/rule_pack_result/);
+  await expect(result.getByTestId("raw-evidence-details")).toContainText(/canonical_fact/);
+});
+
 test("ambiguous reference yields multiple candidates and a grounded follow-up reuses prior evidence", async ({
   page,
 }) => {
@@ -193,7 +216,7 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
   await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
   await expect(workflow.confirmationCards).toHaveCount(1);
   await workflow.datalogDetails.locator("summary").click();
-  await expect(workflow.datalogDetails).toContainText("answer(\"node-p101\")");
+  await expect(workflow.datalogDetails).toContainText('answer("node-p101")');
 
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByTestId("datalog-cancel-note")).toContainText(

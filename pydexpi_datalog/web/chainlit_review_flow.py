@@ -31,7 +31,7 @@ from ..workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
-from ..verification.verify_suite import evaluate_graph_fixture
+from ..verification.bundled_rule_pack import evaluate_bundled_rule
 
 
 ANSWER_FACT_RE = re.compile(r'^\s*answer\s*\(\s*"([^"]+)"\s*\)\s*\.\s*$')
@@ -633,13 +633,18 @@ class ChainlitReviewFlow:
         *,
         session_id: str,
         rule_id: str,
+        pack_id: str = "demo-process-safety",
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
         )
         graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
-        rule_result = evaluate_graph_fixture(graph_facts, rule_id=rule_id)
+        rule_result = evaluate_bundled_rule(
+            graph_facts,
+            pack_id=pack_id,
+            rule_id=rule_id,
+        )
         evidence_items = self._rule_pack_evidence_items(
             session_id=session_id,
             rule_result=rule_result,
@@ -657,6 +662,7 @@ class ChainlitReviewFlow:
             "artifact_type": "rule_pack_result",
             "session_id": session_id,
             "rule_id": rule_id,
+            "pack": rule_result["pack"],
             "rule_result": rule_result,
             "deterministic_inputs": self._artifacts_by_session[session_id],
             "evidence": evidence_items,
@@ -673,11 +679,12 @@ class ChainlitReviewFlow:
             "status": "answered",
             "session_id": session_id,
             "rule_id": rule_id,
-            "outcome": str(rule_result["result_type"]),
+            "pack": rule_result["pack"],
+            "outcome": str(rule_result["outcome"]),
             "confirmation": {"required": False},
             "summary": {
                 "position": "first",
-                "text": f"{rule_id}: {rule_result['result_type']}. {rule_result['message']}",
+                "text": f"{rule_id}: {rule_result['outcome']}. {rule_result['message']}",
             },
             "result_artifact": {
                 "kind": "rule_pack_result",

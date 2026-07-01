@@ -212,6 +212,7 @@ def create_review_api_app(
         return _call_ready(
             lambda: flow.execute_selected_rule_pack_query(
                 session_id=session_id,
+                pack_id=str(body.get("pack_id", "demo-process-safety")),
                 rule_id=_required_string(body, "rule_id"),
             )
         )

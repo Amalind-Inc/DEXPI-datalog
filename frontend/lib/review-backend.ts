@@ -103,6 +103,10 @@ export async function answerChatWithReviewBackend(
   const prompt = body.messages?.at(-1)?.content ?? "";
   const selectedNode = body.selectedNode ?? null;
   const conversation = buildQAConversation(body.messages ?? []);
+  if (body.sessionId && isBundledPumpCheckCommand(prompt)) {
+    const ruleResult = await runBundledPumpCheck(body.sessionId, options);
+    if (ruleResult) return ruleResult;
+  }
   const backendAnswer = await runBackendLogicRequest(
     body.sessionId,
     prompt,
@@ -131,6 +135,41 @@ export async function answerChatWithReviewBackend(
       `to focus deterministic checks. For this request I would inspect source scope, ` +
       `derive the topology evidence, and return highlighted equipment/path evidence.`,
     highlightedNodeIds: inferHighlights(prompt, selectedNode?.id),
+  };
+}
+
+function isBundledPumpCheckCommand(prompt: string) {
+  return prompt.trim().toLowerCase() === "run the bundled pump discharge check.";
+}
+
+async function runBundledPumpCheck(
+  sessionId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions,
+): Promise<ChatResult | null> {
+  if (!baseUrl) return null;
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/rule-pack-results`,
+    body: {
+      pack_id: "demo-process-safety",
+      rule_id: "pump_discharge_check_valve",
+    },
+  });
+  if (!result || result.status !== "answered") return null;
+
+  const pack = isRecord(result.pack) ? result.pack : {};
+  const summary = isRecord(result.summary) ? result.summary : {};
+  const summaryText = typeof summary.text === "string" ? summary.text : readAnswerText(result);
+  const trustNotice = typeof pack.trust_notice === "string" ? pack.trust_notice : "";
+  const highlightedNodeIds = readEvidenceHighlightIds(result.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedLogicAnswer({
+      summary: [summaryText, trustNotice].filter(Boolean).join(" "),
+      rawEvidence: readRawEvidence(result),
+      highlightedNodeIds,
+      raw: result,
+    }),
+    highlightedNodeIds,
   };
 }
 
