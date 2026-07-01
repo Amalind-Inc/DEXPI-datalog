@@ -887,3 +887,111 @@ function stripEnvQuotes(value: string) {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+export async function startTurnOnBackend(
+  sessionId: string,
+  body: {
+    question: string;
+    request_id: string;
+    conversation?: unknown[];
+    selected_node_id?: string;
+  },
+  {
+    baseUrl = backendBaseUrl(),
+    fetcher = fetch,
+    providerSettings = readProviderSettingsFromEnv(),
+  }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  // Pin the selected topology scope. This is only sent when the caller
+  // resolved a real node (selectedNode?.id), so failures are real backend
+  // errors and must surface rather than be swallowed.
+  if (body.selected_node_id) {
+    const scopeResponse = await fetcher(
+      `${baseUrl}/api/review/sessions/${sessionId}/source-scope`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_scope_ids: [body.selected_node_id] }),
+      },
+    );
+    if (!scopeResponse.ok) throw new Error("source-scope update failed");
+  }
+  // Apply env-configured provider settings. Skip obviously-test credentials
+  // (sk-test sentinel) so the backend uses its scripted provider, which
+  // avoids real LLM API calls during automated testing.
+  const isTestCredential = providerSettings?.credential
+    .toLowerCase()
+    .startsWith("sk-test");
+  if (providerSettings && !isTestCredential) {
+    const providerResponse = await fetcher(
+      `${baseUrl}/api/review/sessions/${sessionId}/provider-settings`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(providerSettings),
+      },
+    );
+    if (!providerResponse.ok) throw new Error("provider-settings update failed");
+  }
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns`,
+    body: {
+      question: body.question,
+      request_id: body.request_id,
+      conversation: body.conversation,
+    },
+  });
+  if (!result) throw new Error("turn start failed");
+  return result;
+}
+
+export async function getTurnFromBackend(
+  sessionId: string,
+  turnId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ turn: Record<string, unknown> | null; status: number }> {
+  const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}`);
+  if (!res.ok) return { turn: null, status: res.status };
+  return { turn: (await res.json()) as Record<string, unknown>, status: res.status };
+}
+
+export async function cancelTurnOnBackend(
+  sessionId: string,
+  turnId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/cancel`,
+    body: {},
+  });
+  if (!result) throw new Error("turn cancel failed");
+  return result;
+}
+
+export async function resumeDirectionReviewOnBackend(
+  sessionId: string,
+  turnId: string,
+  body: { decision: string; review_key: string },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/direction-review`,
+    body,
+  });
+  if (!result) throw new Error("direction-review resume failed");
+  return result;
+}
+
+export async function resumeDatalogReviewOnBackend(
+  sessionId: string,
+  turnId: string,
+  body: { decision: string; proposal_result: unknown },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/datalog-review`,
+    body,
+  });
+  if (!result) throw new Error("datalog-review resume failed");
+  return result;
+}

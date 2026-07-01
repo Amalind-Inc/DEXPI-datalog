@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import time
 from typing import Callable
@@ -101,9 +102,17 @@ def create_review_api_app(
     )
     turns = TurnLifecycleStore(artifact_root)
 
+    # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
+    # zero-LLM providers regardless of session provider-settings. This lets the
+    # e2e stack exercise the real turn transport without any real model call,
+    # while a developer's .env.local can still drive a live LLM manually.
+    force_scripted = os.environ.get("PYDEXPI_QA_PROVIDER", "").lower() == "scripted"
+
     def _resolve_provider(session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
             return model_provider_factory()
+        if force_scripted:
+            return TopologyAwareFakeModelProvider()
         settings = flow.provider_settings_state(session_id)
         credential = flow.local_credential_for_test(session_id)
         if credential and settings.get("configured"):
@@ -117,6 +126,8 @@ def create_review_api_app(
     def _resolve_qa_provider(session_id: str) -> QATurnProvider:
         if qa_provider_factory is not None:
             return qa_provider_factory()
+        if force_scripted:
+            return ScriptedQATurnProvider()
         settings = flow.provider_settings_state(session_id)
         if settings.get("provider") == "ollama" and settings.get("configured"):
             return OllamaQATurnProvider(
@@ -246,6 +257,8 @@ def create_review_api_app(
             )
         )
 
+    BUNDLED_PUMP_CHECK_COMMAND = "run the bundled pump discharge check."
+
     @app.post("/api/review/sessions/{session_id}/turns")
     def start_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
         question = _required_string(body, "question")
@@ -256,17 +269,29 @@ def create_review_api_app(
             if isinstance(conversation, list)
             else None
         )
+
+        def _execute() -> dict[str, object]:
+            # The bundled pump check is a trusted rule-pack execution command,
+            # not a QA question; run it inside the turn so dedupe, replay, and
+            # cancellation apply uniformly.
+            if question.strip().lower() == BUNDLED_PUMP_CHECK_COMMAND:
+                return flow.execute_selected_rule_pack_query(
+                    session_id=session_id,
+                    rule_id="pump_discharge_check_valve",
+                )
+            return flow.run_qa_turn(
+                session_id=session_id,
+                question=question,
+                qa_provider=_resolve_qa_provider(session_id),
+                conversation=conversation_turns,
+            )
+
         return _call_ready(
             lambda: turns.start(
                 session_id=session_id,
                 request_id=request_id,
                 question=question,
-                execute=lambda: flow.run_qa_turn(
-                    session_id=session_id,
-                    question=question,
-                    qa_provider=_resolve_qa_provider(session_id),
-                    conversation=conversation_turns,
-                ),
+                execute=_execute,
             )
         )
 

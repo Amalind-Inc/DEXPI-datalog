@@ -20,6 +20,12 @@ import {
   type EvidencePath,
 } from "@/lib/grounded-qa-answer";
 import { parseDirectionReviewMessage, type DirectionReviewState } from "@/lib/direction-review";
+import {
+  readTurnIdentity,
+  resumeDatalogReview,
+  resumeDirectionReview,
+  turnToMessage,
+} from "@/lib/turn-client";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -342,40 +348,53 @@ const DatalogConfirmationCard: FC<{
   const sessionId = readSessionId(confirmation.raw);
   const isTemporaryDatalog = confirmation.raw.confirmation_kind === "temporary_datalog";
 
+  const turnIdentity = readTurnIdentity(confirmation.raw);
+
   const run = async () => {
     if (state === "running") return;
     setState("running");
     setError(null);
     try {
-      const response = await fetch(
-        isTemporaryDatalog
-          ? `/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`
-          : `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            isTemporaryDatalog
-              ? {
-                  question: confirmation.raw.question,
-                  decision: "confirm",
-                  proposalResult: readTemporaryProposalResult(confirmation.raw),
-                }
-              : { confirmation: confirmation.raw },
-          ),
-        },
-      );
-      if (!response.ok) {
-        const errorBody = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(errorBody?.error?.message ?? `Execution failed: ${response.status}`);
+      let result: { message: string; highlightedNodeIds?: string[] };
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Turn-lifecycle path: resume the paused turn; the response carries
+        // the turn's final state.
+        const turn = await resumeDatalogReview(turnIdentity.sessionId, turnIdentity.turnId, {
+          decision: "confirm",
+          proposalResult: readTemporaryProposalResult(confirmation.raw),
+        });
+        result = turnToMessage(turn);
+      } else {
+        const response = await fetch(
+          isTemporaryDatalog
+            ? `/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`
+            : `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              isTemporaryDatalog
+                ? {
+                    question: confirmation.raw.question,
+                    decision: "confirm",
+                    proposalResult: readTemporaryProposalResult(confirmation.raw),
+                  }
+                : { confirmation: confirmation.raw },
+            ),
+          },
+        );
+        if (!response.ok) {
+          const errorBody = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new Error(errorBody?.error?.message ?? `Execution failed: ${response.status}`);
+        }
+        result = (await response.json()) as {
+          message: string;
+          highlightedNodeIds?: string[];
+        };
       }
-      const result = (await response.json()) as {
-        message: string;
-        highlightedNodeIds?: string[];
-      };
-      if (result.highlightedNodeIds) {
+      if (result.highlightedNodeIds && result.highlightedNodeIds.length > 0) {
         setHighlightedNodeIds(result.highlightedNodeIds);
       }
       aui.thread().append({
@@ -391,21 +410,29 @@ const DatalogConfirmationCard: FC<{
 
   const cancel = async () => {
     if (state !== "ready") return;
-    if (!isTemporaryDatalog) {
+    if (!isTemporaryDatalog && !turnIdentity.turnId) {
       setState("canceled");
       return;
     }
     setError(null);
     try {
-      await fetch(`/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: confirmation.raw.question,
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Drive the paused turn to its terminal canceled state.
+        await resumeDatalogReview(turnIdentity.sessionId, turnIdentity.turnId, {
           decision: "cancel",
           proposalResult: readTemporaryProposalResult(confirmation.raw),
-        }),
-      });
+        });
+      } else {
+        await fetch(`/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: confirmation.raw.question,
+            decision: "cancel",
+            proposalResult: readTemporaryProposalResult(confirmation.raw),
+          }),
+        });
+      }
     } catch {
       // A cancel action is still locally final: no query is executed from this card.
     }
@@ -490,31 +517,44 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
     new Set(review.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids])),
   );
 
+  const turnIdentity = readTurnIdentity(review.raw);
+
   const submit = async (decision: "confirm" | "reverse" | "unknown") => {
     if (state !== "ready") return;
     setState("submitting");
     setError(null);
     try {
-      const response = await fetch(
-        `/api/review/sessions/${encodeURIComponent(readSessionIdFromRaw(review.raw))}/direction-reviews`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question: review.question,
-            decision,
-            reviewKey: review.reviewKey,
-            conversation: review.conversation,
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`Direction review failed: ${response.status}`);
+      let result: { message: string; highlightedNodeIds?: string[] };
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Turn-lifecycle path: resume the paused turn with the decision; the
+        // response carries the turn's final state.
+        const turn = await resumeDirectionReview(turnIdentity.sessionId, turnIdentity.turnId, {
+          decision,
+          reviewKey: review.reviewKey,
+        });
+        result = turnToMessage(turn);
+      } else {
+        const response = await fetch(
+          `/api/review/sessions/${encodeURIComponent(readSessionIdFromRaw(review.raw))}/direction-reviews`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: review.question,
+              decision,
+              reviewKey: review.reviewKey,
+              conversation: review.conversation,
+            }),
+          },
+        );
+        if (!response.ok) {
+          throw new Error(`Direction review failed: ${response.status}`);
+        }
+        result = (await response.json()) as {
+          message: string;
+          highlightedNodeIds?: string[];
+        };
       }
-      const result = (await response.json()) as {
-        message: string;
-        highlightedNodeIds?: string[];
-      };
       if (result.highlightedNodeIds) {
         setHighlightedNodeIds(result.highlightedNodeIds);
       }

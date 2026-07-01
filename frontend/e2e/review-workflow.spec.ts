@@ -161,52 +161,100 @@ test("reversing an inferred flow direction resumes with the opposite direction",
 test("temporary Datalog confirmation can be canceled or run from the chat card", async ({
   page,
 }) => {
-  const confirmationMessage = `pydexpi:datalog-confirmation:${JSON.stringify({
-    plainLanguageMeaning: "Return objects matching the temporary topology rule.",
-    generatedDatalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
-    validationStatus: "safe_to_confirm",
-    allowedActions: ["run", "cancel"],
-    raw: {
-      confirmation_kind: "temporary_datalog",
-      session_id: "session-1",
-      question: "Must every connected object satisfy the temporary topology rule?",
-      datalog_confirmation: {
-        proposal_result: {
-          executed: false,
-          proposal: {
-            proposal_id: "proposal-1",
-            generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
-            formal_restatement: "Return objects matching the temporary topology rule.",
-          },
-          confirmation: { proposal_id: "proposal-1" },
+  // Paused turn carrying a datalog confirmation review. The provider derives
+  // the turn id client-side, so accept whatever id the POST implies and
+  // return a paused TurnState; the card then resumes via the turn-scoped
+  // datalog-review endpoint.
+  const review = {
+    status: "needs_datalog_confirmation",
+    question: "Must every connected object satisfy the temporary topology rule?",
+    session_id: "session-e2e",
+    datalog_confirmation: {
+      plain_language_meaning: "Return objects matching the temporary topology rule.",
+      generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+      validation: { status: "safe_to_confirm" },
+      allowed_actions: ["run", "cancel"],
+      proposal_result: {
+        executed: false,
+        proposal: {
+          proposal_id: "proposal-1",
+          generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+          formal_restatement: "Return objects matching the temporary topology rule.",
         },
+        confirmation: { proposal_id: "proposal-1" },
       },
     },
-  })}`;
-  const logicAnswer = `pydexpi:logic-answer:${JSON.stringify({
-    summary: "Return objects matching the temporary topology rule.",
-    rawEvidence: { items: [{ id: "node-p101", label: "P-101" }] },
-    highlightedNodeIds: ["node-p101"],
-    raw: {},
-  })}`;
-  await page.route("**/api/chat", async (route) => {
+  };
+  const pausedTurn = (turnId: string) => ({
+    turn_id: turnId,
+    session_id: "session-e2e",
+    status: "paused",
+    question: review.question,
+    request_id: "req-e2e",
+    events: [
+      { sequence: 1, type: "tool-progress", data: { status: "started" } },
+      { sequence: 2, type: "review-required", data: { review } },
+    ],
+  });
+  let resumeDecisions: string[] = [];
+  await page.route("**/api/review/sessions/*/turns", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ message: confirmationMessage, highlightedNodeIds: [] }),
+      body: JSON.stringify(pausedTurn("turn-e2e-1")),
     });
   });
-  await page.route("**/api/review/sessions/*/temporary-datalog-reviews", async (route) => {
+  await page.route("**/api/review/sessions/*/turns/*/datalog-review", async (route) => {
     const body = route.request().postDataJSON() as { decision?: string };
+    resumeDecisions.push(body.decision ?? "");
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
         body.decision === "cancel"
           ? {
+              turn_id: "turn-e2e-1",
+              session_id: "session-e2e",
               status: "canceled",
-              message: "Canceled. No Datalog query was executed.",
-              highlightedNodeIds: [],
+              question: review.question,
+              request_id: "req-e2e",
+              events: [
+                { sequence: 1, type: "tool-progress", data: { status: "started" } },
+                { sequence: 2, type: "review-required", data: { review } },
+                { sequence: 3, type: "cancellation", data: { message: "Canceled by reviewer." } },
+              ],
             }
-          : { status: "answered", message: logicAnswer, highlightedNodeIds: ["node-p101"] },
+          : {
+              turn_id: "turn-e2e-1",
+              session_id: "session-e2e",
+              status: "completed",
+              question: review.question,
+              request_id: "req-e2e",
+              events: [
+                { sequence: 1, type: "tool-progress", data: { status: "started" } },
+                {
+                  sequence: 2,
+                  type: "text",
+                  data: { text: "Return objects matching the temporary topology rule." },
+                },
+                {
+                  sequence: 3,
+                  type: "evidence",
+                  data: {
+                    evidence_references: ["node-p101"],
+                    evidence_highlight: {
+                      source_scope_ids: [],
+                      matched_object_ids: ["node-p101"],
+                      paths: [],
+                    },
+                  },
+                },
+                { sequence: 4, type: "completion", data: { status: "completed" } },
+              ],
+              result: {
+                answer_text: "Return objects matching the temporary topology rule.",
+                evidence_references: ["node-p101"],
+                conversation_state: [],
+              },
+            },
       ),
     });
   });
@@ -218,15 +266,130 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
   await workflow.datalogDetails.locator("summary").click();
   await expect(workflow.datalogDetails).toContainText('answer("node-p101")');
 
+  // Cancel drives the paused turn to its terminal canceled state via the
+  // turn-scoped resume endpoint.
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByTestId("datalog-cancel-note")).toContainText(
     "No Datalog query was executed",
   );
+  expect(resumeDecisions).toEqual(["cancel"]);
 
   await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
   await expect(workflow.confirmationCards).toHaveCount(2);
   await workflow.confirmationCards.last().getByRole("button", { name: "Run" }).click();
-  await expect(page.getByTestId("evidence-summary")).toContainText(
+  await expect(page.getByTestId("qa-answer-text").last()).toContainText(
     "Return objects matching the temporary topology rule.",
   );
+  expect(resumeDecisions).toEqual(["cancel", "confirm"]);
+});
+
+test("paused direction review survives a page refresh and resumes from persisted state", async ({
+  page,
+}) => {
+  const workflow = reviewWorkflow(page);
+
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+
+  // Pause the turn on a direction review.
+  await workflow.sendPrompt("What is downstream of the piping?");
+  await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
+
+  // Refresh: session id, thread history, and the paused turn are persisted.
+  await page.reload();
+  await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
+
+  // Resuming after the refresh routes through the turn-scoped endpoint and
+  // completes the original question.
+  await page.getByTestId("direction-confirm").click();
+  await page.getByTestId("grounded-qa-answer").last().waitFor({ state: "visible" });
+  await expect(page.getByTestId("qa-answer-text").last()).toContainText(
+    /Confirmed downstream flow direction/,
+  );
+});
+
+test("duplicate turn requests with the same request id do not re-execute the turn", async ({
+  page,
+}) => {
+  const workflow = reviewWorkflow(page);
+
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+
+  // Ask once through the UI so the session has a prepared topology and the
+  // turn transport is exercised end to end.
+  await workflow.sendPrompt("What downstream process objects are reachable from the pump?");
+  await page.getByTestId("grounded-qa-answer").waitFor({ state: "visible" });
+
+  // Re-POST the same request id twice straight from the browser: the backend
+  // must replay the persisted turn, not run a second execution.
+  const [first, second] = await page.evaluate(async () => {
+    const sessionId = window.localStorage.getItem("pydexpi.pidQa.sessionId.v1");
+    const post = async () => {
+      const response = await fetch(`/api/review/sessions/${sessionId}/turns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: "What downstream process objects are reachable from the pump?",
+          request_id: "duplicate-request-e2e",
+        }),
+      });
+      return response.json();
+    };
+    const a = await post();
+    const b = await post();
+    return [a, b];
+  });
+
+  expect(first.turn_id).toBe(second.turn_id);
+  expect(first.status).toBe("completed");
+  // Identical event log — the duplicate replayed, nothing re-executed.
+  expect(second.events).toEqual(first.events);
+});
+
+test("canceling an active turn from the chat composer reaches a terminal canceled state", async ({
+  page,
+}) => {
+  // The real backend executes turns synchronously and too fast to catch
+  // mid-flight, so mock an active turn lifecycle: hold the start POST until
+  // the cancel endpoint is hit, then resolve both with the canceled state.
+  const canceledTurn = {
+    turn_id: "turn-cancel-e2e",
+    session_id: "session-cancel-e2e",
+    status: "canceled",
+    question: "A long-running question",
+    request_id: "req-cancel-e2e",
+    events: [
+      { sequence: 1, type: "tool-progress", data: { status: "started" } },
+      { sequence: 2, type: "cancellation", data: { message: "Canceled by user." } },
+    ],
+  };
+  const { promise: cancelArrived, resolve: cancelRequested } = Promise.withResolvers<void>();
+  await page.route("**/api/review/sessions/*/turns", async (route) => {
+    // Keep the turn "active" until the user cancels.
+    await cancelArrived;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(canceledTurn),
+    });
+  });
+  await page.route("**/api/review/sessions/*/turns/*/cancel", async (route) => {
+    cancelRequested();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(canceledTurn),
+    });
+  });
+
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.sendPrompt("A long-running question");
+
+  // The composer switches to a stop control while the turn is running.
+  await page.getByRole("button", { name: "Stop generating" }).click();
+
+  // The turn reaches its terminal canceled state and the user can see it.
+  await workflow.expectAssistantReply(/The turn was canceled/);
 });

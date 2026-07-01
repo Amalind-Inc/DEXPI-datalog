@@ -39,14 +39,22 @@ class TurnLifecycleStore:
         try:
             result = execute()
         except Exception as error:
-            turn["status"] = "failed"
-            self._append(turn, "failure", {"message": str(error)})
-            self._save(turn)
+            with self._lock:
+                current = self.get(session_id=session_id, turn_id=turn_id)
+                if current is not None and current.get("status") == "canceled":
+                    return current
+                turn["status"] = "failed"
+                self._append(turn, "failure", {"message": str(error)})
+                self._save(turn)
             return turn
 
-        turn["result"] = result
-        self._append_result_events(turn, result)
-        self._save(turn)
+        with self._lock:
+            current = self.get(session_id=session_id, turn_id=turn_id)
+            if current is not None and current.get("status") == "canceled":
+                return current
+            turn["result"] = result
+            self._append_result_events(turn, result)
+            self._save(turn)
         return turn
 
     def begin(
@@ -81,18 +89,19 @@ class TurnLifecycleStore:
         return value if isinstance(value, dict) else None
 
     def cancel(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
-        turn = self.get(session_id=session_id, turn_id=turn_id)
-        if turn is None:
-            return None
-        if turn.get("status") in {"active", "paused"}:
-            turn["status"] = "canceled"
-            self._append(
-                turn,
-                "cancellation",
-                {"message": "The turn was canceled by the user."},
-            )
-            self._save(turn)
-        return turn
+        with self._lock:
+            turn = self.get(session_id=session_id, turn_id=turn_id)
+            if turn is None:
+                return None
+            if turn.get("status") in {"active", "paused"}:
+                turn["status"] = "canceled"
+                self._append(
+                    turn,
+                    "cancellation",
+                    {"message": "The turn was canceled by the user."},
+                )
+                self._save(turn)
+            return turn
 
     def resume(
         self,

@@ -291,3 +291,109 @@ def test_paused_datalog_confirmation_turn_can_be_canceled() -> None:
         ).json()
         assert canceled["status"] == "canceled"
         assert canceled["events"][-1]["type"] == "cancellation"
+
+
+def test_cancel_during_active_execution_is_not_overwritten() -> None:
+    """A cancel that arrives while execute() is still running must leave the turn
+    permanently canceled; start() must not overwrite it with the result on return.
+
+    Race window: begin() saves status=active, then execute() blocks.  cancel()
+    reads active, writes canceled.  When execute() returns, start() must re-read
+    the disk state and respect the terminal cancellation rather than saving the
+    result on top of it.
+    """
+    import hashlib
+    import threading
+
+    session_id = "race-session"
+    request_id = "race-request"
+    # Pre-compute the turn_id using the same formula as TurnLifecycleStore.start()
+    turn_id = hashlib.sha256(
+        f"{session_id}\n{request_id}".encode("utf-8")
+    ).hexdigest()[:20]
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        store = TurnLifecycleStore(root)
+
+        execute_started = threading.Event()
+        cancel_done = threading.Event()
+
+        def slow_execute() -> dict[str, object]:
+            execute_started.set()
+            cancel_done.wait(timeout=5.0)  # block until cancel has been written
+            return {
+                "status": "answered",
+                "answer_text": "Too late — should be discarded.",
+                "evidence_references": [],
+                "evidence_highlight": {},
+                "conversation_state": [],
+            }
+
+        errors: list[Exception] = []
+
+        def do_cancel() -> None:
+            execute_started.wait(timeout=5.0)
+            try:
+                store.cancel(session_id=session_id, turn_id=turn_id)
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                cancel_done.set()
+
+        cancel_thread = threading.Thread(target=do_cancel, daemon=True)
+        cancel_thread.start()
+
+        final = store.start(
+            session_id=session_id,
+            request_id=request_id,
+            question="A slow question",
+            execute=slow_execute,
+        )
+        cancel_thread.join(timeout=5.0)
+
+        assert not errors, errors
+        # start() must return the canceled state, not the result
+        assert final["status"] == "canceled", f"expected canceled, got {final['status']}"
+        # Disk state must also be canceled — not overwritten
+        reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
+        assert reloaded is not None
+        assert reloaded["status"] == "canceled"
+        assert reloaded["events"][-1]["type"] == "cancellation"
+        assert "answer_text" not in str(reloaded.get("result", ""))
+
+
+def test_bundled_pump_check_command_runs_rule_pack_inside_turn() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        provider = CountingProvider()
+        app = create_review_api_app(
+            artifact_root=root, qa_provider_factory=lambda: provider
+        )
+        client = TestClient(app)
+        session_id = "pump-check-session"
+        prepared = client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": E06_FIXTURE.name,
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        assert prepared.status_code == 200
+
+        path = f"/api/review/sessions/{session_id}/turns"
+        body = {
+            "request_id": "pump-check-1",
+            "question": "Run the bundled pump discharge check.",
+        }
+        first = client.post(path, json=body).json()
+
+        # The command executes the trusted rule pack, not the QA provider.
+        assert provider.calls == 0
+        assert first["status"] == "completed"
+        assert first["result"]["result_artifact"]["kind"] == "rule_pack_result"
+        assert first["result"]["rule_id"] == "pump_discharge_check_valve"
+
+        # Duplicate request replays the persisted turn without re-execution.
+        duplicate = client.post(path, json=body).json()
+        assert duplicate == first

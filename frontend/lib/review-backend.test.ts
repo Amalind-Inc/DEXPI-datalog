@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   answerChatWithReviewBackend,
   executeConfirmedDatalog,
+  getTurnFromBackend,
   prepareReviewSession,
+  startTurnOnBackend,
   submitDirectionReview,
   submitTemporaryDatalogReview,
 } from "./review-backend.ts";
@@ -729,4 +731,126 @@ test("OLLAMA_MODEL takes precedence over OPENROUTER_API_KEY in env routing", asy
     if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
   }
+});
+
+test("startTurnOnBackend applies source scope and provider settings before starting the turn", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    calls.push({
+      method: init?.method ?? "GET",
+      path,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  const turn = await startTurnOnBackend(
+    "session-1",
+    {
+      question: "What is downstream of the pump?",
+      request_id: "req-1",
+      conversation: [],
+      selected_node_id: "node-p101",
+    },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      // Non-test credential: provider-settings PUT fires.
+      providerSettings: { provider: "ollama", model: "llama3", credential: "ollama-local" },
+    },
+  );
+
+  assert.deepEqual(
+    calls.map((call) => [call.method, call.path]),
+    [
+      ["PUT", "/api/review/sessions/session-1/source-scope"],
+      ["PUT", "/api/review/sessions/session-1/provider-settings"],
+      ["POST", "/api/review/sessions/session-1/turns"],
+    ],
+  );
+  assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
+  assert.deepEqual(calls[1].body, { provider: "ollama", model: "llama3", credential: "ollama-local" });
+  // selected_node_id is frontend routing state, never part of the turn body.
+  assert.deepEqual(calls[2].body, {
+    question: "What is downstream of the pump?",
+    request_id: "req-1",
+    conversation: [],
+  });
+  assert.equal(turn.turn_id, "turn-1");
+});
+
+test("startTurnOnBackend skips provider-settings PUT for test sentinel credentials", async () => {
+  const paths: string[] = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    paths.push(`${init?.method ?? "GET"} ${new URL(String(url)).pathname}`);
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await startTurnOnBackend(
+    "session-1",
+    { question: "q", request_id: "req-1" },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: { provider: "openai", model: "gpt-4.1", credential: "sk-test-sentinel" },
+    },
+  );
+
+  // provider-settings PUT must be absent; only the turn POST fires.
+  assert.deepEqual(paths, ["POST /api/review/sessions/session-1/turns"]);
+});
+
+test("startTurnOnBackend scope failure throws (caller must resolve real node ids)", async () => {
+  const fetcher = async (url: string | URL | Request) => {
+    if (String(url).endsWith("/source-scope")) return new Response("bad node", { status: 400 });
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await assert.rejects(
+    startTurnOnBackend(
+      "session-1",
+      { question: "q", request_id: "req-1", selected_node_id: "invalid-node" },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
+    ),
+    /source-scope update failed/,
+  );
+});
+
+test("startTurnOnBackend skips source-scope PUT without a selected node", async () => {
+  const paths: string[] = [];
+  const fetcher = async (url: string | URL | Request) => {
+    paths.push(new URL(String(url)).pathname);
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await startTurnOnBackend(
+    "session-1",
+    { question: "q", request_id: "req-1" },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
+  );
+
+  assert.deepEqual(paths, ["/api/review/sessions/session-1/turns"]);
+});
+
+test("getTurnFromBackend preserves the backend HTTP status for failures", async () => {
+  const notFound = await getTurnFromBackend("session-1", "missing-turn", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () => new Response("nope", { status: 404 })) as typeof fetch,
+  });
+  assert.deepEqual(notFound, { turn: null, status: 404 });
+
+  const backendDown = await getTurnFromBackend("session-1", "turn-1", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () => new Response("boom", { status: 500 })) as typeof fetch,
+  });
+  assert.deepEqual(backendDown, { turn: null, status: 500 });
+
+  const ok = await getTurnFromBackend("session-1", "turn-1", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () =>
+      Response.json({ turn_id: "turn-1", status: "completed" })) as typeof fetch,
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.turn, { turn_id: "turn-1", status: "completed" });
 });
