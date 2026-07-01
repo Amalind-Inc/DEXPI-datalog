@@ -6,7 +6,7 @@ import time
 from typing import Callable
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
@@ -14,6 +14,7 @@ from ..qa.grounded_qa_harness import QATurnProvider, ScriptedQATurnProvider
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
+from .turn_lifecycle import TurnLifecycleStore
 
 
 class TopologyAwareFakeModelProvider:
@@ -89,6 +90,7 @@ def create_review_api_app(
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     flow = ChainlitReviewFlow(artifact_root=artifact_root, limits=preparation_limits)
+    turns = TurnLifecycleStore(artifact_root)
 
     def _resolve_provider(session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
@@ -234,6 +236,105 @@ def create_review_api_app(
                 conversation=conversation_turns,
             )
         )
+
+    @app.post("/api/review/sessions/{session_id}/turns")
+    def start_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
+        question = _required_string(body, "question")
+        request_id = _required_string(body, "request_id")
+        conversation = body.get("conversation")
+        conversation_turns = (
+            [turn for turn in conversation if isinstance(turn, dict)]
+            if isinstance(conversation, list)
+            else None
+        )
+        return _call_ready(
+            lambda: turns.start(
+                session_id=session_id,
+                request_id=request_id,
+                question=question,
+                execute=lambda: flow.run_qa_turn(
+                    session_id=session_id,
+                    question=question,
+                    qa_provider=_resolve_qa_provider(session_id),
+                    conversation=conversation_turns,
+                ),
+            )
+        )
+
+    @app.get("/api/review/sessions/{session_id}/turns/{turn_id}")
+    def get_turn(session_id: str, turn_id: str) -> dict[str, object]:
+        turn = turns.get(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        return turn
+
+    @app.get("/api/review/sessions/{session_id}/turns/{turn_id}/events")
+    def stream_turn_events(
+        session_id: str, turn_id: str, after: int = -1
+    ) -> StreamingResponse:
+        turn = turns.get(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        events = turn.get("events", [])
+        selected = [event for event in events if isinstance(event, dict) and int(event.get("sequence", -1)) > after] if isinstance(events, list) else []
+        return StreamingResponse(
+            (json.dumps(event, sort_keys=True) + "\n" for event in selected),
+            media_type="application/x-ndjson",
+        )
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/cancel")
+    def cancel_turn(session_id: str, turn_id: str) -> dict[str, object]:
+        turn = turns.cancel(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        return turn
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/direction-review")
+    def resume_direction_review(
+        session_id: str, turn_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        decision = _required_string(body, "decision")
+        review_key = _required_string(body, "review_key")
+        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        resumed = turns.resume(
+            session_id=session_id,
+            turn_id=turn_id,
+            execute=lambda: flow.submit_direction_review(
+                session_id=session_id,
+                question=str(existing["question"]),
+                decision=decision,
+                review_key=review_key,
+                qa_provider=_resolve_qa_provider(session_id),
+            ),
+        )
+        assert resumed is not None
+        return resumed
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/datalog-review")
+    def resume_datalog_review(
+        session_id: str, turn_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        decision = _required_string(body, "decision")
+        proposal_result = body.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            raise _bad_request("request body must include a proposal_result object")
+        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        resumed = turns.resume(
+            session_id=session_id,
+            turn_id=turn_id,
+            execute=lambda: flow.submit_temporary_datalog_review(
+                session_id=session_id,
+                question=str(existing["question"]),
+                decision=decision,
+                proposal_result=proposal_result,
+            ),
+        )
+        assert resumed is not None
+        return resumed
 
     @app.post("/api/review/sessions/{session_id}/direction-reviews")
     def submit_direction_review(
