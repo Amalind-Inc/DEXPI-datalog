@@ -21,8 +21,10 @@ from ..qa.flow_direction import (
     evaluation_boundary,
 )
 from ..qa.grounded_qa_harness import (
+    DEFAULT_MAX_CONVERSATION_TURNS,
     ConversationTurn,
     QATurnProvider,
+    compact_conversation,
     run_grounded_qa_turn,
 )
 from ..qa.topology_tools import TopologyTools
@@ -143,11 +145,13 @@ class ChainlitReviewFlow:
         artifact_root: Path,
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
+        max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     ) -> None:
         self._service = ReviewSessionService(
             artifact_root=artifact_root, limits=limits
         )
         self._clock = clock
+        self._max_conversation_turns = max_conversation_turns
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
@@ -1082,6 +1086,10 @@ class ChainlitReviewFlow:
             topology_tools=tools,
             provider=qa_provider,
             conversation=prior_turns,
+            max_conversation_turns=self._max_conversation_turns,
+        )
+        conversation_state = self._compacted_conversation_state(
+            prior_turns, question=question, result=result
         )
 
         paths = []
@@ -1113,7 +1121,39 @@ class ChainlitReviewFlow:
             "result": result,
             "matched_object_ids": matched_object_ids,
             "valid_paths": valid_paths,
+            "conversation_state": conversation_state,
         }
+
+    def _compacted_conversation_state(
+        self,
+        prior_turns: list[ConversationTurn],
+        *,
+        question: str,
+        result: object,
+    ) -> list[dict[str, object]]:
+        """Return backend-authored conversation state the stateless client echoes
+        on the next turn. The new grounded turn is appended and the whole history
+        is compacted so it stays bounded while preserving evidence identities.
+
+        Only validated evidence identities are carried forward; prior prose (the
+        answer text) is context only and is re-validated on the next turn.
+        """
+        new_turn = ConversationTurn(
+            question=question,
+            answer_text=str(getattr(result, "answer_text", "")),
+            evidence_references=list(getattr(result, "evidence_references", [])),
+        )
+        carried = compact_conversation(
+            [*prior_turns, new_turn], max_turns=self._max_conversation_turns
+        )
+        return [
+            {
+                "question": turn.question,
+                "answer_text": turn.answer_text,
+                "evidence_references": list(turn.evidence_references),
+            }
+            for turn in carried
+        ]
 
     @staticmethod
     def _primary_witness_path(
@@ -1162,6 +1202,7 @@ class ChainlitReviewFlow:
             "source_grounded": result.source_grounded,
             "disclosure": result.disclosure,
             "evidence_highlight": evidence_highlight,
+            "conversation_state": list(answer.get("conversation_state", [])),
         }
         if direction is not None:
             payload["direction"] = direction

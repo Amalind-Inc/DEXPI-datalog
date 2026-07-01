@@ -21,6 +21,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     QATurnResult,
     ScriptedQATurnProvider,
     ToolCall,
+    compact_conversation,
     run_grounded_qa_turn,
 )
 
@@ -840,3 +841,186 @@ def test_conversation_state_cannot_smuggle_prose_through_prior_evidence():
         conversation=conversation,
     )
     assert seen_grounded_ids == [[PUMP_ID]]
+
+
+def test_compaction_folds_old_turns_but_preserves_evidence_identity():
+    """Past a turn threshold, older prose is folded into a single summary turn,
+    yet the evidence identities it established remain reusable by identity and
+    the recent turns are kept verbatim."""
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump P-101 is right here in the loaded source.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle N-1 hangs off the pump body.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="What about the segment?",
+            answer_text="Segment S-1 continues downstream.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    compacted = compact_conversation(conversation, max_turns=2)
+
+    # The conversation was compacted below the caller-supplied window.
+    assert len(compacted) == 2
+    # The most recent turn is preserved verbatim.
+    assert compacted[-1].question == "What about the segment?"
+    assert compacted[-1].evidence_references == [SEGMENT_ID]
+    # The folded turns collapse into a leading summary that keeps every prior
+    # evidence identity so later follow-ups can still reuse them.
+    summary = compacted[0]
+    assert PUMP_ID in summary.evidence_references
+    assert NOZZLE_ID in summary.evidence_references
+    # Summary prose is context only; it carries the prior user decisions/questions
+    # but is not any single verbatim prior answer that could masquerade as fact.
+    assert "Where is the pump?" in summary.answer_text
+    assert "And the nozzle?" in summary.answer_text
+
+
+def test_compaction_preserves_follow_up_evidence_reuse_across_threshold():
+    """A follow-up asked after the conversation crossed the compaction threshold
+    still resolves against a prior-turn evidence identity that was folded into
+    the summary."""
+    seen_grounded_ids: list[list[str]] = []
+
+    class InspectingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            for message in messages:
+                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                    seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
+            return FinalAnswer(answer_text="ok", evidence_references=[])
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    run_grounded_qa_turn(
+        question="Thanks",
+        topology_tools=tools,
+        provider=InspectingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+
+    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    # The folded pump/nozzle identities remain offered to the model for reuse.
+    assert PUMP_ID in offered
+    assert NOZZLE_ID in offered
+    assert SEGMENT_ID in offered
+
+
+def test_compaction_drops_stale_evidence_but_keeps_valid_for_reuse():
+    """After compaction, a folded evidence identity that is no longer valid in the
+    current topology is dropped (the model must request fresh evidence), while a
+    still-valid folded identity remains available for reuse."""
+    seen_grounded_ids: list[list[str]] = []
+
+    class InspectingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            for message in messages:
+                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                    seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
+            return FinalAnswer(answer_text="ok", evidence_references=[])
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID, "node-removed-since"],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    run_grounded_qa_turn(
+        question="Thanks",
+        topology_tools=tools,
+        provider=InspectingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+
+    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    # Valid identities survive compaction and remain reusable by identity.
+    assert PUMP_ID in offered
+    assert NOZZLE_ID in offered
+    # The stale identity is dropped; it is never offered back for reuse.
+    assert "node-removed-since" not in offered
+
+
+def test_compaction_summary_prose_is_never_promoted_to_evidence():
+    """A model that cites the compacted summary prose as an identity has that
+    citation rejected; folded prose remains context and never becomes evidence."""
+
+    class ProseCitingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            summary_text = ""
+            for message in messages:
+                if message.get("role") == "user" and "Earlier in this conversation" in str(
+                    message.get("content", "")
+                ):
+                    summary_text = str(message["content"])
+            return FinalAnswer(
+                answer_text="Reusing the summary.",
+                evidence_references=[summary_text],
+                interpreted_object_ids=[summary_text],
+            )
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    result = run_grounded_qa_turn(
+        question="Summarize",
+        topology_tools=tools,
+        provider=ProseCitingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+    assert result.evidence_references == []
+    assert result.interpreted_object_ids == []

@@ -10,7 +10,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
-from ..qa.grounded_qa_harness import QATurnProvider, ScriptedQATurnProvider
+from ..qa.grounded_qa_harness import (
+    DEFAULT_MAX_CONVERSATION_TURNS,
+    QATurnProvider,
+    ScriptedQATurnProvider,
+)
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
@@ -85,11 +89,16 @@ def create_review_api_app(
     model_provider_factory: Callable[[], ModelProvider] | None = None,
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
+    max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API."""
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
-    flow = ChainlitReviewFlow(artifact_root=artifact_root, limits=preparation_limits)
+    flow = ChainlitReviewFlow(
+        artifact_root=artifact_root,
+        limits=preparation_limits,
+        max_conversation_turns=max_conversation_turns,
+    )
     turns = TurnLifecycleStore(artifact_root)
 
     def _resolve_provider(session_id: str) -> ModelProvider:

@@ -444,6 +444,59 @@ class ScriptedQATurnProvider:
         return ", ".join(ids) if ids else "no objects"
 
 
+# Compaction: past this many carried turns, older prose is folded into a single
+# summary turn. The summary preserves prior user questions (decisions) and the
+# union of prior evidence identities so follow-ups can still reuse them; the
+# summary prose is context only and is re-validated like any prior turn, so it
+# can never smuggle prose in as engineering evidence.
+DEFAULT_MAX_CONVERSATION_TURNS = 12
+
+
+def compact_conversation(
+    conversation: list[ConversationTurn],
+    *,
+    max_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
+) -> list[ConversationTurn]:
+    """Fold older conversation turns into a leading summary turn once the history
+    exceeds ``max_turns``.
+
+    Grounding is preserved structurally: the summary turn carries every prior
+    user question (the decisions that shaped the thread) and the ordered union of
+    the folded turns' evidence identities. Recent turns are kept verbatim. Prior
+    prose is never concatenated into the summary as fact; only the questions and
+    the evidence identities survive, and identities are re-validated downstream
+    against the current topology before reuse.
+    """
+    if max_turns < 1:
+        raise ValueError("max_turns must be at least 1")
+    if len(conversation) <= max_turns:
+        return list(conversation)
+
+    # One slot is reserved for the summary; keep the most recent turns verbatim.
+    recent_count = max_turns - 1
+    folded = conversation[: len(conversation) - recent_count]
+    recent = conversation[len(conversation) - recent_count :] if recent_count else []
+
+    preserved_ids: list[str] = []
+    questions: list[str] = []
+    for turn in folded:
+        if turn.question:
+            questions.append(turn.question)
+        for reference in turn.evidence_references:
+            if reference not in preserved_ids:
+                preserved_ids.append(reference)
+
+    summary_text = "Earlier in this conversation you asked: " + " ".join(
+        f"({index}) {question}" for index, question in enumerate(questions, start=1)
+    )
+    summary = ConversationTurn(
+        question="[earlier conversation summary]",
+        answer_text=summary_text,
+        evidence_references=preserved_ids,
+    )
+    return [summary, *recent]
+
+
 def run_grounded_qa_turn(
     *,
     question: str,
@@ -451,6 +504,7 @@ def run_grounded_qa_turn(
     provider: QATurnProvider,
     conversation: list[ConversationTurn] | None = None,
     max_rounds: int = 10,
+    max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
 ) -> QATurnResult:
     """Execute a grounded QA turn: model calls tools, backend executes them, model answers.
 
@@ -486,7 +540,10 @@ def run_grounded_qa_turn(
     messages: list[dict[str, object]] = [
         {"role": "system", "content": topology_tools.system_prompt()}
     ]
-    for turn in conversation or []:
+    carried = compact_conversation(
+        list(conversation or []), max_turns=max_conversation_turns
+    )
+    for turn in carried:
         valid_prior = [ref for ref in turn.evidence_references if ref in known_ids]
         messages.append({"role": "user", "content": turn.question})
         messages.append(

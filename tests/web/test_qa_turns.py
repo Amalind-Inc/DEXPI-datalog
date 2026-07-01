@@ -325,3 +325,59 @@ class QATurnsApiTests(unittest.TestCase):
             self.assertIn(
                 "per my earlier note, things connect", body["rejected_references"]
             )
+
+
+class QAConversationCompactionTests(unittest.TestCase):
+    """Long conversations are compacted server-side without losing grounding, and
+    a follow-up asked after the compaction threshold stays grounded."""
+
+    def _prepare(self, max_conversation_turns: int) -> tuple[TestClient, str]:
+        tmp_path = Path(tempfile.mkdtemp())
+        app = create_review_api_app(
+            artifact_root=tmp_path / "sessions",
+            max_conversation_turns=max_conversation_turns,
+        )
+        client = TestClient(app)
+        session_id = "qa-compaction-session"
+        prepared = client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": "E06V01-VER.EX01.xml",
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        assert prepared.status_code == 200, prepared.text
+        return client, session_id
+
+    def test_conversation_state_is_bounded_and_follow_up_stays_grounded(self) -> None:
+        client, session_id = self._prepare(max_conversation_turns=2)
+
+        # Turn 1 establishes grounded evidence identities.
+        first = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": "What is reachable from the nozzle?"},
+        ).json()
+        prior_ids = first["evidence_references"]
+        self.assertTrue(prior_ids)
+        conversation = first["conversation_state"]
+
+        # Several more turns push the history past the compaction threshold.
+        for question in ("Any valves?", "What about the pump?"):
+            body = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": question, "conversation": conversation},
+            ).json()
+            conversation = body["conversation_state"]
+            # The backend keeps the carried conversation bounded to the threshold.
+            self.assertLessEqual(len(conversation), 2)
+
+        # A follow-up after compaction still resolves against a prior identity.
+        follow_up = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": "What is reachable from those?", "conversation": conversation},
+        ).json()
+        self.assertEqual(follow_up["status"], "answered")
+        self.assertTrue(
+            set(follow_up["interpreted_object_ids"]) & set(prior_ids),
+            "post-compaction follow-up should reuse a prior evidence identity",
+        )
