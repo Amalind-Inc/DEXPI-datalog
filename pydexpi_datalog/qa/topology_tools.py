@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
+from time import monotonic
 
 from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_ALLOWED_READ_ONLY,
@@ -13,6 +15,16 @@ from pydexpi_datalog.qa.capability_manifest import (
 from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 
+
+@dataclass(frozen=True)
+class RetrievalBudgets:
+    max_steps: int = 10
+    max_seconds: float = 10.0
+    max_paths: int = 30
+    max_rows: int = 100
+    max_evidence_objects: int = 100
+    max_path_length: int = 30
+    max_payload_bytes: int = 100_000
 
 
 class TopologyTools:
@@ -26,12 +38,18 @@ class TopologyTools:
         topology_view: dict[str, object],
         session_id: str,
         graph_facts: dict[str, object] | None = None,
+        retrieval_budgets: RetrievalBudgets | None = None,
     ) -> None:
         self._topology = topology_view
         self._session_id = session_id
+        self._retrieval_budgets = retrieval_budgets or RetrievalBudgets()
+        self._retrieval_steps = 0
+        self._retrieval_started_at = monotonic()
         self._nodes: list[dict[str, object]] = list(topology_view.get("nodes", []))  # type: ignore[arg-type]
         self._edges: list[dict[str, object]] = list(topology_view.get("edges", []))  # type: ignore[arg-type]
-        self._evidence_map: dict[str, object] = dict(topology_view.get("evidence_map", {}))  # type: ignore[arg-type]
+        self._evidence_map: dict[str, object] = dict(
+            topology_view.get("evidence_map", {})
+        )  # type: ignore[arg-type]
         self._capability_manifest = default_grounded_qa_manifest()
         self._uses_topology_adapter = graph_facts is None
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
@@ -42,7 +60,6 @@ class TopologyTools:
             source_id=str(topology_view.get("source_id") or session_id),
         )
 
-
     def tool_definitions(self) -> list[dict[str, object]]:
         return self._capability_manifest.provider_tool_definitions()
 
@@ -50,7 +67,9 @@ class TopologyTools:
         """Model-facing system prompt derived from the capability manifest."""
         return self._capability_manifest.system_prompt()
 
-    def execute(self, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
+    def execute(
+        self, tool_name: str, tool_input: dict[str, object]
+    ) -> dict[str, object]:
         capability = self._capability_manifest.get(tool_name)
         if capability is None:
             return self._tool_rejection(
@@ -84,12 +103,21 @@ class TopologyTools:
                 code="tool.unsupported_permission",
                 message=f"unsupported permission class: {capability.permission_class}",
             )
+        budget_rejection = self._operation_budget_rejection()
+        if budget_rejection is not None:
+            return budget_rejection
+        self._retrieval_steps += 1
         if tool_name == "find_equipment":
-            return self._find_equipment(str(tool_input.get("pattern", "")))
+            return self._find_equipment(
+                str(tool_input.get("pattern", "")),
+                claim_type=str(tool_input.get("claim_type", "existential")),
+                evidence_role=str(tool_input.get("evidence_role", "witness")),
+            )
         if tool_name == "get_reachable_equipment":
             return self._get_reachable_equipment(
                 str(tool_input.get("equipment_id", "")),
                 int(tool_input.get("max_hops", 6)),
+                claim_type=str(tool_input.get("claim_type", "existential")),
             )
         return self._tool_rejection(
             tool_name=tool_name,
@@ -215,7 +243,11 @@ class TopologyTools:
             )
         approved_predicates = {"answer", "reachable"}
         unapproved_predicates = sorted(
-            {predicate for predicate in predicate_names if predicate not in approved_predicates}
+            {
+                predicate
+                for predicate in predicate_names
+                if predicate not in approved_predicates
+            }
         )
         if unapproved_predicates:
             diagnostics.append(
@@ -226,7 +258,9 @@ class TopologyTools:
                 }
             )
         output_lines = [
-            line.strip() for line in stripped.splitlines() if line.strip().startswith(".output")
+            line.strip()
+            for line in stripped.splitlines()
+            if line.strip().startswith(".output")
         ]
         if output_lines != [".output answer"]:
             diagnostics.append(
@@ -330,7 +364,10 @@ class TopologyTools:
                     }
                 ],
             }
-        if not isinstance(validation, dict) or validation.get("status") != "safe_to_confirm":
+        if (
+            not isinstance(validation, dict)
+            or validation.get("status") != "safe_to_confirm"
+        ):
             return {
                 "status": "execution_failed",
                 "executed": False,
@@ -410,10 +447,13 @@ class TopologyTools:
         "other": 6,
     }
 
-    def _find_equipment(self, pattern: str) -> dict[str, object]:
+    def _find_equipment(
+        self, pattern: str, *, claim_type: str, evidence_role: str
+    ) -> dict[str, object]:
         normalized = pattern.lower()
         matches = []
-        for index, node in enumerate(self._nodes):
+        examined_nodes = self._nodes[: self._retrieval_budgets.max_rows]
+        for index, node in enumerate(examined_nodes):
             display_name = str(node.get("display_name") or "")
             class_name = str(node.get("class_name") or "")
             raw_label = str(node.get("label", ""))
@@ -429,7 +469,10 @@ class TopologyTools:
                         index,
                         {
                             "evidence_id": node["id"],
-                            "label": display_name or tag_name or raw_label or str(node["id"]),
+                            "label": display_name
+                            or tag_name
+                            or raw_label
+                            or str(node["id"]),
                             "node_class": class_name or raw_label,
                             "category": category,
                             "description": str(node.get("description") or ""),
@@ -439,22 +482,90 @@ class TopologyTools:
                 )
         matches.sort(key=lambda item: (item[0], item[1]))
         ordered = [entry for _, _, entry in matches]
-        total = len(ordered)
-        bounded = ordered[: self.MAX_FIND_RESULTS]
+        total = len(self._nodes)
+        total_matches = sum(
+            1
+            for node in self._nodes
+            if not normalized
+            or normalized
+            in " ".join(
+                str(node.get(key) or "")
+                for key in (
+                    "display_name",
+                    "class_name",
+                    "label",
+                    "tag_name",
+                    "category",
+                )
+            ).lower()
+        )
+        result_limit = min(
+            self.MAX_FIND_RESULTS,
+            self._retrieval_budgets.max_rows,
+            self._retrieval_budgets.max_evidence_objects,
+        )
+        bounded = ordered[:result_limit]
+        limitations = []
+        if len(self._nodes) > self._retrieval_budgets.max_rows:
+            limitations.append(
+                {
+                    "code": "retrieval.row_limit",
+                    "message": "Retrieval stopped at the configured row limit.",
+                    "limit": self._retrieval_budgets.max_rows,
+                }
+            )
+        elif total_matches > result_limit:
+            limitations.append(self._limitation("row_limit", result_limit))
+        if len(ordered) > self._retrieval_budgets.max_evidence_objects:
+            limitations.append(
+                {
+                    "code": "retrieval.evidence_object_limit",
+                    "message": "Retrieval stopped at the configured evidence-object limit.",
+                    "limit": self._retrieval_budgets.max_evidence_objects,
+                }
+            )
+        complete = (
+            not limitations
+            and len(examined_nodes) == len(self._nodes)
+            and len(ordered) == len(bounded)
+        )
+        if self._payload_too_large(bounded):
+            bounded = []
+            complete = False
+            limitations.insert(
+                0,
+                self._limitation(
+                    "payload_size_limit", self._retrieval_budgets.max_payload_bytes
+                ),
+            )
+        outcome = self._claim_outcome(
+            claim_type=claim_type,
+            has_evidence=bool(bounded),
+            complete=complete,
+            evidence_role=evidence_role,
+        )
         return {
             "matches": bounded,
             "count": len(bounded),
-            "total_matches": total,
-            "truncated": total > len(bounded),
+            "total_matches": total_matches,
+            "truncated": not complete,
+            "outcome": outcome,
+            "coverage": {
+                "complete": complete,
+                "examined_rows": len(examined_nodes),
+                "total_rows": total,
+                "returned_evidence_objects": len(bounded),
+            },
+            "limitations": limitations,
         }
 
     def _get_reachable_equipment(
-        self, equipment_id: str, max_hops: int
+        self, equipment_id: str, max_hops: int, *, claim_type: str
     ) -> dict[str, object]:
         result = self._interpretation.reachable_from(
             equipment_id,
             max_hops=max_hops,
-            result_limit=30,
+            result_limit=self._retrieval_budgets.max_paths,
         )
         if result.error is not None:
             return {
@@ -463,6 +574,18 @@ class TopologyTools:
                 "reachable": [],
             }
 
+        eligible = [
+            item
+            for item in result.reachable
+            if len(item.witness.topology_edge_ids)
+            <= self._retrieval_budgets.max_path_length
+        ]
+        evidence_limit = min(
+            self._retrieval_budgets.max_paths,
+            self._retrieval_budgets.max_rows,
+            self._retrieval_budgets.max_evidence_objects,
+        )
+        eligible = eligible[:evidence_limit]
         reachable = [
             {
                 "evidence_id": item.topology_id,
@@ -485,15 +608,112 @@ class TopologyTools:
                     ],
                 },
             }
-            for item in result.reachable
+            for item in eligible
         ]
+        limitations = []
+        if result.truncated:
+            limitations.append(
+                self._limitation("path_limit", self._retrieval_budgets.max_paths)
+            )
+        if any(
+            len(item.witness.topology_edge_ids)
+            > self._retrieval_budgets.max_path_length
+            for item in result.reachable
+        ) or (self._retrieval_budgets.max_path_length < max_hops and result.truncated):
+            limitations.append(
+                self._limitation(
+                    "path_length_limit", self._retrieval_budgets.max_path_length
+                )
+            )
+        complete = not limitations and not result.truncated
+        if self._payload_too_large(reachable):
+            reachable = []
+            complete = False
+            limitations.insert(
+                0,
+                self._limitation(
+                    "payload_size_limit", self._retrieval_budgets.max_payload_bytes
+                ),
+            )
         response: dict[str, object] = {
             "source_id": equipment_id,
             "reachable": reachable,
+            "outcome": self._claim_outcome(
+                claim_type=claim_type,
+                has_evidence=bool(reachable),
+                complete=complete,
+                evidence_role="witness",
+            ),
+            "coverage": {
+                "complete": complete,
+                "examined_paths": len(result.reachable),
+                "returned_paths": len(reachable),
+                "returned_evidence_objects": len(reachable),
+            },
+            "limitations": limitations,
         }
         if result.truncated:
             response["truncated"] = True
         return response
+
+    def _operation_budget_rejection(self) -> dict[str, object] | None:
+        if self._retrieval_steps >= self._retrieval_budgets.max_steps:
+            return self._limited_result("step_limit", self._retrieval_budgets.max_steps)
+        if (
+            monotonic() - self._retrieval_started_at
+            >= self._retrieval_budgets.max_seconds
+        ):
+            return self._limited_result(
+                "time_limit", self._retrieval_budgets.max_seconds
+            )
+        return None
+
+    def _limited_result(self, name: str, limit: int | float) -> dict[str, object]:
+        return {
+            "outcome": "indeterminate",
+            "matches": [],
+            "reachable": [],
+            "coverage": {"complete": False, "returned_evidence_objects": 0},
+            "limitations": [self._limitation(name, limit)],
+        }
+
+    @staticmethod
+    def _limitation(name: str, limit: int | float) -> dict[str, object]:
+        return {
+            "code": f"retrieval.{name}",
+            "message": f"Retrieval stopped at the configured {name.replace('_', ' ')}.",
+            "limit": limit,
+        }
+
+    def _payload_too_large(self, evidence: object) -> bool:
+        import json
+
+        return (
+            len(json.dumps(evidence, separators=(",", ":")).encode("utf-8"))
+            > self._retrieval_budgets.max_payload_bytes
+        )
+
+    @staticmethod
+    def _claim_outcome(
+        *, claim_type: str, has_evidence: bool, complete: bool, evidence_role: str
+    ) -> str:
+        if claim_type == "absence":
+            return (
+                "violated"
+                if has_evidence
+                else ("satisfied" if complete else "indeterminate")
+            )
+        if claim_type == "universal":
+            if has_evidence and evidence_role == "counterexample":
+                return "violated"
+            return "satisfied" if complete else "indeterminate"
+        if claim_type in {"existential", "counterexample", "explanation"}:
+            return (
+                "satisfied"
+                if has_evidence
+                else ("violated" if complete else "indeterminate")
+            )
+        return "indeterminate"
 
     def _topology_with_source_graph_ids(self) -> dict[str, object]:
         topology = dict(self._topology)
@@ -533,7 +753,9 @@ class TopologyTools:
                 "node_id": str(node["id"]),
                 "attributes": {
                     "label": str(node.get("label") or node.get("class_name") or ""),
-                    "tagName": str(node.get("tag_name") or node.get("display_name") or ""),
+                    "tagName": str(
+                        node.get("tag_name") or node.get("display_name") or ""
+                    ),
                 },
             }
             for node in self._nodes
