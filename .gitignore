@@ -8,9 +8,10 @@
 __pycache__/
 *.pyc
 .venv/
-logs/mcp_server.log
+logs/
+.tmp/
 
-.TrainingTestCases/*
+TrainingTestCases/
 
 # bv (beads viewer) local config and caches
 .bv/
@@ -23,5 +24,5 @@ AGENTS.md
 CONTEXT.md
 UBIQUITOUS_LANGUAGE.md
 
-.env/*
 .env
+.env.local
