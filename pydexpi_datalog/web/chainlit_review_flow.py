@@ -13,6 +13,10 @@ from ..llm.logic_requests import (
     route_without_model_access,
 )
 from ..llm.model_access import ModelProvider, require_native_tool_capable_model
+from ..qa.datalog_audit import (
+    append_datalog_audit_record,
+    build_datalog_audit_record,
+)
 from ..qa.flow_direction import (
     classify_path_direction_basis,
     detect_directed_intent,
@@ -949,7 +953,17 @@ class ChainlitReviewFlow:
         proposal_result: dict[str, object],
     ) -> dict[str, object]:
         topology = self._topology_for_session(session_id)
+        proposal_raw = proposal_result.get("proposal")
+        proposal = proposal_raw if isinstance(proposal_raw, dict) else {}
         if decision == "cancel":
+            self._append_datalog_audit(
+                session_id=session_id,
+                question=question,
+                proposal=proposal,
+                decision="canceled",
+                executed=False,
+                execution_status="not_executed",
+            )
             return {
                 "status": "canceled",
                 "session_id": session_id,
@@ -970,7 +984,16 @@ class ChainlitReviewFlow:
             graph_facts=graph_facts,
         )
         execution = tools.execute_confirmed_temporary_datalog(proposal_result)
-        if execution.get("status") != "answered":
+        executed = execution.get("status") == "answered"
+        self._append_datalog_audit(
+            session_id=session_id,
+            question=question,
+            proposal=proposal,
+            decision="approved",
+            executed=executed,
+            execution_status="answered" if executed else "execution_failed",
+        )
+        if not executed:
             return {
                 "status": "execution_failed",
                 "session_id": session_id,
@@ -1008,6 +1031,28 @@ class ChainlitReviewFlow:
             "tool_call_trace": [],
             "diagnostics": [],
         }
+
+    def _append_datalog_audit(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        proposal: dict[str, object],
+        decision: str,
+        executed: bool,
+        execution_status: str,
+    ) -> None:
+        record = build_datalog_audit_record(
+            session_id=session_id,
+            question=question,
+            proposal=proposal,
+            decision=decision,
+            executed=executed,
+            execution_status=execution_status,
+        )
+        append_datalog_audit_record(
+            self._service.artifact_root / session_id, record
+        )
 
     @staticmethod
     def _temporary_datalog_confirmation_payload(
