@@ -15,6 +15,8 @@ from ..semantics.derive_graph_semantics import (
     build_derived_graph_semantics_datalog,
     build_graph_facts_datalog,
 )
+from .topology_naming import derive_display_names
+from .pid_view import build_pid_view
 
 
 @dataclass(frozen=True)
@@ -466,17 +468,25 @@ def build_topology_view_model(
     fact_edges = graph_facts["facts"]["edges"]
 
     node_ids_by_raw_id = build_stable_node_id_map(fact_nodes)
+    display_names = derive_display_names(fact_nodes, fact_edges)
     nodes = []
     evidence_map: dict[str, dict[str, object]] = {}
     for node in sorted(
         fact_nodes, key=lambda item: node_ids_by_raw_id[item["node_id"]]
     ):
         stable_node_id = node_ids_by_raw_id[node["node_id"]]
+        naming = display_names.get(node["node_id"], {})
         nodes.append(
             {
                 "id": stable_node_id,
+                # `label` stays the raw DEXPI class for downstream Datalog/semantics.
                 "label": node["attributes"].get("label", stable_node_id),
                 "tag_name": node["attributes"].get("tagName"),
+                # Engineer-facing identifiers derived from the DEXPI hierarchy.
+                "display_name": naming.get("display_name") or stable_node_id,
+                "class_name": naming.get("class_name", ""),
+                "category": naming.get("category", "other"),
+                "description": naming.get("description", ""),
                 "proteus_id": node["attributes"].get("proteusId"),
                 "canonical_fact_id": stable_node_id,
                 "source_graph_node_id": node["node_id"],
@@ -553,6 +563,8 @@ def build_topology_view_model(
         "nodes": nodes,
         "edges": topology_edges,
         "evidence_map": evidence_map,
+        # P&ID-like compression: equipment units + collapsed lines, for the graph panel.
+        "pid_view": build_pid_view(nodes, fact_edges),
         "evidence_highlight": {
             "source_scope_ids": [],
             "matched_object_ids": [],
