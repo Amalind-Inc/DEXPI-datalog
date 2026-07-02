@@ -24,7 +24,36 @@ SUPPORTED_BYOK_PROVIDERS = {
         "api_key_env_var": "OPENROUTER_API_KEY",
         "default_model": "anthropic/claude-sonnet-4",
     },
+    "ollama": {
+        "api_key_env_var": "OLLAMA_BASE_URL",
+        "default_model": "ornith:35b",
+    },
 }
+
+NATIVE_TOOL_CAPABLE_MODELS = {
+    ("openai", "gpt-4.1"),
+    ("anthropic", "claude-sonnet-4"),
+    ("gemini", "gemini-2.5-pro"),
+    ("openrouter", "anthropic/claude-sonnet-4"),
+    ("ollama", "ornith:35b"),
+}
+
+
+class ModelCapabilityError(ValueError):
+    def __init__(self, *, code: str, provider: str, model: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.provider = provider
+        self.model = model
+
+    def diagnostic(self) -> dict[str, str]:
+        return {
+            "code": self.code,
+            "provider": self.provider,
+            "model": self.model,
+            "message": str(self),
+        }
+
 
 
 @dataclass(frozen=True)
@@ -93,6 +122,40 @@ def supported_byok_provider(provider: str) -> dict[str, str]:
             f"unsupported model provider: {provider}. Supported providers: {allowed}"
         )
     return provider_config
+
+
+def supported_native_tool_models() -> set[tuple[str, str]]:
+    """Exact provider/model pairs whose metadata advertises native tool calls."""
+
+    return set(NATIVE_TOOL_CAPABLE_MODELS)
+
+
+def require_native_tool_capable_model(*, provider: str, model: str) -> None:
+    supported_byok_provider(provider)
+    if (provider, model) in NATIVE_TOOL_CAPABLE_MODELS:
+        return
+    raise ModelCapabilityError(
+        code="model_access.native_tools_unsupported",
+        provider=provider,
+        model=model,
+        message=(
+            f"{provider}/{model} is not available for grounded chat because its "
+            "metadata does not advertise native tool calling."
+        ),
+    )
+
+
+def native_tool_capability_diagnostic(
+    *, provider: str, model: str, reason: str
+) -> dict[str, str]:
+    return {
+        "code": "model_access.native_tools_rejected",
+        "provider": provider,
+        "model": model,
+        "message": (
+            f"{provider}/{model} rejected native tool calling at runtime. {reason}"
+        ),
+    }
 
 
 def missing_byok_credentials_diagnostic(

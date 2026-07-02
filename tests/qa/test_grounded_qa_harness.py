@@ -10,11 +10,18 @@ import pytest
 
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_GENERAL_KNOWLEDGE,
+    POSTURE_OUT_OF_SCOPE,
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    POSTURE_SOURCE_GROUNDED,
+    POSTURE_UNSPECIFIED,
+    POSTURE_UNSUPPORTED_SOURCE_CLAIM,
     ConversationTurn,
     FinalAnswer,
     QATurnResult,
     ScriptedQATurnProvider,
     ToolCall,
+    compact_conversation,
     run_grounded_qa_turn,
 )
 
@@ -116,6 +123,300 @@ def make_graph_facts_backed_tools() -> TopologyTools:
         session_id="test-session",
         graph_facts=graph_facts,
     )
+
+
+class LookupOnlyThenWitnessProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": "P-101"},
+                tool_call_id="find-only",
+            )
+        if step == 1:
+            return FinalAnswer(
+                answer_text="Pump P-101 is connected downstream.",
+                evidence_references=[PUMP_ID],
+            )
+        if step == 2:
+            return ToolCall(
+                tool_name="get_reachable_equipment",
+                tool_input={"equipment_id": PUMP_ID},
+                tool_call_id="retrieve-witness",
+            )
+        return FinalAnswer(
+            answer_text="Pump P-101 has a witnessed structural path.",
+            evidence_references=[PUMP_ID, VALVE_ID],
+        )
+
+
+class SampledPathThenDatalogProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="get_reachable_equipment",
+                tool_input={"equipment_id": PUMP_ID},
+                tool_call_id="sample-one-path",
+            )
+        if step == 1:
+            return FinalAnswer(
+                answer_text="All pumps have reachable valves.",
+                evidence_references=[PUMP_ID, VALVE_ID],
+            )
+        if step == 2:
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Check whether every pump has a reachable valve.",
+                    "resolved_identity_ids": [PUMP_ID],
+                },
+                tool_call_id="escalate-datalog",
+            )
+        return FinalAnswer(answer_text="This needs confirmed generated logic.")
+
+
+class ImmediateConversationProvider:
+    def complete_with_tools(self, *, messages, tools):
+        return FinalAnswer(answer_text="Happy to help.")
+
+
+class UnexpectedProviderCall:
+    def complete_with_tools(self, *, messages, tools):
+        raise AssertionError("source mutation requests should be denied before model use")
+
+
+def test_topology_relationship_answer_requires_structural_witness_before_acceptance():
+    result = run_grounded_qa_turn(
+        question="What is connected downstream of P-101?",
+        topology_tools=make_tools(),
+        provider=LookupOnlyThenWitnessProvider(),
+    )
+
+    assert result.answer_text == "Pump P-101 has a witnessed structural path."
+    assert VALVE_ID in result.evidence_references
+    sufficiency_events = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "__evidence_sufficiency__"
+    ]
+    assert sufficiency_events
+    assert sufficiency_events[0]["tool_result"]["suggested_next_tools"] == [
+        "get_reachable_equipment"
+    ]
+
+
+def test_universal_claim_from_sampled_path_escalates_to_confirmed_logic():
+    result = run_grounded_qa_turn(
+        question="Do all pumps have a reachable valve?",
+        topology_tools=make_tools(),
+        provider=SampledPathThenDatalogProvider(),
+    )
+
+    assert result.answer_text == "This needs confirmed generated logic."
+    tool_names = [trace["tool_name"] for trace in result.tool_call_trace]
+    assert "__evidence_sufficiency__" in tool_names
+    assert "propose_temporary_datalog" in tool_names
+
+
+def test_conversational_answer_does_not_require_evidence():
+    result = run_grounded_qa_turn(
+        question="hi, what can you help with?",
+        topology_tools=make_tools(),
+        provider=ImmediateConversationProvider(),
+    )
+
+    assert result.answer_text == "Happy to help."
+    assert result.tool_call_trace == []
+
+
+def test_source_mutation_request_is_denied_without_model_planning():
+    result = run_grounded_qa_turn(
+        question="Delete pump P-101 from the drawing.",
+        topology_tools=make_tools(),
+        provider=UnexpectedProviderCall(),
+    )
+
+    assert "cannot modify" in result.answer_text
+    assert result.tool_call_trace[0]["tool_name"] == "mutate_source_graph"
+    assert result.tool_call_trace[0]["tool_result"]["status"] == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# Grounding-posture disclosure boundary (37x.22.21)
+#
+# The model declares each answer's grounding posture; the backend deterministically
+# enforces that the posture is consistent with validated evidence and attaches an
+# authoritative disclosure whenever an answer is not a validated source conclusion.
+# The backend never classifies the question itself.
+# ---------------------------------------------------------------------------
+
+
+class SinglePostureProvider:
+    """Returns one FinalAnswer with a declared posture and no tool calls."""
+
+    def __init__(self, answer: FinalAnswer) -> None:
+        self._answer = answer
+
+    def complete_with_tools(self, *, messages, tools):
+        return self._answer
+
+
+class FindThenPostureProvider:
+    """Satisfies the object-lookup evidence gate, then answers with a posture."""
+
+    def __init__(self, answer: FinalAnswer, *, pattern: str = "P-101") -> None:
+        self._answer = answer
+        self._pattern = pattern
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        step = self._step
+        self._step += 1
+        if step == 0:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": self._pattern},
+                tool_call_id="posture-find",
+            )
+        return self._answer
+
+
+def test_general_knowledge_answer_is_disclosed_as_not_from_source():
+    result = run_grounded_qa_turn(
+        question="Explain in general how process flow direction is determined.",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text="Flow direction generally follows pressure gradients.",
+                grounding_posture=POSTURE_GENERAL_KNOWLEDGE,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_GENERAL_KNOWLEDGE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert "not" in result.disclosure.lower()
+    assert "loaded source" in result.disclosure.lower()
+    assert result.evidence_references == []
+
+
+def test_source_specific_calculation_with_missing_data_states_unavailable():
+    result = run_grounded_qa_turn(
+        question="Compute the operating Reynolds number for this line.",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text=(
+                    "I cannot compute it: flow rate, fluid viscosity, and density "
+                    "are not present in the loaded source."
+                ),
+                grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_SOURCE_DATA_UNAVAILABLE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert "unavailable" in result.disclosure.lower()
+
+
+def test_unrelated_question_is_redirected_without_backend_classifier():
+    result = run_grounded_qa_turn(
+        question="What is the capital of France?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text=(
+                    "That is unrelated to your P&ID. Ask me about the loaded source."
+                ),
+                grounding_posture=POSTURE_OUT_OF_SCOPE,
+            )
+        ),
+    )
+
+    # The redirect is model behavior: the backend planned no tool calls and ran no
+    # deterministic intent classifier to detect off-topic input.
+    assert result.tool_call_trace == []
+    assert result.grounding_posture == POSTURE_OUT_OF_SCOPE
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+
+
+def test_source_grounded_answer_with_validated_evidence_has_no_disclosure():
+    result = run_grounded_qa_turn(
+        question="Find pump P-101 in the source.",
+        topology_tools=make_tools(),
+        provider=FindThenPostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 is present in the loaded source.",
+                evidence_references=[PUMP_ID],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_SOURCE_GROUNDED
+    assert result.source_grounded is True
+    assert result.disclosure is None
+    assert PUMP_ID in result.evidence_references
+
+
+def test_declared_source_grounding_without_validated_evidence_is_downgraded():
+    result = run_grounded_qa_turn(
+        question="What is the capital of France?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 feeds valve V-102.",
+                evidence_references=["node-not-in-source"],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_UNSUPPORTED_SOURCE_CLAIM
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert result.evidence_references == []
+    assert "node-not-in-source" in result.rejected_references
+
+
+def test_unspecified_posture_preserves_legacy_grounding():
+    grounded = run_grounded_qa_turn(
+        question="Find pump P-101 in the source.",
+        topology_tools=make_tools(),
+        provider=FindThenPostureProvider(
+            FinalAnswer(
+                answer_text="Pump P-101 is present.",
+                evidence_references=[PUMP_ID],
+            )
+        ),
+    )
+    assert grounded.grounding_posture == POSTURE_UNSPECIFIED
+    assert grounded.source_grounded is True
+    assert grounded.disclosure is None
+
+    conversational = run_grounded_qa_turn(
+        question="hi, what can you help with?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(FinalAnswer(answer_text="Happy to help.")),
+    )
+    assert conversational.grounding_posture == POSTURE_UNSPECIFIED
+    assert conversational.source_grounded is False
+    assert conversational.disclosure is None
+    assert conversational.answer_text == "Happy to help."
 
 
 # ---------------------------------------------------------------------------
@@ -395,8 +696,9 @@ def test_harness_raises_on_unknown_tool_name_error():
         provider=UnknownToolThenAnswerProvider(),
     )
     assert result.answer_text == "done"
-    # The unknown tool call should appear in the trace
-    assert any(t["tool_name"] == "nonexistent_tool" for t in result.tool_call_trace)
+    rejected = next(t for t in result.tool_call_trace if t["tool_name"] == "nonexistent_tool")
+    assert rejected["tool_result"]["status"] == "rejected"
+    assert rejected["tool_result"]["code"] == "tool.unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +785,17 @@ def test_prior_prose_is_rejected_as_engineering_evidence():
     is rejected and never becomes evidence or interpretation."""
 
     class ProseCitingProvider:
+        def __init__(self):
+            self._step = 0
+
         def complete_with_tools(self, *, messages, tools):
+            if self._step == 0:
+                self._step += 1
+                return ToolCall(
+                    tool_name="get_reachable_equipment",
+                    tool_input={"equipment_id": PUMP_ID},
+                    tool_call_id="witness-before-citing-prose",
+                )
             return FinalAnswer(
                 answer_text="As I said earlier, the pump is connected.",
                 evidence_references=[VALVE_ID, "the pump is connected"],
@@ -523,9 +835,192 @@ def test_conversation_state_cannot_smuggle_prose_through_prior_evidence():
         )
     ]
     run_grounded_qa_turn(
-        question="And the valve?",
+        question="Thanks",
         topology_tools=tools,
         provider=InspectingProvider(),
         conversation=conversation,
     )
     assert seen_grounded_ids == [[PUMP_ID]]
+
+
+def test_compaction_folds_old_turns_but_preserves_evidence_identity():
+    """Past a turn threshold, older prose is folded into a single summary turn,
+    yet the evidence identities it established remain reusable by identity and
+    the recent turns are kept verbatim."""
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump P-101 is right here in the loaded source.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle N-1 hangs off the pump body.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="What about the segment?",
+            answer_text="Segment S-1 continues downstream.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    compacted = compact_conversation(conversation, max_turns=2)
+
+    # The conversation was compacted below the caller-supplied window.
+    assert len(compacted) == 2
+    # The most recent turn is preserved verbatim.
+    assert compacted[-1].question == "What about the segment?"
+    assert compacted[-1].evidence_references == [SEGMENT_ID]
+    # The folded turns collapse into a leading summary that keeps every prior
+    # evidence identity so later follow-ups can still reuse them.
+    summary = compacted[0]
+    assert PUMP_ID in summary.evidence_references
+    assert NOZZLE_ID in summary.evidence_references
+    # Summary prose is context only; it carries the prior user decisions/questions
+    # but is not any single verbatim prior answer that could masquerade as fact.
+    assert "Where is the pump?" in summary.answer_text
+    assert "And the nozzle?" in summary.answer_text
+
+
+def test_compaction_preserves_follow_up_evidence_reuse_across_threshold():
+    """A follow-up asked after the conversation crossed the compaction threshold
+    still resolves against a prior-turn evidence identity that was folded into
+    the summary."""
+    seen_grounded_ids: list[list[str]] = []
+
+    class InspectingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            for message in messages:
+                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                    seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
+            return FinalAnswer(answer_text="ok", evidence_references=[])
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    run_grounded_qa_turn(
+        question="Thanks",
+        topology_tools=tools,
+        provider=InspectingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+
+    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    # The folded pump/nozzle identities remain offered to the model for reuse.
+    assert PUMP_ID in offered
+    assert NOZZLE_ID in offered
+    assert SEGMENT_ID in offered
+
+
+def test_compaction_drops_stale_evidence_but_keeps_valid_for_reuse():
+    """After compaction, a folded evidence identity that is no longer valid in the
+    current topology is dropped (the model must request fresh evidence), while a
+    still-valid folded identity remains available for reuse."""
+    seen_grounded_ids: list[list[str]] = []
+
+    class InspectingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            for message in messages:
+                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                    seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
+            return FinalAnswer(answer_text="ok", evidence_references=[])
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID, "node-removed-since"],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    run_grounded_qa_turn(
+        question="Thanks",
+        topology_tools=tools,
+        provider=InspectingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+
+    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    # Valid identities survive compaction and remain reusable by identity.
+    assert PUMP_ID in offered
+    assert NOZZLE_ID in offered
+    # The stale identity is dropped; it is never offered back for reuse.
+    assert "node-removed-since" not in offered
+
+
+def test_compaction_summary_prose_is_never_promoted_to_evidence():
+    """A model that cites the compacted summary prose as an identity has that
+    citation rejected; folded prose remains context and never becomes evidence."""
+
+    class ProseCitingProvider:
+        def complete_with_tools(self, *, messages, tools):
+            summary_text = ""
+            for message in messages:
+                if message.get("role") == "user" and "Earlier in this conversation" in str(
+                    message.get("content", "")
+                ):
+                    summary_text = str(message["content"])
+            return FinalAnswer(
+                answer_text="Reusing the summary.",
+                evidence_references=[summary_text],
+                interpreted_object_ids=[summary_text],
+            )
+
+    tools = make_tools()
+    conversation = [
+        ConversationTurn(
+            question="Where is the pump?",
+            answer_text="The pump is here.",
+            evidence_references=[PUMP_ID],
+        ),
+        ConversationTurn(
+            question="And the nozzle?",
+            answer_text="Nozzle is there.",
+            evidence_references=[NOZZLE_ID],
+        ),
+        ConversationTurn(
+            question="And the segment?",
+            answer_text="Segment continues.",
+            evidence_references=[SEGMENT_ID],
+        ),
+    ]
+
+    result = run_grounded_qa_turn(
+        question="Summarize",
+        topology_tools=tools,
+        provider=ProseCitingProvider(),
+        conversation=conversation,
+        max_conversation_turns=2,
+    )
+    assert result.evidence_references == []
+    assert result.interpreted_object_ids == []

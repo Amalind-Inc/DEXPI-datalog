@@ -12,7 +12,11 @@ from ..llm.logic_requests import (
     route_logic_request,
     route_without_model_access,
 )
-from ..llm.model_access import ModelProvider, supported_byok_provider
+from ..llm.model_access import ModelProvider, require_native_tool_capable_model
+from ..qa.datalog_audit import (
+    append_datalog_audit_record,
+    build_datalog_audit_record,
+)
 from ..qa.flow_direction import (
     classify_path_direction_basis,
     detect_directed_intent,
@@ -21,8 +25,10 @@ from ..qa.flow_direction import (
     evaluation_boundary,
 )
 from ..qa.grounded_qa_harness import (
+    DEFAULT_MAX_CONVERSATION_TURNS,
     ConversationTurn,
     QATurnProvider,
+    compact_conversation,
     run_grounded_qa_turn,
 )
 from ..qa.topology_tools import TopologyTools
@@ -31,7 +37,7 @@ from ..workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
-from ..verification.verify_suite import evaluate_graph_fixture
+from ..verification.bundled_rule_pack import evaluate_bundled_rule
 
 
 ANSWER_FACT_RE = re.compile(r'^\s*answer\s*\(\s*"([^"]+)"\s*\)\s*\.\s*$')
@@ -143,11 +149,13 @@ class ChainlitReviewFlow:
         artifact_root: Path,
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
+        max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     ) -> None:
         self._service = ReviewSessionService(
             artifact_root=artifact_root, limits=limits
         )
         self._clock = clock
+        self._max_conversation_turns = max_conversation_turns
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
@@ -159,6 +167,11 @@ class ChainlitReviewFlow:
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
         self._missing_capabilities_by_session: dict[str, list[dict[str, object]]] = {}
         self._direction_annotations_by_session: dict[
+            str, dict[str, dict[str, object]]
+        ] = {}
+        # Approval integrity: proposals raised for review are kept server-side,
+        # keyed by proposal_id, and are the only thing a confirm may execute.
+        self._pending_datalog_proposals_by_session: dict[
             str, dict[str, dict[str, object]]
         ] = {}
 
@@ -633,13 +646,18 @@ class ChainlitReviewFlow:
         *,
         session_id: str,
         rule_id: str,
+        pack_id: str = "demo-process-safety",
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
         )
         graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
-        rule_result = evaluate_graph_fixture(graph_facts, rule_id=rule_id)
+        rule_result = evaluate_bundled_rule(
+            graph_facts,
+            pack_id=pack_id,
+            rule_id=rule_id,
+        )
         evidence_items = self._rule_pack_evidence_items(
             session_id=session_id,
             rule_result=rule_result,
@@ -657,6 +675,7 @@ class ChainlitReviewFlow:
             "artifact_type": "rule_pack_result",
             "session_id": session_id,
             "rule_id": rule_id,
+            "pack": rule_result["pack"],
             "rule_result": rule_result,
             "deterministic_inputs": self._artifacts_by_session[session_id],
             "evidence": evidence_items,
@@ -673,11 +692,12 @@ class ChainlitReviewFlow:
             "status": "answered",
             "session_id": session_id,
             "rule_id": rule_id,
-            "outcome": str(rule_result["result_type"]),
+            "pack": rule_result["pack"],
+            "outcome": str(rule_result["outcome"]),
             "confirmation": {"required": False},
             "summary": {
                 "position": "first",
-                "text": f"{rule_id}: {rule_result['result_type']}. {rule_result['message']}",
+                "text": f"{rule_id}: {rule_result['outcome']}. {rule_result['message']}",
             },
             "result_artifact": {
                 "kind": "rule_pack_result",
@@ -700,15 +720,19 @@ class ChainlitReviewFlow:
         provider: str,
         model: str,
         credential: str,
+        base_url: str | None = None,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
-        supported_byok_provider(provider)
+        require_native_tool_capable_model(provider=provider, model=model)
         self._credentials_by_session[session_id] = credential
-        self._provider_settings_by_session[session_id] = {
+        settings: dict[str, object] = {
             "provider": provider,
             "model": model,
-            "configured": bool(credential),
+            "configured": provider == "ollama" or bool(credential),
         }
+        if base_url is not None:
+            settings["base_url"] = base_url
+        self._provider_settings_by_session[session_id] = settings
         return {
             "session_id": session_id,
             **self.provider_settings_state(session_id),
@@ -817,6 +841,14 @@ class ChainlitReviewFlow:
             qa_provider=qa_provider,
             conversation=conversation,
         )
+        datalog_confirmation = self._temporary_datalog_confirmation_payload(
+            session_id=session_id,
+            question=question,
+            answer=answer,
+        )
+        if datalog_confirmation is not None:
+            self._store_pending_datalog_proposal(session_id, datalog_confirmation)
+            return datalog_confirmation
 
         directed = detect_directed_intent(question)
         primary = self._primary_witness_path(answer["valid_paths"])
@@ -918,6 +950,233 @@ class ChainlitReviewFlow:
             conversation=conversation,
         )
 
+    def submit_temporary_datalog_review(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        decision: str,
+        proposal_result: dict[str, object],
+    ) -> dict[str, object]:
+        topology = self._topology_for_session(session_id)
+        claimed_raw = proposal_result.get("proposal")
+        claimed_proposal = claimed_raw if isinstance(claimed_raw, dict) else {}
+        proposal_id = str(claimed_proposal.get("proposal_id", ""))
+        pending = self._pending_datalog_proposals_by_session.get(session_id, {})
+        if decision == "cancel":
+            stored_result = pending.pop(proposal_id, None)
+            stored_proposal = (
+                stored_result.get("proposal") if stored_result is not None else None
+            )
+            self._append_datalog_audit(
+                session_id=session_id,
+                question=question,
+                proposal=stored_proposal
+                if isinstance(stored_proposal, dict)
+                else claimed_proposal,
+                decision="canceled",
+                executed=False,
+                execution_status="not_executed",
+            )
+            return {
+                "status": "canceled",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": [],
+            }
+        if decision != "confirm":
+            raise ValueError("temporary Datalog decision must be confirm or cancel")
+
+        # Only a proposal the server itself raised for review may execute; the
+        # client payload contributes nothing beyond the proposal_id lookup key.
+        stored_result = pending.pop(proposal_id, None)
+        if stored_result is None:
+            self._append_datalog_audit(
+                session_id=session_id,
+                question=question,
+                proposal=claimed_proposal,
+                decision="approved",
+                executed=False,
+                execution_status="execution_failed",
+            )
+            return {
+                "status": "execution_failed",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.proposal_unknown",
+                        "message": "Temporary Datalog execution requires a proposal the server raised for review in this session.",
+                    }
+                ],
+            }
+        stored_proposal_raw = stored_result.get("proposal")
+        proposal = (
+            stored_proposal_raw if isinstance(stored_proposal_raw, dict) else {}
+        )
+
+        graph_facts_path = Path(
+            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        )
+        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
+        tools = TopologyTools(
+            topology_view=topology,
+            session_id=session_id,
+            graph_facts=graph_facts,
+        )
+        execution = tools.execute_confirmed_temporary_datalog(stored_result)
+        executed = execution.get("status") == "answered"
+        self._append_datalog_audit(
+            session_id=session_id,
+            question=question,
+            proposal=proposal,
+            decision="approved",
+            executed=executed,
+            execution_status="answered" if executed else "execution_failed",
+        )
+        if not executed:
+            return {
+                "status": "execution_failed",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": list(execution.get("diagnostics", [])),
+            }
+        evidence = execution.get("evidence", {})
+        items = evidence.get("items", []) if isinstance(evidence, dict) else []
+        matched_ids = [
+            str(item.get("id"))
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
+        evidence_highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=[],
+            matched_object_ids=matched_ids,
+            paths=[],
+        )
+        self._evidence_highlight_by_session[session_id] = evidence_highlight
+        summary = execution.get("summary", {})
+        return {
+            "status": "answered",
+            "session_id": session_id,
+            "question": question,
+            "answer_text": str(summary.get("text", "Temporary Datalog executed."))
+            if isinstance(summary, dict)
+            else "Temporary Datalog executed.",
+            "evidence_references": matched_ids,
+            "rejected_references": [],
+            "interpreted_object_ids": [],
+            "evidence": evidence,
+            "evidence_highlight": evidence_highlight,
+            "tool_call_trace": [],
+            "diagnostics": [],
+        }
+
+    def _store_pending_datalog_proposal(
+        self, session_id: str, confirmation_payload: dict[str, object]
+    ) -> None:
+        confirmation = confirmation_payload.get("datalog_confirmation")
+        if not isinstance(confirmation, dict):
+            return
+        proposal_result = confirmation.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            return
+        proposal = proposal_result.get("proposal")
+        if not isinstance(proposal, dict):
+            return
+        proposal_id = str(proposal.get("proposal_id", ""))
+        if not proposal_id:
+            return
+        self._pending_datalog_proposals_by_session.setdefault(session_id, {})[
+            proposal_id
+        ] = proposal_result
+
+    def _append_datalog_audit(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        proposal: dict[str, object],
+        decision: str,
+        executed: bool,
+        execution_status: str,
+    ) -> None:
+        record = build_datalog_audit_record(
+            session_id=session_id,
+            question=question,
+            proposal=proposal,
+            decision=decision,
+            executed=executed,
+            execution_status=execution_status,
+        )
+        append_datalog_audit_record(
+            self._service.artifact_root / session_id, record
+        )
+
+    @staticmethod
+    def _temporary_datalog_confirmation_payload(
+        *,
+        session_id: str,
+        question: str,
+        answer: dict[str, object],
+    ) -> dict[str, object] | None:
+        result = answer["result"]
+        for trace_entry in result.tool_call_trace:
+            if trace_entry.get("tool_name") != "propose_temporary_datalog":
+                continue
+            proposal_result = trace_entry.get("tool_result")
+            if not isinstance(proposal_result, dict):
+                continue
+            proposal = proposal_result.get("proposal")
+            validation = proposal_result.get("validation")
+            confirmation = proposal_result.get("confirmation")
+            if not isinstance(proposal, dict):
+                continue
+            return {
+                "status": "needs_datalog_confirmation",
+                "session_id": session_id,
+                "question": question,
+                "datalog_confirmation": {
+                    "review_status": "pending",
+                    "allowed_actions": [
+                        "run",
+                        "revise_interpretation",
+                        "revise_query",
+                        "cancel",
+                    ],
+                    "plain_language_meaning": str(
+                        proposal.get("formal_restatement", question)
+                    ),
+                    "interpretation": str(
+                        proposal.get("interpretation")
+                        or proposal.get("formal_restatement", question)
+                    ),
+                    "scope": proposal.get("scope")
+                    if isinstance(proposal.get("scope"), dict)
+                    else {},
+                    "assumptions": proposal.get("assumptions")
+                    if isinstance(proposal.get("assumptions"), dict)
+                    else {},
+                    "effect": str(proposal.get("effect", "")),
+                    "exact_datalog": str(
+                        proposal.get("exact_datalog")
+                        or proposal.get("generated_datalog", "")
+                    ),
+                    "generated_datalog": str(proposal.get("generated_datalog", "")),
+                    "proposal_result": proposal_result,
+                    "proposal": proposal,
+                    "validation": validation if isinstance(validation, dict) else {},
+                    "confirmation": confirmation
+                    if isinstance(confirmation, dict)
+                    else {},
+                },
+                "diagnostics": [],
+            }
+        return None
+
     def _compute_qa_answer(
         self,
         *,
@@ -954,6 +1213,10 @@ class ChainlitReviewFlow:
             topology_tools=tools,
             provider=qa_provider,
             conversation=prior_turns,
+            max_conversation_turns=self._max_conversation_turns,
+        )
+        conversation_state = self._compacted_conversation_state(
+            prior_turns, question=question, result=result
         )
 
         paths = []
@@ -985,7 +1248,39 @@ class ChainlitReviewFlow:
             "result": result,
             "matched_object_ids": matched_object_ids,
             "valid_paths": valid_paths,
+            "conversation_state": conversation_state,
         }
+
+    def _compacted_conversation_state(
+        self,
+        prior_turns: list[ConversationTurn],
+        *,
+        question: str,
+        result: object,
+    ) -> list[dict[str, object]]:
+        """Return backend-authored conversation state the stateless client echoes
+        on the next turn. The new grounded turn is appended and the whole history
+        is compacted so it stays bounded while preserving evidence identities.
+
+        Only validated evidence identities are carried forward; prior prose (the
+        answer text) is context only and is re-validated on the next turn.
+        """
+        new_turn = ConversationTurn(
+            question=question,
+            answer_text=str(getattr(result, "answer_text", "")),
+            evidence_references=list(getattr(result, "evidence_references", [])),
+        )
+        carried = compact_conversation(
+            [*prior_turns, new_turn], max_turns=self._max_conversation_turns
+        )
+        return [
+            {
+                "question": turn.question,
+                "answer_text": turn.answer_text,
+                "evidence_references": list(turn.evidence_references),
+            }
+            for turn in carried
+        ]
 
     @staticmethod
     def _primary_witness_path(
@@ -1018,6 +1313,8 @@ class ChainlitReviewFlow:
         self._evidence_highlight_by_session[session_id] = evidence_highlight
 
         answer_text = result.answer_text
+        if result.disclosure:
+            answer_text = f"{result.disclosure} {answer_text}"
         if direction is not None:
             answer_text = self._direction_prefixed_answer(answer_text, direction)
 
@@ -1028,7 +1325,11 @@ class ChainlitReviewFlow:
             "evidence_references": list(result.evidence_references),
             "rejected_references": list(result.rejected_references),
             "interpreted_object_ids": list(result.interpreted_object_ids),
+            "grounding_posture": result.grounding_posture,
+            "source_grounded": result.source_grounded,
+            "disclosure": result.disclosure,
             "evidence_highlight": evidence_highlight,
+            "conversation_state": list(answer.get("conversation_state", [])),
         }
         if direction is not None:
             payload["direction"] = direction

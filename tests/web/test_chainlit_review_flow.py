@@ -565,7 +565,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     flow.configure_provider_settings(
                         session_id=session_id,
                         provider="openrouter",
-                        model="openrouter/owl-alpha",
+                        model="anthropic/claude-sonnet-4",
                         credential="sk-sentinel-secret-should-never-leak",
                     )
 
@@ -678,7 +678,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 flow.configure_provider_settings(
                     session_id=session_id,
                     provider="openrouter",
-                    model="openrouter/owl-alpha",
+                    model="anthropic/claude-sonnet-4",
                     credential="sk-sentinel-secret-should-never-leak",
                 )
             improvement = flow.improve_logic_request(
@@ -719,7 +719,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="unresolved-answer-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential="sk-sentinel-secret-should-never-leak",
             )
             improvement = flow.improve_logic_request(
@@ -772,7 +772,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="highlight-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential="sk-sentinel-secret-should-never-leak",
             )
             flow.edit_visible_source_scope(
@@ -882,6 +882,13 @@ class ChainlitReviewFlowTests(unittest.TestCase):
 
                     self.assertEqual(result["status"], "answered")
                     self.assertEqual(result["rule_id"], "pump_discharge_check_valve")
+                    self.assertIn(
+                        result["outcome"],
+                        {"satisfied", "violated", "indeterminate"},
+                    )
+                    self.assertEqual(result["pack"]["pack_id"], "demo-process-safety")
+                    self.assertFalse(result["pack"]["authoritative"])
+                    self.assertIn("not", result["pack"]["trust_notice"].lower())
                     self.assertEqual(result["confirmation"], {"required": False})
                     self.assertEqual(result["summary"]["position"], "first")
                     self.assertIn(result["outcome"], result["summary"]["text"])
@@ -1031,7 +1038,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             flow.configure_provider_settings(
                 session_id="explicit-export-session",
                 provider="openrouter",
-                model="openrouter/owl-alpha",
+                model="anthropic/claude-sonnet-4",
                 credential=sentinel,
             )
             flow.edit_visible_source_scope(
@@ -1084,7 +1091,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 manifest["provider"],
                 {
                     "provider": "openrouter",
-                    "model": "openrouter/owl-alpha",
+                    "model": "anthropic/claude-sonnet-4",
                     "configured": True,
                 },
             )

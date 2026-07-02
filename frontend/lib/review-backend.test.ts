@@ -3,11 +3,67 @@ import test from "node:test";
 import {
   answerChatWithReviewBackend,
   executeConfirmedDatalog,
+  getTurnFromBackend,
   prepareReviewSession,
+  startTurnOnBackend,
   submitDirectionReview,
+  submitTemporaryDatalogReview,
 } from "./review-backend.ts";
 import { QA_ANSWER_PREFIX, parseGroundedQAAnswerMessage } from "./grounded-qa-answer.ts";
 import { DIRECTION_REVIEW_PREFIX, parseDirectionReviewMessage } from "./direction-review.ts";
+import {
+  DATALOG_CONFIRMATION_PREFIX,
+  parseDatalogConfirmationMessage,
+} from "./datalog-confirmation.ts";
+
+test("explicit bundled pump check command runs trusted-pack endpoint without confirmation", async () => {
+  const calls: Array<{ path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ path, body });
+    return Response.json({
+      status: "answered",
+      rule_id: "pump_discharge_check_valve",
+      outcome: "violated",
+      confirmation: { required: false },
+      pack: {
+        pack_id: "demo-process-safety",
+        authoritative: false,
+        trust_notice: "Demonstration content only; not authoritative.",
+      },
+      summary: { text: "pump_discharge_check_valve: violated." },
+      evidence: { items: [{ id: "node-p101" }] },
+      evidence_highlight: {
+        source_scope_ids: [],
+        matched_object_ids: ["node-p101"],
+        paths: [],
+      },
+    });
+  };
+
+  const result = await answerChatWithReviewBackend(
+    {
+      sessionId: "session-1",
+      messages: [{ role: "user", content: "Run the bundled pump discharge check." }],
+    },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+  );
+
+  assert.deepEqual(calls, [
+    {
+      path: "/api/review/sessions/session-1/rule-pack-results",
+      body: {
+        pack_id: "demo-process-safety",
+        rule_id: "pump_discharge_check_valve",
+      },
+    },
+  ]);
+  assert.equal(result.status, "answered");
+  assert.match(result.message, /violated/);
+  assert.match(result.message, /not authoritative/i);
+  assert.deepEqual(result.highlightedNodeIds, ["node-p101"]);
+});
 
 test("prepareReviewSession adapts backend topology_view into graph state", async () => {
   const calls: string[] = [];
@@ -118,7 +174,7 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
       fetcher: fetcher as typeof fetch,
       providerSettings: {
         provider: "openrouter",
-        model: "openrouter/owl-alpha",
+        model: "anthropic/claude-sonnet-4",
         credential: "sk-hidden",
       },
     },
@@ -137,7 +193,7 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
   assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
   assert.deepEqual(calls[1].body, {
     provider: "openrouter",
-    model: "openrouter/owl-alpha",
+    model: "anthropic/claude-sonnet-4",
     credential: "sk-hidden",
   });
   assert.deepEqual(calls[2].body, { question: "What downstream process objects are reachable?" });
@@ -386,6 +442,126 @@ test("submitDirectionReview resumes the original question and returns a grounded
   assert.match(parsed?.answerText ?? "", /Confirmed downstream flow direction/);
 });
 
+test("answerChatWithReviewBackend returns confirmation for rule-shaped Datalog prompts", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ method: init?.method ?? "GET", path: parsedUrl.pathname, body });
+    if (parsedUrl.pathname.endsWith("/logic-requests/improve")) {
+      return Response.json({
+        status: "refinement_ready",
+        route: { kind: "topology_logic" },
+        refinement: {
+          refined_prompt: "Must every connected object satisfy the temporary topology rule?",
+          scope: { kind: "whole_pid" },
+          source_scope_ids: [],
+        },
+      });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "needs_datalog_confirmation",
+        session_id: "session-1",
+        question: "Must every connected object satisfy the temporary topology rule?",
+        datalog_confirmation: {
+          review_status: "pending",
+          allowed_actions: ["run", "cancel"],
+          plain_language_meaning: "Return objects that satisfy the temporary topology rule.",
+          generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+          validation: { status: "safe_to_confirm" },
+          proposal_result: { executed: false },
+        },
+      });
+    }
+    return new Response("unexpected", { status: 500 });
+  };
+
+  const result = await answerChatWithReviewBackend(
+    {
+      sessionId: "session-1",
+      messages: [
+        {
+          role: "user",
+          content: "Must every connected object satisfy the temporary topology rule?",
+        },
+      ],
+    },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: null,
+    },
+  );
+
+  assert.equal(result.status, "confirmation_ready");
+  assert.match(result.message, new RegExp(`^${DATALOG_CONFIRMATION_PREFIX}`));
+  const confirmation = parseDatalogConfirmationMessage(result.message);
+  assert.ok(confirmation);
+  assert.equal(confirmation.validationStatus, "safe_to_confirm");
+  assert.equal(
+    confirmation.plainLanguageMeaning,
+    "Return objects that satisfy the temporary topology rule.",
+  );
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      "POST /api/review/sessions/session-1/logic-requests/improve",
+      "POST /api/review/sessions/session-1/qa-turns",
+    ],
+  );
+});
+
+test("submitTemporaryDatalogReview confirms native proposal through backend endpoint", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    calls.push({
+      method: init?.method ?? "GET",
+      path: parsedUrl.pathname,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({
+      status: "answered",
+      answer_text: "Return objects matching the temporary topology rule.",
+      evidence: {
+        display: "expandable",
+        items: [{ id: "node-p101", label: "P-101" }],
+      },
+      evidence_highlight: {
+        source_scope_ids: [],
+        matched_object_ids: ["node-p101"],
+        paths: [],
+      },
+    });
+  };
+
+  const result = await submitTemporaryDatalogReview(
+    "session-1",
+    {
+      question: "Must every connected object satisfy the temporary topology rule?",
+      decision: "confirm",
+      proposalResult: { proposal: { proposal_id: "abc" } },
+    },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+  );
+
+  assert.deepEqual(calls, [
+    {
+      method: "POST",
+      path: "/api/review/sessions/session-1/temporary-datalog-reviews",
+      body: {
+        question: "Must every connected object satisfy the temporary topology rule?",
+        decision: "confirm",
+        proposal_result: { proposal: { proposal_id: "abc" } },
+      },
+    },
+  ]);
+  assert.equal(result.status, "answered");
+  assert.match(result.message, /^pydexpi:logic-answer:/);
+  assert.deepEqual(result.highlightedNodeIds, ["node-p101"]);
+});
+
 test("answerChatWithReviewBackend returns an error message when backend is unavailable for Datalog prompts", async () => {
   const result = await answerChatWithReviewBackend(
     {
@@ -499,4 +675,224 @@ test("executeConfirmedDatalog rejects backend execution diagnostics instead of r
       ),
     /Generated Datalog answered unknown topology object/,
   );
+});
+
+test("OLLAMA_MODEL env routes provider-settings PUT to ollama with base_url", async () => {
+  const prev = {
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  };
+  process.env.OLLAMA_MODEL = "ornith:35b";
+  delete process.env.OPENROUTER_API_KEY;
+
+  const calls: Array<{ body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (init?.method === "PUT" && parsedUrl.pathname.endsWith("/provider-settings")) {
+      calls.push({ body });
+      return Response.json({ provider: body.provider, model: body.model, configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        answer_text: "ok",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return Response.json({});
+  };
+
+  try {
+    await answerChatWithReviewBackend(
+      {
+        sessionId: "session-1",
+        messages: [{ role: "user", content: "What is connected to the pump?" }],
+      },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+    );
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0].body as Record<string, unknown>;
+    assert.equal(sent.provider, "ollama");
+    assert.equal(sent.model, "ornith:35b");
+    assert.equal(sent.credential, "");
+    assert.equal(sent.base_url, "http://localhost:11434/v1");
+  } finally {
+    if (prev.OLLAMA_MODEL === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = prev.OLLAMA_MODEL;
+    if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
+  }
+});
+
+test("OLLAMA_MODEL takes precedence over OPENROUTER_API_KEY in env routing", async () => {
+  const prev = {
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  };
+  process.env.OLLAMA_MODEL = "ornith:35b";
+  process.env.OPENROUTER_API_KEY = "sk-or-fake";
+
+  const calls: Array<{ body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (init?.method === "PUT" && parsedUrl.pathname.endsWith("/provider-settings")) {
+      calls.push({ body });
+      return Response.json({ provider: body.provider, model: body.model, configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        answer_text: "ok",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return Response.json({});
+  };
+
+  try {
+    await answerChatWithReviewBackend(
+      {
+        sessionId: "session-1",
+        messages: [{ role: "user", content: "What is connected to the pump?" }],
+      },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+    );
+
+    assert.equal(calls.length, 1);
+    const sent = calls[0].body as Record<string, unknown>;
+    assert.equal(sent.provider, "ollama", "ollama must win over openrouter when OLLAMA_MODEL set");
+    assert.notEqual(sent.provider, "openrouter");
+  } finally {
+    if (prev.OLLAMA_MODEL === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = prev.OLLAMA_MODEL;
+    if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
+  }
+});
+
+test("startTurnOnBackend applies source scope and provider settings before starting the turn", async () => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    calls.push({
+      method: init?.method ?? "GET",
+      path,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  const turn = await startTurnOnBackend(
+    "session-1",
+    {
+      question: "What is downstream of the pump?",
+      request_id: "req-1",
+      conversation: [],
+      selected_node_id: "node-p101",
+    },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      // Non-test credential: provider-settings PUT fires.
+      providerSettings: { provider: "ollama", model: "llama3", credential: "ollama-local" },
+    },
+  );
+
+  assert.deepEqual(
+    calls.map((call) => [call.method, call.path]),
+    [
+      ["PUT", "/api/review/sessions/session-1/source-scope"],
+      ["PUT", "/api/review/sessions/session-1/provider-settings"],
+      ["POST", "/api/review/sessions/session-1/turns"],
+    ],
+  );
+  assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
+  assert.deepEqual(calls[1].body, { provider: "ollama", model: "llama3", credential: "ollama-local" });
+  // selected_node_id is frontend routing state, never part of the turn body.
+  assert.deepEqual(calls[2].body, {
+    question: "What is downstream of the pump?",
+    request_id: "req-1",
+    conversation: [],
+  });
+  assert.equal(turn.turn_id, "turn-1");
+});
+
+test("startTurnOnBackend skips provider-settings PUT for test sentinel credentials", async () => {
+  const paths: string[] = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    paths.push(`${init?.method ?? "GET"} ${new URL(String(url)).pathname}`);
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await startTurnOnBackend(
+    "session-1",
+    { question: "q", request_id: "req-1" },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: { provider: "openai", model: "gpt-4.1", credential: "sk-test-sentinel" },
+    },
+  );
+
+  // provider-settings PUT must be absent; only the turn POST fires.
+  assert.deepEqual(paths, ["POST /api/review/sessions/session-1/turns"]);
+});
+
+test("startTurnOnBackend scope failure throws (caller must resolve real node ids)", async () => {
+  const fetcher = async (url: string | URL | Request) => {
+    if (String(url).endsWith("/source-scope")) return new Response("bad node", { status: 400 });
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await assert.rejects(
+    startTurnOnBackend(
+      "session-1",
+      { question: "q", request_id: "req-1", selected_node_id: "invalid-node" },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
+    ),
+    /source-scope update failed/,
+  );
+});
+
+test("startTurnOnBackend skips source-scope PUT without a selected node", async () => {
+  const paths: string[] = [];
+  const fetcher = async (url: string | URL | Request) => {
+    paths.push(new URL(String(url)).pathname);
+    return Response.json({ turn_id: "turn-1", status: "completed", events: [] });
+  };
+
+  await startTurnOnBackend(
+    "session-1",
+    { question: "q", request_id: "req-1" },
+    { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
+  );
+
+  assert.deepEqual(paths, ["/api/review/sessions/session-1/turns"]);
+});
+
+test("getTurnFromBackend preserves the backend HTTP status for failures", async () => {
+  const notFound = await getTurnFromBackend("session-1", "missing-turn", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () => new Response("nope", { status: 404 })) as typeof fetch,
+  });
+  assert.deepEqual(notFound, { turn: null, status: 404 });
+
+  const backendDown = await getTurnFromBackend("session-1", "turn-1", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () => new Response("boom", { status: 500 })) as typeof fetch,
+  });
+  assert.deepEqual(backendDown, { turn: null, status: 500 });
+
+  const ok = await getTurnFromBackend("session-1", "turn-1", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () =>
+      Response.json({ turn_id: "turn-1", status: "completed" })) as typeof fetch,
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.turn, { turn_id: "turn-1", status: "completed" });
 });

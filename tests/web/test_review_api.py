@@ -42,7 +42,7 @@ class ReviewApiTests(unittest.TestCase):
                 ("openai", "gpt-4.1"),
                 ("anthropic", "claude-sonnet-4"),
                 ("gemini", "gemini-2.5-pro"),
-                ("openrouter", "openrouter/owl-alpha"),
+                ("openrouter", "anthropic/claude-sonnet-4"),
             ]:
                 with self.subTest(provider=provider):
                     response = client.put(
@@ -65,6 +65,36 @@ class ReviewApiTests(unittest.TestCase):
                         },
                     )
                     self.assertNotIn(sentinel, response.text)
+
+    def test_provider_settings_endpoint_rejects_non_tool_capable_model(self) -> None:
+        sentinel = "sk-sentinel-secret-should-never-leak"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            session_id = "api-provider-tool-gate"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(prepared.status_code, 200)
+
+            response = client.put(
+                f"/api/review/sessions/{session_id}/provider-settings",
+                json={
+                    "provider": "openai",
+                    "model": "gpt-3.5-turbo-instruct",
+                    "credential": sentinel,
+                },
+            )
+
+            self.assertEqual(response.status_code, 400)
+            detail = response.json()["error"]
+            self.assertEqual(detail["code"], "request.invalid")
+            self.assertIn("native tool", detail["message"])
+            self.assertNotIn(sentinel, response.text)
 
     def test_http_api_runs_review_workflow_without_exposing_credentials(self) -> None:
         sentinel = "sk-sentinel-secret-should-never-leak"
@@ -120,7 +150,7 @@ class ReviewApiTests(unittest.TestCase):
                 f"/api/review/sessions/{session_id}/provider-settings",
                 {
                     "provider": "openrouter",
-                    "model": "openrouter/owl-alpha",
+                    "model": "anthropic/claude-sonnet-4",
                     "credential": sentinel,
                 },
             )
@@ -130,7 +160,7 @@ class ReviewApiTests(unittest.TestCase):
                 {
                     "session_id": session_id,
                     "provider": "openrouter",
-                    "model": "openrouter/owl-alpha",
+                    "model": "anthropic/claude-sonnet-4",
                     "configured": True,
                 },
             )

@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import time
 from typing import Callable
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..llm.byok_provider import create_byok_provider
 from ..llm.model_access import ModelProvider
-from ..qa.grounded_qa_harness import QATurnProvider, ScriptedQATurnProvider
+from ..qa.grounded_qa_harness import (
+    DEFAULT_MAX_CONVERSATION_TURNS,
+    QATurnProvider,
+    ScriptedQATurnProvider,
+)
+from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
+from .turn_lifecycle import TurnLifecycleStore
 
 
 class TopologyAwareFakeModelProvider:
@@ -83,15 +90,29 @@ def create_review_api_app(
     model_provider_factory: Callable[[], ModelProvider] | None = None,
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
+    max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API."""
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
-    flow = ChainlitReviewFlow(artifact_root=artifact_root, limits=preparation_limits)
+    flow = ChainlitReviewFlow(
+        artifact_root=artifact_root,
+        limits=preparation_limits,
+        max_conversation_turns=max_conversation_turns,
+    )
+    turns = TurnLifecycleStore(artifact_root)
+
+    # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
+    # zero-LLM providers regardless of session provider-settings. This lets the
+    # e2e stack exercise the real turn transport without any real model call,
+    # while a developer's .env.local can still drive a live LLM manually.
+    force_scripted = os.environ.get("PYDEXPI_QA_PROVIDER", "").lower() == "scripted"
 
     def _resolve_provider(session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
             return model_provider_factory()
+        if force_scripted:
+            return TopologyAwareFakeModelProvider()
         settings = flow.provider_settings_state(session_id)
         credential = flow.local_credential_for_test(session_id)
         if credential and settings.get("configured"):
@@ -102,9 +123,17 @@ def create_review_api_app(
             )
         return TopologyAwareFakeModelProvider()
 
-    def _resolve_qa_provider(_session_id: str) -> QATurnProvider:
+    def _resolve_qa_provider(session_id: str) -> QATurnProvider:
         if qa_provider_factory is not None:
             return qa_provider_factory()
+        if force_scripted:
+            return ScriptedQATurnProvider()
+        settings = flow.provider_settings_state(session_id)
+        if settings.get("provider") == "ollama" and settings.get("configured"):
+            return OllamaQATurnProvider(
+                model=str(settings["model"]),
+                base_url=str(settings.get("base_url", "http://localhost:11434/v1")),
+            )
         return ScriptedQATurnProvider()
 
     @app.exception_handler(HTTPException)
@@ -152,7 +181,8 @@ def create_review_api_app(
                 session_id=session_id,
                 provider=_required_string(body, "provider"),
                 model=_required_string(body, "model"),
-                credential=_required_string(body, "credential"),
+                credential=body.get("credential", ""),
+                base_url=body.get("base_url") if isinstance(body.get("base_url"), str) else None,
             )
         )
 
@@ -204,6 +234,7 @@ def create_review_api_app(
         return _call_ready(
             lambda: flow.execute_selected_rule_pack_query(
                 session_id=session_id,
+                pack_id=str(body.get("pack_id", "demo-process-safety")),
                 rule_id=_required_string(body, "rule_id"),
             )
         )
@@ -226,6 +257,119 @@ def create_review_api_app(
             )
         )
 
+    BUNDLED_PUMP_CHECK_COMMAND = "run the bundled pump discharge check."
+
+    @app.post("/api/review/sessions/{session_id}/turns")
+    def start_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
+        question = _required_string(body, "question")
+        request_id = _required_string(body, "request_id")
+        conversation = body.get("conversation")
+        conversation_turns = (
+            [turn for turn in conversation if isinstance(turn, dict)]
+            if isinstance(conversation, list)
+            else None
+        )
+
+        def _execute() -> dict[str, object]:
+            # The bundled pump check is a trusted rule-pack execution command,
+            # not a QA question; run it inside the turn so dedupe, replay, and
+            # cancellation apply uniformly.
+            if question.strip().lower() == BUNDLED_PUMP_CHECK_COMMAND:
+                return flow.execute_selected_rule_pack_query(
+                    session_id=session_id,
+                    rule_id="pump_discharge_check_valve",
+                )
+            return flow.run_qa_turn(
+                session_id=session_id,
+                question=question,
+                qa_provider=_resolve_qa_provider(session_id),
+                conversation=conversation_turns,
+            )
+
+        return _call_ready(
+            lambda: turns.start(
+                session_id=session_id,
+                request_id=request_id,
+                question=question,
+                execute=_execute,
+            )
+        )
+
+    @app.get("/api/review/sessions/{session_id}/turns/{turn_id}")
+    def get_turn(session_id: str, turn_id: str) -> dict[str, object]:
+        turn = turns.get(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        return turn
+
+    @app.get("/api/review/sessions/{session_id}/turns/{turn_id}/events")
+    def stream_turn_events(
+        session_id: str, turn_id: str, after: int = -1
+    ) -> StreamingResponse:
+        turn = turns.get(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        events = turn.get("events", [])
+        selected = [event for event in events if isinstance(event, dict) and int(event.get("sequence", -1)) > after] if isinstance(events, list) else []
+        return StreamingResponse(
+            (json.dumps(event, sort_keys=True) + "\n" for event in selected),
+            media_type="application/x-ndjson",
+        )
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/cancel")
+    def cancel_turn(session_id: str, turn_id: str) -> dict[str, object]:
+        turn = turns.cancel(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        return turn
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/direction-review")
+    def resume_direction_review(
+        session_id: str, turn_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        decision = _required_string(body, "decision")
+        review_key = _required_string(body, "review_key")
+        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        resumed = turns.resume(
+            session_id=session_id,
+            turn_id=turn_id,
+            execute=lambda: flow.submit_direction_review(
+                session_id=session_id,
+                question=str(existing["question"]),
+                decision=decision,
+                review_key=review_key,
+                qa_provider=_resolve_qa_provider(session_id),
+            ),
+        )
+        assert resumed is not None
+        return resumed
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/datalog-review")
+    def resume_datalog_review(
+        session_id: str, turn_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        decision = _required_string(body, "decision")
+        proposal_result = body.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            raise _bad_request("request body must include a proposal_result object")
+        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        resumed = turns.resume(
+            session_id=session_id,
+            turn_id=turn_id,
+            execute=lambda: flow.submit_temporary_datalog_review(
+                session_id=session_id,
+                question=str(existing["question"]),
+                decision=decision,
+                proposal_result=proposal_result,
+            ),
+        )
+        assert resumed is not None
+        return resumed
+
     @app.post("/api/review/sessions/{session_id}/direction-reviews")
     def submit_direction_review(
         session_id: str, body: dict[str, object]
@@ -247,6 +391,24 @@ def create_review_api_app(
                 review_key=review_key,
                 qa_provider=_resolve_qa_provider(session_id),
                 conversation=conversation_turns,
+            )
+        )
+
+    @app.post("/api/review/sessions/{session_id}/temporary-datalog-reviews")
+    def submit_temporary_datalog_review(
+        session_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        question = _required_string(body, "question")
+        decision = _required_string(body, "decision")
+        proposal_result = body.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            raise _bad_request("request body must include a proposal_result object")
+        return _call_ready(
+            lambda: flow.submit_temporary_datalog_review(
+                session_id=session_id,
+                question=question,
+                decision=decision,
+                proposal_result=proposal_result,
             )
         )
 

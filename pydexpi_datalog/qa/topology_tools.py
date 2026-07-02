@@ -1,8 +1,55 @@
 from __future__ import annotations
 
+import hashlib
+import re
+from dataclasses import dataclass
+from time import monotonic
+
+from pydexpi_datalog.qa.capability_manifest import (
+    PERMISSION_ALLOWED_READ_ONLY,
+    PERMISSION_CONFIRMATION_REQUIRED,
+    PERMISSION_DENIED,
+    default_grounded_qa_manifest,
+)
+
 from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 
+
+# Reviewer-facing consent context for temporary Datalog proposals. The effect
+# statement is hardcoded — never model-generated — because the executor is
+# strictly read-only. The assumptions describe what the traversal actually
+# does: undirected breadth-first reachability over topology-attribute edges.
+TEMPORARY_DATALOG_EFFECT = (
+    "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack."
+)
+
+TEMPORARY_DATALOG_ASSUMPTIONS: dict[str, object] = {
+    "included_edge_types": [
+        "process-flow piping connectivity (source/target, sourceItem/targetItem)",
+        "composition relationships (nodes, segments, pipingNetworkSystems)",
+        "connector references between topology objects",
+    ],
+    "excluded_edge_types": [
+        "instrument signal and annotation references outside the topology attributes",
+        "any relationship not declared as a topology attribute",
+    ],
+    "recycle_paths": (
+        "Recycle loops are traversed like any other connection; each object is "
+        "visited at most once."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class RetrievalBudgets:
+    max_steps: int = 10
+    max_seconds: float = 10.0
+    max_paths: int = 30
+    max_rows: int = 100
+    max_evidence_objects: int = 100
+    max_path_length: int = 30
+    max_payload_bytes: int = 100_000
 
 
 class TopologyTools:
@@ -16,12 +63,19 @@ class TopologyTools:
         topology_view: dict[str, object],
         session_id: str,
         graph_facts: dict[str, object] | None = None,
+        retrieval_budgets: RetrievalBudgets | None = None,
     ) -> None:
         self._topology = topology_view
         self._session_id = session_id
+        self._retrieval_budgets = retrieval_budgets or RetrievalBudgets()
+        self._retrieval_steps = 0
+        self._retrieval_started_at = monotonic()
         self._nodes: list[dict[str, object]] = list(topology_view.get("nodes", []))  # type: ignore[arg-type]
         self._edges: list[dict[str, object]] = list(topology_view.get("edges", []))  # type: ignore[arg-type]
-        self._evidence_map: dict[str, object] = dict(topology_view.get("evidence_map", {}))  # type: ignore[arg-type]
+        self._evidence_map: dict[str, object] = dict(
+            topology_view.get("evidence_map", {})
+        )  # type: ignore[arg-type]
+        self._capability_manifest = default_grounded_qa_manifest()
         self._uses_topology_adapter = graph_facts is None
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
         self._interpretation = TopologyInterpretation(
@@ -31,71 +85,395 @@ class TopologyTools:
             source_id=str(topology_view.get("source_id") or session_id),
         )
 
-
     def tool_definitions(self) -> list[dict[str, object]]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "find_equipment",
-                    "description": (
-                        "Search for objects by tag, line number, label, or class "
-                        "(e.g. 'P-4713', '47132', 'pump', 'nozzle'). Use an empty "
-                        "pattern to list everything. Results are ordered with "
-                        "process equipment, nozzles, and lines before internal "
-                        "connection nodes, and each carries label/category/description."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "pattern": {
-                                "type": "string",
-                                "description": (
-                                    "Search term matched against tag name or label. "
-                                    "Empty string returns all equipment."
-                                ),
-                            }
-                        },
-                        "required": ["pattern"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_reachable_equipment",
-                    "description": (
-                        "Find topology objects reachable from a given equipment via graph edges, "
-                        "with the complete ordered structural path witness for each result."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "equipment_id": {
-                                "type": "string",
-                                "description": "The evidence_id of the source equipment node.",
-                            },
-                            "max_hops": {
-                                "type": "integer",
-                                "description": "Maximum traversal depth (default 6).",
-                                "default": 6,
-                            },
-                        },
-                        "required": ["equipment_id"],
-                    },
-                },
-            },
-        ]
+        return self._capability_manifest.provider_tool_definitions()
 
-    def execute(self, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
+    def system_prompt(self) -> str:
+        """Model-facing system prompt derived from the capability manifest."""
+        return self._capability_manifest.system_prompt()
+
+    def execute(
+        self, tool_name: str, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        capability = self._capability_manifest.get(tool_name)
+        if capability is None:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.unknown",
+                message=f"unknown tool: {tool_name}",
+            )
+        if capability.permission_class == PERMISSION_DENIED:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.denied",
+                message=capability.denied_reason or f"denied tool: {tool_name}",
+            )
+        if capability.permission_class == PERMISSION_CONFIRMATION_REQUIRED:
+            if tool_name == "propose_temporary_datalog":
+                return self._propose_temporary_datalog(tool_input)
+            return {
+                "status": "confirmation_required",
+                "code": "tool.confirmation_required",
+                "tool_name": tool_name,
+                "message": (
+                    f"{tool_name} requires explicit user confirmation before execution."
+                ),
+                "permission_class": capability.permission_class,
+                "matches": [],
+                "reachable": [],
+            }
+        if capability.permission_class != PERMISSION_ALLOWED_READ_ONLY:
+            return self._tool_rejection(
+                tool_name=tool_name,
+                code="tool.unsupported_permission",
+                message=f"unsupported permission class: {capability.permission_class}",
+            )
+        budget_rejection = self._operation_budget_rejection()
+        if budget_rejection is not None:
+            return budget_rejection
+        self._retrieval_steps += 1
         if tool_name == "find_equipment":
-            return self._find_equipment(str(tool_input.get("pattern", "")))
+            return self._find_equipment(
+                str(tool_input.get("pattern", "")),
+                claim_type=str(tool_input.get("claim_type", "existential")),
+                evidence_role=str(tool_input.get("evidence_role", "witness")),
+            )
         if tool_name == "get_reachable_equipment":
             return self._get_reachable_equipment(
                 str(tool_input.get("equipment_id", "")),
                 int(tool_input.get("max_hops", 6)),
+                claim_type=str(tool_input.get("claim_type", "existential")),
             )
-        return {"error": f"unknown tool: {tool_name}", "reachable": [], "matches": []}
+        return self._tool_rejection(
+            tool_name=tool_name,
+            code="tool.unimplemented",
+            message=f"no adapter registered for tool: {tool_name}",
+        )
+
+    @staticmethod
+    def _tool_rejection(
+        *, tool_name: str, code: str, message: str
+    ) -> dict[str, object]:
+        return {
+            "status": "rejected",
+            "code": code,
+            "tool_name": tool_name,
+            "message": message,
+            "matches": [],
+            "reachable": [],
+        }
+
+    def _propose_temporary_datalog(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        request = str(tool_input.get("request", "")).strip()
+        generated_datalog = str(tool_input.get("generated_datalog", ""))
+        formal_restatement = str(tool_input.get("formal_restatement", "")).strip()
+        resolved_identity_ids = [
+            identity
+            for identity in tool_input.get("resolved_identity_ids", [])
+            if isinstance(identity, str)
+        ]
+        validation = self._validate_temporary_datalog(
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        proposal_id = self._temporary_datalog_proposal_id(
+            request=request,
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        return {
+            "status": "confirmation_required",
+            "code": "tool.confirmation_required",
+            "tool_name": "propose_temporary_datalog",
+            "executed": False,
+            "proposal": {
+                "proposal_id": proposal_id,
+                "request": request,
+                "generated_datalog": generated_datalog,
+                "formal_restatement": formal_restatement,
+                "resolved_identity_ids": resolved_identity_ids,
+                "interpretation": formal_restatement,
+                "exact_datalog": generated_datalog,
+                "effect": TEMPORARY_DATALOG_EFFECT,
+                "scope": self._temporary_datalog_scope(resolved_identity_ids),
+                "assumptions": TEMPORARY_DATALOG_ASSUMPTIONS,
+            },
+            "validation": validation,
+            "confirmation": {
+                "required": True,
+                "grant": "execute_temporary_datalog_pair",
+                "proposal_id": proposal_id,
+            },
+            "matches": [],
+            "reachable": [],
+        }
+
+    def _temporary_datalog_scope(
+        self, resolved_identity_ids: list[str]
+    ) -> dict[str, object]:
+        return {
+            "starting_object_ids": resolved_identity_ids,
+            "graph": str(self._topology.get("source_id") or self._session_id),
+            "direction": "undirected traversal (structural connectivity, not flow direction)",
+            "direction_basis": "structural adjacency; explicit flow direction is not applied",
+            "path_treatment": (
+                "breadth-first reachability up to 6 hops; each object visited at most once"
+            ),
+        }
+
+    @staticmethod
+    def _temporary_datalog_proposal_id(
+        *, request: str, generated_datalog: str, formal_restatement: str
+    ) -> str:
+        return hashlib.sha256(
+            (request + "\n" + generated_datalog + "\n" + formal_restatement).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:16]
+
+    def _validate_temporary_datalog(
+        self, *, generated_datalog: str, formal_restatement: str
+    ) -> dict[str, object]:
+        diagnostics = []
+        stripped = generated_datalog.strip()
+        if not stripped or not formal_restatement:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.missing_pair",
+                    "message": "Temporary Datalog proposals require generated_datalog and formal_restatement.",
+                }
+            )
+        if len(stripped) > 4_000:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.size_limit",
+                    "message": "Temporary Datalog proposal exceeds the 4000 character size limit.",
+                }
+            )
+        lowered = stripped.lower()
+        if any(token in lowered for token in (".include", ".input", "file://", "../")):
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.filesystem_forbidden",
+                    "message": "Temporary Datalog cannot include files, declare inputs, or reference filesystem paths.",
+                }
+            )
+        syntax_invalid = False
+        for line in stripped.splitlines():
+            candidate = line.strip()
+            if not candidate or candidate.startswith("//"):
+                continue
+            if not candidate.startswith(".") and not candidate.endswith("."):
+                syntax_invalid = True
+            if candidate.count('"') % 2 != 0:
+                syntax_invalid = True
+        if syntax_invalid:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.syntax_invalid",
+                    "message": "Temporary Datalog must use complete line-oriented Souffle declarations, outputs, facts, or rules.",
+                }
+            )
+        predicate_names = []
+        for line in stripped.splitlines():
+            candidate = line.strip()
+            if not candidate or candidate.startswith("."):
+                continue
+            predicate_names.extend(
+                re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", candidate)
+            )
+        approved_predicates = {"answer", "reachable"}
+        unapproved_predicates = sorted(
+            {
+                predicate
+                for predicate in predicate_names
+                if predicate not in approved_predicates
+            }
+        )
+        if unapproved_predicates:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.predicate_not_approved",
+                    "message": "Temporary Datalog used unapproved predicate(s): "
+                    + ", ".join(unapproved_predicates),
+                }
+            )
+        output_lines = [
+            line.strip()
+            for line in stripped.splitlines()
+            if line.strip().startswith(".output")
+        ]
+        if output_lines != [".output answer"]:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.output_shape",
+                    "message": "Temporary Datalog must output exactly answer(x:symbol).",
+                }
+            )
+        if ".decl answer(x:symbol)" not in stripped:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.answer_decl_missing",
+                    "message": "Temporary Datalog must declare answer(x:symbol).",
+                }
+            )
+        literal_answer_facts = [
+            line.strip()
+            for line in stripped.splitlines()
+            if line.strip().startswith("answer(") and ":-" not in line
+        ]
+        if len(literal_answer_facts) > 100:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.row_limit",
+                    "message": "Temporary Datalog answer facts exceed the 100 row limit.",
+                }
+            )
+        known_ids = self.known_evidence_ids()
+        unresolved = [
+            fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
+            for fact in literal_answer_facts
+            if fact.endswith(").")
+            and fact.removeprefix("answer(").removesuffix(").").strip().strip('"')
+            not in known_ids
+        ]
+        if unresolved:
+            diagnostics.append(
+                {
+                    "code": "temporary_datalog.unresolved_identity",
+                    "message": "Temporary Datalog answered unknown evidence IDs: "
+                    + ", ".join(unresolved),
+                }
+            )
+        if diagnostics:
+            return {
+                "status": "rejected",
+                "diagnostics": diagnostics,
+                "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
+            }
+        return {
+            "status": "safe_to_confirm",
+            "diagnostics": [],
+            "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
+        }
+
+    def _temporary_datalog_answer_ids(self, generated_datalog: str) -> list[str]:
+        matched_ids: list[str] = []
+        for line in generated_datalog.splitlines():
+            candidate = line.strip()
+            if (
+                candidate.startswith("answer(")
+                and candidate.endswith(").")
+                and ":-" not in candidate
+            ):
+                topology_id = (
+                    candidate.removeprefix("answer(")
+                    .removesuffix(").")
+                    .strip()
+                    .strip('"')
+                )
+                if topology_id in self._evidence_map and topology_id not in matched_ids:
+                    matched_ids.append(topology_id)
+                continue
+            reachable_match = re.fullmatch(
+                r'answer\(x\)\s*:-\s*reachable\("([^"]+)",\s*x\)\.',
+                candidate,
+            )
+            if reachable_match:
+                result = self._interpretation.reachable_from(
+                    reachable_match.group(1), max_hops=6
+                )
+                for reachable in result.reachable:
+                    if reachable.topology_id not in matched_ids:
+                        matched_ids.append(reachable.topology_id)
+        return matched_ids
+
+    def execute_confirmed_temporary_datalog(
+        self, proposal_result: dict[str, object]
+    ) -> dict[str, object]:
+        proposal = proposal_result.get("proposal")
+        confirmation = proposal_result.get("confirmation")
+        validation = proposal_result.get("validation")
+        if not isinstance(proposal, dict) or not isinstance(confirmation, dict):
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.confirmation_missing",
+                        "message": "Temporary Datalog execution requires the exact confirmed proposal pair.",
+                    }
+                ],
+            }
+        if (
+            not isinstance(validation, dict)
+            or validation.get("status") != "safe_to_confirm"
+        ):
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": list(validation.get("diagnostics", []))
+                if isinstance(validation, dict)
+                else [],
+            }
+        request = str(proposal.get("request", ""))
+        generated_datalog = str(proposal.get("generated_datalog", ""))
+        formal_restatement = str(proposal.get("formal_restatement", ""))
+        expected_proposal_id = self._temporary_datalog_proposal_id(
+            request=request,
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+        )
+        if confirmation.get("proposal_id") != expected_proposal_id:
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.confirmation_mismatch",
+                        "message": "Temporary Datalog execution requires the exact confirmed query/restatement pair.",
+                    }
+                ],
+            }
+        validation = self._validate_temporary_datalog(
+            generated_datalog=generated_datalog,
+            formal_restatement=str(proposal.get("formal_restatement", "")),
+        )
+        if validation["status"] != "safe_to_confirm":
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": validation["diagnostics"],
+            }
+        matched_ids = self._temporary_datalog_answer_ids(generated_datalog)
+        evidence_items = [
+            {
+                "id": topology_id,
+                "label": self._node_label(topology_id),
+                "source": "temporary_datalog",
+                "topology_evidence": self._evidence_map[topology_id],
+            }
+            for topology_id in matched_ids
+            if topology_id in self._evidence_map
+        ]
+        return {
+            "status": "answered",
+            "executed": True,
+            "confirmation": confirmation,
+            "summary": {
+                "text": str(proposal.get("formal_restatement", "")),
+            },
+            "evidence": {
+                "display": "expandable",
+                "items": evidence_items,
+            },
+            "diagnostics": [],
+        }
 
     def known_evidence_ids(self) -> set[str]:
         return set(self._evidence_map.keys())
@@ -112,10 +490,13 @@ class TopologyTools:
         "other": 6,
     }
 
-    def _find_equipment(self, pattern: str) -> dict[str, object]:
+    def _find_equipment(
+        self, pattern: str, *, claim_type: str, evidence_role: str
+    ) -> dict[str, object]:
         normalized = pattern.lower()
         matches = []
-        for index, node in enumerate(self._nodes):
+        examined_nodes = self._nodes[: self._retrieval_budgets.max_rows]
+        for index, node in enumerate(examined_nodes):
             display_name = str(node.get("display_name") or "")
             class_name = str(node.get("class_name") or "")
             raw_label = str(node.get("label", ""))
@@ -131,7 +512,10 @@ class TopologyTools:
                         index,
                         {
                             "evidence_id": node["id"],
-                            "label": display_name or tag_name or raw_label or str(node["id"]),
+                            "label": display_name
+                            or tag_name
+                            or raw_label
+                            or str(node["id"]),
                             "node_class": class_name or raw_label,
                             "category": category,
                             "description": str(node.get("description") or ""),
@@ -141,22 +525,90 @@ class TopologyTools:
                 )
         matches.sort(key=lambda item: (item[0], item[1]))
         ordered = [entry for _, _, entry in matches]
-        total = len(ordered)
-        bounded = ordered[: self.MAX_FIND_RESULTS]
+        total = len(self._nodes)
+        total_matches = sum(
+            1
+            for node in self._nodes
+            if not normalized
+            or normalized
+            in " ".join(
+                str(node.get(key) or "")
+                for key in (
+                    "display_name",
+                    "class_name",
+                    "label",
+                    "tag_name",
+                    "category",
+                )
+            ).lower()
+        )
+        result_limit = min(
+            self.MAX_FIND_RESULTS,
+            self._retrieval_budgets.max_rows,
+            self._retrieval_budgets.max_evidence_objects,
+        )
+        bounded = ordered[:result_limit]
+        limitations = []
+        if len(self._nodes) > self._retrieval_budgets.max_rows:
+            limitations.append(
+                {
+                    "code": "retrieval.row_limit",
+                    "message": "Retrieval stopped at the configured row limit.",
+                    "limit": self._retrieval_budgets.max_rows,
+                }
+            )
+        elif total_matches > result_limit:
+            limitations.append(self._limitation("row_limit", result_limit))
+        if len(ordered) > self._retrieval_budgets.max_evidence_objects:
+            limitations.append(
+                {
+                    "code": "retrieval.evidence_object_limit",
+                    "message": "Retrieval stopped at the configured evidence-object limit.",
+                    "limit": self._retrieval_budgets.max_evidence_objects,
+                }
+            )
+        complete = (
+            not limitations
+            and len(examined_nodes) == len(self._nodes)
+            and len(ordered) == len(bounded)
+        )
+        if self._payload_too_large(bounded):
+            bounded = []
+            complete = False
+            limitations.insert(
+                0,
+                self._limitation(
+                    "payload_size_limit", self._retrieval_budgets.max_payload_bytes
+                ),
+            )
+        outcome = self._claim_outcome(
+            claim_type=claim_type,
+            has_evidence=bool(bounded),
+            complete=complete,
+            evidence_role=evidence_role,
+        )
         return {
             "matches": bounded,
             "count": len(bounded),
-            "total_matches": total,
-            "truncated": total > len(bounded),
+            "total_matches": total_matches,
+            "truncated": not complete,
+            "outcome": outcome,
+            "coverage": {
+                "complete": complete,
+                "examined_rows": len(examined_nodes),
+                "total_rows": total,
+                "returned_evidence_objects": len(bounded),
+            },
+            "limitations": limitations,
         }
 
     def _get_reachable_equipment(
-        self, equipment_id: str, max_hops: int
+        self, equipment_id: str, max_hops: int, *, claim_type: str
     ) -> dict[str, object]:
         result = self._interpretation.reachable_from(
             equipment_id,
             max_hops=max_hops,
-            result_limit=30,
+            result_limit=self._retrieval_budgets.max_paths,
         )
         if result.error is not None:
             return {
@@ -165,6 +617,18 @@ class TopologyTools:
                 "reachable": [],
             }
 
+        eligible = [
+            item
+            for item in result.reachable
+            if len(item.witness.topology_edge_ids)
+            <= self._retrieval_budgets.max_path_length
+        ]
+        evidence_limit = min(
+            self._retrieval_budgets.max_paths,
+            self._retrieval_budgets.max_rows,
+            self._retrieval_budgets.max_evidence_objects,
+        )
+        eligible = eligible[:evidence_limit]
         reachable = [
             {
                 "evidence_id": item.topology_id,
@@ -187,15 +651,112 @@ class TopologyTools:
                     ],
                 },
             }
-            for item in result.reachable
+            for item in eligible
         ]
+        limitations = []
+        if result.truncated:
+            limitations.append(
+                self._limitation("path_limit", self._retrieval_budgets.max_paths)
+            )
+        if any(
+            len(item.witness.topology_edge_ids)
+            > self._retrieval_budgets.max_path_length
+            for item in result.reachable
+        ) or (self._retrieval_budgets.max_path_length < max_hops and result.truncated):
+            limitations.append(
+                self._limitation(
+                    "path_length_limit", self._retrieval_budgets.max_path_length
+                )
+            )
+        complete = not limitations and not result.truncated
+        if self._payload_too_large(reachable):
+            reachable = []
+            complete = False
+            limitations.insert(
+                0,
+                self._limitation(
+                    "payload_size_limit", self._retrieval_budgets.max_payload_bytes
+                ),
+            )
         response: dict[str, object] = {
             "source_id": equipment_id,
             "reachable": reachable,
+            "outcome": self._claim_outcome(
+                claim_type=claim_type,
+                has_evidence=bool(reachable),
+                complete=complete,
+                evidence_role="witness",
+            ),
+            "coverage": {
+                "complete": complete,
+                "examined_paths": len(result.reachable),
+                "returned_paths": len(reachable),
+                "returned_evidence_objects": len(reachable),
+            },
+            "limitations": limitations,
         }
         if result.truncated:
             response["truncated"] = True
         return response
+
+    def _operation_budget_rejection(self) -> dict[str, object] | None:
+        if self._retrieval_steps >= self._retrieval_budgets.max_steps:
+            return self._limited_result("step_limit", self._retrieval_budgets.max_steps)
+        if (
+            monotonic() - self._retrieval_started_at
+            >= self._retrieval_budgets.max_seconds
+        ):
+            return self._limited_result(
+                "time_limit", self._retrieval_budgets.max_seconds
+            )
+        return None
+
+    def _limited_result(self, name: str, limit: int | float) -> dict[str, object]:
+        return {
+            "outcome": "indeterminate",
+            "matches": [],
+            "reachable": [],
+            "coverage": {"complete": False, "returned_evidence_objects": 0},
+            "limitations": [self._limitation(name, limit)],
+        }
+
+    @staticmethod
+    def _limitation(name: str, limit: int | float) -> dict[str, object]:
+        return {
+            "code": f"retrieval.{name}",
+            "message": f"Retrieval stopped at the configured {name.replace('_', ' ')}.",
+            "limit": limit,
+        }
+
+    def _payload_too_large(self, evidence: object) -> bool:
+        import json
+
+        return (
+            len(json.dumps(evidence, separators=(",", ":")).encode("utf-8"))
+            > self._retrieval_budgets.max_payload_bytes
+        )
+
+    @staticmethod
+    def _claim_outcome(
+        *, claim_type: str, has_evidence: bool, complete: bool, evidence_role: str
+    ) -> str:
+        if claim_type == "absence":
+            return (
+                "violated"
+                if has_evidence
+                else ("satisfied" if complete else "indeterminate")
+            )
+        if claim_type == "universal":
+            if has_evidence and evidence_role == "counterexample":
+                return "violated"
+            return "satisfied" if complete else "indeterminate"
+        if claim_type in {"existential", "counterexample", "explanation"}:
+            return (
+                "satisfied"
+                if has_evidence
+                else ("violated" if complete else "indeterminate")
+            )
+        return "indeterminate"
 
     def _topology_with_source_graph_ids(self) -> dict[str, object]:
         topology = dict(self._topology)
@@ -235,7 +796,9 @@ class TopologyTools:
                 "node_id": str(node["id"]),
                 "attributes": {
                     "label": str(node.get("label") or node.get("class_name") or ""),
-                    "tagName": str(node.get("tag_name") or node.get("display_name") or ""),
+                    "tagName": str(
+                        node.get("tag_name") or node.get("display_name") or ""
+                    ),
                 },
             }
             for node in self._nodes

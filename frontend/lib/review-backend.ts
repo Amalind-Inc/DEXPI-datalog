@@ -53,7 +53,7 @@ export type DirectionReviewResult = {
 };
 
 export type ExecuteConfirmedDatalogResult = {
-  status: "answered";
+  status: "answered" | "canceled";
   message: string;
   highlightedNodeIds: string[];
 };
@@ -81,9 +81,10 @@ type PrepareBody = {
 
 type BackendFetch = typeof fetch;
 type BackendProviderSettings = {
-  provider: "openrouter" | "openai" | "anthropic" | "gemini";
+  provider: "openrouter" | "openai" | "anthropic" | "gemini" | "ollama";
   model: string;
   credential: string;
+  base_url?: string;
 };
 
 export async function prepareReviewSession(
@@ -111,6 +112,10 @@ export async function answerChatWithReviewBackend(
   const prompt = body.messages?.at(-1)?.content ?? "";
   const selectedNode = body.selectedNode ?? null;
   const conversation = buildQAConversation(body.messages ?? []);
+  if (body.sessionId && isBundledPumpCheckCommand(prompt)) {
+    const ruleResult = await runBundledPumpCheck(body.sessionId, options);
+    if (ruleResult) return ruleResult;
+  }
   const backendAnswer = await runBackendLogicRequest(
     body.sessionId,
     prompt,
@@ -139,6 +144,41 @@ export async function answerChatWithReviewBackend(
       `to focus deterministic checks. For this request I would inspect source scope, ` +
       `derive the topology evidence, and return highlighted equipment/path evidence.`,
     highlightedNodeIds: inferHighlights(prompt, selectedNode?.id),
+  };
+}
+
+function isBundledPumpCheckCommand(prompt: string) {
+  return prompt.trim().toLowerCase() === "run the bundled pump discharge check.";
+}
+
+async function runBundledPumpCheck(
+  sessionId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions,
+): Promise<ChatResult | null> {
+  if (!baseUrl) return null;
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/rule-pack-results`,
+    body: {
+      pack_id: "demo-process-safety",
+      rule_id: "pump_discharge_check_valve",
+    },
+  });
+  if (!result || result.status !== "answered") return null;
+
+  const pack = isRecord(result.pack) ? result.pack : {};
+  const summary = isRecord(result.summary) ? result.summary : {};
+  const summaryText = typeof summary.text === "string" ? summary.text : readAnswerText(result);
+  const trustNotice = typeof pack.trust_notice === "string" ? pack.trust_notice : "";
+  const highlightedNodeIds = readEvidenceHighlightIds(result.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedLogicAnswer({
+      summary: [summaryText, trustNotice].filter(Boolean).join(" "),
+      rawEvidence: readRawEvidence(result),
+      highlightedNodeIds,
+      raw: result,
+    }),
+    highlightedNodeIds,
   };
 }
 
@@ -298,6 +338,10 @@ async function answerWithGroundedQA(
     return directionReviewResult(question, conversation, result);
   }
 
+  if (result.status === "needs_datalog_confirmation") {
+    return temporaryDatalogConfirmationResult(result);
+  }
+
   const answerText = typeof result.answer_text === "string" ? result.answer_text : "";
   const evidenceReferences = readStringArray(result.evidence_references);
   const interpretedObjectIds = readStringArray(result.interpreted_object_ids);
@@ -340,6 +384,68 @@ function directionReviewResult(
       raw: result,
     }),
     highlightedNodeIds: readEvidenceHighlightIds(review.evidence_highlight),
+  };
+}
+
+export async function submitTemporaryDatalogReview(
+  sessionId: string,
+  params: {
+    question: string;
+    decision: "confirm" | "cancel";
+    proposalResult: Record<string, unknown>;
+  },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<ExecuteConfirmedDatalogResult> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/temporary-datalog-reviews`,
+    body: {
+      question: params.question,
+      decision: params.decision,
+      proposal_result: params.proposalResult,
+    },
+  });
+  if (!result) {
+    throw new BackendExecutionUnavailableError();
+  }
+  if (result.status === "canceled") {
+    return {
+      status: "canceled",
+      message: "Canceled. No Datalog query was executed.",
+      highlightedNodeIds: [],
+    };
+  }
+  if (result.status !== "answered") {
+    throw new GeneratedDatalogExecutionError(readExecutionFailureMessage(result));
+  }
+  const highlightedNodeIds = readEvidenceHighlightIds(result.evidence_highlight);
+  return {
+    status: "answered",
+    message: serializeGroundedLogicAnswer({
+      summary: readAnswerText(result),
+      rawEvidence: readRawEvidence(result),
+      highlightedNodeIds,
+      raw: result,
+    }),
+    highlightedNodeIds,
+  };
+}
+
+function temporaryDatalogConfirmationResult(result: Record<string, unknown>): ChatResult {
+  const confirmation = result.datalog_confirmation;
+  const confirmationRecord = isRecord(confirmation) ? confirmation : {};
+  return {
+    status: "confirmation_ready",
+    message: serializeDatalogConfirmation({
+      plainLanguageMeaning: readTemporaryDatalogMeaning(confirmationRecord),
+      generatedDatalog: readTemporaryGeneratedDatalog(confirmationRecord),
+      validationStatus: readTemporaryValidationStatus(confirmationRecord),
+      allowedActions: readStringArray(confirmationRecord.allowed_actions),
+      raw: {
+        confirmation_kind: "temporary_datalog",
+        ...result,
+      },
+    }),
+    highlightedNodeIds: [],
   };
 }
 
@@ -652,6 +758,34 @@ function readConfirmationFailureMessage(confirmation: Record<string, unknown>) {
   return "The backend could not prepare a Datalog confirmation for this prompt.";
 }
 
+function readTemporaryDatalogMeaning(confirmation: Record<string, unknown>) {
+  const value = confirmation.plain_language_meaning;
+  if (typeof value === "string") return value;
+  const proposal = confirmation.proposal;
+  if (isRecord(proposal) && typeof proposal.formal_restatement === "string") {
+    return proposal.formal_restatement;
+  }
+  return "Review generated Datalog before execution.";
+}
+
+function readTemporaryGeneratedDatalog(confirmation: Record<string, unknown>) {
+  const value = confirmation.generated_datalog;
+  if (typeof value === "string") return value;
+  const proposal = confirmation.proposal;
+  if (isRecord(proposal) && typeof proposal.generated_datalog === "string") {
+    return proposal.generated_datalog;
+  }
+  return "";
+}
+
+function readTemporaryValidationStatus(confirmation: Record<string, unknown>) {
+  const validation = confirmation.validation;
+  if (isRecord(validation) && typeof validation.status === "string") {
+    return validation.status;
+  }
+  return "pending_safety_validation";
+}
+
 function readExecutionFailureMessage(answer: Record<string, unknown>) {
   const diagnostics = answer.diagnostics;
   if (Array.isArray(diagnostics) && isRecord(diagnostics[0])) {
@@ -745,15 +879,24 @@ function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   // when a real key is present in the environment or a .env file.
   if (process.env.PYDEXPI_DISABLE_BYOK) return null;
 
+  const ollamaModel = readEnvValue("OLLAMA_MODEL");
   const openrouterKey = readEnvValue("OPENROUTER_API_KEY");
   const openaiKey = readEnvValue("OPENAI_API_KEY");
   const anthropicKey = readEnvValue("ANTHROPIC_API_KEY");
   const geminiKey = readEnvValue("GEMINI_API_KEY");
 
+  if (ollamaModel) {
+    return {
+      provider: "ollama",
+      model: ollamaModel,
+      credential: "",
+      base_url: readEnvValue("OLLAMA_BASE_URL") ?? "http://localhost:11434/v1",
+    };
+  }
   if (openrouterKey) {
     return {
       provider: "openrouter",
-      model: readEnvValue("OPENROUTER_MODEL") ?? "openrouter/owl-alpha",
+      model: readEnvValue("OPENROUTER_MODEL") ?? "anthropic/claude-sonnet-4",
       credential: openrouterKey,
     };
   }
@@ -823,4 +966,112 @@ function stripEnvQuotes(value: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+export async function startTurnOnBackend(
+  sessionId: string,
+  body: {
+    question: string;
+    request_id: string;
+    conversation?: unknown[];
+    selected_node_id?: string;
+  },
+  {
+    baseUrl = backendBaseUrl(),
+    fetcher = fetch,
+    providerSettings = readProviderSettingsFromEnv(),
+  }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  // Pin the selected topology scope. This is only sent when the caller
+  // resolved a real node (selectedNode?.id), so failures are real backend
+  // errors and must surface rather than be swallowed.
+  if (body.selected_node_id) {
+    const scopeResponse = await fetcher(
+      `${baseUrl}/api/review/sessions/${sessionId}/source-scope`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_scope_ids: [body.selected_node_id] }),
+      },
+    );
+    if (!scopeResponse.ok) throw new Error("source-scope update failed");
+  }
+  // Apply env-configured provider settings. Skip obviously-test credentials
+  // (sk-test sentinel) so the backend uses its scripted provider, which
+  // avoids real LLM API calls during automated testing.
+  const isTestCredential = providerSettings?.credential
+    .toLowerCase()
+    .startsWith("sk-test");
+  if (providerSettings && !isTestCredential) {
+    const providerResponse = await fetcher(
+      `${baseUrl}/api/review/sessions/${sessionId}/provider-settings`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(providerSettings),
+      },
+    );
+    if (!providerResponse.ok) throw new Error("provider-settings update failed");
+  }
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns`,
+    body: {
+      question: body.question,
+      request_id: body.request_id,
+      conversation: body.conversation,
+    },
+  });
+  if (!result) throw new Error("turn start failed");
+  return result;
+}
+
+export async function getTurnFromBackend(
+  sessionId: string,
+  turnId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ turn: Record<string, unknown> | null; status: number }> {
+  const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}`);
+  if (!res.ok) return { turn: null, status: res.status };
+  return { turn: (await res.json()) as Record<string, unknown>, status: res.status };
+}
+
+export async function cancelTurnOnBackend(
+  sessionId: string,
+  turnId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/cancel`,
+    body: {},
+  });
+  if (!result) throw new Error("turn cancel failed");
+  return result;
+}
+
+export async function resumeDirectionReviewOnBackend(
+  sessionId: string,
+  turnId: string,
+  body: { decision: string; review_key: string },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/direction-review`,
+    body,
+  });
+  if (!result) throw new Error("direction-review resume failed");
+  return result;
+}
+
+export async function resumeDatalogReviewOnBackend(
+  sessionId: string,
+  turnId: string,
+  body: { decision: string; proposal_result: unknown },
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = await postJson(fetcher, {
+    url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/datalog-review`,
+    body,
+  });
+  if (!result) throw new Error("datalog-review resume failed");
+  return result;
 }

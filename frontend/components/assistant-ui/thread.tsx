@@ -20,6 +20,12 @@ import {
   type EvidencePath,
 } from "@/lib/grounded-qa-answer";
 import { parseDirectionReviewMessage, type DirectionReviewState } from "@/lib/direction-review";
+import {
+  readTurnIdentity,
+  resumeDatalogReview,
+  resumeDirectionReview,
+  turnToMessage,
+} from "@/lib/turn-client";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -336,34 +342,61 @@ const DatalogConfirmationCard: FC<{
 }> = ({ confirmation }) => {
   const aui = useAui();
   const { setHighlightedNodeIds } = usePidGraph();
-  const [state, setState] = useState<"ready" | "running" | "canceled" | "revise">("ready");
+  const [state, setState] = useState<
+    "ready" | "running" | "canceled" | "revise-interpretation" | "revise-query"
+  >("ready");
   const [error, setError] = useState<string | null>(null);
   const sessionId = readSessionId(confirmation.raw);
+  const isTemporaryDatalog = confirmation.raw.confirmation_kind === "temporary_datalog";
+  const consent = readDatalogConsentContext(confirmation.raw);
+
+  const turnIdentity = readTurnIdentity(confirmation.raw);
 
   const run = async () => {
     if (state === "running") return;
     setState("running");
     setError(null);
     try {
-      const response = await fetch(
-        `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirmation: confirmation.raw }),
-        },
-      );
-      if (!response.ok) {
-        const errorBody = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(errorBody?.error?.message ?? `Execution failed: ${response.status}`);
+      let result: { message: string; highlightedNodeIds?: string[] };
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Turn-lifecycle path: resume the paused turn; the response carries
+        // the turn's final state.
+        const turn = await resumeDatalogReview(turnIdentity.sessionId, turnIdentity.turnId, {
+          decision: "confirm",
+          proposalResult: readTemporaryProposalResult(confirmation.raw),
+        });
+        result = turnToMessage(turn);
+      } else {
+        const response = await fetch(
+          isTemporaryDatalog
+            ? `/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`
+            : `/api/review/sessions/${encodeURIComponent(sessionId)}/logic-requests/execute`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              isTemporaryDatalog
+                ? {
+                    question: confirmation.raw.question,
+                    decision: "confirm",
+                    proposalResult: readTemporaryProposalResult(confirmation.raw),
+                  }
+                : { confirmation: confirmation.raw },
+            ),
+          },
+        );
+        if (!response.ok) {
+          const errorBody = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new Error(errorBody?.error?.message ?? `Execution failed: ${response.status}`);
+        }
+        result = (await response.json()) as {
+          message: string;
+          highlightedNodeIds?: string[];
+        };
       }
-      const result = (await response.json()) as {
-        message: string;
-        highlightedNodeIds?: string[];
-      };
-      if (result.highlightedNodeIds) {
+      if (result.highlightedNodeIds && result.highlightedNodeIds.length > 0) {
         setHighlightedNodeIds(result.highlightedNodeIds);
       }
       aui.thread().append({
@@ -375,6 +408,37 @@ const DatalogConfirmationCard: FC<{
       setError(caught instanceof Error ? caught.message : "Execution failed.");
       setState("ready");
     }
+  };
+
+  const cancel = async () => {
+    if (state !== "ready") return;
+    if (!isTemporaryDatalog && !turnIdentity.turnId) {
+      setState("canceled");
+      return;
+    }
+    setError(null);
+    try {
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Drive the paused turn to its terminal canceled state.
+        await resumeDatalogReview(turnIdentity.sessionId, turnIdentity.turnId, {
+          decision: "cancel",
+          proposalResult: readTemporaryProposalResult(confirmation.raw),
+        });
+      } else {
+        await fetch(`/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: confirmation.raw.question,
+            decision: "cancel",
+            proposalResult: readTemporaryProposalResult(confirmation.raw),
+          }),
+        });
+      }
+    } catch {
+      // A cancel action is still locally final: no query is executed from this card.
+    }
+    setState("canceled");
   };
 
   return (
@@ -391,29 +455,75 @@ const DatalogConfirmationCard: FC<{
         <span data-testid="datalog-validation-status">{confirmation.validationStatus}</span>
       </header>
 
-      <p data-testid="datalog-plain-language">{confirmation.plainLanguageMeaning}</p>
+      <p data-testid="datalog-plain-language">
+        {consent.interpretation || confirmation.plainLanguageMeaning}
+      </p>
+
+      {consent.scope.length > 0 && (
+        <dl className="datalog-consent-section" data-testid="datalog-scope">
+          <dt>Scope</dt>
+          {consent.scope.map(([key, value]) => (
+            <dd key={key}>
+              <span className="datalog-consent-key">{formatConsentKey(key)}:</span> {value}
+            </dd>
+          ))}
+        </dl>
+      )}
+
+      {consent.assumptions.length > 0 && (
+        <dl className="datalog-consent-section" data-testid="datalog-assumptions">
+          <dt>Assumptions</dt>
+          {consent.assumptions.map(([key, value]) => (
+            <dd key={key}>
+              <span className="datalog-consent-key">{formatConsentKey(key)}:</span> {value}
+            </dd>
+          ))}
+        </dl>
+      )}
 
       <details data-testid="datalog-details">
-        <summary>Generated Datalog</summary>
-        <pre>
+        <summary>Exact Datalog</summary>
+        <pre className="datalog-syntax">
           <code>{confirmation.generatedDatalog}</code>
         </pre>
       </details>
 
+      <p className="datalog-consent-effect" data-testid="datalog-effect">
+        {DATALOG_EFFECT_STATEMENT}
+      </p>
+
       <div className="datalog-confirmation-actions">
         <button type="button" disabled={state !== "ready"} onClick={run}>
-          {state === "running" ? "Running" : "Run"}
+          {state === "running" ? "Running" : "Approve and run"}
         </button>
-        <button type="button" disabled={state !== "ready"} onClick={() => setState("revise")}>
-          Revise
+        <button
+          type="button"
+          disabled={state !== "ready"}
+          onClick={() => setState("revise-interpretation")}
+        >
+          Revise interpretation
         </button>
-        <button type="button" disabled={state !== "ready"} onClick={() => setState("canceled")}>
+        <button
+          type="button"
+          disabled={state !== "ready"}
+          onClick={() => setState("revise-query")}
+        >
+          Revise query
+        </button>
+        <button type="button" disabled={state !== "ready"} onClick={cancel}>
           Cancel
         </button>
       </div>
-      {state === "revise" && (
+      {state === "revise-interpretation" && (
         <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
-          Revision is not wired yet. Edit your prompt and send a new request.
+          Nothing was executed. Send a message describing what the interpretation got
+          wrong and a corrected proposal will be raised for review.
+        </p>
+      )}
+      {state === "revise-query" && (
+        <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
+          Nothing was executed. Send a message describing how the query should change
+          and a corrected proposal will be raised for review.
         </p>
       )}
       {state === "canceled" && (
@@ -429,6 +539,58 @@ const DatalogConfirmationCard: FC<{
     </section>
   );
 };
+// The effect line is a fixed reviewer guarantee: the temporary Datalog
+// executor is strictly read-only, so this text must never come from the model.
+const DATALOG_EFFECT_STATEMENT =
+  "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.";
+
+function readDatalogConsentContext(raw: Record<string, unknown>): {
+  interpretation: string;
+  scope: [string, string][];
+  assumptions: [string, string][];
+} {
+  const confirmation = raw.datalog_confirmation;
+  if (typeof confirmation !== "object" || confirmation === null) {
+    return { interpretation: "", scope: [], assumptions: [] };
+  }
+  const record = confirmation as Record<string, unknown>;
+  return {
+    interpretation: typeof record.interpretation === "string" ? record.interpretation : "",
+    scope: readStringEntries(record.scope),
+    assumptions: readStringEntries(record.assumptions),
+  };
+}
+
+function readStringEntries(value: unknown): [string, string][] {
+  if (typeof value !== "object" || value === null) return [];
+  return Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+    key,
+    Array.isArray(entry)
+      ? entry.filter((item) => typeof item === "string").join("; ")
+      : String(entry ?? ""),
+  ]);
+}
+
+function formatConsentKey(key: string): string {
+  const spaced = key.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function readTemporaryProposalResult(raw: Record<string, unknown>) {
+  const confirmation = raw.datalog_confirmation;
+  if (
+    typeof confirmation === "object" &&
+    confirmation !== null &&
+    "proposal_result" in confirmation
+  ) {
+    const proposalResult = (confirmation as Record<string, unknown>).proposal_result;
+    if (typeof proposalResult === "object" && proposalResult !== null) {
+      return proposalResult;
+    }
+  }
+  return {};
+}
+
 
 const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) => {
   const aui = useAui();
@@ -440,31 +602,44 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
     new Set(review.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids])),
   );
 
+  const turnIdentity = readTurnIdentity(review.raw);
+
   const submit = async (decision: "confirm" | "reverse" | "unknown") => {
     if (state !== "ready") return;
     setState("submitting");
     setError(null);
     try {
-      const response = await fetch(
-        `/api/review/sessions/${encodeURIComponent(readSessionIdFromRaw(review.raw))}/direction-reviews`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question: review.question,
-            decision,
-            reviewKey: review.reviewKey,
-            conversation: review.conversation,
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`Direction review failed: ${response.status}`);
+      let result: { message: string; highlightedNodeIds?: string[] };
+      if (turnIdentity.turnId && turnIdentity.sessionId) {
+        // Turn-lifecycle path: resume the paused turn with the decision; the
+        // response carries the turn's final state.
+        const turn = await resumeDirectionReview(turnIdentity.sessionId, turnIdentity.turnId, {
+          decision,
+          reviewKey: review.reviewKey,
+        });
+        result = turnToMessage(turn);
+      } else {
+        const response = await fetch(
+          `/api/review/sessions/${encodeURIComponent(readSessionIdFromRaw(review.raw))}/direction-reviews`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: review.question,
+              decision,
+              reviewKey: review.reviewKey,
+              conversation: review.conversation,
+            }),
+          },
+        );
+        if (!response.ok) {
+          throw new Error(`Direction review failed: ${response.status}`);
+        }
+        result = (await response.json()) as {
+          message: string;
+          highlightedNodeIds?: string[];
+        };
       }
-      const result = (await response.json()) as {
-        message: string;
-        highlightedNodeIds?: string[];
-      };
       if (result.highlightedNodeIds) {
         setHighlightedNodeIds(result.highlightedNodeIds);
       }

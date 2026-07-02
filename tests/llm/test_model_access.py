@@ -8,6 +8,12 @@ import tempfile
 import unittest
 
 import pydexpi_datalog
+from pydexpi_datalog.llm.model_access import (
+    ModelCapabilityError,
+    native_tool_capability_diagnostic,
+    require_native_tool_capable_model,
+    supported_native_tool_models,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +25,37 @@ E06_DERIVED_GRAPH_SEMANTICS = (
     / "derived_graph_semantics.dl"
 )
 
+
+
+class NativeToolCapabilityTests(unittest.TestCase):
+    def test_supported_native_tool_models_are_exact_provider_model_pairs(self) -> None:
+        supported = supported_native_tool_models()
+
+        self.assertIn(("openai", "gpt-4.1"), supported)
+        self.assertIn(("openrouter", "anthropic/claude-sonnet-4"), supported)
+        self.assertNotIn(("openai", "gpt-3.5-turbo-instruct"), supported)
+
+    def test_require_native_tool_capable_model_rejects_metadata_without_tools(self) -> None:
+        with self.assertRaises(ModelCapabilityError) as caught:
+            require_native_tool_capable_model(
+                provider="openai",
+                model="gpt-3.5-turbo-instruct",
+            )
+
+        self.assertEqual(caught.exception.code, "model_access.native_tools_unsupported")
+        self.assertIn("openai/gpt-3.5-turbo-instruct", str(caught.exception))
+
+    def test_native_tool_capability_diagnostic_normalizes_runtime_rejection(self) -> None:
+        diagnostic = native_tool_capability_diagnostic(
+            provider="openrouter",
+            model="stale/tool-model",
+            reason="Provider rejected tool_calls for this model.",
+        )
+
+        self.assertEqual(diagnostic["code"], "model_access.native_tools_rejected")
+        self.assertEqual(diagnostic["provider"], "openrouter")
+        self.assertEqual(diagnostic["model"], "stale/tool-model")
+        self.assertIn("Provider rejected tool_calls", diagnostic["message"])
 
 class ModelAccessTests(unittest.TestCase):
     def test_oss_model_access_reports_missing_byok_credentials(self) -> None:

@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from threading import RLock
+from typing import Callable
+
+
+class TurnLifecycleStore:
+    """Disk-backed, replayable lifecycle for one server-owned QA turn."""
+
+    def __init__(self, artifact_root: Path) -> None:
+        self._artifact_root = artifact_root
+        self._lock = RLock()
+
+    def start(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        question: str,
+        execute: Callable[[], dict[str, object]],
+    ) -> dict[str, object]:
+        turn_id = hashlib.sha256(
+            f"{session_id}\n{request_id}".encode("utf-8")
+        ).hexdigest()[:20]
+        with self._lock:
+            existing = self.get(session_id=session_id, turn_id=turn_id)
+            if existing is not None:
+                if existing["request_id"] != request_id or existing["question"] != question:
+                    raise ValueError("request_id was already used for a different turn")
+                return existing
+            turn = self.begin(
+                session_id=session_id,
+                request_id=request_id,
+                question=question,
+            )
+        try:
+            result = execute()
+        except Exception as error:
+            with self._lock:
+                current = self.get(session_id=session_id, turn_id=turn_id)
+                if current is not None and current.get("status") == "canceled":
+                    return current
+                turn["status"] = "failed"
+                self._append(turn, "failure", {"message": str(error)})
+                self._save(turn)
+            return turn
+
+        with self._lock:
+            current = self.get(session_id=session_id, turn_id=turn_id)
+            if current is not None and current.get("status") == "canceled":
+                return current
+            turn["result"] = result
+            self._append_result_events(turn, result)
+            self._save(turn)
+        return turn
+
+    def begin(
+        self, *, session_id: str, request_id: str, question: str
+    ) -> dict[str, object]:
+        turn_id = hashlib.sha256(
+            f"{session_id}\n{request_id}".encode("utf-8")
+        ).hexdigest()[:20]
+        with self._lock:
+            existing = self.get(session_id=session_id, turn_id=turn_id)
+            if existing is not None:
+                if existing["request_id"] != request_id or existing["question"] != question:
+                    raise ValueError("request_id was already used for a different turn")
+                return existing
+            turn: dict[str, object] = {
+                "schema_version": 1,
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "request_id": request_id,
+                "question": question,
+                "status": "active",
+                "events": [self._event(0, "tool-progress", {"status": "started"})],
+            }
+            self._save(turn)
+            return turn
+
+    def get(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
+        path = self._path(session_id, turn_id)
+        if not path.is_file():
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
+
+    def cancel(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
+        with self._lock:
+            turn = self.get(session_id=session_id, turn_id=turn_id)
+            if turn is None:
+                return None
+            if turn.get("status") in {"active", "paused"}:
+                turn["status"] = "canceled"
+                self._append(
+                    turn,
+                    "cancellation",
+                    {"message": "The turn was canceled by the user."},
+                )
+                self._save(turn)
+            return turn
+
+    def resume(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        execute: Callable[[], dict[str, object]],
+    ) -> dict[str, object] | None:
+        with self._lock:
+            turn = self.get(session_id=session_id, turn_id=turn_id)
+            if turn is None or turn.get("status") != "paused":
+                return turn
+            turn["status"] = "active"
+            self._append(turn, "tool-progress", {"status": "resumed"})
+            self._save(turn)
+        try:
+            result = execute()
+        except Exception as error:
+            with self._lock:
+                current = self.get(session_id=session_id, turn_id=turn_id)
+                if current is not None and current.get("status") == "canceled":
+                    return current
+                turn["status"] = "failed"
+                self._append(turn, "failure", {"message": str(error)})
+                self._save(turn)
+            return turn
+        with self._lock:
+            current = self.get(session_id=session_id, turn_id=turn_id)
+            if current is not None and current.get("status") == "canceled":
+                return current
+            turn["result"] = result
+            self._append_result_events(turn, result)
+            self._save(turn)
+        return turn
+
+    def _append_result_events(
+        self, turn: dict[str, object], result: dict[str, object]
+    ) -> None:
+        status = str(result.get("status", "answered"))
+        answer_text = result.get("answer_text")
+        if isinstance(answer_text, str) and answer_text:
+            self._append(turn, "text", {"text": answer_text})
+
+        evidence = {
+            "evidence_references": result.get("evidence_references", []),
+            "evidence_highlight": result.get("evidence_highlight", {}),
+        }
+        if evidence["evidence_references"] or evidence["evidence_highlight"]:
+            self._append(turn, "evidence", evidence)
+
+        if status in {"needs_direction_review", "needs_datalog_confirmation"}:
+            turn["status"] = "paused"
+            self._append(turn, "review-required", {"review": result})
+            return
+        if status in {"canceled", "cancelled"}:
+            turn["status"] = "canceled"
+            self._append(turn, "cancellation", {"result": result})
+            return
+        if status in {"failed", "execution_failed"}:
+            turn["status"] = "failed"
+            self._append(turn, "failure", {"result": result})
+            return
+        turn["status"] = "completed"
+        self._append(turn, "completion", {"status": "completed"})
+
+    @staticmethod
+    def _event(sequence: int, event_type: str, data: object) -> dict[str, object]:
+        return {"sequence": sequence, "type": event_type, "data": data}
+
+    def _append(
+        self, turn: dict[str, object], event_type: str, data: object
+    ) -> None:
+        events = turn.setdefault("events", [])
+        assert isinstance(events, list)
+        events.append(self._event(len(events), event_type, data))
+
+    def _path(self, session_id: str, turn_id: str) -> Path:
+        return self._artifact_root / session_id / "turns" / f"{turn_id}.json"
+
+    def _save(self, turn: dict[str, object]) -> None:
+        path = self._path(str(turn["session_id"]), str(turn["turn_id"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(turn, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        temporary.replace(path)

@@ -10,6 +10,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
+import os
 
 from fastapi.testclient import TestClient
 
@@ -325,3 +327,110 @@ class QATurnsApiTests(unittest.TestCase):
             self.assertIn(
                 "per my earlier note, things connect", body["rejected_references"]
             )
+
+
+class QAConversationCompactionTests(unittest.TestCase):
+    """Long conversations are compacted server-side without losing grounding, and
+    a follow-up asked after the compaction threshold stays grounded."""
+
+    def _prepare(self, max_conversation_turns: int) -> tuple[TestClient, str]:
+        tmp_path = Path(tempfile.mkdtemp())
+        app = create_review_api_app(
+            artifact_root=tmp_path / "sessions",
+            max_conversation_turns=max_conversation_turns,
+        )
+        client = TestClient(app)
+        session_id = "qa-compaction-session"
+        prepared = client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": "E06V01-VER.EX01.xml",
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        assert prepared.status_code == 200, prepared.text
+        return client, session_id
+
+    def test_conversation_state_is_bounded_and_follow_up_stays_grounded(self) -> None:
+        client, session_id = self._prepare(max_conversation_turns=2)
+
+        # Turn 1 establishes grounded evidence identities.
+        first = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": "What is reachable from the nozzle?"},
+        ).json()
+        prior_ids = first["evidence_references"]
+        self.assertTrue(prior_ids)
+        conversation = first["conversation_state"]
+
+        # Several more turns push the history past the compaction threshold.
+        for question in ("Any valves?", "What about the pump?"):
+            body = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": question, "conversation": conversation},
+            ).json()
+            conversation = body["conversation_state"]
+            # The backend keeps the carried conversation bounded to the threshold.
+            self.assertLessEqual(len(conversation), 2)
+
+        # A follow-up after compaction still resolves against a prior identity.
+        follow_up = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": "What is reachable from those?", "conversation": conversation},
+        ).json()
+        self.assertEqual(follow_up["status"], "answered")
+        self.assertTrue(
+            set(follow_up["interpreted_object_ids"]) & set(prior_ids),
+            "post-compaction follow-up should reuse a prior evidence identity",
+        )
+
+
+class ForceScriptedProviderTests(unittest.TestCase):
+    """PYDEXPI_QA_PROVIDER=scripted forces the deterministic provider even when a
+    session has ollama provider-settings configured, so the e2e stack never makes
+    a real LLM call. Regression for turns timing out on a live model."""
+
+    def test_scripted_flag_overrides_configured_ollama_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, mock.patch.dict(
+            os.environ, {"PYDEXPI_QA_PROVIDER": "scripted"}
+        ), mock.patch(
+            "pydexpi_datalog.web.review_api.OllamaQATurnProvider",
+            side_effect=AssertionError("ollama provider must not be constructed"),
+        ):
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            session_id = "force-scripted-session"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            assert prepared.status_code == 200, prepared.text
+
+            # Configure a real ollama provider on the session.
+            configured = client.put(
+                f"/api/review/sessions/{session_id}/provider-settings",
+                json={
+                    "provider": "ollama",
+                    "model": "ornith:35b",
+                    "credential": "",
+                    "base_url": "http://localhost:11434/v1",
+                },
+            )
+            assert configured.status_code == 200, configured.text
+
+            # Turn resolves via the scripted provider (patched Ollama would raise).
+            turn = client.post(
+                f"/api/review/sessions/{session_id}/turns",
+                json={
+                    "question": "What downstream process objects are reachable from the pump?",
+                    "request_id": "force-1",
+                },
+            )
+            self.assertEqual(turn.status_code, 200, turn.text)
+            body = turn.json()
+            self.assertEqual(body["status"], "completed")
+            event_types = [e["type"] for e in body["events"]]
+            self.assertIn("completion", event_types)

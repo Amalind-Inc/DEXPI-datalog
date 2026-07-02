@@ -201,6 +201,60 @@ class DirectionReviewTests(unittest.TestCase):
         self.assertEqual(body["status"], "answered")
         self.assertNotIn("direction", body)
 
+    def test_direction_annotation_survives_conversation_compaction(self) -> None:
+        """A confirmed direction annotation is session state, not conversation
+        prose. It survives after the conversation is compacted past its threshold:
+        re-asking the same inferred question resumes with the stored decision and
+        raises no new review card."""
+        tmp = tempfile.mkdtemp()
+        app = create_review_api_app(
+            artifact_root=Path(tmp) / "sessions",
+            max_conversation_turns=2,
+        )
+        client = TestClient(app)
+        session_id = "dir-compaction-session"
+        prepared = client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": "E06V01-VER.EX01.xml",
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        assert prepared.status_code == 200, prepared.text
+
+        review = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": INFERRED_QUESTION},
+        ).json()["direction_review"]
+        confirmed = client.post(
+            f"/api/review/sessions/{session_id}/direction-reviews",
+            json={
+                "question": INFERRED_QUESTION,
+                "decision": "confirm",
+                "review_key": review["review_key"],
+            },
+        ).json()
+        self.assertEqual(confirmed["status"], "answered")
+        conversation = confirmed["conversation_state"]
+
+        # Drive the conversation past the compaction threshold.
+        for question in ("Any valves?", "What about the pump?"):
+            body = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": question, "conversation": conversation},
+            ).json()
+            conversation = body["conversation_state"]
+            self.assertLessEqual(len(conversation), 2)
+
+        # Re-asking the inferred question resumes with the stored annotation and
+        # never raises a fresh review card, proving the decision survived.
+        again = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": INFERRED_QUESTION, "conversation": conversation},
+        ).json()
+        self.assertEqual(again["status"], "answered")
+        self.assertEqual(again["direction"]["review_status"], "confirmed")
+
 
 if __name__ == "__main__":
     unittest.main()

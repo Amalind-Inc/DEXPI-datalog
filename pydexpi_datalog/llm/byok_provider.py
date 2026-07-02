@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import httpx
 
-from .model_access import ModelProvider
+from .model_access import ModelCapabilityError, ModelProvider, native_tool_capability_diagnostic
 
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+_NATIVE_TOOL_REJECTION_TOKENS = (
+    "tool_calls",
+    "tool call",
+    "function calling",
+    "tools are not supported",
+    "does not support tools",
+    "does not support tool",
+)
+
 
 
 def create_byok_provider(*, provider: str, model: str, credential: str) -> ModelProvider:
@@ -165,9 +174,43 @@ class _OpenAICompatibleProvider:
             },
             timeout=60.0,
         )
-        response.raise_for_status()
+        _raise_for_status_with_native_tool_diagnostic(
+            response, provider=self.provider, model=self.model
+        )
         return str(response.json()["choices"][0]["message"]["content"])
 
+
+
+def _raise_for_status_with_native_tool_diagnostic(
+    response: httpx.Response, *, provider: str, model: str
+) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        _raise_native_tool_capability_error_if_present(
+            error, provider=provider, model=model
+        )
+        raise
+
+
+def _raise_native_tool_capability_error_if_present(
+    error: httpx.HTTPStatusError, *, provider: str, model: str
+) -> None:
+    reason = str(getattr(error.response, "text", "")) or str(error)
+    normalized = reason.lower()
+    if not any(token in normalized for token in _NATIVE_TOOL_REJECTION_TOKENS):
+        return
+    diagnostic = native_tool_capability_diagnostic(
+        provider=provider,
+        model=model,
+        reason=reason,
+    )
+    raise ModelCapabilityError(
+        code=diagnostic["code"],
+        provider=provider,
+        model=model,
+        message=diagnostic["message"],
+    ) from error
 
 class _AnthropicProvider:
     provider = "anthropic"
@@ -193,7 +236,9 @@ class _AnthropicProvider:
             },
             timeout=60.0,
         )
-        response.raise_for_status()
+        _raise_for_status_with_native_tool_diagnostic(
+            response, provider=self.provider, model=self.model
+        )
         return str(response.json()["content"][0]["text"])
 
 
@@ -215,7 +260,9 @@ class _GeminiProvider:
             },
             timeout=60.0,
         )
-        response.raise_for_status()
+        _raise_for_status_with_native_tool_diagnostic(
+            response, provider=self.provider, model=self.model
+        )
         return str(
             response.json()["candidates"][0]["content"]["parts"][0]["text"]
         )

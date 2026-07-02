@@ -14,11 +14,46 @@ class ToolCall:
     tool_call_id: str
 
 
+# Grounding posture: the model declares how a final answer relates to the loaded
+# source. The backend never classifies the question; it only enforces that the
+# declared posture is consistent with the validated evidence the answer carries.
+POSTURE_UNSPECIFIED = "unspecified"
+POSTURE_SOURCE_GROUNDED = "source_grounded"
+POSTURE_GENERAL_KNOWLEDGE = "general_knowledge"
+POSTURE_SOURCE_DATA_UNAVAILABLE = "source_data_unavailable"
+POSTURE_OUT_OF_SCOPE = "out_of_scope"
+# Backend-assigned only: the model declared a source-grounded conclusion but no
+# evidence reference survived validation, so the claim cannot be presented as grounded.
+POSTURE_UNSUPPORTED_SOURCE_CLAIM = "unsupported_source_claim"
+
+# Backend-authoritative disclosures attached when an answer is not a validated
+# conclusion derived from the loaded source.
+_POSTURE_DISCLOSURES: dict[str, str] = {
+    POSTURE_GENERAL_KNOWLEDGE: (
+        "This is general process-engineering knowledge, not a conclusion derived "
+        "from your loaded source."
+    ),
+    POSTURE_SOURCE_DATA_UNAVAILABLE: (
+        "This depends on operating data that is not present in your loaded source, "
+        "so the required inputs are unavailable."
+    ),
+    POSTURE_OUT_OF_SCOPE: (
+        "That is outside grounded P&ID source review. I can answer questions about "
+        "your loaded source."
+    ),
+    POSTURE_UNSUPPORTED_SOURCE_CLAIM: (
+        "This answer is not backed by validated evidence from your loaded source and "
+        "should not be treated as a source conclusion."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class FinalAnswer:
     answer_text: str
     evidence_references: list[str] = field(default_factory=list)
     interpreted_object_ids: list[str] = field(default_factory=list)
+    grounding_posture: str = POSTURE_UNSPECIFIED
 
 
 @dataclass(frozen=True)
@@ -52,6 +87,17 @@ class QATurnResult:
     rejected_references: list[str]
     interpreted_object_ids: list[str]
     tool_call_trace: list[dict[str, object]]
+    grounding_posture: str = POSTURE_UNSPECIFIED
+    source_grounded: bool = False
+    disclosure: str | None = None
+
+
+@dataclass(frozen=True)
+class ReviewIntent:
+    intent_type: str
+    evidence_need: str
+    suggested_next_tools: tuple[str, ...] = ()
+    requires_confirmation: bool = False
 
 
 _FOLLOW_UP_REFERENCES = (
@@ -113,6 +159,162 @@ def _question_token(question: str) -> str:
         if token in normalized:
             return token
     return ""
+
+
+def _classify_review_intent(question: str) -> ReviewIntent:
+    normalized = question.lower()
+    if _looks_like_source_mutation(normalized):
+        return ReviewIntent(
+            intent_type="source_mutation",
+            evidence_need="denial",
+            suggested_next_tools=("mutate_source_graph",),
+        )
+    if _looks_like_rule_evaluation(normalized):
+        return ReviewIntent(
+            intent_type="rule_evaluation",
+            evidence_need="rule_result",
+            suggested_next_tools=("propose_temporary_datalog",),
+            requires_confirmation=True,
+        )
+    if _looks_like_topology_relationship(normalized):
+        return ReviewIntent(
+            intent_type="topology_relationship",
+            evidence_need="structural_path_witness",
+            suggested_next_tools=("get_reachable_equipment",),
+        )
+    if _question_token(question):
+        return ReviewIntent(
+            intent_type="object_lookup",
+            evidence_need="candidate_objects",
+            suggested_next_tools=("find_equipment",),
+        )
+    return ReviewIntent(intent_type="conversation", evidence_need="none")
+
+
+def _looks_like_source_mutation(normalized: str) -> bool:
+    mutation_phrases = (
+        "delete ",
+        "remove ",
+        "edit ",
+        "modify ",
+        "change ",
+        "replace ",
+        "connect ",
+        "disconnect ",
+    )
+    return any(phrase in f"{normalized} " for phrase in mutation_phrases)
+
+
+def _looks_like_rule_evaluation(normalized: str) -> bool:
+    rule_tokens = (
+        " all ",
+        " every ",
+        " any ",
+        " violation",
+        " violates",
+        " comply",
+        " compliant",
+        " required",
+        " require ",
+        " must ",
+        " shall ",
+        " rule",
+        " standard",
+        " no ",
+        " none ",
+    )
+    padded = f" {normalized} "
+    return any(token in padded for token in rule_tokens)
+
+
+def _looks_like_topology_relationship(normalized: str) -> bool:
+    relationship_tokens = (
+        "connected",
+        "connects",
+        "connection",
+        "reachable",
+        "downstream",
+        "upstream",
+        "feed",
+        "feeds",
+        "path",
+    )
+    return (
+        _question_token(normalized) != "" or _looks_like_pid_reference(normalized)
+    ) and any(token in normalized for token in relationship_tokens)
+
+
+def _looks_like_pid_reference(normalized: str) -> bool:
+    return any(character.isdigit() for character in normalized) and (
+        "-" in normalized or "_" in normalized
+    )
+
+
+def _tool_names(tool_call_trace: list[dict[str, object]]) -> set[str]:
+    return {
+        str(item.get("tool_name"))
+        for item in tool_call_trace
+        if isinstance(item.get("tool_name"), str)
+    }
+
+
+def _tool_trace_satisfies_intent(
+    intent: ReviewIntent, tool_call_trace: list[dict[str, object]]
+) -> bool:
+    names = _tool_names(tool_call_trace)
+    if intent.evidence_need == "none":
+        return True
+    if intent.evidence_need == "candidate_objects":
+        return "find_equipment" in names
+    if intent.evidence_need == "structural_path_witness":
+        return any(
+            trace.get("tool_name") == "get_reachable_equipment"
+            and _has_structural_witness_result(trace.get("tool_result"))
+            for trace in tool_call_trace
+        )
+    if intent.evidence_need == "rule_result":
+        return any(
+            trace.get("tool_name") == "propose_temporary_datalog"
+            and _tool_result_status(trace.get("tool_result"))
+            in {"confirmation_required", "executed"}
+            for trace in tool_call_trace
+        )
+    return True
+
+
+def _has_structural_witness_result(tool_result: object) -> bool:
+    if not isinstance(tool_result, dict):
+        return False
+    if "reachable" not in tool_result:
+        return bool(tool_result.get("error"))
+    reachable = tool_result.get("reachable")
+    if not isinstance(reachable, list):
+        return False
+    if not reachable:
+        return True
+    return all(
+        isinstance(item, dict) and isinstance(item.get("witness"), dict)
+        for item in reachable
+    )
+def _tool_result_status(tool_result: object) -> str:
+    if isinstance(tool_result, dict):
+        return str(tool_result.get("status", ""))
+    return ""
+
+
+def _sufficiency_failure(intent: ReviewIntent) -> dict[str, object]:
+    return {
+        "status": "insufficient_evidence",
+        "code": "evidence.insufficient_for_claim",
+        "intent_type": intent.intent_type,
+        "evidence_need": intent.evidence_need,
+        "message": (
+            "The proposed answer does not have the evidence kind required for the "
+            f"{intent.intent_type} request."
+        ),
+        "suggested_next_tools": list(intent.suggested_next_tools),
+        "recoverable": True,
+    }
 
 
 class ScriptedQATurnProvider:
@@ -242,6 +444,59 @@ class ScriptedQATurnProvider:
         return ", ".join(ids) if ids else "no objects"
 
 
+# Compaction: past this many carried turns, older prose is folded into a single
+# summary turn. The summary preserves prior user questions (decisions) and the
+# union of prior evidence identities so follow-ups can still reuse them; the
+# summary prose is context only and is re-validated like any prior turn, so it
+# can never smuggle prose in as engineering evidence.
+DEFAULT_MAX_CONVERSATION_TURNS = 12
+
+
+def compact_conversation(
+    conversation: list[ConversationTurn],
+    *,
+    max_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
+) -> list[ConversationTurn]:
+    """Fold older conversation turns into a leading summary turn once the history
+    exceeds ``max_turns``.
+
+    Grounding is preserved structurally: the summary turn carries every prior
+    user question (the decisions that shaped the thread) and the ordered union of
+    the folded turns' evidence identities. Recent turns are kept verbatim. Prior
+    prose is never concatenated into the summary as fact; only the questions and
+    the evidence identities survive, and identities are re-validated downstream
+    against the current topology before reuse.
+    """
+    if max_turns < 1:
+        raise ValueError("max_turns must be at least 1")
+    if len(conversation) <= max_turns:
+        return list(conversation)
+
+    # One slot is reserved for the summary; keep the most recent turns verbatim.
+    recent_count = max_turns - 1
+    folded = conversation[: len(conversation) - recent_count]
+    recent = conversation[len(conversation) - recent_count :] if recent_count else []
+
+    preserved_ids: list[str] = []
+    questions: list[str] = []
+    for turn in folded:
+        if turn.question:
+            questions.append(turn.question)
+        for reference in turn.evidence_references:
+            if reference not in preserved_ids:
+                preserved_ids.append(reference)
+
+    summary_text = "Earlier in this conversation you asked: " + " ".join(
+        f"({index}) {question}" for index, question in enumerate(questions, start=1)
+    )
+    summary = ConversationTurn(
+        question="[earlier conversation summary]",
+        answer_text=summary_text,
+        evidence_references=preserved_ids,
+    )
+    return [summary, *recent]
+
+
 def run_grounded_qa_turn(
     *,
     question: str,
@@ -249,6 +504,7 @@ def run_grounded_qa_turn(
     provider: QATurnProvider,
     conversation: list[ConversationTurn] | None = None,
     max_rounds: int = 10,
+    max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
 ) -> QATurnResult:
     """Execute a grounded QA turn: model calls tools, backend executes them, model answers.
 
@@ -256,9 +512,38 @@ def run_grounded_qa_turn(
     references. Prior evidence identities are re-validated against the current
     topology before reuse; prior prose is never promoted to evidence.
     """
+    intent = _classify_review_intent(question)
+    if intent.intent_type == "source_mutation":
+        tool_result = topology_tools.execute("mutate_source_graph", {})
+        trace = [
+            {
+                "tool_call_id": "intent-denied-source-mutation",
+                "tool_name": "mutate_source_graph",
+                "tool_input": {},
+                "tool_result": tool_result,
+            }
+        ]
+        return QATurnResult(
+            answer_text=(
+                "I cannot modify the loaded source graph. I can inspect the "
+                "topology or help write a review note with grounded evidence."
+            ),
+            evidence_references=[],
+            rejected_references=[],
+            interpreted_object_ids=[],
+            tool_call_trace=trace,
+            grounding_posture=POSTURE_OUT_OF_SCOPE,
+            source_grounded=False,
+            disclosure=None,
+        )
     known_ids = topology_tools.known_evidence_ids()
-    messages: list[dict[str, object]] = []
-    for turn in conversation or []:
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": topology_tools.system_prompt()}
+    ]
+    carried = compact_conversation(
+        list(conversation or []), max_turns=max_conversation_turns
+    )
+    for turn in carried:
         valid_prior = [ref for ref in turn.evidence_references if ref in known_ids]
         messages.append({"role": "user", "content": turn.question})
         messages.append(
@@ -269,7 +554,7 @@ def run_grounded_qa_turn(
             }
         )
     messages.append({"role": "user", "content": question})
-
+    last_insufficient_answer: FinalAnswer | None = None
     tool_call_trace: list[dict[str, object]] = []
     tools = topology_tools.tool_definitions()
 
@@ -277,7 +562,29 @@ def run_grounded_qa_turn(
         response = provider.complete_with_tools(messages=messages, tools=tools)
 
         if isinstance(response, FinalAnswer):
-            return _finalize(response, known_ids, tool_call_trace)
+            if _tool_trace_satisfies_intent(intent, tool_call_trace):
+                return _finalize(response, known_ids, tool_call_trace)
+            last_insufficient_answer = response
+            tool_result = _sufficiency_failure(intent)
+            tool_call_trace.append(
+                {
+                    "tool_call_id": "evidence-sufficiency",
+                    "tool_name": "__evidence_sufficiency__",
+                    "tool_input": {"question": question},
+                    "tool_result": tool_result,
+                }
+            )
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Backend evidence sufficiency check failed: "
+                        f"{tool_result['message']} Suggested next tools: "
+                        f"{', '.join(tool_result['suggested_next_tools'])}."
+                    ),
+                }
+            )
+            continue
 
         if isinstance(response, ToolCall):
             tool_result = topology_tools.execute(response.tool_name, response.tool_input)
@@ -317,7 +624,19 @@ def run_grounded_qa_turn(
             continue
 
         raise TypeError(f"Unexpected provider response type: {type(response)}")
-
+    if last_insufficient_answer is not None:
+        return _finalize(
+            FinalAnswer(
+                answer_text=(
+                    "I could not ground that answer with the required evidence. "
+                    "Please narrow the question or approve the suggested deterministic check."
+                ),
+                evidence_references=last_insufficient_answer.evidence_references,
+                interpreted_object_ids=last_insufficient_answer.interpreted_object_ids,
+            ),
+            known_ids,
+            tool_call_trace,
+        )
     raise RuntimeError(f"QA harness exceeded {max_rounds} rounds without a final answer.")
 
 
@@ -338,10 +657,51 @@ def _finalize(
         if reference in known_ids and reference not in interpreted:
             interpreted.append(reference)
 
+    posture, source_grounded, disclosure = _resolve_grounding(
+        response.grounding_posture, valid_references
+    )
+
     return QATurnResult(
         answer_text=response.answer_text,
         evidence_references=valid_references,
         rejected_references=rejected_references,
         interpreted_object_ids=interpreted,
         tool_call_trace=tool_call_trace,
+        grounding_posture=posture,
+        source_grounded=source_grounded,
+        disclosure=disclosure,
     )
+
+
+def _resolve_grounding(
+    declared_posture: str, valid_references: list[str]
+) -> tuple[str, bool, str | None]:
+    """Enforce the posture <-> evidence boundary deterministically.
+
+    The backend never decides what a question is about. It only checks that a
+    model-declared grounding posture is consistent with the evidence references
+    that survived validation, and attaches an authoritative disclosure whenever
+    the answer is not a validated conclusion derived from the loaded source.
+    """
+    has_evidence = bool(valid_references)
+
+    if declared_posture == POSTURE_SOURCE_GROUNDED:
+        if has_evidence:
+            return POSTURE_SOURCE_GROUNDED, True, None
+        # A source conclusion was claimed but nothing was validated: it cannot be
+        # presented as grounded.
+        return (
+            POSTURE_UNSUPPORTED_SOURCE_CLAIM,
+            False,
+            _POSTURE_DISCLOSURES[POSTURE_UNSUPPORTED_SOURCE_CLAIM],
+        )
+
+    if declared_posture in _POSTURE_DISCLOSURES:
+        # Explicitly non-source postures (general knowledge, missing source data,
+        # out of scope) are always disclosed as not derived from the source.
+        return declared_posture, False, _POSTURE_DISCLOSURES[declared_posture]
+
+    # Legacy / unspecified posture preserves prior behavior: an answer is treated
+    # as source-grounded exactly when it carries validated evidence, with no
+    # backend-authored disclosure.
+    return POSTURE_UNSPECIFIED, has_evidence, None
