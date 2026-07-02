@@ -25,10 +25,10 @@ E06_FIXTURE = (
     / "E06 Pump, HeatExchanger, Nozzles Connected With PNS"
     / "E06V01-VER.EX01.xml"
 )
-# A piping-rooted question whose witness runs through structural composition
+# A segment-rooted question whose witness runs through structural composition
 # edges, so its flow direction is inferred (review required). Nozzle-rooted
 # questions traverse explicit sourceItem/targetItem edges (no review).
-INFERRED_QUESTION = "What is downstream of the piping?"
+INFERRED_QUESTION = "What is downstream of the segment?"
 EXPLICIT_QUESTION = "What is downstream of the nozzle?"
 
 
@@ -166,7 +166,7 @@ class DirectionReviewTests(unittest.TestCase):
         # The opposite direction is a different evaluation boundary -> re-review.
         upstream = client.post(
             f"/api/review/sessions/{session_id}/qa-turns",
-            json={"question": "What is upstream of the piping?"},
+            json={"question": "What is upstream of the segment?"},
         ).json()
         self.assertEqual(upstream["status"], "needs_direction_review")
 

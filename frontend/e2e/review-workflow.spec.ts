@@ -324,7 +324,7 @@ test("paused direction review survives a page refresh and resumes from persisted
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
   // Pause the turn on a direction review.
-  await workflow.sendPrompt("What is downstream of the piping?");
+  await workflow.sendPrompt("What is downstream of the segment?");
   await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
 
   // Refresh: session id, thread history, and the paused turn are persisted.
