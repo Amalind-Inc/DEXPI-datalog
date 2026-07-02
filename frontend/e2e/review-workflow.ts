@@ -37,9 +37,10 @@ export function reviewWorkflow(page: Page) {
     },
 
     async expectGraphNonPrimaryBeforeUpload() {
-      await expect(graphPanel).toBeVisible();
-      await expect(graphPanel.getByText("sample graph")).toBeVisible();
+      // Graph-on-demand: the topology panel is not shown until a P&ID is
+      // prepared. The chat is the primary, full-width surface on entry.
       await expect(chat).toBeVisible();
+      await expect(graphPanel).toHaveCount(0);
     },
 
     async uploadPlantXml(filePath = e06DexpiFixture) {
@@ -50,8 +51,9 @@ export function reviewWorkflow(page: Page) {
 
     async expectPreparedTopology(filename: string) {
       await expect(graphPanel.getByText(filename)).toBeVisible();
-      await expect(graphPanel.getByRole("img", { name: "P&ID topology graph" })).toBeVisible();
-      await expect(graphPanel.getByRole("button").first()).toBeVisible();
+      // Graphics-bearing topologies render the compressed Cytoscape P&ID view
+      // (a canvas, so node interactivity is not exposed as DOM buttons).
+      await expect(page.getByTestId("cytoscape-pid-graph")).toBeVisible();
     },
 
     async sendPrompt(prompt: string) {

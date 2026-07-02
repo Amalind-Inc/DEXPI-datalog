@@ -1,11 +1,13 @@
 "use client";
 
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PidNodeKind } from "@/components/pid/types";
 import { layoutGraphNodes } from "@/components/pid/graph-layout";
+import { CytoscapePidGraph } from "@/components/pid/cytoscape-pid-graph";
+import { PidLegend } from "@/components/pid/pid-legend";
 
 const filters: Array<PidNodeKind | "All"> = [
   "All",
@@ -18,14 +20,19 @@ const filters: Array<PidNodeKind | "All"> = [
 export function PidGraphPanel() {
   const {
     graph,
+    pidView,
     highlightedNodeIds,
     loadedFileName,
     selectedNode,
     selectedNodeId,
     setSelectedNodeId,
+    setGraphOpen,
   } = usePidGraph();
+  const hasPidView = pidView.units.length > 0;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PidNodeKind | "All">("All");
+  const [showLegend, setShowLegend] = useState(false);
+  const [processFlow, setProcessFlow] = useState(true);
 
   const visibleNodes = useMemo(
     () =>
@@ -44,13 +51,20 @@ export function PidGraphPanel() {
 
   return (
     <aside className="pid-panel" aria-label="P&ID graph panel">
-      <header className="pid-panel-header">
-        <div>
-          <p className="pid-eyebrow">Graph workspace</p>
-          <h2>Plant topology</h2>
+      <div className="pid-tabbar">
+        <div className="pid-tab" data-testid="pid-tab">
+          <span className="pid-tab-name">{loadedFileName ?? "sample graph"}</span>
+          <button
+            type="button"
+            className="pid-tab-close"
+            data-testid="close-graph"
+            aria-label="Close topology view"
+            onClick={() => setGraphOpen(false)}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
         </div>
-        <span className="pid-file-chip">{loadedFileName ?? "sample graph"}</span>
-      </header>
+      </div>
 
       <div className="pid-search-row">
         <label className="pid-search">
@@ -79,6 +93,38 @@ export function PidGraphPanel() {
       </div>
 
       <section className="pid-graph-canvas" aria-label="Graph visualization">
+        {hasPidView ? (
+          <div className="pid-cyto-wrap">
+            <div className="pid-cyto-toolbar">
+              <button
+                type="button"
+                data-testid="toggle-process-flow"
+                className={cn("pid-toolbar-btn", processFlow && "active")}
+                aria-pressed={processFlow}
+                onClick={() => setProcessFlow((value) => !value)}
+              >
+                Process flow
+              </button>
+              <button
+                type="button"
+                data-testid="toggle-legend"
+                className={cn("pid-toolbar-btn", showLegend && "active")}
+                aria-expanded={showLegend}
+                onClick={() => setShowLegend((value) => !value)}
+              >
+                Legend
+              </button>
+            </div>
+            {showLegend && <PidLegend onClose={() => setShowLegend(false)} />}
+            <CytoscapePidGraph
+              pidView={pidView}
+              highlightedNodeIds={highlightedNodeIds}
+              selectedNodeId={selectedNodeId}
+              processFlow={processFlow}
+              onSelect={setSelectedNodeId}
+            />
+          </div>
+        ) : (
         <svg viewBox="0 0 430 290" role="img" aria-label="P&ID topology graph">
           {graph.edges.map((edge) => {
             const source = positions[edge.source] ?? { x: 60, y: 60 };
@@ -141,6 +187,7 @@ export function PidGraphPanel() {
             );
           })}
         </svg>
+        )}
       </section>
 
       <section className="pid-details" aria-label="Selected-node details view">

@@ -42,13 +42,12 @@ test("QA answer evidence chips open the topology panel and highlight structural 
   const chips = page.getByTestId("qa-evidence-chip");
   await expect(chips.first()).toBeVisible();
 
-  // Clicking a chip applies highlights in the graph panel
-  const graphPanel = page.getByRole("complementary", { name: "P&ID graph panel" });
+  // Clicking a chip applies highlights in the Cytoscape P&ID graph. The graph
+  // renders to a canvas, so highlight state is surfaced via a data attribute.
+  const graph = page.getByTestId("cytoscape-pid-graph");
+  await expect(graph).toBeVisible();
   await chips.first().click();
-
-  // The graph panel must show at least one highlighted node after chip click
-  // (the `.highlighted` CSS class is applied to SVG rect elements by graph-panel.tsx)
-  await expect(graphPanel.locator("rect.highlighted").first()).toBeVisible({ timeout: 3000 });
+  await expect(graph).toHaveAttribute("data-highlight-active", "true", { timeout: 3000 });
 });
 
 test("ambiguous reference yields multiple candidates and a grounded follow-up reuses prior evidence", async ({
@@ -88,7 +87,7 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
   // A piping-rooted directed question has inferred flow direction -> review card.
-  await workflow.sendPrompt("What is downstream of the piping?");
+  await workflow.sendPrompt("What is downstream of the segment?");
   await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
   await expect(page.getByTestId("direction-basis")).toHaveText("inferred");
   await expect(page.getByTestId("direction-proposed")).toContainText("downstream");
@@ -96,12 +95,12 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   await expect(page.getByTestId("direction-reverse")).toBeVisible();
   await expect(page.getByTestId("direction-unknown")).toBeVisible();
 
-  // Clicking the witness chip highlights the structural witness in the graph.
-  const graphPanel = page.getByRole("complementary", { name: "P&ID graph panel" });
+  // Clicking the witness chip highlights the structural witness in the Cytoscape
+  // P&ID graph (canvas-backed, so highlight state is exposed as a data attribute).
+  const graph = page.getByTestId("cytoscape-pid-graph");
+  await expect(graph).toBeVisible();
   await page.getByTestId("direction-witness-chip").click();
-  await expect(graphPanel.locator("rect.highlighted").first()).toBeVisible({
-    timeout: 3000,
-  });
+  await expect(graph).toHaveAttribute("data-highlight-active", "true", { timeout: 3000 });
 
   // Confirming resumes the original question with a grounded answer.
   await page.getByTestId("direction-confirm").click();
@@ -120,7 +119,7 @@ test("reversing an inferred flow direction resumes with the opposite direction",
   await workflow.uploadPlantXml();
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
-  await workflow.sendPrompt("What is downstream of the piping?");
+  await workflow.sendPrompt("What is downstream of the segment?");
   await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
   await page.getByTestId("direction-reverse").click();
 
@@ -130,7 +129,7 @@ test("reversing an inferred flow direction resumes with the opposite direction",
   );
 
   // Reuse: asking the same question again must not pause for review.
-  await workflow.sendPrompt("What is downstream of the piping?");
+  await workflow.sendPrompt("What is downstream of the segment?");
   await expect(page.getByTestId("grounded-qa-answer")).toHaveCount(2);
   await expect(page.getByTestId("direction-review-card")).toHaveCount(1);
 });

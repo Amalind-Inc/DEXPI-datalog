@@ -124,12 +124,13 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
     },
   );
 
+  // With a tool-calling model configured, chat goes straight to the agentic QA
+  // harness — no keyword-router (improve) round-trip.
   assert.deepEqual(
     calls.map((call) => `${call.method} ${call.path}`),
     [
       "PUT /api/review/sessions/session-1/source-scope",
       "PUT /api/review/sessions/session-1/provider-settings",
-      "POST /api/review/sessions/session-1/logic-requests/improve",
       "POST /api/review/sessions/session-1/qa-turns",
     ],
   );
@@ -139,7 +140,7 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
     model: "openrouter/owl-alpha",
     credential: "sk-hidden",
   });
-  assert.deepEqual(calls[3].body, { question: "What downstream process objects are reachable?" });
+  assert.deepEqual(calls[2].body, { question: "What downstream process objects are reachable?" });
   assert.equal(result.status, "answered");
   assert.match(result.message, /^pydexpi:qa-answer:/);
   const parsed = parseGroundedQAAnswerMessage(result.message);
@@ -155,6 +156,47 @@ test("answerChatWithReviewBackend routes topology question through QA harness an
     result.highlightedNodeIds.includes("node-p101") ||
       result.highlightedNodeIds.includes("node-v102"),
   );
+});
+
+test("answerChatWithReviewBackend sends open conversation to the harness instead of rejecting it", async () => {
+  const paths: string[] = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    paths.push(parsedUrl.pathname);
+    if (parsedUrl.pathname.endsWith("/provider-settings")) {
+      return Response.json({ provider: "openrouter", model: "m", configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        session_id: "session-1",
+        answer_text: "Sure — ask me anything about the loaded P&ID and I'll dig in.",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+
+  const result = await answerChatWithReviewBackend(
+    {
+      sessionId: "session-1",
+      selectedNode: null,
+      messages: [{ role: "user", content: "bro i need help" }],
+    },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: { provider: "openrouter", model: "m", credential: "sk-x" },
+    },
+  );
+
+  // A non-topology message must not hit the keyword router or be rejected.
+  assert.ok(!paths.some((p) => p.endsWith("/logic-requests/improve")));
+  assert.ok(paths.some((p) => p.endsWith("/qa-turns")));
+  assert.equal(result.status, "answered");
+  const parsed = parseGroundedQAAnswerMessage(result.message);
+  assert.match(parsed?.answerText ?? "", /ask me anything/);
 });
 
 test("answerChatWithReviewBackend forwards prior QA evidence as conversation state for follow-ups", async () => {

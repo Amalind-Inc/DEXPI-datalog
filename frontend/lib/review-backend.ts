@@ -1,7 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { samplePidGraph } from "../components/pid/sample-graph.ts";
-import type { PidGraph, PidNode, PrepareResult } from "../components/pid/types.ts";
+import type {
+  PidGraph,
+  PidNode,
+  PidNodeKind,
+  PidView,
+  PrepareResult,
+} from "../components/pid/types.ts";
+
+const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
 import {
   serializeGroundedLogicAnswer,
   serializeDatalogConfirmation,
@@ -91,6 +99,7 @@ export async function prepareReviewSession(
     status: "ready",
     filename: body.filename ?? "plant.xml",
     graph,
+    pidView: EMPTY_PID_VIEW,
     sourceScopeIds: [graph.nodes[0]?.id ?? "pump-101"],
   };
 }
@@ -178,6 +187,7 @@ async function prepareWithPythonBackend(
       status: readStatus(data),
       filename: body.filename ?? "plant.xml",
       graph: readTopology(data),
+      pidView: readPidView(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
     };
   } catch {
@@ -223,7 +233,11 @@ async function runBackendLogicRequest(
       if (!providerResponse.ok) return null;
     }
 
-    if (conversation.length > 0) {
+    // When a tool-calling model is configured, the agentic QA harness handles
+    // everything: open conversation, follow-ups, and grounded topology questions.
+    // The model decides when to call topology tools. The keyword router below is
+    // only a fallback for the no-model (deterministic stub) case.
+    if (providerSettings || conversation.length > 0) {
       return await answerWithGroundedQA(fetcher, baseUrl, sessionId, prompt, conversation);
     }
 
@@ -460,12 +474,19 @@ function readTopology(data: Record<string, unknown>): PidGraph {
   const nodes =
     topology.nodes?.map((node): PidNode => {
       const id = String(node.id ?? node.label ?? "node");
-      const label = String(node.tag_name ?? node.label ?? id);
+      // Prefer the engineer-facing identifier (tag / line / qualified nozzle).
+      const label = String(node.display_name ?? node.tag_name ?? node.label ?? id);
+      const className = String(node.class_name ?? node.label ?? "");
+      const category = String(node.category ?? "");
+      const description =
+        typeof node.description === "string" && node.description
+          ? node.description
+          : `${className || "Topology object"} ${label}`.trim();
       return {
         id,
         label,
-        kind: classifyNode(label),
-        description: `Prepared topology object ${label}.`,
+        kind: classifyKind(category, label),
+        description,
         status: "normal",
       };
     }) ?? samplePidGraph.nodes;
@@ -477,6 +498,50 @@ function readTopology(data: Record<string, unknown>): PidGraph {
       label: String(edge.relationship ?? edge.label ?? "connected to"),
     })) ?? samplePidGraph.edges;
   return { nodes, edges };
+}
+
+function readPidView(data: Record<string, unknown>): PidView {
+  const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
+  const raw = (source.pid_view ?? data.pid_view) as Record<string, unknown> | undefined;
+  if (!raw || typeof raw !== "object") return EMPTY_PID_VIEW;
+  const units = Array.isArray(raw.units)
+    ? raw.units.map((u) => {
+        const unit = u as Record<string, unknown>;
+        return {
+          id: String(unit.id ?? ""),
+          label: String(unit.label ?? unit.id ?? ""),
+          className: String(unit.class_name ?? ""),
+          category: String(unit.category ?? ""),
+          description: String(unit.description ?? ""),
+          ports: Array.isArray(unit.ports)
+            ? unit.ports.map((p) => {
+                const port = p as Record<string, unknown>;
+                return { id: String(port.id ?? ""), label: String(port.label ?? port.id ?? "") };
+              })
+            : [],
+        };
+      })
+    : [];
+  const lines = Array.isArray(raw.lines)
+    ? raw.lines.map((l) => {
+        const line = l as Record<string, unknown>;
+        return {
+          id: String(line.id ?? ""),
+          label: String(line.label ?? ""),
+          sourceUnit: line.source_unit ? String(line.source_unit) : null,
+          targetUnit: line.target_unit ? String(line.target_unit) : null,
+          sourcePort: line.source_port ? String(line.source_port) : null,
+          targetPort: line.target_port ? String(line.target_port) : null,
+          memberTopologyIds: Array.isArray(line.member_topology_ids)
+            ? line.member_topology_ids.map((m) => String(m))
+            : [],
+        };
+      })
+    : [];
+  const hiddenTopologyIds = Array.isArray(raw.hidden_topology_ids)
+    ? raw.hidden_topology_ids.map((h) => String(h))
+    : [];
+  return { units, lines, hiddenTopologyIds };
 }
 
 function readVisibleSourceScopeIds(value: unknown) {
@@ -640,12 +705,23 @@ function readNonRefinementMessage(improvement: Record<string, unknown>) {
   return "The backend did not create a reviewable topology refinement for this prompt.";
 }
 
-function classifyNode(label: string) {
+function classifyNode(label: string): PidNodeKind {
   if (label.startsWith("P-")) return "Pump";
   if (label.startsWith("V-")) return "Valve";
   if (label.startsWith("FT-")) return "Instrument";
-  if (label.startsWith("L-")) return "Line";
+  if (label.startsWith("L-") || label.startsWith("Line ")) return "Line";
   return "Equipment";
+}
+
+// Map the backend topology category to a graph node kind, falling back to
+// label-prefix heuristics for equipment tags (P-4713 -> Pump).
+function classifyKind(category: string, label: string): PidNodeKind {
+  if (category === "line") return "Line";
+  if (category === "equipment") return classifyNode(label);
+  if (category === "nozzle" || category === "connection" || category === "piping") {
+    return "Equipment";
+  }
+  return classifyNode(label);
 }
 
 function inferHighlights(prompt: string, fallbackId: string | undefined) {
@@ -665,6 +741,10 @@ function inferHighlights(prompt: string, fallbackId: string | undefined) {
 }
 
 function readProviderSettingsFromEnv(): BackendProviderSettings | null {
+  // Explicit escape hatch for deterministic e2e: force the stub provider even
+  // when a real key is present in the environment or a .env file.
+  if (process.env.PYDEXPI_DISABLE_BYOK) return null;
+
   const openrouterKey = readEnvValue("OPENROUTER_API_KEY");
   const openaiKey = readEnvValue("OPENAI_API_KEY");
   const anthropicKey = readEnvValue("ANTHROPIC_API_KEY");
