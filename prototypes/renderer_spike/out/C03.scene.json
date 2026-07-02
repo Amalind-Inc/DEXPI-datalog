@@ -1,0 +1,665 @@
+{
+ "name": "C03",
+ "units": "m",
+ "symbols": [
+  {
+   "id": "ActuatingSystemNumberLabel-1",
+   "class": "Label",
+   "shape": "ACTUATING_SYSTEM_LABEL_SHAPE",
+   "tx": 0.0566,
+   "ty": 0.082,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.1,
+   "sy": 1.1
+  },
+  {
+   "id": "ControlledActuator-1",
+   "class": "ControlledActuator",
+   "shape": "CONTROLLED_ACTUATOR_ELECTRICAL_SHAPE",
+   "tx": 0.0726,
+   "ty": 0.0615,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "PipeFitting-1",
+   "class": "PipeFitting",
+   "shape": "PLUG_SHAPE",
+   "tx": 0.035,
+   "ty": 0.0704,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 1.2,
+   "sy": 1.2
+  },
+  {
+   "id": "BlindFlange-1",
+   "class": "BlindFlange",
+   "shape": "BLIND_FLANGE_SHAPE",
+   "tx": 0.035,
+   "ty": 0.0702,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "Flange-1",
+   "class": "Flange",
+   "shape": "FLANGE_SHAPE",
+   "tx": 0.035,
+   "ty": 0.069,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "Flange-2",
+   "class": "Flange",
+   "shape": "FLANGE_SHAPE",
+   "tx": 0.0672,
+   "ty": 0.057,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "OperatedValve-1",
+   "class": "OperatedValve",
+   "shape": "OPERATED_VALVE_SHAPE",
+   "tx": 0.0726,
+   "ty": 0.057,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "Flange-3",
+   "class": "Flange",
+   "shape": "FLANGE_SHAPE",
+   "tx": 0.078,
+   "ty": 0.057,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "RestrictionOrifice-1",
+   "class": "RestrictionOrifice",
+   "shape": "ORIFICE_PLATE_SHAPE",
+   "tx": 0.108,
+   "ty": 0.057,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "BallValve-1",
+   "class": "BallValve",
+   "shape": "BALL_VALVE_SHAPE",
+   "tx": 0.1164,
+   "ty": 0.057,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "PipeReducer-1",
+   "class": "PipeReducer",
+   "shape": "REDUCER_GENERAL_SHAPE",
+   "tx": 0.125,
+   "ty": 0.057,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "FlowOutPipeOffPageConnector-1",
+   "class": "FlowOutPipeOffPageConnector",
+   "shape": "SYMBOL_FOR_OUTLET_OF_ESSENTIAL_SUBSTANCES_SHAPE",
+   "tx": 0.15,
+   "ty": 0.111,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.0,
+   "sy": 1.0
+  },
+  {
+   "id": "PipeSlopeSymbol-1",
+   "class": "",
+   "shape": "PIPE_SLOPE_SYMBOL_SHAPE",
+   "tx": 0.152,
+   "ty": 0.076,
+   "angle": -90.00000000000001,
+   "mirror": false,
+   "sx": 1.5,
+   "sy": 1.5
+  },
+  {
+   "id": "PipeFlowArrow-1",
+   "class": "",
+   "shape": "DIRECTION_OF_FLOW_SHAPE_FOR_PRIMARY_SEGMENT",
+   "tx": 0.15,
+   "ty": 0.1055,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.7,
+   "sy": 0.7
+  },
+  {
+   "id": "ProcessInstrumentationFunction-1",
+   "class": "ProcessInstrumentationFunction",
+   "shape": "INSTRUMENTATION_BUBBLE_SHAPE_CENTRAL",
+   "tx": 0.02,
+   "ty": 0.093,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.1,
+   "sy": 1.1
+  }
+ ],
+ "polylines": [
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.0686,
+     0.06325
+    ],
+    [
+     0.0614,
+     0.0745
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.0726,
+     0.0522
+    ],
+    [
+     0.0726,
+     0.035
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.0726,
+     0.025
+    ],
+    [
+     0.0726,
+     0.015
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-1",
+   "kind": "pipe",
+   "points": [
+    [
+     0.035,
+     0.069
+    ],
+    [
+     0.035,
+     0.057
+    ],
+    [
+     0.0672,
+     0.057
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.001,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1015,
+     0.0564
+    ],
+    [
+     0.1015,
+     0.026
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-3",
+   "kind": "pipe",
+   "points": [
+    [
+     0.078,
+     0.057
+    ],
+    [
+     0.10515,
+     0.057
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.001,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1506,
+     0.0936
+    ],
+    [
+     0.1568,
+     0.0936
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-5",
+   "kind": "pipe",
+   "points": [
+    [
+     0.128,
+     0.057
+    ],
+    [
+     0.15,
+     0.057
+    ],
+    [
+     0.15,
+     0.106
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.001,
+   "dash": null
+  },
+  {
+   "id": "SignalConveyingFunction-1",
+   "kind": "signal",
+   "points": [
+    [
+     0.027425,
+     0.093
+    ],
+    [
+     0.0726,
+     0.093
+    ],
+    [
+     0.0726,
+     0.0768
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "drawing",
+   "kind": "frame",
+   "points": [
+    [
+     0.0646,
+     0.114
+    ],
+    [
+     0.0806,
+     0.114
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "drawing",
+   "kind": "frame",
+   "points": [
+    [
+     0.0726,
+     0.093
+    ],
+    [
+     0.0726,
+     0.1
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "drawing",
+   "kind": "frame",
+   "points": [
+    [
+     0.0726,
+     0.093
+    ],
+    [
+     0.0726,
+     0.1
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "sheet",
+   "kind": "frame",
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.24,
+     0.0
+    ],
+    [
+     0.24,
+     0.125
+    ],
+    [
+     0.0,
+     0.125
+    ],
+    [
+     0.0,
+     0.0
+    ]
+   ],
+   "stroke": "#999",
+   "width": 0.0005,
+   "dash": null
+  }
+ ],
+ "polygons": [
+  {
+   "points": [
+    [
+     0.0726,
+     0.0522
+    ],
+    [
+     0.0735,
+     0.05
+    ],
+    [
+     0.0726,
+     0.0506
+    ],
+    [
+     0.0717,
+     0.05
+    ],
+    [
+     0.0726,
+     0.0522
+    ]
+   ],
+   "filled": true,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.1015,
+     0.0564
+    ],
+    [
+     0.1024,
+     0.0532
+    ],
+    [
+     0.1015,
+     0.0538
+    ],
+    [
+     0.1006,
+     0.0532
+    ],
+    [
+     0.1015,
+     0.0564
+    ]
+   ],
+   "filled": true,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.1506,
+     0.0936
+    ],
+    [
+     0.1528,
+     0.0945
+    ],
+    [
+     0.1522,
+     0.0936
+    ],
+    [
+     0.1528,
+     0.0927
+    ],
+    [
+     0.1506,
+     0.0936
+    ]
+   ],
+   "filled": true,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.0726,
+     0.1
+    ],
+    [
+     0.0646,
+     0.114
+    ],
+    [
+     0.0646,
+     0.1195
+    ],
+    [
+     0.0806,
+     0.1195
+    ],
+    [
+     0.0806,
+     0.114
+    ],
+    [
+     0.0726,
+     0.1
+    ]
+   ],
+   "filled": false,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.0726,
+     0.093
+    ],
+    [
+     0.0736,
+     0.096
+    ],
+    [
+     0.0716,
+     0.096
+    ],
+    [
+     0.0726,
+     0.093
+    ]
+   ],
+   "filled": true,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  }
+ ],
+ "texts": [
+  {
+   "x": 0.0566,
+   "y": 0.0855,
+   "angle": 0.0,
+   "string": "ESV",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.0566,
+   "y": 0.0801,
+   "angle": 0.0,
+   "string": "3712",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.012075,
+   "y": 0.101925,
+   "angle": 0.0,
+   "string": "D-13",
+   "height": 0.005,
+   "just": "RightTop"
+  },
+  {
+   "x": 0.0931,
+   "y": 0.0137,
+   "angle": 0.0,
+   "string": "D-13L37014A-0200PB-FD120-0F000N",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.13,
+   "y": 0.0245,
+   "angle": 0.0,
+   "string": "D-13L37007A-0200PB-FS720-0F000N",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.195,
+   "y": 0.0945,
+   "angle": 0.0,
+   "string": "D-43L37007A-0800VF-AS7F0-0F000N",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.137,
+   "y": 0.0655,
+   "angle": 0.0,
+   "string": "0200x0800",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.02,
+   "y": 0.0965,
+   "angle": 0.0,
+   "string": "ESV",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.02,
+   "y": 0.0911,
+   "angle": 0.0,
+   "string": "3712",
+   "height": 0.005,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.012075,
+   "y": 0.101925,
+   "angle": 0.0,
+   "string": "D-13",
+   "height": 0.005,
+   "just": "RightTop"
+  },
+  {
+   "x": 0.0636,
+   "y": 0.1204,
+   "angle": 0.0,
+   "string": "D",
+   "height": 0.005,
+   "just": "RightTop"
+  },
+  {
+   "x": 0.0726,
+   "y": 0.1144,
+   "angle": 0.0,
+   "string": "ESD",
+   "height": 0.005,
+   "just": "CenterTop"
+  }
+ ],
+ "report": {
+  "items_with_shape": 14,
+  "items_missing_shape": 0,
+  "items_missing_position": 0,
+  "segments": 5,
+  "segments_with_centerline": 3
+ }
+}

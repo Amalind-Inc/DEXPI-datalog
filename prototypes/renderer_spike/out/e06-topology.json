@@ -1,0 +1,246 @@
+{
+ "nodes": [
+  {
+   "id": "node-13117f90809effab",
+   "kind": "node",
+   "label": "H-1009 / N-3 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-242cbc81f38b6e51",
+   "kind": "node",
+   "label": "Line 47132",
+   "node_class": "Piping Network System",
+   "category": "line",
+   "description": "A fluid system of interconnected piping network branches limited by Unit Operation Inlet/Outlet and  Piping Network Terminators. In this context Piping includes e.g. plumbing and tubing (from http://data.posccaesar.org/rdl/RDS270359).",
+   "selectable": true
+  },
+  {
+   "id": "node-24cd4fd96392d1e2",
+   "kind": "node",
+   "label": "H-1009",
+   "node_class": "Plate Heat Exchanger",
+   "category": "equipment",
+   "description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+   "selectable": true
+  },
+  {
+   "id": "node-29dde60ddfce7e07",
+   "kind": "node",
+   "label": "H-1009 / N-1",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  },
+  {
+   "id": "node-4b4135b1ad4a0906",
+   "kind": "node",
+   "label": "P-4713 / N-2",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  },
+  {
+   "id": "node-502f4454a8bca9fc",
+   "kind": "node",
+   "label": "H-1009 / N-3",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  },
+  {
+   "id": "node-697d40e55900d412",
+   "kind": "node",
+   "label": "H-1009 / N-2 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-811a4ac148269df4",
+   "kind": "node",
+   "label": "Pipe",
+   "node_class": "Pipe",
+   "category": "piping",
+   "description": "An elementary piece of piping, i.e., not interrupted by any item.",
+   "selectable": true
+  },
+  {
+   "id": "node-8451e7851587cfd4",
+   "kind": "node",
+   "label": "Line 47132 (segment)",
+   "node_class": "Piping Network Segment",
+   "category": "piping",
+   "description": "The piping limited by a Node and a Break, Node and Connector,  two Nodes, two Breaks, two Connectors or a Break and a Connector. The last five providing there are no Breaks or Connectors in between. In the last three cases the Segment will coincide with a Piping Branch (from http://data.posccaesar.org/rdl/RDS267704).",
+   "selectable": true
+  },
+  {
+   "id": "node-87fa8621a315fb6f",
+   "kind": "node",
+   "label": "H-1009 / N-2",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  },
+  {
+   "id": "node-887d6d6d6d11d3a9",
+   "kind": "node",
+   "label": "P-4713",
+   "node_class": "Centrifugal Pump",
+   "category": "equipment",
+   "description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+   "selectable": true
+  },
+  {
+   "id": "node-983f5544100a62fc",
+   "kind": "node",
+   "label": "P-4713 / N-2 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-b4bec72bb6eb1cd3",
+   "kind": "node",
+   "label": "P-4713 / N-1 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-bc2741be9af8a590",
+   "kind": "node",
+   "label": "H-1009 / N-1 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-c17c3e623354b90b",
+   "kind": "node",
+   "label": "H-1009 / N-4 (connection)",
+   "node_class": "Piping Node",
+   "category": "connection",
+   "description": "A possible connection point for a PipingConnection.",
+   "selectable": true
+  },
+  {
+   "id": "node-c5076e4802fd2f7a",
+   "kind": "node",
+   "label": "H-1009 / N-4",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  },
+  {
+   "id": "node-f13640359dd1d7b0",
+   "kind": "node",
+   "label": "Conceptual Model",
+   "node_class": "Conceptual Model",
+   "category": "structural",
+   "description": "The conceptual content of a DexpiModel, i.e., engineering information independent from its graphical representation.",
+   "selectable": true
+  },
+  {
+   "id": "node-f24e50dc0b8c768c",
+   "kind": "node",
+   "label": "P-4713 / N-1",
+   "node_class": "Nozzle",
+   "category": "nozzle",
+   "description": "A physical object that has a protruding part through which a stream of fluid is directed (from http://data.posccaesar.org/rdl/RDS415214).",
+   "selectable": true
+  }
+ ],
+ "edges": [
+  {
+   "id": "edge-8930faffdc04b11e",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-81c656289a06197a",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-c6a741c37ea1388a",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-aecc0255f1b7e483",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-f7ac61f18a7bc0e2",
+   "kind": "edge",
+   "label": "targetItem",
+   "selectable": false
+  },
+  {
+   "id": "edge-c2783755dda5f7f7",
+   "kind": "edge",
+   "label": "sourceItem",
+   "selectable": false
+  },
+  {
+   "id": "edge-186728f4d4768e2a",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-2b1b99c0fcfd0f48",
+   "kind": "edge",
+   "label": "segments",
+   "selectable": false
+  },
+  {
+   "id": "edge-a6105e462080bb2e",
+   "kind": "edge",
+   "label": "nodes",
+   "selectable": false
+  },
+  {
+   "id": "edge-dad096a39ca57527",
+   "kind": "edge",
+   "label": "targetItem",
+   "selectable": false
+  },
+  {
+   "id": "edge-5b695b8f99ae9f2b",
+   "kind": "edge",
+   "label": "connections",
+   "selectable": false
+  },
+  {
+   "id": "edge-40be6d87a6908ae4",
+   "kind": "edge",
+   "label": "sourceItem",
+   "selectable": false
+  },
+  {
+   "id": "edge-92e533bc5e8e50e6",
+   "kind": "edge",
+   "label": "pipingNetworkSystems",
+   "selectable": false
+  }
+ ]
+}

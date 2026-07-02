@@ -1,0 +1,67 @@
+{
+ "units": [
+  {
+   "id": "node-24cd4fd96392d1e2",
+   "label": "H-1009",
+   "class_name": "Plate Heat Exchanger",
+   "category": "equipment",
+   "description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+   "ports": [
+    {
+     "id": "node-29dde60ddfce7e07",
+     "label": "H-1009 / N-1"
+    },
+    {
+     "id": "node-87fa8621a315fb6f",
+     "label": "H-1009 / N-2"
+    },
+    {
+     "id": "node-502f4454a8bca9fc",
+     "label": "H-1009 / N-3"
+    },
+    {
+     "id": "node-c5076e4802fd2f7a",
+     "label": "H-1009 / N-4"
+    }
+   ]
+  },
+  {
+   "id": "node-887d6d6d6d11d3a9",
+   "label": "P-4713",
+   "class_name": "Centrifugal Pump",
+   "category": "equipment",
+   "description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+   "ports": [
+    {
+     "id": "node-f24e50dc0b8c768c",
+     "label": "P-4713 / N-1"
+    },
+    {
+     "id": "node-4b4135b1ad4a0906",
+     "label": "P-4713 / N-2"
+    }
+   ]
+  }
+ ],
+ "lines": [
+  {
+   "id": "node-8451e7851587cfd4",
+   "label": "Line 47132",
+   "source_unit": "node-887d6d6d6d11d3a9",
+   "target_unit": "node-24cd4fd96392d1e2",
+   "source_port": "node-4b4135b1ad4a0906",
+   "target_port": "node-29dde60ddfce7e07",
+   "member_topology_ids": [
+    "node-242cbc81f38b6e51",
+    "node-29dde60ddfce7e07",
+    "node-4b4135b1ad4a0906",
+    "node-8451e7851587cfd4",
+    "node-983f5544100a62fc",
+    "node-bc2741be9af8a590"
+   ]
+  }
+ ],
+ "hidden_topology_ids": [
+  "node-f13640359dd1d7b0"
+ ]
+}

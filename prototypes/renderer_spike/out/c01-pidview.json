@@ -1,0 +1,471 @@
+{
+ "units": [
+  {
+   "id": "node-024a1fbc69172a37",
+   "label": "P4711",
+   "class_name": "Centrifugal Pump",
+   "category": "equipment",
+   "description": "A dynamic pump utilizing impellers provided with vanes generating centrifugal force to achieve the required pressure head (from http://data.posccaesar.org/rdl/RDS416834).",
+   "ports": [
+    {
+     "id": "node-f4514b559dca78df",
+     "label": "P4711 / N1"
+    },
+    {
+     "id": "node-213d4733305358da",
+     "label": "P4711 / N2"
+    }
+   ]
+  },
+  {
+   "id": "node-24f22ea5853a3a2a",
+   "label": "P4712",
+   "class_name": "Reciprocating Pump",
+   "category": "equipment",
+   "description": "A positive displacement pump which contains a displacing element intended to be moved in a reciprocating movement to exert pressure on a fluid, typically moving within a cylindrical space (from http://data.posccaesar.org/rdl/RDS416969).",
+   "ports": [
+    {
+     "id": "node-c8ce16778258b7e4",
+     "label": "P4712 / N1"
+    },
+    {
+     "id": "node-1afc44b670faf847",
+     "label": "P4712 / N2"
+    }
+   ]
+  },
+  {
+   "id": "node-c39e6ad56080eec9",
+   "label": "H1008",
+   "class_name": "Tubular Heat Exchanger",
+   "category": "equipment",
+   "description": "An indirect contact heat exchanger that separates the hot and cold fluids by tubes (from http://data.posccaesar.org/rdl/RDS13971182).",
+   "ports": [
+    {
+     "id": "node-1e39a29bc961cc3e",
+     "label": "H1008 / N1"
+    },
+    {
+     "id": "node-ca7b996e6b760806",
+     "label": "H1008 / N2"
+    },
+    {
+     "id": "node-0f64167d834e04c8",
+     "label": "H1008 / N3"
+    },
+    {
+     "id": "node-a0e8106c591afffe",
+     "label": "H1008 / N4"
+    }
+   ]
+  },
+  {
+   "id": "node-c400dca36b68849f",
+   "label": "H1007",
+   "class_name": "Plate Heat Exchanger",
+   "category": "equipment",
+   "description": "A heat exchanger that uses metal plates to transfer heat between two fluids.",
+   "ports": [
+    {
+     "id": "node-a56b91ebaeca656d",
+     "label": "H1007 / N1"
+    },
+    {
+     "id": "node-5bc21339881d095c",
+     "label": "H1007 / N2"
+    },
+    {
+     "id": "node-1ef5c19e739c00db",
+     "label": "H1007 / N3"
+    },
+    {
+     "id": "node-23a6a160316ac156",
+     "label": "H1007 / N4"
+    }
+   ]
+  },
+  {
+   "id": "node-ca044a8226e9dea4",
+   "label": "T4750",
+   "class_name": "Tank",
+   "category": "equipment",
+   "description": "A vessel intended to contain fluid for storage. Typically a receiving or collecting function for further distribution. Typically with a vertical and cylindrical or square shape and a flat or conical bottom (from http://data.posccaesar.org/rdl/RDS445139).",
+   "ports": [
+    {
+     "id": "node-8e0dd6454733c0f9",
+     "label": "T4750 / N1"
+    },
+    {
+     "id": "node-d2f7623923734b21",
+     "label": "T4750 / N2"
+    },
+    {
+     "id": "node-8bc758f060ab142f",
+     "label": "T4750 / N3"
+    },
+    {
+     "id": "node-902942c2357f3f75",
+     "label": "T4750 / N5"
+    },
+    {
+     "id": "node-20f1a9bbb03535c2",
+     "label": "T4750 / N6"
+    },
+    {
+     "id": "node-64f6a9130d99fdd2",
+     "label": "T4750 / N7"
+    },
+    {
+     "id": "node-8763f7efe3393c91",
+     "label": "T4750 / N8"
+    }
+   ]
+  }
+ ],
+ "lines": [
+  {
+   "id": "node-0ec199f8e93ae376",
+   "label": "Line 47124",
+   "source_unit": "node-ca044a8226e9dea4",
+   "target_unit": null,
+   "source_port": "node-d2f7623923734b21",
+   "target_port": "node-72c1f9a6dab554d4",
+   "member_topology_ids": [
+    "node-0ec199f8e93ae376",
+    "node-2bbf3d26333435bd",
+    "node-560f4e7f2ff28a14",
+    "node-72c1f9a6dab554d4",
+    "node-92461019456d5a4f",
+    "node-bfafbf8b252eb492",
+    "node-d2f7623923734b21"
+   ]
+  },
+  {
+   "id": "node-f80645ca50642ef1",
+   "label": "Line 47124",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-72c1f9a6dab554d4",
+   "target_port": "node-6a0c0f62126590c5",
+   "member_topology_ids": [
+    "node-2bbf3d26333435bd",
+    "node-4c1df9a2f7800f59",
+    "node-560f4e7f2ff28a14",
+    "node-6a0c0f62126590c5",
+    "node-72c1f9a6dab554d4",
+    "node-77fa322a4b56dbb9",
+    "node-bfafbf8b252eb492",
+    "node-f80645ca50642ef1"
+   ]
+  },
+  {
+   "id": "node-82b06b9c9562214a",
+   "label": "Line 47124",
+   "source_unit": null,
+   "target_unit": "node-24f22ea5853a3a2a",
+   "source_port": "node-6a0c0f62126590c5",
+   "target_port": "node-c8ce16778258b7e4",
+   "member_topology_ids": [
+    "node-1a0a696a5a281115",
+    "node-4c1df9a2f7800f59",
+    "node-6a0c0f62126590c5",
+    "node-77fa322a4b56dbb9",
+    "node-82b06b9c9562214a",
+    "node-bfafbf8b252eb492",
+    "node-c8ce16778258b7e4"
+   ]
+  },
+  {
+   "id": "node-7af9a7ffacfd80ea",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-7d8f2f93d924101f",
+   "target_port": "node-6f3c457ceca795a2",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-10321b68d789f62d",
+    "node-5ab2a87eac255c34",
+    "node-6f3c457ceca795a2",
+    "node-7af9a7ffacfd80ea",
+    "node-7d8f2f93d924101f",
+    "node-883b8049521a81c7",
+    "node-af0f51b1523011df",
+    "node-bcca3caef8edf6db",
+    "node-de2e1eb86010cc54"
+   ]
+  },
+  {
+   "id": "node-d51fabf7269e5a09",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-3677c9fb2a68d0b7",
+   "target_port": "node-3c82d01bd9fd3b3b",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-3677c9fb2a68d0b7",
+    "node-3abf5537bb44d290",
+    "node-3c82d01bd9fd3b3b",
+    "node-6c69e7bdc4b82235",
+    "node-824830afba96a462",
+    "node-b10b86e91b3c61b4",
+    "node-d51fabf7269e5a09"
+   ]
+  },
+  {
+   "id": "node-84b16c924bda086d",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-89a7e5644772d49f",
+   "target_port": "node-da8a8c0e8745ab1e",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-2e6d76c9405ed7f1",
+    "node-825aa771a56be52a",
+    "node-84b16c924bda086d",
+    "node-89a7e5644772d49f",
+    "node-adc5c2c98e528432",
+    "node-bb54a058e9ebc9ab",
+    "node-da8a8c0e8745ab1e",
+    "node-e1dd80608e5e5a80"
+   ]
+  },
+  {
+   "id": "node-329791e04852275b",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-6f3c457ceca795a2",
+   "target_port": "node-3677c9fb2a68d0b7",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-329791e04852275b",
+    "node-3677c9fb2a68d0b7",
+    "node-3abf5537bb44d290",
+    "node-5ab2a87eac255c34",
+    "node-6c69e7bdc4b82235",
+    "node-6f3c457ceca795a2",
+    "node-824830afba96a462",
+    "node-af0f51b1523011df",
+    "node-de2e1eb86010cc54"
+   ]
+  },
+  {
+   "id": "node-c6c64ab986b18799",
+   "label": "Line 47126",
+   "source_unit": "node-24f22ea5853a3a2a",
+   "target_unit": null,
+   "source_port": "node-1afc44b670faf847",
+   "target_port": "node-89a7e5644772d49f",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-1afc44b670faf847",
+    "node-7deb2219568ec6bc",
+    "node-825aa771a56be52a",
+    "node-89a7e5644772d49f",
+    "node-adc5c2c98e528432",
+    "node-bb54a058e9ebc9ab",
+    "node-c6c64ab986b18799"
+   ]
+  },
+  {
+   "id": "node-d711e08bdbf2c667",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-89a7e5644772d49f",
+   "target_port": "node-4cc8fe5b74aef953",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-098f9c03cd9be492",
+    "node-4231baf09c431f02",
+    "node-4888506a04bf93f1",
+    "node-4cc8fe5b74aef953",
+    "node-825aa771a56be52a",
+    "node-89a7e5644772d49f",
+    "node-adc5c2c98e528432",
+    "node-bb54a058e9ebc9ab",
+    "node-d711e08bdbf2c667"
+   ]
+  },
+  {
+   "id": "node-16bc5648b730457d",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-3677c9fb2a68d0b7",
+   "target_port": "node-71091644fa4bc8b7",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-16bc5648b730457d",
+    "node-3677c9fb2a68d0b7",
+    "node-3abf5537bb44d290",
+    "node-4fc8668f940a99af",
+    "node-6c69e7bdc4b82235",
+    "node-71091644fa4bc8b7",
+    "node-824830afba96a462"
+   ]
+  },
+  {
+   "id": "node-8d0a3ffc97594d94",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": "node-c39e6ad56080eec9",
+   "source_port": "node-6f3c457ceca795a2",
+   "target_port": "node-1e39a29bc961cc3e",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-1e39a29bc961cc3e",
+    "node-5ab2a87eac255c34",
+    "node-6f3c457ceca795a2",
+    "node-8d0a3ffc97594d94",
+    "node-af0f51b1523011df",
+    "node-c8c5f17004d07c93",
+    "node-de2e1eb86010cc54"
+   ]
+  },
+  {
+   "id": "node-0f1c9c658a266973",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-4cc8fe5b74aef953",
+   "target_port": "node-7d8f2f93d924101f",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-098f9c03cd9be492",
+    "node-0f1c9c658a266973",
+    "node-10321b68d789f62d",
+    "node-4231baf09c431f02",
+    "node-4888506a04bf93f1",
+    "node-4cc8fe5b74aef953",
+    "node-7d8f2f93d924101f",
+    "node-883b8049521a81c7",
+    "node-bcca3caef8edf6db"
+   ]
+  },
+  {
+   "id": "node-9d3b932cdadbf989",
+   "label": "Line 47126",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-7d8f2f93d924101f",
+   "target_port": "node-71acb27d39a8f8b4",
+   "member_topology_ids": [
+    "node-0038f3ef9797136f",
+    "node-10321b68d789f62d",
+    "node-71acb27d39a8f8b4",
+    "node-7d8f2f93d924101f",
+    "node-883b8049521a81c7",
+    "node-9d3b932cdadbf989",
+    "node-bcca3caef8edf6db",
+    "node-edaa51492dc87b8d"
+   ]
+  },
+  {
+   "id": "node-6464b23fb2003257",
+   "label": "Line 47123",
+   "source_unit": "node-c400dca36b68849f",
+   "target_unit": "node-ca044a8226e9dea4",
+   "source_port": "node-5bc21339881d095c",
+   "target_port": "node-8e0dd6454733c0f9",
+   "member_topology_ids": [
+    "node-0f923ed11a790f3f",
+    "node-5bc21339881d095c",
+    "node-6464b23fb2003257",
+    "node-736795fe1401bba2",
+    "node-8e0dd6454733c0f9",
+    "node-b0ce44df4715f308"
+   ]
+  },
+  {
+   "id": "node-2d489d41311c4420",
+   "label": "Line 47122",
+   "source_unit": "node-024a1fbc69172a37",
+   "target_unit": "node-c400dca36b68849f",
+   "source_port": "node-213d4733305358da",
+   "target_port": "node-a56b91ebaeca656d",
+   "member_topology_ids": [
+    "node-1a3ea22ae5265a61",
+    "node-20a802af723eefc6",
+    "node-213d4733305358da",
+    "node-2d489d41311c4420",
+    "node-8a29a6746be70a73",
+    "node-a56b91ebaeca656d"
+   ]
+  },
+  {
+   "id": "node-dd5fd21dba9254ac",
+   "label": "Line 47125",
+   "source_unit": null,
+   "target_unit": "node-ca044a8226e9dea4",
+   "source_port": "node-53f3f05f422d500b",
+   "target_port": "node-902942c2357f3f75",
+   "member_topology_ids": [
+    "node-53f3f05f422d500b",
+    "node-5f6903d88e59ed98",
+    "node-7fcf4abb47dcda67",
+    "node-902942c2357f3f75",
+    "node-993cb4b101e86889",
+    "node-b4655107404e9faa",
+    "node-dd5fd21dba9254ac"
+   ]
+  },
+  {
+   "id": "node-5a709ba0d89ae021",
+   "label": "Line 47125",
+   "source_unit": null,
+   "target_unit": null,
+   "source_port": "node-4cc8fe5b74aef953",
+   "target_port": "node-53f3f05f422d500b",
+   "member_topology_ids": [
+    "node-098f9c03cd9be492",
+    "node-4231baf09c431f02",
+    "node-4888506a04bf93f1",
+    "node-4cc8fe5b74aef953",
+    "node-53f3f05f422d500b",
+    "node-5a709ba0d89ae021",
+    "node-5f6903d88e59ed98",
+    "node-993cb4b101e86889",
+    "node-b4655107404e9faa"
+   ]
+  },
+  {
+   "id": "node-81947619115a6669",
+   "label": "Line 47127",
+   "source_unit": "node-c39e6ad56080eec9",
+   "target_unit": "node-ca044a8226e9dea4",
+   "source_port": "node-ca7b996e6b760806",
+   "target_port": "node-20f1a9bbb03535c2",
+   "member_topology_ids": [
+    "node-1aa5c95a13520d73",
+    "node-20f1a9bbb03535c2",
+    "node-81947619115a6669",
+    "node-9001152a67ab9558",
+    "node-a36d702d7b573e72",
+    "node-ca7b996e6b760806"
+   ]
+  },
+  {
+   "id": "node-5dbed4b410839428",
+   "label": "Line 47121",
+   "source_unit": null,
+   "target_unit": "node-024a1fbc69172a37",
+   "source_port": "node-d3c5a54ef1dce797",
+   "target_port": "node-f4514b559dca78df",
+   "member_topology_ids": [
+    "node-41a9868f91f69582",
+    "node-5dbed4b410839428",
+    "node-87caadad02296089",
+    "node-b4bec72bb6eb1cd3",
+    "node-d3c5a54ef1dce797",
+    "node-f4514b559dca78df"
+   ]
+  }
+ ],
+ "hidden_topology_ids": [
+  "node-f13640359dd1d7b0"
+ ]
+}

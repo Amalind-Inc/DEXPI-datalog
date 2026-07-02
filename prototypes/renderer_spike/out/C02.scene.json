@@ -1,0 +1,1580 @@
+{
+ "name": "C02",
+ "units": "m",
+ "symbols": [
+  {
+   "id": "PipeReducer-1",
+   "class": "PipeReducer",
+   "shape": "REDUCER_GENERAL_SHAPE",
+   "tx": 0.197,
+   "ty": 0.2464,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "FlowOutPipeOffPageConnector-1",
+   "class": "FlowOutPipeOffPageConnector",
+   "shape": "ARROW_FOR_OUTLET_OF_ESSENTIAL_SUBSTANCES_SHAPE",
+   "tx": 0.2835,
+   "ty": 0.2545,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.55
+  },
+  {
+   "id": "InsulationSymbol-1",
+   "class": "",
+   "shape": "PIPING_INSULATED_SHORT_SHAPE_",
+   "tx": 0.23747845,
+   "ty": 0.2545,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.28,
+   "sy": 0.28
+  },
+  {
+   "id": "PipeSlopeSymbol-1",
+   "class": "",
+   "shape": "SLOPE_SHAPE",
+   "tx": 0.21685,
+   "ty": 0.255575,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.55
+  },
+  {
+   "id": "PipeFlowArrow-1",
+   "class": "",
+   "shape": "DIRECTION_OF_FLOW_SHAPE_FOR_SECONDARY_SEGMENT",
+   "tx": 0.197,
+   "ty": 0.2545,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.35
+  },
+  {
+   "id": "PipeTee-1",
+   "class": "PipeTee",
+   "shape": "T_TYPE_CONNECTION_SHAPE",
+   "tx": 0.197,
+   "ty": 0.063,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.0,
+   "sy": 0.0
+  },
+  {
+   "id": "OperatedValve-1",
+   "class": "OperatedValve",
+   "shape": "OPERATED_VALVE_SHAPE",
+   "tx": 0.1875,
+   "ty": 0.063,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "BlindFlange-1",
+   "class": "BlindFlange",
+   "shape": "BLIND_COVER_SHAPE",
+   "tx": 0.1566,
+   "ty": 0.23065,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "OperatedValve-2",
+   "class": "OperatedValve",
+   "shape": "OPERATED_VALVE_SHAPE",
+   "tx": 0.1566,
+   "ty": 0.2352,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "BlindFlange-2",
+   "class": "BlindFlange",
+   "shape": "BLIND_COVER_SHAPE",
+   "tx": 0.1566,
+   "ty": 0.23685,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "BlindFlange-3",
+   "class": "BlindFlange",
+   "shape": "BLIND_COVER_SHAPE",
+   "tx": 0.1755,
+   "ty": 0.23065,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "OperatedValve-3",
+   "class": "OperatedValve",
+   "shape": "OPERATED_VALVE_SHAPE",
+   "tx": 0.1755,
+   "ty": 0.2352,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "BlindFlange-4",
+   "class": "BlindFlange",
+   "shape": "BLIND_COVER_SHAPE",
+   "tx": 0.1755,
+   "ty": 0.23685,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.25,
+   "sy": 0.25
+  },
+  {
+   "id": "ProcessInstrumentationFunction-1",
+   "class": "ProcessInstrumentationFunction",
+   "shape": "INSTRUMENTATION_BUBBLE_SHAPE_CENTRAL",
+   "tx": 0.114,
+   "ty": 0.2436,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.72,
+   "sy": 0.72
+  },
+  {
+   "id": "ProcessInstrumentationFunction-2",
+   "class": "ProcessInstrumentationFunction",
+   "shape": "INSTRUMENTATION_BUBBLE_SHAPE_CENTRAL",
+   "tx": 0.1566,
+   "ty": 0.2436,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.72,
+   "sy": 0.72
+  },
+  {
+   "id": "Symbol-1",
+   "class": "",
+   "shape": "INFORMATION_FLOW_ARROW",
+   "tx": 0.1194,
+   "ty": 0.2436,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 0.6,
+   "sy": 0.6
+  },
+  {
+   "id": "ProcessInstrumentationFunction-3",
+   "class": "ProcessInstrumentationFunction",
+   "shape": "INSTRUMENTATION_BUBBLE_SHAPE_CENTRAL",
+   "tx": 0.1755,
+   "ty": 0.2436,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.72,
+   "sy": 0.72
+  },
+  {
+   "id": "Symbol-2",
+   "class": "",
+   "shape": "INFORMATION_FLOW_ARROW",
+   "tx": 0.1755,
+   "ty": 0.251,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.6,
+   "sy": 0.6
+  },
+  {
+   "id": "Symbol-3",
+   "class": "",
+   "shape": "INFORMATION_FLOW_ARROW",
+   "tx": 0.114,
+   "ty": 0.251,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 0.6,
+   "sy": 0.6
+  },
+  {
+   "id": "Symbol-4",
+   "class": "",
+   "shape": "INFORMATION_FLOW_ARROW",
+   "tx": 0.114,
+   "ty": 0.2463,
+   "angle": -90.0,
+   "mirror": false,
+   "sx": 0.6,
+   "sy": 0.6
+  },
+  {
+   "id": "ProcessColumn-1",
+   "class": "ProcessColumn",
+   "shape": "HIGH_VESSEL_WITH_DISHED_HEADS_SHAPE",
+   "tx": 0.197,
+   "ty": 0.1548,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 5.0,
+   "sy": 5.0
+  },
+  {
+   "id": "SubTaggedColumnSection-1",
+   "class": "ColumnSection",
+   "shape": "FIXED_BED_SHAPE",
+   "tx": 0.197,
+   "ty": 0.1169,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.075,
+   "sy": 1.85
+  },
+  {
+   "id": "Nozzle-1",
+   "class": "Nozzle",
+   "shape": "MANHOLE_SHAPE",
+   "tx": 0.18625,
+   "ty": 0.09,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 0.2,
+   "sy": 0.4
+  },
+  {
+   "id": "Nozzle-2",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.197,
+   "ty": 0.2383,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-3",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.18625,
+   "ty": 0.144,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-4",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.197,
+   "ty": 0.0713,
+   "angle": -90.00000000000001,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-5",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.20775,
+   "ty": 0.0892,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-6",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.20775,
+   "ty": 0.222,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-7",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.18625,
+   "ty": 0.0825,
+   "angle": 180.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-8",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.1566,
+   "ty": 0.2275,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "Nozzle-9",
+   "class": "Nozzle",
+   "shape": "NOZZLE_SHAPE",
+   "tx": 0.1755,
+   "ty": 0.2275,
+   "angle": 90.0,
+   "mirror": false,
+   "sx": 0.55,
+   "sy": 0.28
+  },
+  {
+   "id": "TaggedColumnSection-1",
+   "class": "ColumnSection",
+   "shape": "FIXED_BED_SHAPE",
+   "tx": 0.197,
+   "ty": 0.1844,
+   "angle": 0.0,
+   "mirror": false,
+   "sx": 1.075,
+   "sy": 3.7
+  }
+ ],
+ "polylines": [
+  {
+   "id": "PipingNetworkSegment-1",
+   "kind": "pipe",
+   "points": [
+    [
+     0.197,
+     0.24105
+    ],
+    [
+     0.197,
+     0.24515
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-2",
+   "kind": "pipe",
+   "points": [
+    [
+     0.197,
+     0.24765
+    ],
+    [
+     0.197,
+     0.2545
+    ],
+    [
+     0.2835,
+     0.2545
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-3",
+   "kind": "pipe",
+   "points": [
+    [
+     0.197,
+     0.06855
+    ],
+    [
+     0.197,
+     0.063
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-4",
+   "kind": "pipe",
+   "points": [
+    [
+     0.197,
+     0.063
+    ],
+    [
+     0.197,
+     0.0566
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-5",
+   "kind": "pipe",
+   "points": [
+    [
+     0.197,
+     0.063
+    ],
+    [
+     0.18875,
+     0.063
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-7",
+   "kind": "pipe",
+   "points": [
+    [
+     0.1566,
+     0.23065
+    ],
+    [
+     0.1566,
+     0.23395
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "PipingNetworkSegment-9",
+   "kind": "pipe",
+   "points": [
+    [
+     0.1755,
+     0.23065
+    ],
+    [
+     0.1755,
+     0.23395
+    ]
+   ],
+   "stroke": "#808000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "MeasuringLineFunction-1",
+   "kind": "signal",
+   "points": [
+    [
+     0.1566,
+     0.23685
+    ],
+    [
+     0.1566,
+     0.2409
+    ]
+   ],
+   "stroke": "#008000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "SignalConveyingFunction-1",
+   "kind": "signal",
+   "points": [
+    [
+     0.1512,
+     0.2436
+    ],
+    [
+     0.1194,
+     0.2436
+    ]
+   ],
+   "stroke": "#0000ff",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "MeasuringLineFunction-2",
+   "kind": "signal",
+   "points": [
+    [
+     0.1755,
+     0.23685
+    ],
+    [
+     0.1755,
+     0.2409
+    ]
+   ],
+   "stroke": "#008000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "SignalConveyingFunction-2",
+   "kind": "signal",
+   "points": [
+    [
+     0.1755,
+     0.2463
+    ],
+    [
+     0.1755,
+     0.251
+    ],
+    [
+     0.114,
+     0.251
+    ],
+    [
+     0.114,
+     0.2463
+    ]
+   ],
+   "stroke": "#0000ff",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.154,
+     0.2275
+    ],
+    [
+     0.18625,
+     0.2275
+    ]
+   ],
+   "stroke": "#000000",
+   "width": 0.0005,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.18475,
+     0.225
+    ],
+    [
+     0.20925,
+     0.225
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.20775,
+     0.222
+    ],
+    [
+     0.197,
+     0.222
+    ],
+    [
+     0.197,
+     0.2195
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1962,
+     0.2209
+    ],
+    [
+     0.1978,
+     0.2209
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1962,
+     0.2202
+    ],
+    [
+     0.1978,
+     0.2202
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.18475,
+     0.1426
+    ],
+    [
+     0.20925,
+     0.1426
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1882,
+     0.1412
+    ],
+    [
+     0.1882,
+     0.1397
+    ],
+    [
+     0.2058,
+     0.1397
+    ],
+    [
+     0.2058,
+     0.1412
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.197,
+     0.1397
+    ],
+    [
+     0.197,
+     0.1386
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.18475,
+     0.0941
+    ],
+    [
+     0.20925,
+     0.0941
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.18625,
+     0.0845
+    ],
+    [
+     0.20775,
+     0.0845
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 8e-05,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1984,
+     0.0859
+    ],
+    [
+     0.1964,
+     0.0859
+    ],
+    [
+     0.197,
+     0.0845
+    ],
+    [
+     0.1976,
+     0.0859
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.00011,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.189,
+     0.0713
+    ],
+    [
+     0.197,
+     0.0713
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 8e-05,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.192,
+     0.0845
+    ],
+    [
+     0.192,
+     0.0713
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 8e-05,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.205,
+     0.0846
+    ],
+    [
+     0.205,
+     0.0905
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.195,
+     0.0726
+    ],
+    [
+     0.199,
+     0.0726
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1956,
+     0.0713472590085
+    ],
+    [
+     0.1956,
+     0.0726
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "label",
+   "kind": "leader",
+   "points": [
+    [
+     0.1984,
+     0.0713472590085
+    ],
+    [
+     0.1984,
+     0.0726
+    ]
+   ],
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "id": "sheet",
+   "kind": "frame",
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.42,
+     0.0
+    ],
+    [
+     0.42,
+     0.297
+    ],
+    [
+     0.0,
+     0.297
+    ],
+    [
+     0.0,
+     0.0
+    ]
+   ],
+   "stroke": "#999",
+   "width": 0.0005,
+   "dash": null
+  }
+ ],
+ "polygons": [
+  {
+   "points": [
+    [
+     0.14575,
+     0.239
+    ],
+    [
+     0.15115,
+     0.239
+    ],
+    [
+     0.15115,
+     0.2314
+    ],
+    [
+     0.14575,
+     0.2314
+    ],
+    [
+     0.14575,
+     0.239
+    ]
+   ],
+   "filled": false,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.16465,
+     0.239
+    ],
+    [
+     0.17005,
+     0.239
+    ],
+    [
+     0.17005,
+     0.2314
+    ],
+    [
+     0.16465,
+     0.2314
+    ],
+    [
+     0.16465,
+     0.239
+    ]
+   ],
+   "filled": false,
+   "stroke": "#000000",
+   "width": 0.0002,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.1882,
+     0.2188
+    ],
+    [
+     0.2058,
+     0.2188
+    ],
+    [
+     0.2058,
+     0.2174
+    ],
+    [
+     0.1882,
+     0.2174
+    ],
+    [
+     0.1882,
+     0.2188
+    ]
+   ],
+   "filled": false,
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.1882,
+     0.1386
+    ],
+    [
+     0.2058,
+     0.1386
+    ],
+    [
+     0.2058,
+     0.136
+    ],
+    [
+     0.1882,
+     0.136
+    ],
+    [
+     0.1882,
+     0.1386
+    ]
+   ],
+   "filled": false,
+   "stroke": "#800000",
+   "width": 0.0003,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.192,
+     0.0845
+    ],
+    [
+     0.1924,
+     0.0831
+    ],
+    [
+     0.192,
+     0.0835
+    ],
+    [
+     0.1916,
+     0.0831
+    ],
+    [
+     0.192,
+     0.0845
+    ]
+   ],
+   "filled": true,
+   "stroke": "#800000",
+   "width": 8e-05,
+   "dash": null
+  },
+  {
+   "points": [
+    [
+     0.192,
+     0.0713
+    ],
+    [
+     0.1924,
+     0.0727
+    ],
+    [
+     0.192,
+     0.0723
+    ],
+    [
+     0.1916,
+     0.0727
+    ],
+    [
+     0.192,
+     0.0713
+    ]
+   ],
+   "filled": true,
+   "stroke": "#800000",
+   "width": 8e-05,
+   "dash": null
+  }
+ ],
+ "texts": [
+  {
+   "x": 0.26165,
+   "y": 0.256225,
+   "angle": 0.0,
+   "string": "2750.001.6-0N-2170.8503-150/10HB25T10B1-B40-",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1947,
+   "y": 0.2464,
+   "angle": 0.0,
+   "string": "200/150",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.21625,
+   "y": 0.257575,
+   "angle": 0.0,
+   "string": "1%",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2859,
+   "y": 0.25489,
+   "angle": 0.0,
+   "string": "2765",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2872,
+   "y": 0.2512,
+   "angle": 0.0,
+   "string": "2750.001",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2945,
+   "y": 0.25489,
+   "angle": 0.0,
+   "string": "W 2765",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1875,
+   "y": 0.0654,
+   "angle": 0.0,
+   "string": "H672B1V",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1875,
+   "y": 0.0613,
+   "angle": 0.0,
+   "string": "80",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1875,
+   "y": 0.0593,
+   "angle": 0.0,
+   "string": "AS9",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1604,
+   "y": 0.23075,
+   "angle": 0.0,
+   "string": "80/25",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1552,
+   "y": 0.2357,
+   "angle": 0.0,
+   "string": "H658B1UV",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1532,
+   "y": 0.2357,
+   "angle": 0.0,
+   "string": "2170.8503",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1593,
+   "y": 0.2357,
+   "angle": 0.0,
+   "string": "25",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1613,
+   "y": 0.2357,
+   "angle": 0.0,
+   "string": "AS9",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.14795,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "SP",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.14995,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "2750-5",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.14895,
+   "y": 0.2309,
+   "angle": 0.0,
+   "string": "1)",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1793,
+   "y": 0.23075,
+   "angle": 0.0,
+   "string": "80/25",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1741,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "H658B1UV",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1721,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "2170.8503",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1782,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "25",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1802,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "AS9",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.16685,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "SP",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.16885,
+   "y": 0.2362,
+   "angle": 0.0,
+   "string": "2750-6",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.16785,
+   "y": 0.2309,
+   "angle": 0.0,
+   "string": "1)",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.114,
+   "y": 0.2453,
+   "angle": 0.0,
+   "string": "PIS\u207aZ\u207aA",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.114,
+   "y": 0.2428,
+   "angle": 0.0,
+   "string": "275003",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1566,
+   "y": 0.2453,
+   "angle": 0.0,
+   "string": "PI(Z)",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1566,
+   "y": 0.2428,
+   "angle": 0.0,
+   "string": "275003A",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1755,
+   "y": 0.2453,
+   "angle": 0.0,
+   "string": "PI(Z)",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1755,
+   "y": 0.2428,
+   "angle": 0.0,
+   "string": "275003B",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1626,
+   "y": 0.207814,
+   "angle": 0.0,
+   "string": "K 2750",
+   "height": 0.0042,
+   "just": "LeftCenter"
+  },
+  {
+   "x": 0.1075,
+   "y": 0.0745,
+   "angle": 0.0,
+   "string": "K 2750",
+   "height": 0.0042,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1075,
+   "y": 0.0682,
+   "angle": 0.0,
+   "string": "1 Kolonne",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1075,
+   "y": 0.0656,
+   "angle": 0.0,
+   "string": "\u2300 500 x 14000 mm",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1075,
+   "y": 0.063,
+   "angle": 0.0,
+   "string": "1.4571",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1075,
+   "y": 0.0604,
+   "angle": 0.0,
+   "string": "pe=6/-1 bar, 150 \u00b0C",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1904,
+   "y": 0.0779,
+   "angle": 0.0,
+   "string": "1000",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1982,
+   "y": 0.0905,
+   "angle": 0.0,
+   "string": "Mit Prallblech",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.197,
+   "y": 0.0743,
+   "angle": 0.0,
+   "string": "16)",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.18825,
+   "y": 0.09139,
+   "angle": 0.0,
+   "string": "H1",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.18825,
+   "y": 0.08939,
+   "angle": 0.0,
+   "string": "250",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.197,
+   "y": 0.23724,
+   "angle": 0.0,
+   "string": "N1",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.197,
+   "y": 0.23524,
+   "angle": 0.0,
+   "string": "200",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.184,
+   "y": 0.14834,
+   "angle": 0.0,
+   "string": "N2",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.184,
+   "y": 0.14634,
+   "angle": 0.0,
+   "string": "150",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1998,
+   "y": 0.06989,
+   "angle": 0.0,
+   "string": "N3",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1998,
+   "y": 0.06789,
+   "angle": 0.0,
+   "string": "150",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2105,
+   "y": 0.09144,
+   "angle": 0.0,
+   "string": "N4",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2105,
+   "y": 0.08764,
+   "angle": 0.0,
+   "string": "200",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2105,
+   "y": 0.22424,
+   "angle": 0.0,
+   "string": "N5",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.2105,
+   "y": 0.22044,
+   "angle": 0.0,
+   "string": "50",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.182,
+   "y": 0.08384,
+   "angle": 0.0,
+   "string": "N7",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.182,
+   "y": 0.08184,
+   "angle": 0.0,
+   "string": "50",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1566,
+   "y": 0.22594,
+   "angle": 0.0,
+   "string": "P3",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1566,
+   "y": 0.22394,
+   "angle": 0.0,
+   "string": "80",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1755,
+   "y": 0.22594,
+   "angle": 0.0,
+   "string": "P4",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1755,
+   "y": 0.22394,
+   "angle": 0.0,
+   "string": "80",
+   "height": 0.002,
+   "just": "CenterCenter"
+  },
+  {
+   "x": 0.1626,
+   "y": 0.203614,
+   "angle": 0.0,
+   "string": "KX 2750",
+   "height": 0.0042,
+   "just": "LeftCenter"
+  },
+  {
+   "x": 0.1285,
+   "y": 0.0745,
+   "angle": 0.0,
+   "string": "KX 2750",
+   "height": 0.0042,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1285,
+   "y": 0.0682,
+   "angle": 0.0,
+   "string": "1 Ventilb\u00f6den",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1285,
+   "y": 0.0656,
+   "angle": 0.0,
+   "string": "\u2300 600 mm",
+   "height": 0.002,
+   "just": "LeftTop"
+  },
+  {
+   "x": 0.1285,
+   "y": 0.063,
+   "angle": 0.0,
+   "string": "1.4571",
+   "height": 0.002,
+   "just": "LeftTop"
+  }
+ ],
+ "report": {
+  "items_with_shape": 32,
+  "items_missing_shape": 0,
+  "items_missing_position": 0,
+  "segments": 9,
+  "segments_with_centerline": 7
+ }
+}
