@@ -56,6 +56,17 @@ def read_position(el):
     return tx, ty, angle, mirrored
 
 
+def read_text(el):
+    """Text -> prim fields. Angle = Position/Reference angle + explicit TextAngle."""
+    pos = read_position(el) or (0, 0, 0, False)
+    return {"x": pos[0], "y": pos[1],
+            "angle": pos[2] + fnum(el.attrib.get("TextAngle")),
+            "string": el.attrib.get("String", ""),
+            "height": fnum(el.attrib.get("Height"), 3.0),
+            "font": el.attrib.get("Font", "Calibri"),
+            "just": el.attrib.get("Justification", "LeftBottom")}
+
+
 def read_scale(el):
     sc = el.find("Scale")
     if sc is None:
@@ -100,11 +111,7 @@ def shape_primitives(shape_el):
                 **presentation_style(circ),
             })
         elif tag == "Text":
-            pos = read_position(el) or (0, 0, 0, False)
-            prims.append({"kind": "text", "x": pos[0], "y": pos[1], "angle": pos[2],
-                          "string": el.attrib.get("String", ""),
-                          "height": fnum(el.attrib.get("Height"), 3.0),
-                          "just": el.attrib.get("Justification", "LeftBottom")})
+            prims.append({"kind": "text", **read_text(el)})
         elif tag == "Shape":
             # Polygon: direct Coordinate children, optional Filled="Solid".
             pts = [(fnum(c.attrib.get("X")), fnum(c.attrib.get("Y"))) for c in el.findall("Coordinate")]
@@ -155,12 +162,8 @@ def build_scene(root, name):
                                            "points": pts, **presentation_style(child)})
                 continue
             if tag == "Text":
-                pos = read_position(child)
-                if pos:
-                    scene["texts"].append({"x": pos[0], "y": pos[1], "angle": pos[2],
-                                           "string": child.attrib.get("String", ""),
-                                           "height": fnum(child.attrib.get("Height"), 3.0),
-                                           "just": child.attrib.get("Justification", "LeftBottom")})
+                if read_position(child):
+                    scene["texts"].append(read_text(child))
                 continue
             if tag == "PolyLine" and in_drawing:
                 pts = [(fnum(c.attrib.get("X")), fnum(c.attrib.get("Y"))) for c in child.findall("Coordinate")]
@@ -205,12 +208,8 @@ def build_scene(root, name):
                                      "mirror": pos[3], "sx": sx, "sy": sy})
         for child in label:
             if child.tag == "Text":
-                tpos = read_position(child)
-                if tpos:
-                    scene["texts"].append({"x": tpos[0], "y": tpos[1], "angle": tpos[2],
-                                           "string": child.attrib.get("String", ""),
-                                           "height": fnum(child.attrib.get("Height"), 3.0),
-                                           "just": child.attrib.get("Justification", "LeftBottom")})
+                if read_position(child):
+                    scene["texts"].append(read_text(child))
             elif child.tag == "PolyLine":
                 pts = [(fnum(c.attrib.get("X")), fnum(c.attrib.get("Y"))) for c in child.findall("Coordinate")]
                 scene["polylines"].append({"id": "label", "kind": "leader", "points": pts,
@@ -276,7 +275,7 @@ def _prim_svg(p):
         # anchor point (SVG rotates clockwise; source angle is CCW in Y-up space).
         rot = f' rotate({-p.get("angle", 0):.1f} {p["x"]:.4f} {-p["y"]:.4f})' if p.get("angle") else ""
         return (f'<text x="{p["x"]:.4f}" y="{-p["y"]:.4f}" transform="scale(1,-1){rot}" '
-                f'font-size="{p["height"]:.4f}" font-family="Calibri, sans-serif" '
+                f'font-size="{p["height"]:.4f}" font-family="{p.get("font", "Calibri")}, sans-serif" '
                 f'text-anchor="{anchor}">{_esc(p["string"])}</text>')
     return ""
 

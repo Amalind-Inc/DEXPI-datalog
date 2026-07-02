@@ -3903,25 +3903,28 @@
   {
    "x": 319.5,
    "y": 199.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "PV4712.02",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 327.0,
    "y": 197.5,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "F.C.",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 157.5,
    "y": 176.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "F.C.",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3930,6 +3933,7 @@
    "angle": 0.0,
    "string": "TV4750.03",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3938,6 +3942,7 @@
    "angle": 0.0,
    "string": "F.O.",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3946,6 +3951,7 @@
    "angle": 0.0,
    "string": "MNb 47121 75HB13 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3954,30 +3960,34 @@
    "angle": 0.0,
    "string": "MNb 47122 75HB13 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 157.0,
    "y": 206.179501955,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "MNb 47123 75HB13 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 190.0,
    "y": 148.75,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "MNc 47124 75HB13 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 198.0,
    "y": 161.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "66KL21-80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3986,6 +3996,7 @@
    "angle": 0.0,
    "string": "75SA21-80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -3994,6 +4005,7 @@
    "angle": 0.0,
    "string": "80/50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4002,14 +4014,16 @@
    "angle": 0.0,
    "string": "73KH12-50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 272.3,
    "y": 180.0005,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "MNc 47125 73HG12 25",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4018,6 +4032,7 @@
    "angle": 0.0,
    "string": "SV 104.01",
    "height": 3.0,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4026,6 +4041,7 @@
    "angle": 0.0,
    "string": "P = 6 barg",
    "height": 3.0,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4034,6 +4050,7 @@
    "angle": 0.0,
    "string": "DN = 25/50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4042,6 +4059,7 @@
    "angle": 0.0,
    "string": "MNc 47125 75HB13 50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4050,6 +4068,7 @@
    "angle": 0.0,
    "string": "MNc 47126 75HB13 50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4058,14 +4077,16 @@
    "angle": 0.0,
    "string": "73KH12-25",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 285.0,
    "y": 153.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "73KH12-25",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4074,14 +4095,16 @@
    "angle": 0.0,
    "string": "73KH12-50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 369.0,
    "y": 152.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "73KH12-25",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4090,6 +4113,7 @@
    "angle": 0.0,
    "string": "MNc 47127 75HB13 50 Q 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4098,38 +4122,43 @@
    "angle": 0.0,
    "string": "Q80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 117.5,
    "y": 114.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "WKa 47130 75HB13 50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 150.5,
    "y": 114.0,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "WKb 47131 75HB13 50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 342.1,
    "y": 113.5,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "QSa 47140 75HB13 50 Q 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 350.7,
    "y": 113.6,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "QSb 47141 75HB13 50 Q 80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4138,6 +4167,7 @@
    "angle": 0.0,
    "string": "PI",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4146,6 +4176,7 @@
    "angle": 0.0,
    "string": "4712.01",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4154,6 +4185,7 @@
    "angle": 0.0,
    "string": "PICSA",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4162,6 +4194,7 @@
    "angle": 0.0,
    "string": "4712.02",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4170,6 +4203,7 @@
    "angle": 0.0,
    "string": "HS",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4178,6 +4212,7 @@
    "angle": 0.0,
    "string": "4750.01",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4186,6 +4221,7 @@
    "angle": 0.0,
    "string": "TICSA",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4194,6 +4230,7 @@
    "angle": 0.0,
    "string": "4750.03",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4202,6 +4239,7 @@
    "angle": 0.0,
    "string": "H1007",
    "height": 4.5,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4210,6 +4248,7 @@
    "angle": 0.0,
    "string": "Ident",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4218,6 +4257,7 @@
    "angle": 0.0,
    "string": "H1007",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4226,6 +4266,7 @@
    "angle": 0.0,
    "string": "Design Press. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4234,6 +4275,7 @@
    "angle": 0.0,
    "string": "-1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4242,6 +4284,7 @@
    "angle": 0.0,
    "string": "-1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4250,6 +4293,7 @@
    "angle": 0.0,
    "string": "Design Press. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4258,6 +4302,7 @@
    "angle": 0.0,
    "string": "60 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4266,6 +4311,7 @@
    "angle": 0.0,
    "string": "30 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4274,6 +4320,7 @@
    "angle": 0.0,
    "string": "Design Temp. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4282,6 +4329,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4290,6 +4338,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4298,6 +4347,7 @@
    "angle": 0.0,
    "string": "Design Temp. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4306,6 +4356,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4314,6 +4365,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4322,6 +4374,7 @@
    "angle": 0.0,
    "string": "Design Duty / Design Heat Transfer Area",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4330,6 +4383,7 @@
    "angle": 0.0,
    "string": "313 kW",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4338,6 +4392,7 @@
    "angle": 0.0,
    "string": "46.8 m\u00b2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4346,6 +4401,7 @@
    "angle": 0.0,
    "string": "DesignPlate Height / Plate Width",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4354,6 +4410,7 @@
    "angle": 0.0,
    "string": "850 mm",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4362,6 +4419,7 @@
    "angle": 0.0,
    "string": "1100 mm",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4370,6 +4428,7 @@
    "angle": 0.0,
    "string": "MaterialPlates",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4378,6 +4437,7 @@
    "angle": 0.0,
    "string": "1.4306",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4386,6 +4446,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4394,6 +4455,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4402,6 +4464,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4410,6 +4473,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4418,6 +4482,7 @@
    "angle": 0.0,
    "string": "N3",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4426,6 +4491,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4434,6 +4500,7 @@
    "angle": 0.0,
    "string": "N4",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4442,6 +4509,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4450,6 +4518,7 @@
    "angle": 0.0,
    "string": "H1008",
    "height": 4.5,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4458,6 +4527,7 @@
    "angle": 0.0,
    "string": "Ident",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4466,6 +4536,7 @@
    "angle": 0.0,
    "string": "H1008",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4474,6 +4545,7 @@
    "angle": 0.0,
    "string": "Design Press. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4482,6 +4554,7 @@
    "angle": 0.0,
    "string": "-1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4490,6 +4563,7 @@
    "angle": 0.0,
    "string": "-1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4498,6 +4572,7 @@
    "angle": 0.0,
    "string": "Design Press. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4506,6 +4581,7 @@
    "angle": 0.0,
    "string": "60 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4514,6 +4590,7 @@
    "angle": 0.0,
    "string": "30 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4522,6 +4599,7 @@
    "angle": 0.0,
    "string": "Design Temp. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4530,6 +4608,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4538,6 +4617,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4546,6 +4626,7 @@
    "angle": 0.0,
    "string": "Design Temp. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4554,6 +4635,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4562,6 +4644,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4570,6 +4653,7 @@
    "angle": 0.0,
    "string": "Design Duty / Design Heat Transfer Area",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4578,6 +4662,7 @@
    "angle": 0.0,
    "string": "313 kW",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4586,6 +4671,7 @@
    "angle": 0.0,
    "string": "46.8 m\u00b2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4594,6 +4680,7 @@
    "angle": 0.0,
    "string": "Nominal Diameter / Tube Length",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4602,6 +4689,7 @@
    "angle": 0.0,
    "string": "DN 800",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4610,6 +4698,7 @@
    "angle": 0.0,
    "string": "2200 mm",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4618,6 +4707,7 @@
    "angle": 0.0,
    "string": "MaterialTubes / Material Shell",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4626,6 +4716,7 @@
    "angle": 0.0,
    "string": "1.4306",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4634,6 +4725,7 @@
    "angle": 0.0,
    "string": "1.4308",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4642,6 +4734,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4650,6 +4743,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4658,6 +4752,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4666,6 +4761,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4674,6 +4770,7 @@
    "angle": 0.0,
    "string": "N3",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4682,6 +4779,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4690,6 +4788,7 @@
    "angle": 0.0,
    "string": "N4",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4698,6 +4797,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4706,6 +4806,7 @@
    "angle": 0.0,
    "string": "P4711",
    "height": 4.5,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4714,6 +4815,7 @@
    "angle": 0.0,
    "string": "Ident",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4722,6 +4824,7 @@
    "angle": 0.0,
    "string": "P4711",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4730,6 +4833,7 @@
    "angle": 0.0,
    "string": "Design Press. Casing min.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4738,6 +4842,7 @@
    "angle": 0.0,
    "string": "-0.5 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4746,6 +4851,7 @@
    "angle": 0.0,
    "string": "Design Press. Casing max.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4754,6 +4860,7 @@
    "angle": 0.0,
    "string": "60 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4762,6 +4869,7 @@
    "angle": 0.0,
    "string": "Design Temp. Casing min.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4770,6 +4878,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4778,6 +4887,7 @@
    "angle": 0.0,
    "string": "Design Temp. Casing max.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4786,6 +4896,7 @@
    "angle": 0.0,
    "string": "80 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4794,6 +4905,7 @@
    "angle": 0.0,
    "string": "Design Capacity / Design Press. Head",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4802,6 +4914,7 @@
    "angle": 0.0,
    "string": "200 m\u00b3/h",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4810,6 +4923,7 @@
    "angle": 0.0,
    "string": "10 m",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4818,6 +4932,7 @@
    "angle": 0.0,
    "string": "Design Speed / Design Power max. Diam. Wheel",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4826,6 +4941,7 @@
    "angle": 0.0,
    "string": "600 1/min",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4834,6 +4950,7 @@
    "angle": 0.0,
    "string": "60 kW",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4842,6 +4959,7 @@
    "angle": 0.0,
    "string": "Material Case Press. Side / Material Impeller",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4850,6 +4968,7 @@
    "angle": 0.0,
    "string": "1.4306",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4858,6 +4977,7 @@
    "angle": 0.0,
    "string": "1.4308",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4866,6 +4986,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4874,6 +4995,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4882,6 +5004,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4890,6 +5013,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4898,6 +5022,7 @@
    "angle": 0.0,
    "string": "P4712",
    "height": 4.5,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -4906,6 +5031,7 @@
    "angle": 0.0,
    "string": "Ident",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4914,6 +5040,7 @@
    "angle": 0.0,
    "string": "P4712",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4922,6 +5049,7 @@
    "angle": 0.0,
    "string": "Design Press. Casing min.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4930,6 +5058,7 @@
    "angle": 0.0,
    "string": "-1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4938,6 +5067,7 @@
    "angle": 0.0,
    "string": "Design Press. Casing max.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4946,6 +5076,7 @@
    "angle": 0.0,
    "string": "60 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4954,6 +5085,7 @@
    "angle": 0.0,
    "string": "Design Temp. Casing min.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4962,6 +5094,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4970,6 +5103,7 @@
    "angle": 0.0,
    "string": "Design Temp. Casing max.",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4978,6 +5112,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -4986,6 +5121,7 @@
    "angle": 0.0,
    "string": "Design Capacity / Design Press. Head",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -4994,6 +5130,7 @@
    "angle": 0.0,
    "string": "420 m\u00b3/h",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5002,6 +5139,7 @@
    "angle": 0.0,
    "string": "40 m",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5010,6 +5148,7 @@
    "angle": 0.0,
    "string": "Design Speed / Design Power max. Diam. Wheel",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5018,6 +5157,7 @@
    "angle": 0.0,
    "string": "1400 1/min",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5026,6 +5166,7 @@
    "angle": 0.0,
    "string": "84 kW",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5034,6 +5175,7 @@
    "angle": 0.0,
    "string": "Material Case Press. Side / Material Impeller",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5042,6 +5184,7 @@
    "angle": 0.0,
    "string": "1.4306",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5050,6 +5193,7 @@
    "angle": 0.0,
    "string": "1.4305",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5058,6 +5202,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5066,6 +5211,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5074,6 +5220,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5082,6 +5229,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5090,6 +5238,7 @@
    "angle": 0.0,
    "string": "T4750",
    "height": 4.5,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5098,6 +5247,7 @@
    "angle": 0.0,
    "string": "Ident",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5106,6 +5256,7 @@
    "angle": 0.0,
    "string": "T4750",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5114,6 +5265,7 @@
    "angle": 0.0,
    "string": "Design Press. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5122,6 +5274,7 @@
    "angle": 0.0,
    "string": "-0.1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5130,6 +5283,7 @@
    "angle": 0.0,
    "string": "-0.1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5138,6 +5292,7 @@
    "angle": 0.0,
    "string": "Design Press. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5146,6 +5301,7 @@
    "angle": 0.0,
    "string": "0.1 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5154,6 +5310,7 @@
    "angle": 0.0,
    "string": "0.05 barg",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5162,6 +5319,7 @@
    "angle": 0.0,
    "string": "Design Temp. min. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5170,6 +5328,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5178,6 +5337,7 @@
    "angle": 0.0,
    "string": "-45 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5186,6 +5346,7 @@
    "angle": 0.0,
    "string": "Design Temp. max. Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5194,6 +5355,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5202,6 +5364,7 @@
    "angle": 0.0,
    "string": "100 \u00b0C",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5210,6 +5373,7 @@
    "angle": 0.0,
    "string": "Nominal Diameter / Overall Height/Length",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5218,6 +5382,7 @@
    "angle": 0.0,
    "string": "DN 20000",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5226,6 +5391,7 @@
    "angle": 0.0,
    "string": "4 m",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5234,6 +5400,7 @@
    "angle": 0.0,
    "string": "Nominal Capacity",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5242,6 +5409,7 @@
    "angle": 0.0,
    "string": "26 m\u00b3",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5250,6 +5418,7 @@
    "angle": 0.0,
    "string": "Material Chamber 1 / 2",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5258,6 +5427,7 @@
    "angle": 0.0,
    "string": "1.4306",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5266,6 +5436,7 @@
    "angle": 0.0,
    "string": "1.4305",
    "height": 2.5,
+   "font": "Calibri",
    "just": "CenterBottom"
   },
   {
@@ -5274,6 +5445,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5282,6 +5454,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5290,6 +5463,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5298,6 +5472,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5306,6 +5481,7 @@
    "angle": 0.0,
    "string": "N3",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5314,6 +5490,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5322,6 +5499,7 @@
    "angle": 0.0,
    "string": "N5",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5330,6 +5508,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5338,6 +5517,7 @@
    "angle": 0.0,
    "string": "N6",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5346,6 +5526,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5354,6 +5535,7 @@
    "angle": 0.0,
    "string": "N7",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5362,6 +5544,7 @@
    "angle": 0.0,
    "string": "25",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5370,6 +5553,7 @@
    "angle": 0.0,
    "string": "N8",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5378,6 +5562,7 @@
    "angle": 0.0,
    "string": "800",
    "height": 3.0,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5386,6 +5571,7 @@
    "angle": 0.0,
    "string": "1",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5394,6 +5580,7 @@
    "angle": 0.0,
    "string": "1",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5402,6 +5589,7 @@
    "angle": 0.0,
    "string": "2",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5410,6 +5598,7 @@
    "angle": 0.0,
    "string": "2",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5418,6 +5607,7 @@
    "angle": 0.0,
    "string": "3",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5426,6 +5616,7 @@
    "angle": 0.0,
    "string": "3",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5434,6 +5625,7 @@
    "angle": 0.0,
    "string": "4",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5442,6 +5634,7 @@
    "angle": 0.0,
    "string": "4",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5450,6 +5643,7 @@
    "angle": 0.0,
    "string": "5",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5458,6 +5652,7 @@
    "angle": 0.0,
    "string": "5",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5466,6 +5661,7 @@
    "angle": 0.0,
    "string": "6",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5474,6 +5670,7 @@
    "angle": 0.0,
    "string": "6",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5482,6 +5679,7 @@
    "angle": 0.0,
    "string": "7",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5490,6 +5688,7 @@
    "angle": 0.0,
    "string": "7",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5498,6 +5697,7 @@
    "angle": 0.0,
    "string": "8",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5506,6 +5706,7 @@
    "angle": 0.0,
    "string": "8",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5514,6 +5715,7 @@
    "angle": 0.0,
    "string": "9",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5522,6 +5724,7 @@
    "angle": 0.0,
    "string": "9",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5530,6 +5733,7 @@
    "angle": 0.0,
    "string": "10",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5538,6 +5742,7 @@
    "angle": 0.0,
    "string": "10",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5546,6 +5751,7 @@
    "angle": 0.0,
    "string": "11",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5554,6 +5760,7 @@
    "angle": 0.0,
    "string": "11",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5562,6 +5769,7 @@
    "angle": 0.0,
    "string": "12",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5570,6 +5778,7 @@
    "angle": 0.0,
    "string": "12",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5578,6 +5787,7 @@
    "angle": 0.0,
    "string": "H",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5586,6 +5796,7 @@
    "angle": 0.0,
    "string": "H",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5594,6 +5805,7 @@
    "angle": 0.0,
    "string": "G",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5602,6 +5814,7 @@
    "angle": 0.0,
    "string": "G",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5610,6 +5823,7 @@
    "angle": 0.0,
    "string": "F",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5618,6 +5832,7 @@
    "angle": 0.0,
    "string": "F",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5626,6 +5841,7 @@
    "angle": 0.0,
    "string": "E",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5634,6 +5850,7 @@
    "angle": 0.0,
    "string": "E",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5642,6 +5859,7 @@
    "angle": 0.0,
    "string": "D",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5650,6 +5868,7 @@
    "angle": 0.0,
    "string": "D",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5658,6 +5877,7 @@
    "angle": 0.0,
    "string": "C",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5666,6 +5886,7 @@
    "angle": 0.0,
    "string": "C",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5674,6 +5895,7 @@
    "angle": 0.0,
    "string": "B",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5682,6 +5904,7 @@
    "angle": 0.0,
    "string": "B",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5690,6 +5913,7 @@
    "angle": 0.0,
    "string": "A",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5698,6 +5922,7 @@
    "angle": 0.0,
    "string": "A",
    "height": 2.85,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -5706,6 +5931,7 @@
    "angle": 0.0,
    "string": "APPROVED BY",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5714,6 +5940,7 @@
    "angle": 0.0,
    "string": "A. P. Prover",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5722,6 +5949,7 @@
    "angle": 0.0,
    "string": "2016-04-01",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5730,6 +5958,7 @@
    "angle": 0.0,
    "string": "DRAWING NO",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5738,6 +5967,7 @@
    "angle": 0.0,
    "string": "123/A93",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5746,6 +5976,7 @@
    "angle": 0.0,
    "string": "CHECKED BY",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5754,6 +5985,7 @@
    "angle": 0.0,
    "string": "C. Hecker",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5762,6 +5994,7 @@
    "angle": 0.0,
    "string": "PROJECT",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5770,6 +6003,7 @@
    "angle": 0.0,
    "string": "P3.1415",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5778,6 +6012,7 @@
    "angle": 0.0,
    "string": "CREATED BY",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5786,6 +6021,7 @@
    "angle": 0.0,
    "string": "A. Creator",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5794,6 +6030,7 @@
    "angle": 0.0,
    "string": "2016-04-01",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5802,6 +6039,7 @@
    "angle": 0.0,
    "string": "NAME",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5810,6 +6048,7 @@
    "angle": 0.0,
    "string": "DATE",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5818,6 +6057,7 @@
    "angle": 0.0,
    "string": "DEXPI example PID",
    "height": 4.0,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5826,6 +6066,7 @@
    "angle": 0.0,
    "string": "PLANT SECTION",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5834,6 +6075,7 @@
    "angle": 0.0,
    "string": "Utilities",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5842,6 +6084,7 @@
    "angle": 0.0,
    "string": "Oil & Gas, Inc.",
    "height": 4.0,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5850,6 +6093,7 @@
    "angle": 0.0,
    "string": "SITE",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   },
   {
@@ -5858,6 +6102,7 @@
    "angle": 0.0,
    "string": "Dexpi City",
    "height": 2.5,
+   "font": "Calibri",
    "just": "LeftBottom"
   }
  ],

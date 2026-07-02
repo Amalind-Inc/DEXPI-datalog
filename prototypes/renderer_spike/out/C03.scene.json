@@ -564,6 +564,7 @@
    "angle": 0.0,
    "string": "ESV",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -572,6 +573,7 @@
    "angle": 0.0,
    "string": "3712",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -580,6 +582,7 @@
    "angle": 0.0,
    "string": "D-13",
    "height": 0.005,
+   "font": "Calibri",
    "just": "RightTop"
   },
   {
@@ -588,6 +591,7 @@
    "angle": 0.0,
    "string": "D-13L37014A-0200PB-FD120-0F000N",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -596,6 +600,7 @@
    "angle": 0.0,
    "string": "D-13L37007A-0200PB-FS720-0F000N",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -604,6 +609,7 @@
    "angle": 0.0,
    "string": "D-43L37007A-0800VF-AS7F0-0F000N",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -612,6 +618,7 @@
    "angle": 0.0,
    "string": "0200x0800",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -620,6 +627,7 @@
    "angle": 0.0,
    "string": "ESV",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -628,6 +636,7 @@
    "angle": 0.0,
    "string": "3712",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -636,6 +645,7 @@
    "angle": 0.0,
    "string": "D-13",
    "height": 0.005,
+   "font": "Calibri",
    "just": "RightTop"
   },
   {
@@ -644,6 +654,7 @@
    "angle": 0.0,
    "string": "D",
    "height": 0.005,
+   "font": "Calibri",
    "just": "RightTop"
   },
   {
@@ -652,6 +663,7 @@
    "angle": 0.0,
    "string": "ESD",
    "height": 0.005,
+   "font": "Calibri",
    "just": "CenterTop"
   }
  ],

@@ -23,7 +23,10 @@ C03 (Equinor piping) also match their vendor references.
 - **Primitives**: `PolyLine` (Coordinate*), `Circle` (Radius, optional
   `Filled="Solid"`), `TrimmedCurve` (arc: inner Circle + Start/EndAngle),
   `Shape` (**polygon** with direct Coordinate children + optional Filled —
-  never a nested group), `Text` (String/Height/Justification).
+  never a nested group), `Text` (String/Height/Justification/Font +
+  **`TextAngle`**: explicit CCW rotation *additive* to the Position/Reference
+  angle — vertical pipe-run labels rely on it; C01 has 13, C02 has 15.
+  `Font` names the face — all fixtures say Calibri; emit it, don't hardcode).
 - **Placement**: `Position/Location` = translate, `Position/Reference` = local
   +X direction (rotation = atan2(ry, rx)), `Position/Axis` Z<0 = mirror,
   instance-level `Scale` (nozzles use 0.8x0.4). Y axis is **up**: flip once at

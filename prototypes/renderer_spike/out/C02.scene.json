@@ -1071,14 +1071,16 @@
    "angle": 0.0,
    "string": "2750.001.6-0N-2170.8503-150/10HB25T10B1-B40-",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1947,
    "y": 0.2464,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "200/150",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1087,6 +1089,7 @@
    "angle": 0.0,
    "string": "1%",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1095,6 +1098,7 @@
    "angle": 0.0,
    "string": "2765",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1103,6 +1107,7 @@
    "angle": 0.0,
    "string": "2750.001",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1111,6 +1116,7 @@
    "angle": 0.0,
    "string": "W 2765",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1119,6 +1125,7 @@
    "angle": 0.0,
    "string": "H672B1V",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1127,6 +1134,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1135,6 +1143,7 @@
    "angle": 0.0,
    "string": "AS9",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1143,62 +1152,70 @@
    "angle": 0.0,
    "string": "80/25",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1552,
    "y": 0.2357,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "H658B1UV",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1532,
    "y": 0.2357,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "2170.8503",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1593,
    "y": 0.2357,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "25",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1613,
    "y": 0.2357,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "AS9",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.14795,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "SP",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.14995,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "2750-5",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.14895,
    "y": 0.2309,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "1)",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1207,62 +1224,70 @@
    "angle": 0.0,
    "string": "80/25",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1741,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "H658B1UV",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1721,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "2170.8503",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1782,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "25",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.1802,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "AS9",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.16685,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "SP",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.16885,
    "y": 0.2362,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "2750-6",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
    "x": 0.16785,
    "y": 0.2309,
-   "angle": 0.0,
+   "angle": 90.0,
    "string": "1)",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1271,6 +1296,7 @@
    "angle": 0.0,
    "string": "PIS\u207aZ\u207aA",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1279,6 +1305,7 @@
    "angle": 0.0,
    "string": "275003",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1287,6 +1314,7 @@
    "angle": 0.0,
    "string": "PI(Z)",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1295,6 +1323,7 @@
    "angle": 0.0,
    "string": "275003A",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1303,6 +1332,7 @@
    "angle": 0.0,
    "string": "PI(Z)",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1311,6 +1341,7 @@
    "angle": 0.0,
    "string": "275003B",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1319,6 +1350,7 @@
    "angle": 0.0,
    "string": "K 2750",
    "height": 0.0042,
+   "font": "Calibri",
    "just": "LeftCenter"
   },
   {
@@ -1327,6 +1359,7 @@
    "angle": 0.0,
    "string": "K 2750",
    "height": 0.0042,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1335,6 +1368,7 @@
    "angle": 0.0,
    "string": "1 Kolonne",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1343,6 +1377,7 @@
    "angle": 0.0,
    "string": "\u2300 500 x 14000 mm",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1351,6 +1386,7 @@
    "angle": 0.0,
    "string": "1.4571",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1359,6 +1395,7 @@
    "angle": 0.0,
    "string": "pe=6/-1 bar, 150 \u00b0C",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1367,6 +1404,7 @@
    "angle": 0.0,
    "string": "1000",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1375,6 +1413,7 @@
    "angle": 0.0,
    "string": "Mit Prallblech",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1383,6 +1422,7 @@
    "angle": 0.0,
    "string": "16)",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1391,6 +1431,7 @@
    "angle": 0.0,
    "string": "H1",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1399,6 +1440,7 @@
    "angle": 0.0,
    "string": "250",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1407,6 +1449,7 @@
    "angle": 0.0,
    "string": "N1",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1415,6 +1458,7 @@
    "angle": 0.0,
    "string": "200",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1423,6 +1467,7 @@
    "angle": 0.0,
    "string": "N2",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1431,6 +1476,7 @@
    "angle": 0.0,
    "string": "150",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1439,6 +1485,7 @@
    "angle": 0.0,
    "string": "N3",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1447,6 +1494,7 @@
    "angle": 0.0,
    "string": "150",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1455,6 +1503,7 @@
    "angle": 0.0,
    "string": "N4",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1463,6 +1512,7 @@
    "angle": 0.0,
    "string": "200",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1471,6 +1521,7 @@
    "angle": 0.0,
    "string": "N5",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1479,6 +1530,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1487,6 +1539,7 @@
    "angle": 0.0,
    "string": "N7",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1495,6 +1548,7 @@
    "angle": 0.0,
    "string": "50",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1503,6 +1557,7 @@
    "angle": 0.0,
    "string": "P3",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1511,6 +1566,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1519,6 +1575,7 @@
    "angle": 0.0,
    "string": "P4",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1527,6 +1584,7 @@
    "angle": 0.0,
    "string": "80",
    "height": 0.002,
+   "font": "Calibri",
    "just": "CenterCenter"
   },
   {
@@ -1535,6 +1593,7 @@
    "angle": 0.0,
    "string": "KX 2750",
    "height": 0.0042,
+   "font": "Calibri",
    "just": "LeftCenter"
   },
   {
@@ -1543,6 +1602,7 @@
    "angle": 0.0,
    "string": "KX 2750",
    "height": 0.0042,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1551,6 +1611,7 @@
    "angle": 0.0,
    "string": "1 Ventilb\u00f6den",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1559,6 +1620,7 @@
    "angle": 0.0,
    "string": "\u2300 600 mm",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   },
   {
@@ -1567,6 +1629,7 @@
    "angle": 0.0,
    "string": "1.4571",
    "height": 0.002,
+   "font": "Calibri",
    "just": "LeftTop"
   }
  ],
