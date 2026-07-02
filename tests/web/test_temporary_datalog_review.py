@@ -75,6 +75,23 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             confirmation = proposal_body["datalog_confirmation"]
             self.assertEqual(confirmation["validation"]["status"], "safe_to_confirm")
             self.assertFalse(confirmation["proposal_result"]["executed"])
+            self.assertEqual(
+                confirmation["allowed_actions"],
+                ["run", "revise_interpretation", "revise_query", "cancel"],
+            )
+            self.assertEqual(
+                confirmation["interpretation"],
+                "Return objects matching the temporary topology rule.",
+            )
+            self.assertEqual(
+                confirmation["effect"],
+                "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
+            )
+            self.assertIn("starting_object_ids", confirmation["scope"])
+            self.assertIn("included_edge_types", confirmation["assumptions"])
+            self.assertEqual(
+                confirmation["exact_datalog"], confirmation["generated_datalog"]
+            )
 
             executed = client.post(
                 f"/api/review/sessions/{session_id}/temporary-datalog-reviews",

@@ -317,7 +317,35 @@
 }
 
 .datalog-confirmation-actions {
+  flex-wrap: wrap;
   justify-content: flex-start;
+}
+
+.datalog-consent-section {
+  border-left: 3px solid #d7ded5;
+  color: #26342d;
+  display: grid;
+  font-size: 0.86rem;
+  gap: 3px;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 11px;
+}
+
+.datalog-consent-section dt {
+  font-weight: 800;
+}
+
+.datalog-consent-section dd {
+  margin: 0;
+}
+
+.datalog-consent-key {
+  font-weight: 700;
+}
+
+.datalog-consent-effect {
+  font-weight: 700;
 }
 
 .datalog-confirmation-actions button {
@@ -332,7 +360,8 @@
 }
 
 .datalog-confirmation-actions button:nth-child(2),
-.datalog-confirmation-actions button:nth-child(3) {
+.datalog-confirmation-actions button:nth-child(3),
+.datalog-confirmation-actions button:nth-child(4) {
   background: #ffffff;
   color: #17201b;
 }

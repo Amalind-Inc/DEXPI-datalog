@@ -343,10 +343,13 @@ const DatalogConfirmationCard: FC<{
 }> = ({ confirmation }) => {
   const aui = useAui();
   const { setHighlightedNodeIds } = usePidGraph();
-  const [state, setState] = useState<"ready" | "running" | "canceled" | "revise">("ready");
+  const [state, setState] = useState<
+    "ready" | "running" | "canceled" | "revise-interpretation" | "revise-query"
+  >("ready");
   const [error, setError] = useState<string | null>(null);
   const sessionId = readSessionId(confirmation.raw);
   const isTemporaryDatalog = confirmation.raw.confirmation_kind === "temporary_datalog";
+  const consent = readDatalogConsentContext(confirmation.raw);
 
   const turnIdentity = readTurnIdentity(confirmation.raw);
 
@@ -453,29 +456,75 @@ const DatalogConfirmationCard: FC<{
         <span data-testid="datalog-validation-status">{confirmation.validationStatus}</span>
       </header>
 
-      <p data-testid="datalog-plain-language">{confirmation.plainLanguageMeaning}</p>
+      <p data-testid="datalog-plain-language">
+        {consent.interpretation || confirmation.plainLanguageMeaning}
+      </p>
+
+      {consent.scope.length > 0 && (
+        <dl className="datalog-consent-section" data-testid="datalog-scope">
+          <dt>Scope</dt>
+          {consent.scope.map(([key, value]) => (
+            <dd key={key}>
+              <span className="datalog-consent-key">{formatConsentKey(key)}:</span> {value}
+            </dd>
+          ))}
+        </dl>
+      )}
+
+      {consent.assumptions.length > 0 && (
+        <dl className="datalog-consent-section" data-testid="datalog-assumptions">
+          <dt>Assumptions</dt>
+          {consent.assumptions.map(([key, value]) => (
+            <dd key={key}>
+              <span className="datalog-consent-key">{formatConsentKey(key)}:</span> {value}
+            </dd>
+          ))}
+        </dl>
+      )}
 
       <details data-testid="datalog-details">
-        <summary>Generated Datalog</summary>
-        <pre>
+        <summary>Exact Datalog</summary>
+        <pre className="datalog-syntax">
           <code>{confirmation.generatedDatalog}</code>
         </pre>
       </details>
 
+      <p className="datalog-consent-effect" data-testid="datalog-effect">
+        {DATALOG_EFFECT_STATEMENT}
+      </p>
+
       <div className="datalog-confirmation-actions">
         <button type="button" disabled={state !== "ready"} onClick={run}>
-          {state === "running" ? "Running" : "Run"}
+          {state === "running" ? "Running" : "Approve and run"}
         </button>
-        <button type="button" disabled={state !== "ready"} onClick={() => setState("revise")}>
-          Revise
+        <button
+          type="button"
+          disabled={state !== "ready"}
+          onClick={() => setState("revise-interpretation")}
+        >
+          Revise interpretation
+        </button>
+        <button
+          type="button"
+          disabled={state !== "ready"}
+          onClick={() => setState("revise-query")}
+        >
+          Revise query
         </button>
         <button type="button" disabled={state !== "ready"} onClick={cancel}>
           Cancel
         </button>
       </div>
-      {state === "revise" && (
+      {state === "revise-interpretation" && (
         <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
-          Revision is not wired yet. Edit your prompt and send a new request.
+          Nothing was executed. Send a message describing what the interpretation got
+          wrong and a corrected proposal will be raised for review.
+        </p>
+      )}
+      {state === "revise-query" && (
+        <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
+          Nothing was executed. Send a message describing how the query should change
+          and a corrected proposal will be raised for review.
         </p>
       )}
       {state === "canceled" && (
@@ -491,6 +540,43 @@ const DatalogConfirmationCard: FC<{
     </section>
   );
 };
+// The effect line is a fixed reviewer guarantee: the temporary Datalog
+// executor is strictly read-only, so this text must never come from the model.
+const DATALOG_EFFECT_STATEMENT =
+  "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.";
+
+function readDatalogConsentContext(raw: Record<string, unknown>): {
+  interpretation: string;
+  scope: [string, string][];
+  assumptions: [string, string][];
+} {
+  const confirmation = raw.datalog_confirmation;
+  if (typeof confirmation !== "object" || confirmation === null) {
+    return { interpretation: "", scope: [], assumptions: [] };
+  }
+  const record = confirmation as Record<string, unknown>;
+  return {
+    interpretation: typeof record.interpretation === "string" ? record.interpretation : "",
+    scope: readStringEntries(record.scope),
+    assumptions: readStringEntries(record.assumptions),
+  };
+}
+
+function readStringEntries(value: unknown): [string, string][] {
+  if (typeof value !== "object" || value === null) return [];
+  return Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+    key,
+    Array.isArray(entry)
+      ? entry.filter((item) => typeof item === "string").join("; ")
+      : String(entry ?? ""),
+  ]);
+}
+
+function formatConsentKey(key: string): string {
+  const spaced = key.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 function readTemporaryProposalResult(raw: Record<string, unknown>) {
   const confirmation = raw.datalog_confirmation;
   if (

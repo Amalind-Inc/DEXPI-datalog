@@ -49,6 +49,46 @@ def test_propose_temporary_datalog_returns_confirmation_without_execution() -> N
     assert result["confirmation"]["required"] is True
 
 
+def test_propose_temporary_datalog_describes_interpretation_scope_and_effect() -> None:
+    """
+    Behavior: a proposal carries everything a reviewer needs for meaningful
+    consent — interpretation, scope, traversal assumptions, exact Datalog, and
+    a hardcoded read-only effect statement.
+    """
+    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Which objects violate the temporary check?",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer("node-pump-p101").',
+            "formal_restatement": "Return the pump as the temporary check result.",
+            "resolved_identity_ids": ["node-pump-p101"],
+        },
+    )
+
+    proposal = result["proposal"]
+    assert proposal["interpretation"] == "Return the pump as the temporary check result."
+    assert proposal["exact_datalog"] == proposal["generated_datalog"]
+    assert (
+        proposal["effect"]
+        == "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack."
+    )
+
+    scope = proposal["scope"]
+    assert scope["starting_object_ids"] == ["node-pump-p101"]
+    assert scope["graph"]
+    assert scope["direction"]
+    assert scope["direction_basis"]
+    assert scope["path_treatment"]
+
+    assumptions = proposal["assumptions"]
+    assert assumptions["included_edge_types"]
+    assert assumptions["excluded_edge_types"]
+    assert all(isinstance(item, str) for item in assumptions["included_edge_types"])
+    assert all(isinstance(item, str) for item in assumptions["excluded_edge_types"])
+
+
 def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
 

@@ -16,6 +16,31 @@ from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 
 
+# Reviewer-facing consent context for temporary Datalog proposals. The effect
+# statement is hardcoded — never model-generated — because the executor is
+# strictly read-only. The assumptions describe what the traversal actually
+# does: undirected breadth-first reachability over topology-attribute edges.
+TEMPORARY_DATALOG_EFFECT = (
+    "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack."
+)
+
+TEMPORARY_DATALOG_ASSUMPTIONS: dict[str, object] = {
+    "included_edge_types": [
+        "process-flow piping connectivity (source/target, sourceItem/targetItem)",
+        "composition relationships (nodes, segments, pipingNetworkSystems)",
+        "connector references between topology objects",
+    ],
+    "excluded_edge_types": [
+        "instrument signal and annotation references outside the topology attributes",
+        "any relationship not declared as a topology attribute",
+    ],
+    "recycle_paths": (
+        "Recycle loops are traversed like any other connection; each object is "
+        "visited at most once."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class RetrievalBudgets:
     max_steps: int = 10
@@ -169,6 +194,11 @@ class TopologyTools:
                 "generated_datalog": generated_datalog,
                 "formal_restatement": formal_restatement,
                 "resolved_identity_ids": resolved_identity_ids,
+                "interpretation": formal_restatement,
+                "exact_datalog": generated_datalog,
+                "effect": TEMPORARY_DATALOG_EFFECT,
+                "scope": self._temporary_datalog_scope(resolved_identity_ids),
+                "assumptions": TEMPORARY_DATALOG_ASSUMPTIONS,
             },
             "validation": validation,
             "confirmation": {
@@ -178,6 +208,19 @@ class TopologyTools:
             },
             "matches": [],
             "reachable": [],
+        }
+
+    def _temporary_datalog_scope(
+        self, resolved_identity_ids: list[str]
+    ) -> dict[str, object]:
+        return {
+            "starting_object_ids": resolved_identity_ids,
+            "graph": str(self._topology.get("source_id") or self._session_id),
+            "direction": "undirected traversal (structural connectivity, not flow direction)",
+            "direction_basis": "structural adjacency; explicit flow direction is not applied",
+            "path_treatment": (
+                "breadth-first reachability up to 6 hops; each object visited at most once"
+            ),
         }
 
     @staticmethod

@@ -1141,9 +1141,29 @@ class ChainlitReviewFlow:
                 "question": question,
                 "datalog_confirmation": {
                     "review_status": "pending",
-                    "allowed_actions": ["run", "cancel"],
+                    "allowed_actions": [
+                        "run",
+                        "revise_interpretation",
+                        "revise_query",
+                        "cancel",
+                    ],
                     "plain_language_meaning": str(
                         proposal.get("formal_restatement", question)
+                    ),
+                    "interpretation": str(
+                        proposal.get("interpretation")
+                        or proposal.get("formal_restatement", question)
+                    ),
+                    "scope": proposal.get("scope")
+                    if isinstance(proposal.get("scope"), dict)
+                    else {},
+                    "assumptions": proposal.get("assumptions")
+                    if isinstance(proposal.get("assumptions"), dict)
+                    else {},
+                    "effect": str(proposal.get("effect", "")),
+                    "exact_datalog": str(
+                        proposal.get("exact_datalog")
+                        or proposal.get("generated_datalog", "")
                     ),
                     "generated_datalog": str(proposal.get("generated_datalog", "")),
                     "proposal_result": proposal_result,

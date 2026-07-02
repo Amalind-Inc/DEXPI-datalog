@@ -171,9 +171,24 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
     session_id: "session-e2e",
     datalog_confirmation: {
       plain_language_meaning: "Return objects matching the temporary topology rule.",
+      interpretation: "Return objects matching the temporary topology rule.",
+      scope: {
+        starting_object_ids: ["node-p101"],
+        graph: "session-e2e",
+        direction: "undirected traversal (structural connectivity, not flow direction)",
+        direction_basis: "structural adjacency; explicit flow direction is not applied",
+        path_treatment: "breadth-first reachability up to 6 hops",
+      },
+      assumptions: {
+        included_edge_types: ["process-flow piping connectivity"],
+        excluded_edge_types: ["instrument signal references"],
+      },
+      effect:
+        "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
       generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
+      exact_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
       validation: { status: "safe_to_confirm" },
-      allowed_actions: ["run", "cancel"],
+      allowed_actions: ["run", "revise_interpretation", "revise_query", "cancel"],
       proposal_result: {
         executed: false,
         proposal: {
@@ -263,6 +278,23 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
   await workflow.open();
   await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
   await expect(workflow.confirmationCards).toHaveCount(1);
+
+  // The consent surface: interpretation, scope, assumptions, exact Datalog,
+  // and the fixed read-only effect line, plus all four review actions.
+  await expect(page.getByTestId("datalog-plain-language")).toContainText(
+    "Return objects matching the temporary topology rule.",
+  );
+  await expect(page.getByTestId("datalog-scope")).toContainText("undirected traversal");
+  await expect(page.getByTestId("datalog-assumptions")).toContainText(
+    "process-flow piping connectivity",
+  );
+  await expect(page.getByTestId("datalog-effect")).toHaveText(
+    "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
+  );
+  await expect(page.getByRole("button", { name: "Approve and run" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Revise interpretation" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Revise query" })).toBeEnabled();
+
   await workflow.datalogDetails.locator("summary").click();
   await expect(workflow.datalogDetails).toContainText('answer("node-p101")');
 
