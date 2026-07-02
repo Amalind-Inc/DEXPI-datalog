@@ -120,13 +120,21 @@ class TurnLifecycleStore:
         try:
             result = execute()
         except Exception as error:
-            turn["status"] = "failed"
-            self._append(turn, "failure", {"message": str(error)})
-            self._save(turn)
+            with self._lock:
+                current = self.get(session_id=session_id, turn_id=turn_id)
+                if current is not None and current.get("status") == "canceled":
+                    return current
+                turn["status"] = "failed"
+                self._append(turn, "failure", {"message": str(error)})
+                self._save(turn)
             return turn
-        turn["result"] = result
-        self._append_result_events(turn, result)
-        self._save(turn)
+        with self._lock:
+            current = self.get(session_id=session_id, turn_id=turn_id)
+            if current is not None and current.get("status") == "canceled":
+                return current
+            turn["result"] = result
+            self._append_result_events(turn, result)
+            self._save(turn)
         return turn
 
     def _append_result_events(

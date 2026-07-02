@@ -363,6 +363,85 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
         assert "answer_text" not in str(reloaded.get("result", ""))
 
 
+def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
+    """A cancel that arrives while a resumed execute() is still running must leave
+    the turn permanently canceled; resume() must not overwrite it with the result.
+
+    Race window: resume() saves status=active and releases the lock, then
+    execute() blocks.  cancel() reads active, writes canceled.  When execute()
+    returns, resume() must re-read the disk state and respect the terminal
+    cancellation rather than saving completion on top of it.
+    """
+    import hashlib
+    import threading
+
+    session_id = "resume-race-session"
+    request_id = "resume-race-request"
+    turn_id = hashlib.sha256(
+        f"{session_id}\n{request_id}".encode("utf-8")
+    ).hexdigest()[:20]
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        store = TurnLifecycleStore(root)
+
+        paused = store.start(
+            session_id=session_id,
+            request_id=request_id,
+            question="Needs confirmation",
+            execute=lambda: {
+                "status": "needs_datalog_confirmation",
+                "datalog_confirmation": {},
+                "evidence_references": [],
+                "evidence_highlight": {},
+            },
+        )
+        assert paused["status"] == "paused"
+
+        execute_started = threading.Event()
+        cancel_done = threading.Event()
+
+        def slow_execute() -> dict[str, object]:
+            execute_started.set()
+            cancel_done.wait(timeout=5.0)
+            return {
+                "status": "answered",
+                "answer_text": "Too late — should be discarded.",
+                "evidence_references": [],
+                "evidence_highlight": {},
+            }
+
+        errors: list[Exception] = []
+
+        def do_cancel() -> None:
+            execute_started.wait(timeout=5.0)
+            try:
+                store.cancel(session_id=session_id, turn_id=turn_id)
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                cancel_done.set()
+
+        cancel_thread = threading.Thread(target=do_cancel, daemon=True)
+        cancel_thread.start()
+
+        final = store.resume(
+            session_id=session_id,
+            turn_id=turn_id,
+            execute=slow_execute,
+        )
+        cancel_thread.join(timeout=5.0)
+
+        assert not errors, errors
+        assert final is not None
+        assert final["status"] == "canceled", f"expected canceled, got {final['status']}"
+        reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
+        assert reloaded is not None
+        assert reloaded["status"] == "canceled"
+        assert reloaded["events"][-1]["type"] == "cancellation"
+        assert "answer_text" not in str(reloaded.get("result", ""))
+
+
 def test_bundled_pump_check_command_runs_rule_pack_inside_turn() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"

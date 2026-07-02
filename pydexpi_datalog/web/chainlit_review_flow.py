@@ -169,6 +169,11 @@ class ChainlitReviewFlow:
         self._direction_annotations_by_session: dict[
             str, dict[str, dict[str, object]]
         ] = {}
+        # Approval integrity: proposals raised for review are kept server-side,
+        # keyed by proposal_id, and are the only thing a confirm may execute.
+        self._pending_datalog_proposals_by_session: dict[
+            str, dict[str, dict[str, object]]
+        ] = {}
 
     def initial_state(self) -> dict[str, object]:
         return {
@@ -842,6 +847,7 @@ class ChainlitReviewFlow:
             answer=answer,
         )
         if datalog_confirmation is not None:
+            self._store_pending_datalog_proposal(session_id, datalog_confirmation)
             return datalog_confirmation
 
         directed = detect_directed_intent(question)
@@ -953,13 +959,21 @@ class ChainlitReviewFlow:
         proposal_result: dict[str, object],
     ) -> dict[str, object]:
         topology = self._topology_for_session(session_id)
-        proposal_raw = proposal_result.get("proposal")
-        proposal = proposal_raw if isinstance(proposal_raw, dict) else {}
+        claimed_raw = proposal_result.get("proposal")
+        claimed_proposal = claimed_raw if isinstance(claimed_raw, dict) else {}
+        proposal_id = str(claimed_proposal.get("proposal_id", ""))
+        pending = self._pending_datalog_proposals_by_session.get(session_id, {})
         if decision == "cancel":
+            stored_result = pending.pop(proposal_id, None)
+            stored_proposal = (
+                stored_result.get("proposal") if stored_result is not None else None
+            )
             self._append_datalog_audit(
                 session_id=session_id,
                 question=question,
-                proposal=proposal,
+                proposal=stored_proposal
+                if isinstance(stored_proposal, dict)
+                else claimed_proposal,
                 decision="canceled",
                 executed=False,
                 execution_status="not_executed",
@@ -974,6 +988,35 @@ class ChainlitReviewFlow:
         if decision != "confirm":
             raise ValueError("temporary Datalog decision must be confirm or cancel")
 
+        # Only a proposal the server itself raised for review may execute; the
+        # client payload contributes nothing beyond the proposal_id lookup key.
+        stored_result = pending.pop(proposal_id, None)
+        if stored_result is None:
+            self._append_datalog_audit(
+                session_id=session_id,
+                question=question,
+                proposal=claimed_proposal,
+                decision="approved",
+                executed=False,
+                execution_status="execution_failed",
+            )
+            return {
+                "status": "execution_failed",
+                "session_id": session_id,
+                "question": question,
+                "executed": False,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.proposal_unknown",
+                        "message": "Temporary Datalog execution requires a proposal the server raised for review in this session.",
+                    }
+                ],
+            }
+        stored_proposal_raw = stored_result.get("proposal")
+        proposal = (
+            stored_proposal_raw if isinstance(stored_proposal_raw, dict) else {}
+        )
+
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
         )
@@ -983,7 +1026,7 @@ class ChainlitReviewFlow:
             session_id=session_id,
             graph_facts=graph_facts,
         )
-        execution = tools.execute_confirmed_temporary_datalog(proposal_result)
+        execution = tools.execute_confirmed_temporary_datalog(stored_result)
         executed = execution.get("status") == "answered"
         self._append_datalog_audit(
             session_id=session_id,
@@ -1031,6 +1074,25 @@ class ChainlitReviewFlow:
             "tool_call_trace": [],
             "diagnostics": [],
         }
+
+    def _store_pending_datalog_proposal(
+        self, session_id: str, confirmation_payload: dict[str, object]
+    ) -> None:
+        confirmation = confirmation_payload.get("datalog_confirmation")
+        if not isinstance(confirmation, dict):
+            return
+        proposal_result = confirmation.get("proposal_result")
+        if not isinstance(proposal_result, dict):
+            return
+        proposal = proposal_result.get("proposal")
+        if not isinstance(proposal, dict):
+            return
+        proposal_id = str(proposal.get("proposal_id", ""))
+        if not proposal_id:
+            return
+        self._pending_datalog_proposals_by_session.setdefault(session_id, {})[
+            proposal_id
+        ] = proposal_result
 
     def _append_datalog_audit(
         self,
