@@ -49,10 +49,73 @@ export type PidView = {
   hiddenTopologyIds: string[];
 };
 
+// Tier-1 drawing-faithful schematic scene (ADR 0004/0005): file-shape
+// symbols placed as drawn, drawn centerlines, drawing-native text. The
+// backend owns geometry semantics; the frontend paints this verbatim.
+export type SchematicPrimitive =
+  | { kind: "polyline"; points: [number, number][]; stroke: string; width: number; dash: string | null }
+  | { kind: "circle"; cx: number; cy: number; r: number; filled: boolean; stroke: string; width: number; dash: string | null }
+  | { kind: "arc"; cx: number; cy: number; r: number; start: number; end: number; stroke: string; width: number; dash: string | null }
+  | { kind: "polygon"; points: [number, number][]; filled: boolean; stroke: string; width: number; dash: string | null }
+  | SchematicText;
+
+export type SchematicText = {
+  kind: "text";
+  x: number;
+  y: number;
+  angle: number;
+  string: string;
+  height: number;
+  font: string;
+  just: string;
+};
+
+export type SchematicSymbol = {
+  id: string;
+  topologyId: string | null;
+  className: string;
+  shape: string;
+  tx: number;
+  ty: number;
+  angle: number;
+  mirror: boolean;
+  sx: number;
+  sy: number;
+};
+
+export type SchematicPolyline = {
+  id: string;
+  topologyId: string | null;
+  kind: "pipe" | "signal" | "leader" | "frame";
+  points: [number, number][];
+  stroke: string;
+  width: number;
+  dash: string | null;
+};
+
+export type SchematicPolygon = {
+  points: [number, number][];
+  filled: boolean;
+  stroke: string;
+  width: number;
+  dash: string | null;
+};
+
+export type SchematicScene = {
+  units: string;
+  extent: { x0: number; y0: number; x1: number; y1: number } | null;
+  catalogue: Record<string, SchematicPrimitive[]>;
+  symbols: SchematicSymbol[];
+  polylines: SchematicPolyline[];
+  polygons: SchematicPolygon[];
+  texts: SchematicText[];
+};
+
 export type PrepareResult = {
   status: "ready" | "failed";
   filename: string;
   graph: PidGraph;
   pidView: PidView;
+  schematicScene: SchematicScene | null;
   sourceScopeIds: string[];
 };

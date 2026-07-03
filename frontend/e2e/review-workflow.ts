@@ -10,6 +10,17 @@ export const e06DexpiFixture = path.resolve(
   "E06V01-VER.EX01.xml",
 );
 
+// Geometry-bearing fixture (file-defined shape catalogue + as-drawn
+// positions + drawn centerlines) -- renders the tier-1 schematic (ADR 0004).
+export const c01DexpiFixture = path.resolve(
+  "..",
+  "TrainingTestCases",
+  "dexpi 1.3",
+  "example pids",
+  "C01 DEXPI Reference P&ID",
+  "C01V04-VER.EX01.xml",
+);
+
 export function reviewWorkflow(page: Page) {
   const chat = page.getByRole("region", { name: "Chat" });
   const graphPanel = page.getByRole("complementary", {
@@ -54,6 +65,14 @@ export function reviewWorkflow(page: Page) {
       // Graphics-bearing topologies render the compressed Cytoscape P&ID view
       // (a canvas, so node interactivity is not exposed as DOM buttons).
       await expect(page.getByTestId("cytoscape-pid-graph")).toBeVisible();
+    },
+
+    async expectPreparedSchematicScene(filename: string) {
+      await expect(graphPanel.getByText(filename)).toBeVisible();
+      // Geometry-bearing topologies render the tier-1 drawing-faithful
+      // schematic instead of the auto-laid-out Cytoscape view (ADR 0004).
+      await expect(page.getByTestId("schematic-panel")).toBeVisible();
+      await expect(page.getByTestId("schematic-scene")).toBeVisible();
     },
 
     async sendPrompt(prompt: string) {

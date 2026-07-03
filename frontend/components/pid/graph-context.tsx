@@ -8,13 +8,20 @@ import {
   useState,
 } from "react";
 import { samplePidGraph } from "@/components/pid/sample-graph";
-import type { PidGraph, PidNode, PidView, PrepareResult } from "@/components/pid/types";
+import type {
+  PidGraph,
+  PidNode,
+  PidView,
+  PrepareResult,
+  SchematicScene,
+} from "@/components/pid/types";
 
 const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
 
 type GraphContextValue = {
   graph: PidGraph;
   pidView: PidView;
+  schematicScene: SchematicScene | null;
   loadedFileName: string | null;
   isGraphOpen: boolean;
   selectedNodeId: string | null;
@@ -31,6 +38,7 @@ const GraphContext = createContext<GraphContextValue | null>(null);
 export function PidGraphProvider({ children }: { children: ReactNode }) {
   const [graph, setGraph] = useState<PidGraph>(samplePidGraph);
   const [pidView, setPidView] = useState<PidView>(EMPTY_PID_VIEW);
+  const [schematicScene, setSchematicScene] = useState<SchematicScene | null>(null);
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
   const [isGraphOpen, setGraphOpen] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("pump-101");
@@ -47,6 +55,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
     () => ({
       graph,
       pidView,
+      schematicScene,
       loadedFileName,
       isGraphOpen,
       selectedNodeId,
@@ -58,13 +67,23 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       applyPrepareResult(result) {
         setGraph(result.graph);
         setPidView(result.pidView ?? EMPTY_PID_VIEW);
+        setSchematicScene(result.schematicScene ?? null);
         setLoadedFileName(result.filename);
         setGraphOpen(true);
         setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
         setHighlightedNodeIds(result.sourceScopeIds);
       },
     }),
-    [graph, pidView, highlightedNodeIds, isGraphOpen, loadedFileName, selectedNode, selectedNodeId],
+    [
+      graph,
+      pidView,
+      schematicScene,
+      highlightedNodeIds,
+      isGraphOpen,
+      loadedFileName,
+      selectedNode,
+      selectedNodeId,
+    ],
   );
 
   return <GraphContext.Provider value={value}>{children}</GraphContext.Provider>;

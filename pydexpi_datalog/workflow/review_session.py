@@ -17,6 +17,7 @@ from ..semantics.derive_graph_semantics import (
 )
 from .topology_naming import derive_display_names
 from .pid_view import build_pid_view
+from .schematic_scene import build_schematic_scene
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,7 @@ class ReviewSessionService:
                 graph_facts=graph_facts,
                 session_id=session_id,
                 source_id=source_id,
+                dexpi_xml_path=dexpi_xml_path,
             )
             topology_view_path = session_dir / "topology_view.json"
             topology_view_path.write_text(
@@ -459,7 +461,11 @@ def check_artifact_size_limits(
 
 
 def build_topology_view_model(
-    *, graph_facts: dict[str, object], session_id: str, source_id: str | None = None
+    *,
+    graph_facts: dict[str, object],
+    session_id: str,
+    source_id: str | None = None,
+    dexpi_xml_path: Path | None = None,
 ) -> dict[str, object]:
     # Document-level provenance; kept distinct from per-edge graph endpoint ids
     # (which also use the name "source_id") below.
@@ -555,6 +561,17 @@ def build_topology_view_model(
             },
         }
 
+    schematic_scene = None
+    if dexpi_xml_path is not None:
+        proteus_id_to_topology_id = {
+            node["proteus_id"]: node["id"] for node in nodes if node.get("proteus_id")
+        }
+        schematic_scene = build_schematic_scene(
+            dexpi_xml_path=dexpi_xml_path,
+            proteus_id_to_topology_id=proteus_id_to_topology_id,
+            namespace=document_source_id or session_id,
+        )
+
     return {
         "schema_version": "topology-view.v1",
         "session_id": session_id,
@@ -565,6 +582,9 @@ def build_topology_view_model(
         "evidence_map": evidence_map,
         # P&ID-like compression: equipment units + collapsed lines, for the graph panel.
         "pid_view": build_pid_view(nodes, fact_edges),
+        # Drawing-faithful tier-1 scene (ADR 0004/0005); None when the source
+        # carries no geometry (catalogue-free / unpositioned exports).
+        "schematic_scene": schematic_scene,
         "evidence_highlight": {
             "source_scope_ids": [],
             "matched_object_ids": [],

@@ -7,6 +7,7 @@ import { usePidGraph } from "@/components/pid/graph-context";
 import type { PidNodeKind } from "@/components/pid/types";
 import { layoutGraphNodes } from "@/components/pid/graph-layout";
 import { CytoscapePidGraph } from "@/components/pid/cytoscape-pid-graph";
+import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
 import { PidLegend } from "@/components/pid/pid-legend";
 
 const filters: Array<PidNodeKind | "All"> = [
@@ -21,6 +22,7 @@ export function PidGraphPanel() {
   const {
     graph,
     pidView,
+    schematicScene,
     highlightedNodeIds,
     loadedFileName,
     selectedNode,
@@ -48,6 +50,24 @@ export function PidGraphPanel() {
   );
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
   const positions = useMemo(() => layoutGraphNodes(graph), [graph]);
+  const nodeLabelById = useMemo(
+    () => new Map(graph.nodes.map((node) => [node.id, node.label])),
+    [graph.nodes],
+  );
+  const connectedLines = useMemo(() => {
+    if (!selectedNodeId) return [];
+    return pidView.lines
+      .filter((line) => line.sourceUnit === selectedNodeId || line.targetUnit === selectedNodeId)
+      .map((line) => {
+        const otherUnit =
+          line.sourceUnit === selectedNodeId ? line.targetUnit : line.sourceUnit;
+        return {
+          id: line.id,
+          label: line.label || line.id,
+          otherUnitLabel: otherUnit ? nodeLabelById.get(otherUnit) ?? otherUnit : "unconnected",
+        };
+      });
+  }, [nodeLabelById, pidView.lines, selectedNodeId]);
 
   return (
     <aside className="pid-panel" aria-label="P&ID graph panel">
@@ -93,7 +113,16 @@ export function PidGraphPanel() {
       </div>
 
       <section className="pid-graph-canvas" aria-label="Graph visualization">
-        {hasPidView ? (
+        {schematicScene ? (
+          <div className="pid-schematic-wrap" data-testid="schematic-panel">
+            <SchematicSceneView
+              scene={schematicScene}
+              selectedId={selectedNodeId}
+              highlightedIds={highlightedNodeIds}
+              onSelect={setSelectedNodeId}
+            />
+          </div>
+        ) : hasPidView ? (
           <div className="pid-cyto-wrap">
             <div className="pid-cyto-toolbar">
               <button
@@ -206,6 +235,18 @@ export function PidGraphPanel() {
               </div>
             </dl>
             <p>{selectedNode.description}</p>
+            {connectedLines.length > 0 && (
+              <div className="pid-connections" data-testid="pid-connections">
+                <p className="pid-eyebrow">Connections</p>
+                <ul>
+                  {connectedLines.map((line) => (
+                    <li key={line.id}>
+                      {line.label} → {line.otherUnitLabel}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         ) : (
           <p>Select a graph node to ground assistant answers.</p>

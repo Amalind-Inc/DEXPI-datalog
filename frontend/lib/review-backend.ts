@@ -7,6 +7,12 @@ import type {
   PidNodeKind,
   PidView,
   PrepareResult,
+  SchematicPolygon,
+  SchematicPolyline,
+  SchematicPrimitive,
+  SchematicScene,
+  SchematicSymbol,
+  SchematicText,
 } from "../components/pid/types.ts";
 
 const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
@@ -101,6 +107,7 @@ export async function prepareReviewSession(
     filename: body.filename ?? "plant.xml",
     graph,
     pidView: EMPTY_PID_VIEW,
+    schematicScene: null,
     sourceScopeIds: [graph.nodes[0]?.id ?? "pump-101"],
   };
 }
@@ -228,6 +235,7 @@ async function prepareWithPythonBackend(
       filename: body.filename ?? "plant.xml",
       graph: readTopology(data),
       pidView: readPidView(data),
+      schematicScene: readSchematicScene(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
     };
   } catch {
@@ -648,6 +656,141 @@ function readPidView(data: Record<string, unknown>): PidView {
     ? raw.hidden_topology_ids.map((h) => String(h))
     : [];
   return { units, lines, hiddenTopologyIds };
+}
+
+function readSchematicScene(data: Record<string, unknown>): SchematicScene | null {
+  const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
+  const raw = (source.schematic_scene ?? data.schematic_scene) as Record<string, unknown> | null | undefined;
+  if (!raw || typeof raw !== "object") return null;
+
+  const extentRaw = raw.extent as Record<string, unknown> | null | undefined;
+  const catalogue: Record<string, SchematicPrimitive[]> = {};
+  if (isRecord(raw.catalogue)) {
+    for (const [shape, prims] of Object.entries(raw.catalogue)) {
+      if (Array.isArray(prims)) catalogue[shape] = prims.map(readSchematicPrimitive);
+    }
+  }
+
+  return {
+    units: String(raw.units ?? "mm"),
+    extent: extentRaw
+      ? {
+          x0: Number(extentRaw.x0 ?? 0),
+          y0: Number(extentRaw.y0 ?? 0),
+          x1: Number(extentRaw.x1 ?? 0),
+          y1: Number(extentRaw.y1 ?? 0),
+        }
+      : null,
+    catalogue,
+    symbols: Array.isArray(raw.symbols) ? raw.symbols.map(readSchematicSymbol) : [],
+    polylines: Array.isArray(raw.polylines) ? raw.polylines.map(readSchematicPolyline) : [],
+    polygons: Array.isArray(raw.polygons) ? raw.polygons.map(readSchematicPolygon) : [],
+    texts: Array.isArray(raw.texts) ? raw.texts.map(readSchematicText) : [],
+  };
+}
+
+function readSchematicPoints(value: unknown): [number, number][] {
+  if (!Array.isArray(value)) return [];
+  return value.map((point) => {
+    const pair = point as unknown[];
+    return [Number(pair[0] ?? 0), Number(pair[1] ?? 0)] as [number, number];
+  });
+}
+
+function readSchematicSymbol(value: unknown): SchematicSymbol {
+  const symbol = value as Record<string, unknown>;
+  return {
+    id: String(symbol.id ?? ""),
+    topologyId: typeof symbol.topology_id === "string" ? symbol.topology_id : null,
+    className: String(symbol.class_name ?? ""),
+    shape: String(symbol.shape ?? ""),
+    tx: Number(symbol.tx ?? 0),
+    ty: Number(symbol.ty ?? 0),
+    angle: Number(symbol.angle ?? 0),
+    mirror: Boolean(symbol.mirror),
+    sx: Number(symbol.sx ?? 1),
+    sy: Number(symbol.sy ?? 1),
+  };
+}
+
+function readSchematicPolyline(value: unknown): SchematicPolyline {
+  const polyline = value as Record<string, unknown>;
+  return {
+    id: String(polyline.id ?? ""),
+    topologyId: typeof polyline.topology_id === "string" ? polyline.topology_id : null,
+    kind: (polyline.kind as SchematicPolyline["kind"]) ?? "pipe",
+    points: readSchematicPoints(polyline.points),
+    stroke: String(polyline.stroke ?? "#333333"),
+    width: Number(polyline.width ?? 0.25),
+    dash: typeof polyline.dash === "string" ? polyline.dash : null,
+  };
+}
+
+function readSchematicPolygon(value: unknown): SchematicPolygon {
+  const polygon = value as Record<string, unknown>;
+  return {
+    points: readSchematicPoints(polygon.points),
+    filled: Boolean(polygon.filled),
+    stroke: String(polygon.stroke ?? "#333333"),
+    width: Number(polygon.width ?? 0.25),
+    dash: typeof polygon.dash === "string" ? polygon.dash : null,
+  };
+}
+
+function readSchematicText(value: unknown): SchematicText {
+  const text = value as Record<string, unknown>;
+  return {
+    kind: "text",
+    x: Number(text.x ?? 0),
+    y: Number(text.y ?? 0),
+    angle: Number(text.angle ?? 0),
+    string: String(text.string ?? ""),
+    height: Number(text.height ?? 3),
+    font: String(text.font ?? "Calibri"),
+    just: String(text.just ?? "LeftBottom"),
+  };
+}
+
+function readSchematicPrimitive(value: unknown): SchematicPrimitive {
+  const prim = value as Record<string, unknown>;
+  const style = {
+    stroke: String(prim.stroke ?? "#333333"),
+    width: Number(prim.width ?? 0.25),
+    dash: typeof prim.dash === "string" ? prim.dash : null,
+  };
+  switch (prim.kind) {
+    case "circle":
+      return {
+        kind: "circle",
+        cx: Number(prim.cx ?? 0),
+        cy: Number(prim.cy ?? 0),
+        r: Number(prim.r ?? 0),
+        filled: Boolean(prim.filled),
+        ...style,
+      };
+    case "arc":
+      return {
+        kind: "arc",
+        cx: Number(prim.cx ?? 0),
+        cy: Number(prim.cy ?? 0),
+        r: Number(prim.r ?? 0),
+        start: Number(prim.start ?? 0),
+        end: Number(prim.end ?? 0),
+        ...style,
+      };
+    case "polygon":
+      return {
+        kind: "polygon",
+        points: readSchematicPoints(prim.points),
+        filled: Boolean(prim.filled),
+        ...style,
+      };
+    case "text":
+      return readSchematicText(prim);
+    case "polyline":
+    default:
+      return { kind: "polyline", points: readSchematicPoints(prim.points), ...style };
+  }
 }
 
 function readVisibleSourceScopeIds(value: unknown) {
