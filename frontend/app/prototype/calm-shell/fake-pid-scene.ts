@@ -1,0 +1,82 @@
+import type { SchematicScene } from "@/components/pid/types";
+
+// PROTOTYPE fake schematic scene -- a small pump/tank/valve skid, just
+// enough geometry to show the split-pane "P&ID as citation panel" idea
+// (inspired by a doc-QA UI where the right pane highlights the quoted
+// passage). Shapes are hand-drawn primitives, not real DEXPI geometry.
+export const fakePidScene: SchematicScene = {
+  units: "mm",
+  extent: { x0: 0, y0: 0, x1: 420, y1: 220 },
+  catalogue: {
+    pump: [
+      { kind: "circle", cx: 0, cy: 0, r: 14, filled: false, stroke: "#1c1815", width: 1.4, dash: null },
+      { kind: "polygon", points: [[-6, -7], [-6, 7], [8, 0]], filled: true, stroke: "#1c1815", width: 1, dash: null },
+    ],
+    tank: [
+      {
+        kind: "polygon",
+        points: [[-16, -24], [16, -24], [16, 22], [10, 28], [-10, 28], [-16, 22]],
+        filled: false,
+        stroke: "#1c1815",
+        width: 1.4,
+        dash: null,
+      },
+    ],
+    valve: [
+      {
+        kind: "polygon",
+        points: [[-10, -8], [10, -8], [-10, 8], [10, 8]],
+        filled: false,
+        stroke: "#1c1815",
+        width: 1.4,
+        dash: null,
+      },
+    ],
+    instrument: [
+      { kind: "circle", cx: 0, cy: 0, r: 9, filled: false, stroke: "#1c1815", width: 1.2, dash: null },
+    ],
+  },
+  symbols: [
+    { id: "PU-1101", topologyId: "PU-1101", className: "Pump", shape: "pump", tx: 90, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1 },
+    { id: "PU-1102", topologyId: "PU-1102", className: "Pump", shape: "pump", tx: 90, ty: 60, angle: 0, mirror: false, sx: 1, sy: 1 },
+    { id: "TK-2201", topologyId: "TK-2201", className: "Tank", shape: "tank", tx: 320, ty: 90, angle: 0, mirror: false, sx: 1, sy: 1 },
+    { id: "V-1", topologyId: null, className: "Valve", shape: "valve", tx: 180, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1 },
+    { id: "FI-401", topologyId: null, className: "Instrument", shape: "instrument", tx: 250, ty: 130, angle: 0, mirror: false, sx: 1, sy: 1 },
+  ],
+  polylines: [
+    {
+      id: "L-100-6\"-CS",
+      topologyId: "L-100-6\"-CS",
+      kind: "pipe",
+      points: [[104, 110], [320, 110], [320, 105]],
+      stroke: "#1c1815",
+      width: 1.6,
+      dash: null,
+    },
+    {
+      id: "L-101-4\"-CS",
+      topologyId: "L-101-4\"-CS",
+      kind: "pipe",
+      points: [[104, 60], [140, 60], [140, 90], [180, 90]],
+      stroke: "#1c1815",
+      width: 1.6,
+      dash: null,
+    },
+    {
+      id: "frame",
+      topologyId: null,
+      kind: "frame",
+      points: [[6, 6], [414, 6], [414, 214], [6, 214], [6, 6]],
+      stroke: "#c9c2b8",
+      width: 1,
+      dash: null,
+    },
+  ],
+  polygons: [],
+  texts: [
+    { kind: "text", x: 90, y: 128, angle: 0, string: "PU-1101", height: 8, font: "sans-serif", just: "center" },
+    { kind: "text", x: 90, y: 78, angle: 0, string: "PU-1102", height: 8, font: "sans-serif", just: "center" },
+    { kind: "text", x: 320, y: 128, angle: 0, string: "TK-2201", height: 8, font: "sans-serif", just: "center" },
+    { kind: "text", x: 250, y: 148, angle: 0, string: "FI-401", height: 8, font: "sans-serif", just: "center" },
+  ],
+};
