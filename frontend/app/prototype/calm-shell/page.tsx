@@ -1,21 +1,13 @@
 "use client";
 
-// PROTOTYPE — throwaway. Answers: "what should the calm review shell look
-// like?" (bead pydexpi-datalog-1-2ki.3). Three structurally different
-// directions, switchable via ?variant=. Sub-shape B (new page) per
-// skill://prototype: this is a new top-level surface, not an adjustment to
-// the existing chat app at app/page.tsx.
-//
-// Design tokens under exploration here (white ground, one accent, serif
-// display face, shadow elevation) are captured in NOTES.md once a direction
-// is chosen — see that file for the running verdict.
+// PROTOTYPE — throwaway. Answered: "what should the calm review shell look
+// like?" (bead pydexpi-datalog-1-2ki.3). Direction B ("hero-first, minimal
+// chrome" with a split-pane P&ID panel) was approved by the user; the losing
+// A/C variants and the comparison switcher have been deleted. This route
+// stays as a living reference for the real shell implementation slice
+// (2ki.10) — see NOTES.md for the verdict and captured design tokens.
 import { Fraunces } from "next/font/google";
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { PrototypeSwitcher } from "@/components/prototype/prototype-switcher";
-import { VariantA } from "./variant-a";
 import { VariantB } from "./variant-b";
-import { VariantC } from "./variant-c";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -23,16 +15,7 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
-const variants = [
-  { key: "A", name: "Rail + timeline" },
-  { key: "B", name: "Hero-first, minimal chrome" },
-  { key: "C", name: "Split workspace" },
-];
-
-function CalmShellPrototype() {
-  const searchParams = useSearchParams();
-  const variant = searchParams.get("variant") ?? "A";
-
+export default function CalmShellPrototypePage() {
   return (
     <div
       className={`${fraunces.variable} min-h-screen bg-[var(--calm-paper)] text-[var(--calm-ink)]`}
@@ -47,18 +30,7 @@ function CalmShellPrototype() {
         } as React.CSSProperties
       }
     >
-      {variant === "A" && <VariantA />}
-      {variant === "B" && <VariantB />}
-      {variant === "C" && <VariantC />}
-      <PrototypeSwitcher variants={variants} current={variant} />
+      <VariantB />
     </div>
-  );
-}
-
-export default function CalmShellPrototypePage() {
-  return (
-    <Suspense fallback={null}>
-      <CalmShellPrototype />
-    </Suspense>
   );
 }
