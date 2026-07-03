@@ -32,6 +32,14 @@ E06_FIXTURE = (
     / "E06 Pump, HeatExchanger, Nozzles Connected With PNS"
     / "E06V01-VER.EX01.xml"
 )
+C03_FIXTURE = (
+    REPO_ROOT
+    / "TrainingTestCases"
+    / "dexpi 1.3"
+    / "example pids"
+    / "C03 Piping (Equinor)"
+    / "C03V04-VER.EX02.xml"
+)
 
 
 class SchematicSceneApiTests(unittest.TestCase):
@@ -135,6 +143,44 @@ class GeometrySanityGateApiTests(unittest.TestCase):
             # The E-series fixture still carries exact source connectivity
             # for the auto-layout view to lay out (bead AC).
             self.assertGreater(len(body["pid_view"]["units"]), 0)
+
+
+class RoutedPipeApiTests(unittest.TestCase):
+    """Acceptance criteria for bead pydexpi-datalog-1-2ki.6: per-pipe demotion."""
+
+    def _prepare(self, client: TestClient, session_id: str, fixture: Path):
+        return client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={"filename": fixture.name, "content": fixture.read_text(encoding="utf-8")},
+        )
+
+    def test_c03_stays_as_drawn_with_routed_runs_disclosed_as_typed_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            self._prepare(client, "c03-routed", C03_FIXTURE)
+            topology = client.get("/api/review/sessions/c03-routed/topology")
+            self.assertEqual(topology.status_code, 200)
+            body = topology.json()
+            # Two of C03's five segments carry no CenterLine, but the drawing
+            # as a whole still comfortably passes the gate -- this is a
+            # per-pipe fallback, not a whole-scene degradation.
+            self.assertEqual(body["schematic_scene_kind"], "as-drawn")
+            scene = body["schematic_scene"]
+            self.assertIsNotNone(scene)
+
+            routed = [p for p in scene["polylines"] if p.get("inferred")]
+            drawn = [p for p in scene["polylines"] if p["kind"] == "pipe" and not p.get("inferred")]
+            self.assertEqual(len(routed), 2)
+            self.assertGreater(len(drawn), 0)
+            for polyline in routed:
+                # Real endpoints, not a re-layout: exactly two points.
+                self.assertEqual(len(polyline["points"]), 2)
+
+            diagnostics = body["geometry_report"]["routed_pipe_runs"]
+            self.assertEqual(len(diagnostics), 2)
+            for diagnostic in diagnostics:
+                self.assertEqual(diagnostic["reason"], "missing_centerline")
 
 
 if __name__ == "__main__":

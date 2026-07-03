@@ -727,6 +727,14 @@
   filter: drop-shadow(0 0 0.6mm #f59e0b);
 }
 
+/* Per-pipe demotion (bead pydexpi-datalog-1-2ki.6): the single uniform cue
+   for a routed run whose source carried no CenterLine. Opacity is the visual
+   half of the cue; the dash pattern itself is set inline (schematic-scene-view.tsx)
+   since it must override whatever source Presentation/LineType supplied. */
+.schematic-scene-svg .schematic-inferred {
+  opacity: 0.65;
+}
+
 /* Tier-2 auto-layout schematic (bead pydexpi-datalog-1-2ki.5): connectivity
    is real, positions are computed -- the badge and dashed border keep that
    visibly distinct from the tier-1 as-drawn wrap above. */

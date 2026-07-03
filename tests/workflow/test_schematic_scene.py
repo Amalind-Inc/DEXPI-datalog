@@ -12,7 +12,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from pydexpi_datalog.workflow.schematic_scene import build_schematic_scene
+from pydexpi_datalog.workflow.schematic_scene import build_schematic_scene, build_schematic_scene_report
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 C01_FIXTURE = (
@@ -79,6 +79,58 @@ _NO_GEOMETRY_PROTEUS = """<?xml version="1.0" encoding="UTF-8"?>
 <PlantModel>
   <PlantInformation Units="mm"/>
   <Equipment ComponentClass="CentrifugalPump" ID="Equipment-1"/>
+</PlantModel>
+"""
+
+# Otherwise geometry-bearing: Segment-1 has a real drawn CenterLine.
+# Segment-2 has none, but its Connection names two items (Equipment-1 and
+# Valve-1) that each carry their own authored Position elsewhere in the
+# document -- the per-pipe routing fallback (bead 2ki.6) should route
+# between those, not erase the run or touch Segment-1.
+_ROUTED_PIPE_PROTEUS = """<?xml version="1.0" encoding="UTF-8"?>
+<PlantModel>
+  <PlantInformation Units="mm"/>
+  <ShapeCatalogue>
+    <PlantItemShape ComponentName="PUMP_SHAPE" ComponentClass="CentrifugalPump">
+      <PolyLine>
+        <Presentation R="0.2" G="0.2" B="0.2" LineWeight="0.25" LineType="0"/>
+        <Coordinate X="0" Y="0"/>
+        <Coordinate X="10" Y="0"/>
+      </PolyLine>
+    </PlantItemShape>
+  </ShapeCatalogue>
+  <Drawing>
+    <Extent>
+      <Min X="0" Y="0"/>
+      <Max X="420" Y="297"/>
+    </Extent>
+  </Drawing>
+  <Equipment ComponentClass="CentrifugalPump" ComponentName="PUMP_SHAPE" ID="Equipment-1">
+    <Position>
+      <Location X="50" Y="60"/>
+      <Reference X="1" Y="0"/>
+      <Axis X="0" Y="0" Z="1"/>
+    </Position>
+  </Equipment>
+  <PipingNetworkSystem ID="System-1">
+    <PipingNetworkSegment ID="Segment-1">
+      <CenterLine>
+        <Presentation R="0" G="0" B="0" LineWeight="0.3" LineType="0"/>
+        <Coordinate X="120" Y="60"/>
+        <Coordinate X="150" Y="60"/>
+      </CenterLine>
+    </PipingNetworkSegment>
+    <PipingNetworkSegment ID="Segment-2">
+      <PipingComponent ID="Valve-1" ComponentClass="BallValve" ComponentName="VALVE_SHAPE">
+        <Position>
+          <Location X="200" Y="60"/>
+          <Reference X="1" Y="0"/>
+          <Axis X="0" Y="0" Z="1"/>
+        </Position>
+      </PipingComponent>
+      <Connection FromID="Equipment-1" FromNode="1" ToID="Valve-1" ToNode="1"/>
+    </PipingNetworkSegment>
+  </PipingNetworkSystem>
 </PlantModel>
 """
 
@@ -154,6 +206,37 @@ class BuildSchematicSceneTests(unittest.TestCase):
         # Position/Reference angle (0) + explicit TextAngle (90).
         self.assertEqual(text["angle"], 90.0)
         self.assertEqual(text["font"], "Calibri")
+
+    def test_missing_centerline_pipe_is_routed_between_source_stated_endpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write(Path(tmp), _ROUTED_PIPE_PROTEUS)
+            scene = build_schematic_scene_report(
+                dexpi_xml_path=path,
+                proteus_id_to_topology_id={"Segment-2": "topo-seg-2"},
+                namespace="ns",
+            )
+        [routed] = [p for p in scene["polylines"] if p.get("inferred")]
+        self.assertEqual(routed["topology_id"], "topo-seg-2")
+        self.assertEqual(routed["kind"], "pipe")
+        # Equipment-1's own Position (50, 60) -> Valve-1's own Position
+        # (200, 60), resolved from the segment's Connection FromID/ToID --
+        # not a layout guess.
+        self.assertEqual(routed["points"], [[50.0, 60.0], [200.0, 60.0]])
+        self.assertEqual(scene["report"]["routed_pipe_runs"], [
+            {"topology_id": "topo-seg-2", "raw_id": "Segment-2", "reason": "missing_centerline"}
+        ])
+
+    def test_drawn_centerline_pipe_is_untouched_by_routing_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write(Path(tmp), _ROUTED_PIPE_PROTEUS)
+            scene = build_schematic_scene_report(
+                dexpi_xml_path=path,
+                proteus_id_to_topology_id={"Segment-1": "topo-seg-1"},
+                namespace="ns",
+            )
+        [drawn] = [p for p in scene["polylines"] if p["id"] == "topo-seg-1"]
+        self.assertFalse(drawn["inferred"])
+        self.assertEqual(drawn["points"], [[120.0, 60.0], [150.0, 60.0]])
 
     def test_drawing_frame_is_a_frame_polyline_with_no_topology_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

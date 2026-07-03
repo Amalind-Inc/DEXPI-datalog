@@ -21,6 +21,19 @@ export const c01DexpiFixture = path.resolve(
   "C01V04-VER.EX01.xml",
 );
 
+// Otherwise geometry-bearing (passes the sanity gate) but two of its five
+// PipingNetworkSegments carry no CenterLine -- exercises the per-pipe
+// routed-run demotion (bead pydexpi-datalog-1-2ki.6) rather than the
+// whole-scene auto-layout degradation.
+export const c03DexpiFixture = path.resolve(
+  "..",
+  "TrainingTestCases",
+  "dexpi 1.3",
+  "example pids",
+  "C03 Piping (Equinor)",
+  "C03V04-VER.EX02.xml",
+);
+
 export function reviewWorkflow(page: Page) {
   const chat = page.getByRole("region", { name: "Chat" });
   const graphPanel = page.getByRole("complementary", {

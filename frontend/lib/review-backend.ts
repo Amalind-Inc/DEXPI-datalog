@@ -729,6 +729,16 @@ function readGeometryReport(data: Record<string, unknown>): GeometryReport | nul
       total: Number(unpositioned.total ?? 0),
       missing: Number(unpositioned.missing ?? 0),
     },
+    routedPipeRuns: Array.isArray(raw.routed_pipe_runs)
+      ? raw.routed_pipe_runs.map((run) => {
+          const r = run as Record<string, unknown>;
+          return {
+            topologyId: typeof r.topology_id === "string" ? r.topology_id : null,
+            rawId: String(r.raw_id ?? ""),
+            reason: String(r.reason ?? ""),
+          };
+        })
+      : [],
   };
 }
 
@@ -766,6 +776,7 @@ function readSchematicPolyline(value: unknown): SchematicPolyline {
     stroke: String(polyline.stroke ?? "#333333"),
     width: Number(polyline.width ?? 0.25),
     dash: typeof polyline.dash === "string" ? polyline.dash : null,
+    inferred: Boolean(polyline.inferred),
   };
 }
 

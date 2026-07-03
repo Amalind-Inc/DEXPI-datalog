@@ -38,6 +38,7 @@ test("sceneViewBox pads the drawn content bounding box by 3%", () => {
           stroke: "#000",
           width: 0.3,
           dash: null,
+          inferred: false,
         },
       ],
     }),
@@ -121,9 +122,9 @@ test("hitTestableObjects includes symbols and pipe/signal lines but not frame or
   const s = scene({
     symbols: [{ id: "sym-1", topologyId: "topo-1", className: "", shape: "X", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1 }],
     polylines: [
-      { id: "line-1", topologyId: "topo-2", kind: "pipe", points: [], stroke: "#000", width: 0.3, dash: null },
-      { id: "sheet", topologyId: null, kind: "frame", points: [], stroke: "#000", width: 0.3, dash: null },
-      { id: "leader", topologyId: null, kind: "leader", points: [], stroke: "#000", width: 0.3, dash: null },
+      { id: "line-1", topologyId: "topo-2", kind: "pipe", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
+      { id: "sheet", topologyId: null, kind: "frame", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
+      { id: "leader", topologyId: null, kind: "leader", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
     ],
   });
   const ids = hitTestableObjects(s).map((o) => o.id);

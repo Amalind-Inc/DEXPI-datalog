@@ -91,6 +91,11 @@ export type SchematicPolyline = {
   stroke: string;
   width: number;
   dash: string | null;
+  // Per-pipe demotion (bead pydexpi-datalog-1-2ki.6): true when this run's
+  // source carried no CenterLine and was routed between its source-stated
+  // endpoints instead. Drives the one uniform inferred-style cue; drawn
+  // runs (false) are painted byte-identical to their scene geometry.
+  inferred: boolean;
 };
 
 export type SchematicPolygon = {
@@ -122,12 +127,23 @@ export type GeometryGateMetric = {
   ratio?: number | null;
 };
 
+// Per-pipe demotion diagnostic (bead pydexpi-datalog-1-2ki.6): one entry per
+// pipe run routed between source-stated endpoints because its CenterLine
+// was missing. topologyId is null when the segment has no stable topology
+// counterpart in this session's map.
+export type InferredPipeRun = {
+  topologyId: string | null;
+  rawId: string;
+  reason: string;
+};
+
 export type GeometryReport = {
   passed: boolean;
   reasons: string[];
   extent: GeometryGateMetric & { widthMm: number; heightMm: number };
   pipeCoverage: GeometryGateMetric & { segments: number; segmentsWithCenterline: number };
   unpositionedEquipment: GeometryGateMetric & { total: number; missing: number };
+  routedPipeRuns: InferredPipeRun[];
 };
 
 export type PrepareResult = {

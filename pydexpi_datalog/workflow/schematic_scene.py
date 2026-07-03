@@ -105,6 +105,7 @@ class _SceneBuilder:
         self._topology_id_of = proteus_id_to_topology_id
         self._namespace = namespace
         self._fallback_seq = 0
+        self._position_by_raw_id: dict[str, tuple[float, float]] = {}
 
     def build(self, root: ET.Element) -> dict[str, object]:
         plant_info = root.find("PlantInformation")
@@ -123,8 +124,10 @@ class _SceneBuilder:
                 "items_missing_position": 0,
                 "segments": 0,
                 "segments_with_centerline": 0,
+                "routed_pipe_runs": [],
             },
         }
+        self._position_by_raw_id = _index_positions(root)
         catalogue_el = root.find("ShapeCatalogue")
         self._walk(root, scene, catalogue_el, in_drawing=False)
 
@@ -170,6 +173,7 @@ class _SceneBuilder:
                         "topology_id": None,
                         "kind": "frame",
                         "points": _read_points(child),
+                        "inferred": False,
                         **_presentation_style(child),
                     }
                 )
@@ -200,6 +204,8 @@ class _SceneBuilder:
                 report["segments"] += 1
                 if child.find("CenterLine") is not None:
                     report["segments_with_centerline"] += 1
+                else:
+                    self._emit_routed_pipe(child, scene)
             self._walk(child, scene, catalogue_el, in_drawing=in_drawing or tag == "Drawing")
 
     def _emit_symbol(
@@ -234,6 +240,44 @@ class _SceneBuilder:
             }
         )
 
+    def _emit_routed_pipe(self, segment: ET.Element, scene: dict[str, object]) -> None:
+        """Route a pipe run whose source carries no CenterLine (bead 2ki.6).
+
+        The segment's own `Connection` children name its boundary items by
+        the same `FromID`/`ToID` the source author used to wire the run --
+        these are the "true source-stated endpoints", resolved to wherever
+        those items' own `Position` is authored elsewhere in the document.
+        Equipment demotion stays all-or-nothing (the geometry gate); this is
+        purely a per-pipe fallback so one missing centerline in an otherwise
+        geometry-bearing drawing does not erase the run entirely.
+        """
+        connections = segment.findall("Connection")
+        if not connections:
+            return
+        from_id = connections[0].attrib.get("FromID")
+        to_id = connections[-1].attrib.get("ToID")
+        start = self._position_by_raw_id.get(from_id or "")
+        end = self._position_by_raw_id.get(to_id or "")
+        if start is None or end is None:
+            return
+        raw_id = segment.attrib.get("ID", "")
+        topology_id = self._topology_id_of.get(raw_id)
+        scene["polylines"].append(
+            {
+                "id": self._identity(raw_id, kind="polyline"),
+                "topology_id": topology_id,
+                "kind": "pipe",
+                "points": [[start[0], start[1]], [end[0], end[1]]],
+                "stroke": "#333333",
+                "width": 0.25,
+                "dash": None,
+                "inferred": True,
+            }
+        )
+        scene["report"]["routed_pipe_runs"].append(
+            {"topology_id": topology_id, "raw_id": raw_id, "reason": "missing_centerline"}
+        )
+
     def _emit_centerline(self, parent: ET.Element, centerline: ET.Element, scene: dict[str, object]) -> None:
         kind = "signal" if parent.tag in _SIGNAL_PARENT_TAGS else "pipe"
         raw_id = parent.attrib.get("ID", "")
@@ -243,6 +287,7 @@ class _SceneBuilder:
                 "topology_id": self._topology_id_of.get(raw_id),
                 "kind": kind,
                 "points": _read_points(centerline),
+                "inferred": False,
                 **_presentation_style(centerline),
             }
         )
@@ -275,6 +320,7 @@ class _SceneBuilder:
                         "topology_id": None,
                         "kind": "leader",
                         "points": _read_points(child),
+                        "inferred": False,
                         **_presentation_style(child),
                     }
                 )
@@ -298,6 +344,24 @@ class _SceneBuilder:
     def _fallback_id(self, kind: str) -> str:
         self._fallback_seq += 1
         return f"{self._namespace}:{kind}-{self._fallback_seq}"
+
+
+def _index_positions(root: ET.Element) -> dict[str, tuple[float, float]]:
+    """Map every authored `ID` in the document to its own `Position` location.
+
+    Used to resolve routed-pipe endpoints (bead 2ki.6): a segment's
+    `Connection/@FromID`/`@ToID` name items that may be authored anywhere in
+    the document, not just inside that segment's own element.
+    """
+    positions: dict[str, tuple[float, float]] = {}
+    for el in root.iter():
+        raw_id = el.attrib.get("ID")
+        if not raw_id or raw_id in positions:
+            continue
+        position = _read_position(el)
+        if position is not None:
+            positions[raw_id] = (position[0], position[1])
+    return positions
 
 
 def _build_catalogue(root: ET.Element) -> dict[str, list[dict[str, object]]]:

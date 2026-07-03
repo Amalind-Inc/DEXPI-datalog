@@ -44,6 +44,7 @@ def evaluate_geometry_gate(scene: dict[str, object] | None) -> dict[str, object]
                 "missing": 0,
             },
             "reasons": ["no_geometry_source"],
+            "routed_pipe_runs": [],
         }
 
     factor = _UNIT_TO_MM.get(str(scene.get("units", "mm")), 1.0)
@@ -100,4 +101,11 @@ def evaluate_geometry_gate(scene: dict[str, object] | None) -> dict[str, object]
             "missing": items_missing_position,
         },
         "reasons": reasons,
+        # Per-pipe demotion (bead pydexpi-datalog-1-2ki.6): a pipe run routed
+        # between its source-stated endpoints because its source geometry
+        # carried no CenterLine. Independent of the gate's pass/fail --
+        # equipment placement stays all-or-nothing, but a single missing
+        # centerline in an otherwise geometry-bearing drawing does not sink
+        # the whole scene.
+        "routed_pipe_runs": list(report.get("routed_pipe_runs", [])),
     }

@@ -12,7 +12,16 @@ import unittest
 from pydexpi_datalog.workflow.geometry_gate import evaluate_geometry_gate
 
 
-def _scene(*, extent, units="mm", segments=0, segments_with_centerline=0, items_with_shape=0, items_missing_position=0):
+def _scene(
+    *,
+    extent,
+    units="mm",
+    segments=0,
+    segments_with_centerline=0,
+    items_with_shape=0,
+    items_missing_position=0,
+    routed_pipe_runs=None,
+):
     return {
         "units": units,
         "extent": extent,
@@ -22,6 +31,7 @@ def _scene(*, extent, units="mm", segments=0, segments_with_centerline=0, items_
             "items_missing_position": items_missing_position,
             "segments": segments,
             "segments_with_centerline": segments_with_centerline,
+            "routed_pipe_runs": routed_pipe_runs or [],
         },
     }
 
@@ -99,6 +109,25 @@ class GeometryGateTests(unittest.TestCase):
         report = evaluate_geometry_gate(scene)
         self.assertTrue(report["extent"]["passed"])
         self.assertEqual(report["extent"]["width_mm"], 20.0)
+
+    def test_none_scene_reports_no_routed_pipe_runs(self) -> None:
+        report = evaluate_geometry_gate(None)
+        self.assertEqual(report["routed_pipe_runs"], [])
+
+    def test_routed_pipe_runs_pass_through_independent_of_gate_outcome(self) -> None:
+        # Per-pipe demotion (bead 2ki.6) is orthogonal to the gate's pass/fail --
+        # a healthy drawing can still carry a routed run, and the report
+        # discloses it either way.
+        runs = [{"topology_id": "topo-seg", "raw_id": "Segment-2", "reason": "missing_centerline"}]
+        scene = _scene(
+            extent={"x0": 0, "y0": 0, "x1": 420, "y1": 297},
+            segments=10,
+            segments_with_centerline=8,
+            routed_pipe_runs=runs,
+        )
+        report = evaluate_geometry_gate(scene)
+        self.assertTrue(report["passed"])
+        self.assertEqual(report["routed_pipe_runs"], runs)
 
 
 if __name__ == "__main__":

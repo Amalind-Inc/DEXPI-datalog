@@ -101,13 +101,19 @@ function SchematicPolylineShape({
         `schematic-${polyline.kind}`,
         selected && "selected",
         highlighted && "highlighted",
+        polyline.inferred && "schematic-inferred",
       )}
       data-id={polyline.id}
+      data-inferred={polyline.inferred || undefined}
       points={polyline.points.map(([x, y]) => `${x},${y}`).join(" ")}
       fill="none"
       stroke={polyline.stroke}
       strokeWidth={polyline.width}
-      strokeDasharray={polyline.dash ?? undefined}
+      // The one uniform inferred-style cue (bead pydexpi-datalog-1-2ki.6)
+      // overrides any source-authored dash pattern -- drawn runs keep
+      // whatever LineType the source declared, routed runs always get this
+      // exact dash so "inferred" reads the same regardless of source style.
+      strokeDasharray={polyline.inferred ? "5 3" : polyline.dash ?? undefined}
       role={hitTestable ? "button" : undefined}
       tabIndex={hitTestable ? 0 : undefined}
       aria-label={hitTestable ? `Select ${polyline.kind} ${polyline.id}` : undefined}

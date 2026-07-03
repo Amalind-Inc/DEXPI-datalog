@@ -115,6 +115,7 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
         // Dashed = the standing "inferred routing" cue (renderer spike
         // section 5): positions here are computed, not drawn.
         dash: "6 3",
+        inferred: true,
       });
     }
   }

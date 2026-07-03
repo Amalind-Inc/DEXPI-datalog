@@ -52,6 +52,7 @@ export const fakePidScene: SchematicScene = {
       stroke: "#1c1815",
       width: 1.6,
       dash: null,
+      inferred: false,
     },
     {
       id: "L-101-4\"-CS",
@@ -61,6 +62,7 @@ export const fakePidScene: SchematicScene = {
       stroke: "#1c1815",
       width: 1.6,
       dash: null,
+      inferred: false,
     },
     {
       id: "frame",
@@ -70,6 +72,7 @@ export const fakePidScene: SchematicScene = {
       stroke: "#c9c2b8",
       width: 1,
       dash: null,
+      inferred: false,
     },
   ],
   polygons: [],
