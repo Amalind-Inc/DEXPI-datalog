@@ -88,5 +88,54 @@ class SchematicSceneApiTests(unittest.TestCase):
             self.assertIsNone(topology.json()["schematic_scene"])
 
 
+class GeometrySanityGateApiTests(unittest.TestCase):
+    """Acceptance criteria for bead pydexpi-datalog-1-2ki.5: honest degradation."""
+
+    def _prepare(self, client: TestClient, session_id: str, fixture: Path):
+        return client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={"filename": fixture.name, "content": fixture.read_text(encoding="utf-8")},
+        )
+
+    def test_c01_passes_the_gate_and_is_disclosed_as_drawn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            self._prepare(client, "c01-gate-pass", C01_FIXTURE)
+            topology = client.get("/api/review/sessions/c01-gate-pass/topology")
+            self.assertEqual(topology.status_code, 200)
+            body = topology.json()
+            self.assertEqual(body["schematic_scene_kind"], "as-drawn")
+            self.assertIsNotNone(body["schematic_scene"])
+            report = body["geometry_report"]
+            self.assertTrue(report["passed"])
+            self.assertEqual(report["reasons"], [])
+
+    def test_e06_fails_the_gate_and_degrades_to_auto_layout_with_typed_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            self._prepare(client, "e06-gate-fail", E06_FIXTURE)
+            topology = client.get("/api/review/sessions/e06-gate-fail/topology")
+            self.assertEqual(topology.status_code, 200)
+            body = topology.json()
+            self.assertEqual(body["schematic_scene_kind"], "auto-layout")
+            # Positions from source are never mixed with invented positions:
+            # a gate failure drops the scene entirely rather than partially
+            # disclosing it as drawn.
+            self.assertIsNone(body["schematic_scene"])
+            report = body["geometry_report"]
+            self.assertFalse(report["passed"])
+            self.assertGreater(len(report["reasons"]), 0)
+            for reason in report["reasons"]:
+                self.assertIn(
+                    reason,
+                    {"no_geometry_source", "degenerate_extent", "low_pipe_coverage", "unpositioned_equipment"},
+                )
+            # The E-series fixture still carries exact source connectivity
+            # for the auto-layout view to lay out (bead AC).
+            self.assertGreater(len(body["pid_view"]["units"]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

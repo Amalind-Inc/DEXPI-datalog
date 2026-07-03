@@ -8,6 +8,7 @@ import type { PidNodeKind } from "@/components/pid/types";
 import { layoutGraphNodes } from "@/components/pid/graph-layout";
 import { CytoscapePidGraph } from "@/components/pid/cytoscape-pid-graph";
 import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
+import { AutoLayoutSchematicView } from "@/components/pid/auto-layout-scene-view";
 import { PidLegend } from "@/components/pid/pid-legend";
 
 const filters: Array<PidNodeKind | "All"> = [
@@ -23,6 +24,7 @@ export function PidGraphPanel() {
     graph,
     pidView,
     schematicScene,
+    schematicSceneKind,
     highlightedNodeIds,
     loadedFileName,
     selectedNode,
@@ -117,6 +119,15 @@ export function PidGraphPanel() {
           <div className="pid-schematic-wrap" data-testid="schematic-panel">
             <SchematicSceneView
               scene={schematicScene}
+              selectedId={selectedNodeId}
+              highlightedIds={highlightedNodeIds}
+              onSelect={setSelectedNodeId}
+            />
+          </div>
+        ) : schematicSceneKind === "auto-layout" && hasPidView ? (
+          <div className="pid-schematic-wrap" data-testid="auto-layout-panel">
+            <AutoLayoutSchematicView
+              pidView={pidView}
               selectedId={selectedNodeId}
               highlightedIds={highlightedNodeIds}
               onSelect={setSelectedNodeId}

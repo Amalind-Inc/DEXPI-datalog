@@ -14,6 +14,7 @@ import type {
   PidView,
   PrepareResult,
   SchematicScene,
+  SchematicSceneKind,
 } from "@/components/pid/types";
 
 const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
@@ -22,6 +23,7 @@ type GraphContextValue = {
   graph: PidGraph;
   pidView: PidView;
   schematicScene: SchematicScene | null;
+  schematicSceneKind: SchematicSceneKind;
   loadedFileName: string | null;
   isGraphOpen: boolean;
   selectedNodeId: string | null;
@@ -39,6 +41,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
   const [graph, setGraph] = useState<PidGraph>(samplePidGraph);
   const [pidView, setPidView] = useState<PidView>(EMPTY_PID_VIEW);
   const [schematicScene, setSchematicScene] = useState<SchematicScene | null>(null);
+  const [schematicSceneKind, setSchematicSceneKind] = useState<SchematicSceneKind>("none");
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
   const [isGraphOpen, setGraphOpen] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("pump-101");
@@ -56,6 +59,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       graph,
       pidView,
       schematicScene,
+      schematicSceneKind,
       loadedFileName,
       isGraphOpen,
       selectedNodeId,
@@ -68,6 +72,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
         setGraph(result.graph);
         setPidView(result.pidView ?? EMPTY_PID_VIEW);
         setSchematicScene(result.schematicScene ?? null);
+        setSchematicSceneKind(result.schematicSceneKind ?? "none");
         setLoadedFileName(result.filename);
         setGraphOpen(true);
         setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
@@ -78,6 +83,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       graph,
       pidView,
       schematicScene,
+      schematicSceneKind,
       highlightedNodeIds,
       isGraphOpen,
       loadedFileName,

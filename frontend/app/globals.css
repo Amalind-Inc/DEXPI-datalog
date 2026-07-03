@@ -727,6 +727,38 @@
   filter: drop-shadow(0 0 0.6mm #f59e0b);
 }
 
+/* Tier-2 auto-layout schematic (bead pydexpi-datalog-1-2ki.5): connectivity
+   is real, positions are computed -- the badge and dashed border keep that
+   visibly distinct from the tier-1 as-drawn wrap above. */
+.pid-auto-layout-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 310px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pid-auto-layout-badge {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: #fef3c7;
+  border-bottom: 1px dashed #d1d5db;
+}
+
+.pid-auto-layout-loading {
+  margin: auto;
+  font-size: 13px;
+  color: #6b7280;
+}
+
 .pid-toolbar-btn:hover {
   color: #374151;
   border-color: #d1d5db;

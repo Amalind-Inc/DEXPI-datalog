@@ -17,7 +17,8 @@ from ..semantics.derive_graph_semantics import (
 )
 from .topology_naming import derive_display_names
 from .pid_view import build_pid_view
-from .schematic_scene import build_schematic_scene
+from .schematic_scene import build_schematic_scene_report, has_drawable_geometry
+from .geometry_gate import evaluate_geometry_gate
 
 
 @dataclass(frozen=True)
@@ -561,16 +562,34 @@ def build_topology_view_model(
             },
         }
 
-    schematic_scene = None
+    raw_schematic_scene = None
     if dexpi_xml_path is not None:
         proteus_id_to_topology_id = {
             node["proteus_id"]: node["id"] for node in nodes if node.get("proteus_id")
         }
-        schematic_scene = build_schematic_scene(
+        raw_schematic_scene = build_schematic_scene_report(
             dexpi_xml_path=dexpi_xml_path,
             proteus_id_to_topology_id=proteus_id_to_topology_id,
             namespace=document_source_id or session_id,
         )
+
+    # Geometry sanity gate (bead pydexpi-datalog-1-2ki.5): the gate outcome,
+    # not just geometry presence, decides whether the scene is disclosed as
+    # drawn. Files failing the gate degrade to the auto-layout schematic view
+    # (frontend-computed, per ADR 0005's tolerated client-side exception) --
+    # source positions are never mixed with invented ones, so a gate failure
+    # drops the scene entirely rather than presenting it partially "as drawn".
+    geometry_report = evaluate_geometry_gate(raw_schematic_scene)
+    drawable = raw_schematic_scene is not None and has_drawable_geometry(raw_schematic_scene)
+    if drawable and geometry_report["passed"]:
+        schematic_scene = raw_schematic_scene
+        schematic_scene_kind = "as-drawn"
+    elif raw_schematic_scene is not None:
+        schematic_scene = None
+        schematic_scene_kind = "auto-layout"
+    else:
+        schematic_scene = None
+        schematic_scene_kind = "none"
 
     return {
         "schema_version": "topology-view.v1",
@@ -583,8 +602,16 @@ def build_topology_view_model(
         # P&ID-like compression: equipment units + collapsed lines, for the graph panel.
         "pid_view": build_pid_view(nodes, fact_edges),
         # Drawing-faithful tier-1 scene (ADR 0004/0005); None when the source
-        # carries no geometry (catalogue-free / unpositioned exports).
+        # carries no geometry, or when the geometry sanity gate fails
+        # (bead pydexpi-datalog-1-2ki.5) -- source positions are never
+        # disclosed as drawn once the gate rejects them.
         "schematic_scene": schematic_scene,
+        # "as-drawn" | "auto-layout" | "none" -- the gate's disclosure of
+        # which schematic tier the frontend must present. Kept backend-owned
+        # even though auto-layout position computation itself may run
+        # client-side (ADR 0005).
+        "schematic_scene_kind": schematic_scene_kind,
+        "geometry_report": geometry_report,
         "evidence_highlight": {
             "source_scope_ids": [],
             "matched_object_ids": [],

@@ -42,9 +42,10 @@ test("QA answer evidence chips open the topology panel and highlight structural 
   const chips = page.getByTestId("qa-evidence-chip");
   await expect(chips.first()).toBeVisible();
 
-  // Clicking a chip applies highlights in the Cytoscape P&ID graph. The graph
-  // renders to a canvas, so highlight state is surfaced via a data attribute.
-  const graph = page.getByTestId("cytoscape-pid-graph");
+  // E06 carries no drawable geometry, so it fails the sanity gate and
+  // degrades to the auto-layout schematic (bead pydexpi-datalog-1-2ki.5).
+  // Clicking a chip applies highlights there, surfaced via a data attribute.
+  const graph = page.getByTestId("auto-layout-schematic");
   await expect(graph).toBeVisible();
   await chips.first().click();
   await expect(graph).toHaveAttribute("data-highlight-active", "true", { timeout: 3000 });
@@ -118,9 +119,9 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   await expect(page.getByTestId("direction-reverse")).toBeVisible();
   await expect(page.getByTestId("direction-unknown")).toBeVisible();
 
-  // Clicking the witness chip highlights the structural witness in the Cytoscape
-  // P&ID graph (canvas-backed, so highlight state is exposed as a data attribute).
-  const graph = page.getByTestId("cytoscape-pid-graph");
+  // Clicking the witness chip highlights the structural witness in the
+  // auto-layout schematic (E06 fails the geometry sanity gate).
+  const graph = page.getByTestId("auto-layout-schematic");
   await expect(graph).toBeVisible();
   await page.getByTestId("direction-witness-chip").click();
   await expect(graph).toHaveAttribute("data-highlight-active", "true", { timeout: 3000 });

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { samplePidGraph } from "../components/pid/sample-graph.ts";
 import type {
+  GeometryReport,
   PidGraph,
   PidNode,
   PidNodeKind,
@@ -11,6 +12,7 @@ import type {
   SchematicPolyline,
   SchematicPrimitive,
   SchematicScene,
+  SchematicSceneKind,
   SchematicSymbol,
   SchematicText,
 } from "../components/pid/types.ts";
@@ -108,6 +110,8 @@ export async function prepareReviewSession(
     graph,
     pidView: EMPTY_PID_VIEW,
     schematicScene: null,
+    schematicSceneKind: "none",
+    geometryReport: null,
     sourceScopeIds: [graph.nodes[0]?.id ?? "pump-101"],
   };
 }
@@ -236,6 +240,8 @@ async function prepareWithPythonBackend(
       graph: readTopology(data),
       pidView: readPidView(data),
       schematicScene: readSchematicScene(data),
+      schematicSceneKind: readSchematicSceneKind(data),
+      geometryReport: readGeometryReport(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
     };
   } catch {
@@ -686,6 +692,43 @@ function readSchematicScene(data: Record<string, unknown>): SchematicScene | nul
     polylines: Array.isArray(raw.polylines) ? raw.polylines.map(readSchematicPolyline) : [],
     polygons: Array.isArray(raw.polygons) ? raw.polygons.map(readSchematicPolygon) : [],
     texts: Array.isArray(raw.texts) ? raw.texts.map(readSchematicText) : [],
+  };
+}
+
+function readSchematicSceneKind(data: Record<string, unknown>): SchematicSceneKind {
+  const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
+  const raw = source.schematic_scene_kind ?? data.schematic_scene_kind;
+  if (raw === "as-drawn" || raw === "auto-layout" || raw === "none") return raw;
+  return "none";
+}
+
+function readGeometryReport(data: Record<string, unknown>): GeometryReport | null {
+  const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
+  const raw = (source.geometry_report ?? data.geometry_report) as Record<string, unknown> | null | undefined;
+  if (!raw || typeof raw !== "object") return null;
+  const extent = (raw.extent ?? {}) as Record<string, unknown>;
+  const pipeCoverage = (raw.pipe_coverage ?? {}) as Record<string, unknown>;
+  const unpositioned = (raw.unpositioned_equipment ?? {}) as Record<string, unknown>;
+  return {
+    passed: Boolean(raw.passed),
+    reasons: Array.isArray(raw.reasons) ? raw.reasons.map((r) => String(r)) : [],
+    extent: {
+      passed: Boolean(extent.passed),
+      widthMm: Number(extent.width_mm ?? 0),
+      heightMm: Number(extent.height_mm ?? 0),
+    },
+    pipeCoverage: {
+      passed: Boolean(pipeCoverage.passed),
+      ratio: pipeCoverage.ratio == null ? null : Number(pipeCoverage.ratio),
+      segments: Number(pipeCoverage.segments ?? 0),
+      segmentsWithCenterline: Number(pipeCoverage.segments_with_centerline ?? 0),
+    },
+    unpositionedEquipment: {
+      passed: Boolean(unpositioned.passed),
+      ratio: unpositioned.ratio == null ? null : Number(unpositioned.ratio),
+      total: Number(unpositioned.total ?? 0),
+      missing: Number(unpositioned.missing ?? 0),
+    },
   };
 }
 

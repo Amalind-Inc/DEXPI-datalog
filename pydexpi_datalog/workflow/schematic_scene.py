@@ -55,15 +55,34 @@ def build_schematic_scene(
     plant item, nozzle, or segment to the stable topology id already used by
     the rest of the review workflow (see `build_stable_node_id_map`).
     """
-    root = ET.parse(dexpi_xml_path).getroot()
-    builder = _SceneBuilder(proteus_id_to_topology_id, namespace)
-    scene = builder.build(root)
-    if not _has_drawable_geometry(scene):
+    scene = build_schematic_scene_report(
+        dexpi_xml_path=dexpi_xml_path,
+        proteus_id_to_topology_id=proteus_id_to_topology_id,
+        namespace=namespace,
+    )
+    if not has_drawable_geometry(scene):
         return None
     return scene
 
 
-def _has_drawable_geometry(scene: dict[str, object]) -> bool:
+def build_schematic_scene_report(
+    *,
+    dexpi_xml_path: Path,
+    proteus_id_to_topology_id: dict[str, str],
+    namespace: str,
+) -> dict[str, object]:
+    """Return the raw scene (with its geometry diagnostics report) unfiltered.
+
+    Unlike `build_schematic_scene`, this never returns None -- callers that
+    need the diagnostics report even for sources with no drawable content
+    (the geometry sanity gate, bead pydexpi-datalog-1-2ki.5) use this instead.
+    """
+    root = ET.parse(dexpi_xml_path).getroot()
+    builder = _SceneBuilder(proteus_id_to_topology_id, namespace)
+    return builder.build(root)
+
+
+def has_drawable_geometry(scene: dict[str, object]) -> bool:
     """Distinguish real geometry from pedagogical fixtures with empty stubs.
 
     Some fixtures declare a CenterLine or Shape element with zero coordinates

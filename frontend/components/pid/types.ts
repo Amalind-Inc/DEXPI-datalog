@@ -111,11 +111,32 @@ export type SchematicScene = {
   texts: SchematicText[];
 };
 
+// Which schematic tier the geometry sanity gate disclosed (backend-owned,
+// bead pydexpi-datalog-1-2ki.5): "as-drawn" when the gate passed, "auto-layout"
+// when it failed (source connectivity is real, positions are computed), and
+// "none" when there is no DEXPI geometry source to evaluate at all.
+export type SchematicSceneKind = "as-drawn" | "auto-layout" | "none";
+
+export type GeometryGateMetric = {
+  passed: boolean;
+  ratio?: number | null;
+};
+
+export type GeometryReport = {
+  passed: boolean;
+  reasons: string[];
+  extent: GeometryGateMetric & { widthMm: number; heightMm: number };
+  pipeCoverage: GeometryGateMetric & { segments: number; segmentsWithCenterline: number };
+  unpositionedEquipment: GeometryGateMetric & { total: number; missing: number };
+};
+
 export type PrepareResult = {
   status: "ready" | "failed";
   filename: string;
   graph: PidGraph;
   pidView: PidView;
   schematicScene: SchematicScene | null;
+  schematicSceneKind: SchematicSceneKind;
+  geometryReport: GeometryReport | null;
   sourceScopeIds: string[];
 };

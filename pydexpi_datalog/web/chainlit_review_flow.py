@@ -268,8 +268,11 @@ class ChainlitReviewFlow:
             # Compressed P&ID-like view (equipment units + collapsed lines).
             "pid_view": topology.get("pid_view", {"units": [], "lines": [], "hidden_topology_ids": []}),
             # Drawing-faithful tier-1 scene (ADR 0004/0005); None when the
-            # source carries no geometry.
+            # source carries no geometry, or fails the geometry sanity gate.
             "schematic_scene": topology.get("schematic_scene"),
+            # "as-drawn" | "auto-layout" | "none" (bead pydexpi-datalog-1-2ki.5).
+            "schematic_scene_kind": topology.get("schematic_scene_kind", "none"),
+            "geometry_report": topology.get("geometry_report"),
             "visible_source_scope": self._visible_source_scope(session_id),
             "evidence_highlight": self._evidence_highlight(session_id),
         }
