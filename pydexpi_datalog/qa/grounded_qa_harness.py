@@ -206,10 +206,10 @@ def _looks_like_source_mutation(normalized: str) -> bool:
 
 
 def _looks_like_rule_evaluation(normalized: str) -> bool:
-    rule_tokens = (
-        " all ",
-        " every ",
-        " any ",
+    """Deontic/compliance wording alone marks a rule claim; bare quantifiers
+    do not. "Any valves?" is a lookup, not a rule -- a quantifier only counts
+    when the question also claims a condition over the quantified set."""
+    deontic_tokens = (
         " violation",
         " violates",
         " comply",
@@ -220,11 +220,23 @@ def _looks_like_rule_evaluation(normalized: str) -> bool:
         " shall ",
         " rule",
         " standard",
-        " no ",
-        " none ",
     )
     padded = f" {normalized} "
-    return any(token in padded for token in rule_tokens)
+    if any(token in padded for token in deontic_tokens):
+        return True
+    quantifier_tokens = (" all ", " every ", " any ", " no ", " none ")
+    condition_markers = (
+        " have ",
+        " has ",
+        " satisf",
+        " connect",
+        " reach",
+        " contain",
+        " include",
+    )
+    return any(token in padded for token in quantifier_tokens) and any(
+        marker in padded for marker in condition_markers
+    )
 
 
 def _looks_like_topology_relationship(normalized: str) -> bool:
@@ -333,6 +345,7 @@ class ScriptedQATurnProvider:
         self._candidates: list[str] = []
         self._reachable_ids: list[str] = []
         self._question = ""
+        self._anchor = ""
 
     def complete_with_tools(
         self,
@@ -384,13 +397,25 @@ class ScriptedQATurnProvider:
                     evidence_references=[],
                     interpreted_object_ids=[],
                 )
+            self._anchor = self._candidates[0]
+            if _looks_like_rule_evaluation(self._question.lower()):
+                # Rule-like questions cannot be answered from sampled
+                # retrieval; sample reachability once, then escalate to the
+                # confirmation-gated temporary Datalog capability instead of
+                # dead-ending (37x.22.34.2). Prefer a piping/structural
+                # anchor: equipment nodes are frequently isolated in the
+                # structural view, and an empty sample demos nothing.
+                self._mode = "rule_evaluation"
+                self._anchor = self._rule_evaluation_anchor(matches)
             return ToolCall(
                 tool_name="get_reachable_equipment",
-                tool_input={"equipment_id": self._candidates[0]},
+                tool_input={"equipment_id": self._anchor},
                 tool_call_id="scripted-reachable",
             )
 
         self._reachable_ids = self._read_reachable(messages)
+        if self._mode == "rule_evaluation":
+            return self._propose_temporary_datalog()
         references = self._candidates + self._reachable_ids[:2]
         if len(self._candidates) > 1:
             answer_text = (
@@ -422,6 +447,65 @@ class ScriptedQATurnProvider:
             if filtered:
                 matches = filtered
         return [str(match["evidence_id"]) for match in matches[: self._max_candidates]]
+
+    def _rule_evaluation_anchor(self, matches: list[dict[str, object]]) -> str:
+        """Pick the reachability anchor for a rule-evaluation proposal.
+
+        Prefer piping/structural objects: equipment nodes are frequently
+        isolated in the structural view, so anchoring there samples nothing.
+        """
+        for match in matches:
+            described = (
+                f"{match.get('node_class', '')} {match.get('label', '')}".lower()
+            )
+            if "pip" in described or "segment" in described or "line" in described:
+                return str(match["evidence_id"])
+        return self._candidates[0]
+
+    def _propose_temporary_datalog(self) -> ToolCall:
+        """Escalate a rule-like question to the confirmation-gated capability.
+
+        The restatement states exactly what the temporary query computes --
+        nothing more. If the sampled anchor has reachable objects, propose the
+        reachability query; otherwise fall back to the resolved objects
+        themselves as literal facts.
+        """
+        if self._reachable_ids:
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": self._question,
+                    "generated_datalog": (
+                        ".decl answer(x:symbol)\n"
+                        ".output answer\n"
+                        f'answer(x) :- reachable("{self._anchor}", x).'
+                    ),
+                    "formal_restatement": (
+                        "Return every object structurally reachable from "
+                        f"{self._anchor} as the temporary check result."
+                    ),
+                    "resolved_identity_ids": [self._anchor],
+                },
+                tool_call_id="scripted-propose-datalog",
+            )
+        facts = "\n".join(f'answer("{cid}").' for cid in self._candidates)
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": self._question,
+                "generated_datalog": (
+                    ".decl answer(x:symbol)\n.output answer\n" + facts
+                ),
+                "formal_restatement": (
+                    "Return the resolved objects "
+                    f"{self._describe(self._candidates)} as the temporary "
+                    "check result; no further objects were structurally "
+                    "reachable from the sampled anchor."
+                ),
+                "resolved_identity_ids": list(self._candidates),
+            },
+            tool_call_id="scripted-propose-datalog",
+        )
 
     @staticmethod
     def _read_matches(messages: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -598,6 +682,26 @@ def run_grounded_qa_turn(
                     "tool_result": tool_result,
                 }
             )
+
+            if (
+                response.tool_name == "propose_temporary_datalog"
+                and _tool_result_status(tool_result) == "confirmation_required"
+            ):
+                # The proposal ends the turn deterministically (37x.22.34.2):
+                # execution consent belongs to the user, so the model never
+                # authors a final answer on top of an unconfirmed proposal.
+                # The caller detects the proposal in the trace and pauses the
+                # turn with needs_datalog_confirmation.
+                return _finalize(
+                    FinalAnswer(
+                        answer_text=(
+                            "A temporary Datalog query was proposed and is "
+                            "awaiting your confirmation before it can run."
+                        ),
+                    ),
+                    known_ids,
+                    tool_call_trace,
+                )
 
             messages.append(
                 {

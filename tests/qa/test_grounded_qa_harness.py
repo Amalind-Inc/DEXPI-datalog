@@ -222,10 +222,83 @@ def test_universal_claim_from_sampled_path_escalates_to_confirmed_logic():
         provider=SampledPathThenDatalogProvider(),
     )
 
-    assert result.answer_text == "This needs confirmed generated logic."
+    # The proposal itself ends the turn: the model never authors the final
+    # answer after a confirmation_required tool result (37x.22.34.2).
+    assert "confirmation" in result.answer_text.lower()
     tool_names = [trace["tool_name"] for trace in result.tool_call_trace]
     assert "__evidence_sufficiency__" in tool_names
     assert "propose_temporary_datalog" in tool_names
+
+
+class AnswerAfterProposalProvider:
+    """Would author its own final answer after proposing; must never get to."""
+
+    def __init__(self) -> None:
+        self.calls_after_proposal = 0
+        self._proposed = False
+
+    def complete_with_tools(self, *, messages, tools):
+        if not self._proposed:
+            self._proposed = True
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every segment reach a valve?",
+                    "generated_datalog": (
+                        '.decl answer(x:symbol)\n.output answer\n'
+                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    ),
+                    "formal_restatement": "Return objects reachable from segment S-1.",
+                    "resolved_identity_ids": [SEGMENT_ID],
+                },
+                tool_call_id="proposal-shortcircuit",
+            )
+        self.calls_after_proposal += 1
+        return FinalAnswer(answer_text="Model-authored answer that must not appear.")
+
+
+def test_confirmation_required_proposal_short_circuits_before_model_answer():
+    """A confirmation_required tool result pauses the turn deterministically:
+    the provider is never consulted again and cannot author the final answer."""
+    provider = AnswerAfterProposalProvider()
+    result = run_grounded_qa_turn(
+        question="Must every segment reach a valve?",
+        topology_tools=make_tools(),
+        provider=provider,
+    )
+
+    assert provider.calls_after_proposal == 0
+    assert "Model-authored answer" not in result.answer_text
+    proposal_traces = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposal_traces) == 1
+    assert proposal_traces[0]["tool_result"]["status"] == "confirmation_required"
+
+
+def test_scripted_provider_escalates_rule_evaluation_to_datalog_proposal():
+    """The OSS default provider reaches the confirmation gate for rule-like
+    questions instead of dead-ending in a retrieval-only answer."""
+    result = run_grounded_qa_turn(
+        question="Must every connected object satisfy the temporary topology rule?",
+        topology_tools=make_tools(),
+        provider=ScriptedQATurnProvider(),
+    )
+
+    proposal_traces = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposal_traces) == 1
+    tool_result = proposal_traces[0]["tool_result"]
+    assert tool_result["status"] == "confirmation_required"
+    proposal = tool_result["proposal"]
+    assert proposal["generated_datalog"]
+    assert proposal["formal_restatement"]
+    assert tool_result["validation"]["status"] == "safe_to_confirm"
 
 
 def test_conversational_answer_does_not_require_evidence():
