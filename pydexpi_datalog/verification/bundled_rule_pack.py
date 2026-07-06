@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from .verify_suite import evaluate_graph_fixture
+from .souffle_rule_pack import evaluate_pump_discharge_rule, load_rule_datalog
 
 
 _DEMO_PACK: dict[str, object] = {
@@ -19,6 +19,22 @@ _DEMO_PACK: dict[str, object] = {
             "rule_id": "pump_discharge_check_valve",
             "title": "Pump discharge check valve",
             "outcomes": ["satisfied", "violated", "indeterminate"],
+            "restatement": {
+                "kind": "engineer_readable_rule_restatement",
+                "plain_language_meaning": (
+                    "If a pump has a discharge nozzle, then a check valve must "
+                    "be reachable downstream on that discharge path before the "
+                    "scope boundary is reached."
+                ),
+            },
+            "executable_logic": {
+                "kind": "collapsed_executable_logic",
+                "language": "souffle_datalog",
+                "content": load_rule_datalog(),
+                "inspectable": True,
+                "editable": False,
+                "disclosure": "collapsed",
+            },
         }
     ],
 }
@@ -27,6 +43,11 @@ _DEMO_PACK: dict[str, object] = {
 def bundled_rule_packs() -> list[dict[str, object]]:
     """Return provider-independent metadata for repository-bundled rule packs."""
     return [deepcopy(_DEMO_PACK)]
+
+
+def pack_metadata(pack_id: str) -> dict[str, object]:
+    """Return metadata for a single bundled rule pack by id."""
+    return _pack(pack_id)
 
 
 def evaluate_bundled_rule(
@@ -41,7 +62,7 @@ def evaluate_bundled_rule(
     if rule_id not in {str(rule["rule_id"]) for rule in pack["rules"]}:
         raise ValueError(f"unknown bundled rule: {pack_id}/{rule_id}")
 
-    legacy = evaluate_graph_fixture(graph_facts, rule_id=rule_id)
+    legacy = evaluate_pump_discharge_rule(graph_facts, rule_id=rule_id)
     outcome = {
         "pass": "satisfied",
         "hard_violation": "violated",
