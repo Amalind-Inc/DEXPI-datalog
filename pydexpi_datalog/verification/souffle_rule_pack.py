@@ -8,6 +8,10 @@ from .verify_suite import build_evaluation_diagnostic
 
 
 RULE_DATALOG_PATH = Path(__file__).resolve().parent / "datalog" / "pump_discharge_check_valve.dl"
+DIAMETER_RULE_DATALOG_PATH = (
+    Path(__file__).resolve().parent / "datalog" / "discharge_line_min_diameter.dl"
+)
+DIAMETER_RULE_MIN_DN = 25
 
 _MESSAGES = {
     "matched_required_component": (
@@ -33,6 +37,151 @@ _RESULT_TYPES = {
 def load_rule_datalog() -> str:
     """Return the executed Souffle rule program text (inspectable logic)."""
     return RULE_DATALOG_PATH.read_text(encoding="utf-8")
+
+
+def load_diameter_rule_datalog() -> str:
+    """Return the executed diameter-rule Souffle program text (inspectable logic)."""
+    return DIAMETER_RULE_DATALOG_PATH.read_text(encoding="utf-8")
+
+
+def evaluate_discharge_line_min_diameter_rule(
+    graph_facts: dict[str, object], *, rule_id: str
+) -> dict[str, object]:
+    """Evaluate the numeric-threshold diameter rule as a real Souffle program.
+
+    Compares the source-provided nominal diameter on the pump's discharge
+    line (segment or its composing piping system) against a fixed DN
+    threshold via the typed ``node_numeric_attribute`` predicate. A missing
+    numeric diameter is an explicit ``source_data_unavailable`` outcome,
+    never an invented value.
+    """
+    if rule_id != "discharge_line_min_diameter":
+        raise ValueError(f"unsupported souffle rule: {rule_id}")
+
+    nodes = {node["node_id"]: node for node in graph_facts["facts"]["nodes"]}
+    pump = next(
+        node
+        for node in graph_facts["facts"]["nodes"]
+        if node["attributes"].get("label") == "CentrifugalPump"
+    )
+    pump_id = pump["node_id"]
+    semantic_evidence = {
+        "numeric_predicate": "node_numeric_attribute",
+        "engine": "souffle",
+    }
+
+    program = (
+        build_graph_facts_datalog(graph_facts)
+        + "\n"
+        + load_graph_topology_idb()
+        + "\n"
+        + load_diameter_rule_datalog()
+    )
+    relations = run_souffle_program(program)
+
+    unresolved = {row[0] for row in relations.get("rule_unresolved", [])}
+    segments = [
+        row[1] for row in relations.get("discharge_segment", []) if row[0] == pump_id
+    ]
+    if pump_id in unresolved or not segments:
+        return build_evaluation_diagnostic(
+            pump_id=pump_id, rule_id=rule_id, semantic_evidence=semantic_evidence
+        )
+
+    nozzle_rows = [
+        row[1] for row in relations.get("discharge_nozzle", []) if row[0] == pump_id
+    ]
+    subject = {
+        "pump_id": pump_id,
+        "discharge_nozzle_id": nozzle_rows[0] if nozzle_rows else "unknown",
+    }
+
+    def _readings(relation: str) -> list[dict[str, object]]:
+        return sorted(
+            (
+                {
+                    "object_id": object_id,
+                    "class": nodes[object_id]["attributes"]["label"],
+                    "nominal_diameter_dn": int(dn),
+                }
+                for rule_pump, object_id, dn in relations.get(relation, [])
+                if rule_pump == pump_id
+            ),
+            key=lambda item: str(item["object_id"]),
+        )
+
+    violated = _readings("diameter_violated")
+    satisfied = _readings("diameter_satisfied")
+    unavailable = pump_id in {
+        row[0] for row in relations.get("diameter_unavailable", [])
+    }
+
+    evidence: dict[str, object] = {
+        "derived_graph_semantics": semantic_evidence,
+        "threshold": {
+            "attr_name": "nominalDiameterNumericalValueRepresentation",
+            "min_diameter_dn": DIAMETER_RULE_MIN_DN,
+        },
+        "diameter_readings": violated + satisfied,
+        "matched_objects": violated or satisfied,
+        "scope_completeness": {
+            "complete": not unavailable,
+            "basis": (
+                "source_data_unavailable"
+                if unavailable
+                else "numeric_attribute_read"
+            ),
+            "boundary_kind": "numeric_attribute",
+        },
+    }
+
+    if violated:
+        worst = min(int(item["nominal_diameter_dn"]) for item in violated)
+        return {
+            "schema_version": 1,
+            "result_type": "hard_violation",
+            "rule_id": rule_id,
+            "message": (
+                f"The discharge line declares nominal diameter DN {worst}, below "
+                f"the required minimum DN {DIAMETER_RULE_MIN_DN}."
+            ),
+            "subject": subject,
+            "evidence": evidence,
+        }
+    if satisfied:
+        best = max(int(item["nominal_diameter_dn"]) for item in satisfied)
+        return {
+            "schema_version": 1,
+            "result_type": "pass",
+            "rule_id": rule_id,
+            "message": (
+                f"The discharge line declares nominal diameter DN {best}, meeting "
+                f"the required minimum DN {DIAMETER_RULE_MIN_DN}."
+            ),
+            "subject": subject,
+            "evidence": evidence,
+        }
+
+    evidence["limitation"] = {
+        "code": "source_data_unavailable",
+        "message": (
+            "No source-provided numeric nominal diameter exists on the "
+            "discharge line; the source does not carry the data this "
+            "threshold needs."
+        ),
+    }
+    return {
+        "schema_version": 1,
+        "result_type": "source_data_unavailable",
+        "rule_id": rule_id,
+        "message": (
+            "The discharge line carries no source-provided numeric nominal "
+            f"diameter, so the DN {DIAMETER_RULE_MIN_DN} minimum cannot be "
+            "evaluated from the loaded source."
+        ),
+        "subject": subject,
+        "evidence": evidence,
+    }
 
 
 def evaluate_pump_discharge_rule(

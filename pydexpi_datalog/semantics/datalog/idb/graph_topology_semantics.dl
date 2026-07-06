@@ -10,6 +10,7 @@
 .decl downstream_reference(source:symbol, target:symbol)
 .decl direct_process_connection(source:symbol, target:symbol)
 .decl reachable(source:symbol, target:symbol)
+.decl node_numeric_attribute(id:symbol, attr_name:symbol, value:number)
 
 topology_attr_name("connections").
 topology_attr_name("connectorReference").
@@ -26,6 +27,15 @@ topology_attr_name("targetNode").
 node_label(id, label) :- node_attribute(id, "label", label).
 node_tag(id, tag) :- node_attribute(id, "tagName", tag).
 node_proteus_id(id, proteus_id) :- node_attribute(id, "proteusId", proteus_id).
+
+// Typed numeric view of source-provided attribute values. Only whole-number
+// representations cast; non-numeric or fractional strings simply produce no
+// fact (they remain available as symbols via node_attribute), so a rule that
+// needs a number can distinguish "value present" from "no numeric value in
+// the source" instead of inventing one.
+node_numeric_attribute(id, attr_name, to_number(attr_value)) :-
+    node_attribute(id, attr_name, attr_value),
+    match("-?[0-9]+", attr_value).
 
 composition_edge(source, target, attr_name) :-
     graph_edge_attribute(source, target, edge_key, "label", "composition"),

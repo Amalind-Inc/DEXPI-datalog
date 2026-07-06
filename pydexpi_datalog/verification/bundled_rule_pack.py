@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from .souffle_rule_pack import evaluate_pump_discharge_rule, load_rule_datalog
+from .souffle_rule_pack import (
+    DIAMETER_RULE_MIN_DN,
+    evaluate_discharge_line_min_diameter_rule,
+    evaluate_pump_discharge_rule,
+    load_diameter_rule_datalog,
+    load_rule_datalog,
+)
 
 
 _DEMO_PACK: dict[str, object] = {
@@ -35,7 +41,31 @@ _DEMO_PACK: dict[str, object] = {
                 "editable": False,
                 "disclosure": "collapsed",
             },
-        }
+        },
+        {
+            "rule_id": "discharge_line_min_diameter",
+            "title": "Discharge line minimum nominal diameter",
+            "outcomes": ["satisfied", "violated", "indeterminate"],
+            "restatement": {
+                "kind": "engineer_readable_rule_restatement",
+                "plain_language_meaning": (
+                    "The piping line on a pump's discharge side must declare a "
+                    f"nominal diameter of at least DN {DIAMETER_RULE_MIN_DN} in "
+                    "the loaded source. The check compares only source-provided "
+                    "values; if the source carries no numeric diameter for the "
+                    "line, the outcome is indeterminate (source data "
+                    "unavailable), never an assumed value."
+                ),
+            },
+            "executable_logic": {
+                "kind": "collapsed_executable_logic",
+                "language": "souffle_datalog",
+                "content": load_diameter_rule_datalog(),
+                "inspectable": True,
+                "editable": False,
+                "disclosure": "collapsed",
+            },
+        },
     ],
 }
 
@@ -62,28 +92,34 @@ def evaluate_bundled_rule(
     if rule_id not in {str(rule["rule_id"]) for rule in pack["rules"]}:
         raise ValueError(f"unknown bundled rule: {pack_id}/{rule_id}")
 
-    legacy = evaluate_pump_discharge_rule(graph_facts, rule_id=rule_id)
+    evaluator = {
+        "pump_discharge_check_valve": evaluate_pump_discharge_rule,
+        "discharge_line_min_diameter": evaluate_discharge_line_min_diameter_rule,
+    }[rule_id]
+    legacy = evaluator(graph_facts, rule_id=rule_id)
     outcome = {
         "pass": "satisfied",
         "hard_violation": "violated",
         "bounded_failure_off_page": "indeterminate",
         "evaluation_diagnostic": "indeterminate",
+        "source_data_unavailable": "indeterminate",
     }.get(str(legacy["result_type"]), "indeterminate")
     evidence = deepcopy(legacy["evidence"])
-    boundary = evidence.get("boundary", {})
-    boundary_kind = str(boundary.get("kind", "unknown"))
-    complete = boundary_kind in {"matched_required_component", "terminal_object"}
-    evidence["scope_completeness"] = {
-        "complete": complete,
-        "basis": (
-            "terminal_boundary_reached"
-            if boundary_kind == "terminal_object"
-            else "required_component_matched"
-            if boundary_kind == "matched_required_component"
-            else "evaluation_boundary_incomplete"
-        ),
-        "boundary_kind": boundary_kind,
-    }
+    if "scope_completeness" not in evidence:
+        boundary = evidence.get("boundary", {})
+        boundary_kind = str(boundary.get("kind", "unknown"))
+        complete = boundary_kind in {"matched_required_component", "terminal_object"}
+        evidence["scope_completeness"] = {
+            "complete": complete,
+            "basis": (
+                "terminal_boundary_reached"
+                if boundary_kind == "terminal_object"
+                else "required_component_matched"
+                if boundary_kind == "matched_required_component"
+                else "evaluation_boundary_incomplete"
+            ),
+            "boundary_kind": boundary_kind,
+        }
 
     formal_direction_allowed = direction_basis == "explicit" or (
         direction_basis == "inferred"

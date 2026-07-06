@@ -1,0 +1,94 @@
+// Rule pack: demo-process-safety / discharge_line_min_diameter
+//
+// Numeric-threshold demonstration rule over the shared EDB
+// (graph_facts_schema.dl facts) and IDB (graph_topology_semantics.dl,
+// including the typed node_numeric_attribute predicate).
+//
+// The pump's discharge line -- the piping segment referencing the pump's
+// discharge nozzle as sourceItem, or the PipingNetworkSystem composing that
+// segment -- must declare a source-provided nominal diameter of at least
+// min_diameter_dn. The threshold compares values already present in the
+// DEXPI source; nothing is computed from external formulas or constants.
+//   diameter >= threshold -> diameter_satisfied
+//   diameter <  threshold -> diameter_violated
+//   segment resolved, no numeric diameter anywhere on the line
+//                         -> diameter_unavailable (source data unavailable)
+// An ambiguous discharge nozzle yields rule_unresolved, as in the
+// pump_discharge_check_valve rule.
+
+.decl min_diameter_dn(n:number)
+min_diameter_dn(25).
+
+.decl diameter_attr_name(attr_name:symbol)
+diameter_attr_name("nominalDiameterNumericalValueRepresentation").
+
+.decl pump(id:symbol)
+pump(id) :- node_label(id, "CentrifugalPump").
+
+.decl pump_nozzle(pump:symbol, nozzle:symbol)
+pump_nozzle(pump, nozzle) :- pump(pump), composition_edge(pump, nozzle, "nozzles").
+
+.decl discharge_candidate(pump:symbol, nozzle:symbol)
+discharge_candidate(pump, nozzle) :-
+    pump_nozzle(pump, nozzle),
+    reference_edge(_, nozzle, "sourceItem").
+
+.decl discharge_candidate_count(pump:symbol, n:number)
+discharge_candidate_count(pump, n) :-
+    pump(pump),
+    n = count : { discharge_candidate(pump, _) }.
+
+.decl discharge_nozzle(pump:symbol, nozzle:symbol)
+discharge_nozzle(pump, nozzle) :-
+    discharge_candidate(pump, nozzle),
+    discharge_candidate_count(pump, 1).
+
+// The discharge line: the segment referencing the discharge nozzle as its
+// sourceItem, plus the piping system that composes that segment.
+.decl discharge_segment(pump:symbol, segment:symbol)
+discharge_segment(pump, segment) :-
+    discharge_nozzle(pump, nozzle),
+    reference_edge(segment, nozzle, "sourceItem").
+
+.decl discharge_line_object(pump:symbol, object:symbol)
+discharge_line_object(pump, segment) :- discharge_segment(pump, segment).
+discharge_line_object(pump, system) :-
+    discharge_segment(pump, segment),
+    composition_edge(system, segment, "segments").
+
+// Source-provided nominal diameter on any object of the discharge line.
+.decl discharge_line_diameter(pump:symbol, object:symbol, dn:number)
+discharge_line_diameter(pump, object, dn) :-
+    discharge_line_object(pump, object),
+    diameter_attr_name(attr),
+    node_numeric_attribute(object, attr, dn).
+
+.decl diameter_satisfied(pump:symbol, object:symbol, dn:number)
+diameter_satisfied(pump, object, dn) :-
+    discharge_line_diameter(pump, object, dn),
+    min_diameter_dn(threshold),
+    dn >= threshold.
+
+.decl diameter_violated(pump:symbol, object:symbol, dn:number)
+diameter_violated(pump, object, dn) :-
+    discharge_line_diameter(pump, object, dn),
+    min_diameter_dn(threshold),
+    dn < threshold.
+
+// The discharge line resolved, but no object on it carries a numeric
+// nominal diameter: the source does not provide the data.
+.decl diameter_unavailable(pump:symbol)
+diameter_unavailable(pump) :-
+    discharge_segment(pump, _),
+    !discharge_line_diameter(pump, _, _).
+
+.decl rule_unresolved(pump:symbol)
+rule_unresolved(pump) :- pump(pump), discharge_candidate_count(pump, n), n != 1.
+
+.output discharge_nozzle
+.output discharge_segment
+.output discharge_line_diameter
+.output diameter_satisfied
+.output diameter_violated
+.output diameter_unavailable
+.output rule_unresolved

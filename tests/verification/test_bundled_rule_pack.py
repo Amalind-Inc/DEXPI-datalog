@@ -29,8 +29,12 @@ def test_bundled_pack_declares_non_authoritative_rule_contract() -> None:
     assert demo["authoritative"] is False
     assert "not" in str(demo["trust_notice"]).lower()
     assert [rule["rule_id"] for rule in demo["rules"]] == [
-        "pump_discharge_check_valve"
+        "pump_discharge_check_valve",
+        "discharge_line_min_diameter",
     ]
+    rule = demo["rules"][0]
+    assert rule["restatement"]["plain_language_meaning"]
+    assert rule["executable_logic"]["inspectable"] is True
 
 
 def test_pump_rule_satisfied_outcome_has_complete_witness() -> None:
