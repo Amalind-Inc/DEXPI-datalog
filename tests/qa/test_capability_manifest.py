@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydexpi_datalog.qa.capability_manifest import (
+    GROUNDING_DISCLOSURE_POLICY,
     PERMISSION_ALLOWED_READ_ONLY,
     PERMISSION_CONFIRMATION_REQUIRED,
     default_grounded_qa_manifest,
@@ -124,3 +125,20 @@ def test_topology_tools_expose_manifest_system_prompt() -> None:
     tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
 
     assert tools.system_prompt() == default_grounded_qa_manifest().system_prompt()
+
+
+def test_out_of_scope_policy_permits_acknowledgment_before_redirect() -> None:
+    """37x.22.34.3: the out_of_scope posture must explicitly allow a brief,
+    honest acknowledgment of an off-topic question before redirecting, rather
+    than implying a bare non-answer -- while remaining model-owned prompt
+    text, not a backend classifier."""
+    policy = GROUNDING_DISCLOSURE_POLICY
+    out_of_scope_clause = policy.split("- out_of_scope:")[1].split("\n")[0]
+
+    assert "acknowledgment" in out_of_scope_clause
+    assert "brief" in out_of_scope_clause
+    assert "redirect" in out_of_scope_clause.lower()
+    # Acknowledge *then* redirect: the redirect follows the acknowledgment.
+    assert out_of_scope_clause.index("acknowledgment") < out_of_scope_clause.lower().index(
+        "then redirect"
+    )

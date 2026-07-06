@@ -104,8 +104,11 @@ GROUNDING_DISCLOSURE_POLICY = "\n".join(
         "that it is not derived from the loaded source.",
         "- source_data_unavailable: a source-specific calculation whose operating "
         "inputs are absent. Say what data is missing; never invent values.",
-        "- out_of_scope: a question unrelated to P&ID source review. Redirect the "
-        "user conversationally back to their loaded source.",
+        "- out_of_scope: a question unrelated to P&ID source review. You may "
+        "first give a brief, honest acknowledgment of the question (one or two "
+        "sentences -- e.g. name the model you are, or answer a trivial general "
+        "question directly); never pretend you cannot understand it. Then "
+        "redirect the user conversationally back to their loaded source.",
         "Never present model knowledge as if it were a conclusion read from the "
         "loaded source.",
     ]
