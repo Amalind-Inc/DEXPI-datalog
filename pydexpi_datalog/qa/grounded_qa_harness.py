@@ -466,29 +466,29 @@ class ScriptedQATurnProvider:
         """Escalate a rule-like question to the confirmation-gated capability.
 
         The restatement states exactly what the temporary query computes --
-        nothing more. If the sampled anchor has reachable objects, propose the
-        reachability query; otherwise fall back to the resolved objects
-        themselves as literal facts.
+        nothing more. If the sampled source has reachable objects, propose a
+        generic-schema join over direct process connections; otherwise fall
+        back to the resolved objects themselves as literal facts.
         """
         if self._reachable_ids:
             return ToolCall(
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": self._question,
-                    # Deliberately not the historical `answer(x) :- ...` text
-                    # shape: the executor is a real Souffle engine
-                    # (37x.22.34.4), not a regex over two blessed spellings,
-                    # so the OSS default provider exercises that for real.
+                    # Deliberately beyond the historical reachable-only shim:
+                    # the executor is a real Souffle engine over the generic
+                    # schema, so the OSS default provider exercises an IDB join
+                    # that the old regex path could never evaluate.
                     "generated_datalog": (
                         ".decl answer(x:symbol)\n"
                         ".output answer\n"
-                        f'answer(result) :- reachable("{self._anchor}", result).'
+                        "answer(result) :- direct_process_connection(_, result)."
                     ),
                     "formal_restatement": (
-                        "Return every object structurally reachable from "
-                        f"{self._anchor} as the temporary check result."
+                        "Return every object that appears as a direct process-"
+                        "connection target in the loaded source."
                     ),
-                    "resolved_identity_ids": [self._anchor],
+                    "resolved_identity_ids": [],
                 },
                 tool_call_id="scripted-propose-datalog",
             )

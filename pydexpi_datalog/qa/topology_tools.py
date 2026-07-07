@@ -12,12 +12,17 @@ from pydexpi_datalog.qa.capability_manifest import (
     default_grounded_qa_manifest,
 )
 
-from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
+from pydexpi_datalog.semantics.derive_graph_semantics import (
+    TOPOLOGY_ATTR_NAMES,
+    build_graph_facts_datalog,
+    load_graph_topology_idb,
+)
 from pydexpi_datalog.semantics.souffle_runner import (
     SouffleExecutionError,
     run_souffle_program,
 )
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
+from pydexpi_datalog.verification.bundled_rule_pack import pack_metadata
 
 
 # Reviewer-facing consent context for temporary Datalog proposals. The effect
@@ -68,6 +73,7 @@ class TopologyTools:
         session_id: str,
         graph_facts: dict[str, object] | None = None,
         retrieval_budgets: RetrievalBudgets | None = None,
+        loaded_rule_pack_ids: list[str] | tuple[str, ...] | set[str] | None = None,
     ) -> None:
         self._topology = topology_view
         self._session_id = session_id
@@ -79,9 +85,14 @@ class TopologyTools:
         self._evidence_map: dict[str, object] = dict(
             topology_view.get("evidence_map", {})
         )  # type: ignore[arg-type]
-        self._capability_manifest = default_grounded_qa_manifest()
         self._uses_topology_adapter = graph_facts is None
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
+        self._loaded_rule_pack_ids = tuple(
+            sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
+        )
+        self._capability_manifest = default_grounded_qa_manifest(
+            temporary_datalog_contract=self._temporary_datalog_contract_description()
+        )
         self._interpretation = TopologyInterpretation(
             graph_facts=self._graph_facts,
             topology_view=self._topology_with_source_graph_ids(),
@@ -288,7 +299,7 @@ class TopologyTools:
             predicate_names.extend(
                 re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", candidate)
             )
-        approved_predicates = {"answer", "reachable"}
+        approved_predicates = self._temporary_datalog_approved_predicates()
         unapproved_predicates = sorted(
             {
                 predicate
@@ -363,13 +374,69 @@ class TopologyTools:
             "limits": {"timeout_seconds": 2, "row_limit": 100, "size_limit": 4000},
         }
 
+    def _temporary_datalog_approved_predicates(self) -> set[str]:
+        return {"answer"} | self._temporary_datalog_schema_predicates()
+
+    def _temporary_datalog_schema_predicates(self) -> set[str]:
+        schema_text = (
+            build_graph_facts_datalog(self._graph_facts)
+            + "\n"
+            + load_graph_topology_idb()
+            + "\n"
+            + "\n".join(self._loaded_rule_pack_programs())
+        )
+        return self._declared_predicates(schema_text)
+
+    def _temporary_datalog_contract_description(self) -> str:
+        predicates = sorted(self._temporary_datalog_schema_predicates())
+        predicate_list = ", ".join(f"`{predicate}`" for predicate in predicates)
+        return (
+            "declare `.decl answer(x:symbol)` and output exactly `.output answer`; "
+            "rules and facts may define ONLY `answer` and may read only these "
+            f"engine-supplied predicates: {predicate_list}. Do not redeclare or "
+            "define engine-supplied predicates. "
+            "`reachable(source, target)` is the schema's topology reachability relation."
+        )
+
+    def _loaded_rule_pack_programs(self) -> list[str]:
+        programs: list[str] = []
+        for pack_id in self._loaded_rule_pack_ids:
+            pack = pack_metadata(pack_id)
+            for rule in pack["rules"]:
+                executable_logic = rule.get("executable_logic", {})
+                content = (
+                    executable_logic.get("content")
+                    if isinstance(executable_logic, dict)
+                    else None
+                )
+                if isinstance(content, str):
+                    programs.append(self._strip_souffle_outputs(content))
+        return programs
+
+    @staticmethod
+    def _declared_predicates(program_text: str) -> set[str]:
+        return {
+            match.group(1)
+            for match in re.finditer(
+                r"(?m)^\s*\.decl\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                program_text,
+            )
+        }
+
+    @staticmethod
+    def _strip_souffle_outputs(program_text: str) -> str:
+        return "\n".join(
+            line
+            for line in program_text.splitlines()
+            if not line.strip().startswith(".output")
+        )
+
     def _temporary_datalog_answer_ids(self, generated_datalog: str) -> list[str]:
         """Execute a validated temporary Datalog program on real Souffle.
 
-        The program runs against a materialized `reachable(src, dst)` relation
-        derived from the same undirected topology traversal the read-only
-        tools use (max 6 hops, per-source result limit preserved from the
-        previous executor). Raises SouffleExecutionError on any engine
+        The program runs against the same graph facts and topology-semantics
+        schema used by rule packs, plus read-only IDB predicates from the
+        currently loaded rule packs. Raises SouffleExecutionError on any engine
         failure so callers surface an explicit error instead of a silent
         empty result.
         """
@@ -385,30 +452,30 @@ class TopologyTools:
         return matched_ids
 
     def _temporary_datalog_program(self, generated_datalog: str) -> str:
-        prelude: list[str] = []
-        if ".decl reachable(" not in generated_datalog:
-            prelude.append(".decl reachable(src:symbol, dst:symbol)")
-        for source_id, target_id in self._reachable_fact_pairs():
-            prelude.append(
-                "reachable("
-                f'"{self._souffle_symbol(source_id)}", '
-                f'"{self._souffle_symbol(target_id)}").'
+        return self._deduplicate_souffle_declarations(
+            "\n".join(
+                [
+                    build_graph_facts_datalog(self._graph_facts),
+                    load_graph_topology_idb(),
+                    *self._loaded_rule_pack_programs(),
+                    generated_datalog,
+                ]
             )
-        return "\n".join(prelude + [generated_datalog])
-
-    def _reachable_fact_pairs(self) -> list[tuple[str, str]]:
-        pairs: list[tuple[str, str]] = []
-        for source_id in sorted(self._interpretation.known_topology_ids()):
-            result = self._interpretation.reachable_from(source_id, max_hops=6)
-            if result.error is not None:
-                continue
-            for reachable in result.reachable:
-                pairs.append((source_id, reachable.topology_id))
-        return pairs
+        )
 
     @staticmethod
-    def _souffle_symbol(value: str) -> str:
-        return value.replace("\\", "\\\\").replace('"', '\\"')
+    def _deduplicate_souffle_declarations(program_text: str) -> str:
+        seen: set[str] = set()
+        lines: list[str] = []
+        for line in program_text.splitlines():
+            match = re.match(r"\s*\.decl\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", line)
+            if match:
+                predicate = match.group(1)
+                if predicate in seen:
+                    continue
+                seen.add(predicate)
+            lines.append(line)
+        return "\n".join(lines) + "\n"
 
     def execute_confirmed_temporary_datalog(
         self, proposal_result: dict[str, object]
@@ -485,15 +552,16 @@ class TopologyTools:
                 "confirmation": confirmation,
                 "diagnostics": [diagnostic],
             }
+        evidence_ids = self._temporary_answer_evidence_ids(matched_ids)
         evidence_items = [
             {
-                "id": topology_id,
-                "label": self._node_label(topology_id),
+                "id": evidence_id,
+                "label": self._node_label(evidence_id),
                 "source": "temporary_datalog",
-                "topology_evidence": self._evidence_map[topology_id],
+                "topology_evidence": self._evidence_map[evidence_id],
             }
-            for topology_id in matched_ids
-            if topology_id in self._evidence_map
+            for evidence_id in evidence_ids
+            if evidence_id in self._evidence_map
         ]
         return {
             "status": "answered",
@@ -508,6 +576,22 @@ class TopologyTools:
             },
             "diagnostics": [],
         }
+
+    def _temporary_answer_evidence_ids(self, answer_ids: list[str]) -> list[str]:
+        evidence_ids: list[str] = []
+        for answer_id in answer_ids:
+            evidence_id = self._evidence_id_for_temporary_answer(answer_id)
+            if evidence_id is not None and evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+        return evidence_ids
+
+    def _evidence_id_for_temporary_answer(self, answer_id: str) -> str | None:
+        if answer_id in self._evidence_map:
+            return answer_id
+        for node in self._nodes:
+            if str(node.get("source_graph_node_id") or "") == answer_id:
+                return str(node.get("id"))
+        return None
 
     def known_evidence_ids(self) -> set[str]:
         return set(self._evidence_map.keys())

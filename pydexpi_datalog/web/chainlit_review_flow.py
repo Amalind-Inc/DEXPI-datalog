@@ -165,6 +165,7 @@ class ChainlitReviewFlow:
         self._provider_settings_by_session: dict[str, dict[str, object]] = {}
         self._credentials_by_session: dict[str, str] = {}
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
+        self._loaded_rule_packs_by_session: dict[str, set[str]] = {}
         self._missing_capabilities_by_session: dict[str, list[dict[str, object]]] = {}
         self._direction_annotations_by_session: dict[
             str, dict[str, dict[str, object]]
@@ -1031,6 +1032,9 @@ class ChainlitReviewFlow:
             topology_view=topology,
             session_id=session_id,
             graph_facts=graph_facts,
+            loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
+                session_id, set()
+            ),
         )
         execution = tools.execute_confirmed_temporary_datalog(stored_result)
         executed = execution.get("status") == "answered"
@@ -1200,6 +1204,9 @@ class ChainlitReviewFlow:
             topology_view=topology,
             session_id=session_id,
             graph_facts=graph_facts,
+            loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
+                session_id, set()
+            ),
         )
         prior_turns = [
             ConversationTurn(
@@ -1434,6 +1441,7 @@ class ChainlitReviewFlow:
             )
             self._visible_source_scope_by_session[str(result["session_id"])] = []
             self._rule_pack_results_by_session[str(result["session_id"])] = []
+            self._loaded_rule_packs_by_session[str(result["session_id"])] = set()
             self._missing_capabilities_by_session[str(result["session_id"])] = []
 
         disabled_reason = None

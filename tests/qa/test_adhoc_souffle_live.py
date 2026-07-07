@@ -24,7 +24,6 @@ from pathlib import Path
 
 import pytest
 
-from pydexpi_datalog.llm.byok_provider import OPENAI_COMPATIBLE_BASE_URLS
 from pydexpi_datalog.llm.model_access import supported_byok_provider
 from pydexpi_datalog.qa.grounded_qa_harness import run_grounded_qa_turn
 from pydexpi_datalog.qa.ollama_qa_provider import OllamaQATurnProvider
@@ -32,6 +31,12 @@ from pydexpi_datalog.qa.openai_compatible_qa_provider import (
     OpenAICompatibleQATurnProvider,
 )
 from pydexpi_datalog.qa.topology_tools import TopologyTools
+
+OPENAI_COMPATIBLE_BASE_URLS = {
+    "openai": "https://api.openai.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "ollama": "http://localhost:11434/v1",
+}
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Every live run captures the model-drafted proposal here so validation and
@@ -43,6 +48,12 @@ E06_GRAPH_FACTS = REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "
 QUESTION = (
     "Must every object structurally connected to the piping network also be "
     "reachable from it? List the reachable objects."
+)
+
+JOIN_QUESTION = (
+    "Using the temporary Datalog predicate contract, list the loaded source "
+    "objects that appear as the first argument/source in a direct process "
+    "connection."
 )
 
 
@@ -92,6 +103,50 @@ def _e06_topology_tools() -> TopologyTools:
         graph_facts=graph_facts,
         session_id="live-adhoc-souffle-session",
     )
+
+
+def test_model_drafted_generic_schema_join_confirms_executes_and_grounds() -> None:
+    """A real model drafts a query using a generic schema predicate beyond
+    the old {answer, reachable} surface, and confirmed execution returns the
+    same process-connection source objects computed by Souffle."""
+    tools = _e06_topology_tools()
+    result = run_grounded_qa_turn(
+        question=JOIN_QUESTION,
+        topology_tools=tools,
+        provider=_live_provider(),
+    )
+
+    proposal_results = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace.get("tool_name") == "propose_temporary_datalog"
+        and isinstance(trace.get("tool_result"), dict)
+        and trace["tool_result"].get("status") == "confirmation_required"
+    ]
+    assert proposal_results, (
+        "expected the live model to draft the join question into a "
+        f"confirmation-gated temporary Datalog proposal, got: {result.answer_text!r}"
+    )
+    proposal_result = proposal_results[-1]
+    CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CAPTURE_PATH.write_text(
+        json.dumps(proposal_result, indent=2, default=str), encoding="utf-8"
+    )
+    assert proposal_result["validation"]["status"] == "safe_to_confirm", (
+        "model-drafted Datalog failed validation.\n"
+        f"diagnostics: {proposal_result['validation']['diagnostics']!r}\n"
+        f"generated_datalog:\n{proposal_result['proposal']['generated_datalog']}\n"
+        f"(captured to {CAPTURE_PATH})"
+    )
+    assert "direct_process_connection" in proposal_result["proposal"]["generated_datalog"]
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal_result)
+
+    assert answer["status"] == "answered", f"execution failed: {answer!r}"
+    assert {item["id"] for item in answer["evidence"]["items"]} == {
+        "3b212201-f8b6-47ed-9019-d7961f3276c8",
+        "72b41d51-c363-4b85-94d4-03d0f1a19a63",
+    }
 
 
 def test_model_drafted_datalog_confirms_executes_and_grounds_a_correct_answer() -> None:

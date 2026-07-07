@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydexpi_datalog.qa.topology_tools import TopologyTools
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+E06_GRAPH_FACTS = REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
 
 
 TOPOLOGY = {
@@ -239,6 +246,104 @@ def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> 
     assert answer["executed"] is False
     assert answer["diagnostics"], "engine failure must carry diagnostics"
     assert answer["diagnostics"][0]["code"] == "temporary_datalog.souffle_execution_failed"
+
+
+def _tools_for_e06(*, loaded_rule_pack_ids: list[str] | None = None) -> TopologyTools:
+    graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
+    nodes = [
+        {
+            "id": node["node_id"],
+            "label": node["attributes"].get("label", ""),
+            "tag_name": node["attributes"].get("tagName", ""),
+        }
+        for node in graph_facts["facts"]["nodes"]
+    ]
+    return TopologyTools(
+        topology_view={
+            "nodes": nodes,
+            "edges": [],
+            "evidence_map": {node["id"]: {"kind": "node"} for node in nodes},
+        },
+        graph_facts=graph_facts,
+        session_id="e06-session",
+        loaded_rule_pack_ids=loaded_rule_pack_ids,
+    )
+
+
+def test_temporary_datalog_contract_mentions_generic_schema_predicates() -> None:
+    tools = _tools_for_e06()
+
+    generated_datalog_description = next(
+        tool["function"]["parameters"]["properties"]["generated_datalog"]["description"]
+        for tool in tools.tool_definitions()
+        if tool["function"]["name"] == "propose_temporary_datalog"
+    )
+
+    assert "`direct_process_connection`" in generated_datalog_description
+    assert "`node_numeric_attribute`" in generated_datalog_description
+    assert "`diameter_satisfied`" not in generated_datalog_description
+
+
+def test_execute_confirmed_temporary_datalog_joins_against_generic_schema_predicate() -> None:
+    tools = _tools_for_e06()
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Which objects are direct process targets?",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- direct_process_connection(_, x).',
+            "formal_restatement": "Return objects that are direct process-connection targets.",
+        },
+    )
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal)
+
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["status"] == "answered"
+    assert {item["id"] for item in answer["evidence"]["items"]} == {
+        "57c776dc-fc90-4276-bb53-f0bbdd01bb83",
+        "2accb8cf-7c3d-4563-8c22-5d817f464bd5",
+    }
+
+
+def test_temporary_datalog_rejects_predicate_from_unloaded_rule_pack() -> None:
+    tools = _tools_for_e06()
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Which discharge lines satisfy the diameter rule?",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).',
+            "formal_restatement": "Return discharge line objects that satisfy the diameter rule.",
+        },
+    )
+
+    assert result["validation"]["status"] == "rejected"
+    assert result["validation"]["diagnostics"] == [
+        {
+            "code": "temporary_datalog.predicate_not_approved",
+            "message": "Temporary Datalog used unapproved predicate(s): diameter_satisfied",
+        }
+    ]
+
+
+def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb() -> None:
+    tools = _tools_for_e06(loaded_rule_pack_ids=["demo-process-safety"])
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Which discharge lines satisfy the diameter rule?",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).',
+            "formal_restatement": "Return discharge line objects that satisfy the diameter rule.",
+        },
+    )
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal)
+
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["status"] == "answered"
+    assert [item["id"] for item in answer["evidence"]["items"]] == [
+        "152b44e1-3763-4f6f-bb0e-ef69897c2c61"
+    ]
 
 
 def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule() -> None:
