@@ -382,6 +382,18 @@ function directionReviewResult(
   result: Record<string, unknown>,
 ): ChatResult {
   const review = isRecord(result.direction_review) ? result.direction_review : {};
+  const rawItems = Array.isArray(result.direction_reviews)
+    ? result.direction_reviews.filter(isRecord)
+    : [review];
+  const items = rawItems.map((item) => ({
+    reviewKey: typeof item.review_key === "string" ? item.review_key : "",
+    objectId: typeof item.object_id === "string" ? item.object_id : "",
+    proposedDirection: typeof item.proposed_direction === "string" ? item.proposed_direction : "",
+    directionBasis: typeof item.direction_basis === "string" ? item.direction_basis : "",
+    basisExplanation: typeof item.basis_explanation === "string" ? item.basis_explanation : "",
+    evidenceHighlight: readEvidenceHighlight(item.evidence_highlight),
+    raw: item,
+  }));
   const highlight = readEvidenceHighlight(review.evidence_highlight);
   return {
     status: "needs_direction_review",
@@ -396,6 +408,7 @@ function directionReviewResult(
       evidenceHighlight: highlight,
       conversation,
       raw: result,
+      items,
     }),
     highlightedNodeIds: readEvidenceHighlightIds(review.evidence_highlight),
   };

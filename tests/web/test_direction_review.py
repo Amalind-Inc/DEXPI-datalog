@@ -127,6 +127,25 @@ class DirectionReviewTests(unittest.TestCase):
         self.assertEqual(resumed["direction"]["review_status"], "unknown")
         self.assertEqual(resumed["direction"]["effective_direction"], "unknown")
 
+    def test_endpoint_accepts_batched_direction_review_decisions(self) -> None:
+        client, session_id, _ = _client()
+        review = client.post(
+            f"/api/review/sessions/{session_id}/qa-turns",
+            json={"question": INFERRED_QUESTION},
+        ).json()["direction_review"]
+        resumed = client.post(
+            f"/api/review/sessions/{session_id}/direction-reviews",
+            json={
+                "question": INFERRED_QUESTION,
+                "direction_reviews": [
+                    {"decision": "reverse", "review_key": review["review_key"]}
+                ],
+            },
+        ).json()
+        self.assertEqual(resumed["status"], "answered")
+        self.assertEqual(resumed["direction"]["review_status"], "reversed")
+        self.assertEqual(resumed["direction"]["effective_direction"], "upstream")
+
     def test_annotation_is_reused_for_same_source_path_and_boundary(self) -> None:
         client, session_id, _ = _client()
         review = client.post(

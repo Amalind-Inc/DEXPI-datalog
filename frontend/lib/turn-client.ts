@@ -143,12 +143,22 @@ export async function cancelTurn(
 export async function resumeDirectionReview(
   sessionId: string,
   turnId: string,
-  body: { decision: string; reviewKey: string },
+  body:
+    | { decision: string; reviewKey: string }
+    | { directionReviews: Array<{ decision: string; reviewKey: string }> },
   options: TurnClientOptions = {},
 ): Promise<TurnState> {
+  const payload = "directionReviews" in body
+    ? {
+        direction_reviews: body.directionReviews.map((item) => ({
+          decision: item.decision,
+          review_key: item.reviewKey,
+        })),
+      }
+    : { decision: body.decision, review_key: body.reviewKey };
   return postTurnJson(
     turnUrl(options.baseUrl, sessionId, turnId, "direction-review"),
-    { decision: body.decision, review_key: body.reviewKey },
+    payload,
     options.fetcher,
   );
 }
@@ -308,6 +318,20 @@ export function turnToMessage(turn: TurnState): TurnMessage {
     const review = reduced.review;
     if (review.status === "needs_direction_review") {
       const directionReview = isRecord(review.direction_review) ? review.direction_review : {};
+      const rawItems = Array.isArray(review.direction_reviews)
+        ? review.direction_reviews.filter(isRecord)
+        : [directionReview];
+      const items = rawItems.map((item) => ({
+        reviewKey: typeof item.review_key === "string" ? item.review_key : "",
+        objectId: typeof item.object_id === "string" ? item.object_id : "",
+        proposedDirection:
+          typeof item.proposed_direction === "string" ? item.proposed_direction : "",
+        directionBasis: typeof item.direction_basis === "string" ? item.direction_basis : "",
+        basisExplanation:
+          typeof item.basis_explanation === "string" ? item.basis_explanation : "",
+        evidenceHighlight: readEvidenceHighlight(item.evidence_highlight),
+        raw: item,
+      }));
       const highlight = readEvidenceHighlight(directionReview.evidence_highlight);
       return {
         status: "needs_direction_review",
@@ -327,8 +351,9 @@ export function turnToMessage(turn: TurnState): TurnMessage {
           evidenceHighlight: highlight,
           conversation: [],
           raw: withTurnIdentity(review, turn),
+          items,
         }),
-        highlightedNodeIds: readEvidenceHighlightIds(directionReview.evidence_highlight),
+        highlightedNodeIds: readEvidenceHighlightIds(review.direction_reviews ?? directionReview.evidence_highlight),
       };
     }
     const confirmation = isRecord(review.datalog_confirmation) ? review.datalog_confirmation : {};

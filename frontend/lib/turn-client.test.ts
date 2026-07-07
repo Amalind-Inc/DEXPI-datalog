@@ -166,6 +166,43 @@ test("resumeDirectionReview POSTs decision and review_key", async () => {
   ]);
 });
 
+test("resumeDirectionReview POSTs a batch of independent direction-review decisions", async () => {
+  const returned = mockTurn();
+  const calls: Array<{ path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      path: new URL(String(url)).pathname,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json(returned);
+  };
+
+  const result = await resumeDirectionReview(
+    "session-1",
+    "turn-1",
+    {
+      directionReviews: [
+        { reviewKey: "review-a", decision: "confirm" },
+        { reviewKey: "review-b", decision: "unknown" },
+      ],
+    },
+    { baseUrl: "http://frontend.test", fetcher: fetcher as typeof fetch },
+  );
+
+  assert.deepEqual(result, returned);
+  assert.deepEqual(calls, [
+    {
+      path: "/api/review/sessions/session-1/turns/turn-1/direction-review",
+      body: {
+        direction_reviews: [
+          { review_key: "review-a", decision: "confirm" },
+          { review_key: "review-b", decision: "unknown" },
+        ],
+      },
+    },
+  ]);
+});
+
 test("reduceTurn pulls conversationState from turn.result not events", () => {
   const conversationState = [{ role: "assistant", content: "stored state" }];
   const turn = mockTurn({
@@ -247,6 +284,60 @@ test("turnToMessage tags a direction-review-required turn with turn identity for
   const identity = readTurnIdentity(parsed!.raw);
   assert.equal(identity.turnId, "turn-abc");
   assert.equal(identity.sessionId, "session-xyz");
+});
+
+test("turnToMessage preserves batched direction-review items", () => {
+  const turn = mockTurn({
+    turn_id: "turn-batch",
+    session_id: "session-xyz",
+    status: "paused",
+    events: [
+      {
+        sequence: 1,
+        type: "review-required",
+        data: {
+          review: {
+            status: "needs_direction_review",
+            question: "Do all pumps have downstream valves?",
+            direction_reviews: [
+              {
+                review_key: "review-a",
+                object_id: "pump-a",
+                proposed_direction: "downstream",
+                direction_basis: "inferred",
+                basis_explanation: "First inferred path.",
+                evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-a"], paths: [] },
+              },
+              {
+                review_key: "review-b",
+                object_id: "pump-b",
+                proposed_direction: "downstream",
+                direction_basis: "inferred",
+                basis_explanation: "Second inferred path.",
+                evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-b"], paths: [] },
+              },
+            ],
+            direction_review: {
+              review_key: "review-a",
+              object_id: "pump-a",
+              proposed_direction: "downstream",
+              direction_basis: "inferred",
+              basis_explanation: "First inferred path.",
+              evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-a"], paths: [] },
+            },
+          },
+        },
+      },
+    ],
+  });
+
+  const converted = turnToMessage(turn);
+  const parsed = parseDirectionReviewMessage(converted.message);
+
+  assert.equal(converted.status, "needs_direction_review");
+  assert.equal(parsed?.items.length, 2);
+  assert.deepEqual(parsed?.items.map((item) => item.reviewKey), ["review-a", "review-b"]);
+  assert.deepEqual(parsed?.items.map((item) => item.objectId), ["pump-a", "pump-b"]);
 });
 
 test("turnToMessage tags a datalog-confirmation-required turn with turn identity for resume", () => {

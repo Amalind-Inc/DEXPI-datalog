@@ -858,98 +858,126 @@ class ChainlitReviewFlow:
             return datalog_confirmation
 
         directed = detect_directed_intent(question)
-        primary = self._primary_witness_path(answer["valid_paths"])
-        if directed is None or primary is None:
+        review_paths = self._direction_review_paths(
+            answer["valid_paths"], batch=self._is_universal_direction_question(question)
+        )
+        if directed is None or not review_paths:
             return self._answered_payload(session_id, answer)
 
         edge_relationships = {
             str(edge["id"]): str(edge["relationship"]) for edge in topology["edges"]
         }
-        basis = classify_path_direction_basis(
-            [edge_relationships.get(eid, "") for eid in primary["edge_ids"]]
-        )
         boundary = evaluation_boundary(directed)
         source_id = topology.get("source_id")
-        review_key = direction_annotation_key(
-            source_id=str(source_id) if source_id else None,
-            evaluation_boundary=boundary,
-            node_ids=primary["node_ids"],
-            edge_ids=primary["edge_ids"],
-        )
+        pending_reviews: list[dict[str, object]] = []
+        resolved_directions: list[dict[str, object]] = []
+        annotations = self._direction_annotations_by_session.get(session_id, {})
 
-        if basis == "explicit":
-            direction = {
-                "proposed_direction": directed,
-                "effective_direction": directed,
-                "direction_basis": "explicit",
-                "review_status": "confirmed",
-                "evaluation_boundary": boundary,
-                "review_key": review_key,
-                "review_required": False,
-            }
-            return self._answered_payload(session_id, answer, direction=direction)
-
-        annotation = self._direction_annotations_by_session.get(session_id, {}).get(
-            review_key
-        )
-        if annotation is None:
-            return self._needs_direction_review_payload(
-                session_id=session_id,
-                question=question,
-                topology=topology,
-                proposed_direction=directed,
-                basis=basis,
-                boundary=boundary,
-                source_id=source_id,
-                review_key=review_key,
-                primary=primary,
-                answer=answer,
+        for path in review_paths:
+            basis = classify_path_direction_basis(
+                [edge_relationships.get(eid, "") for eid in path["edge_ids"]]
+            )
+            review_key = direction_annotation_key(
+                source_id=str(source_id) if source_id else None,
+                evaluation_boundary=boundary,
+                node_ids=path["node_ids"],
+                edge_ids=path["edge_ids"],
+            )
+            if basis == "explicit":
+                resolved_directions.append(
+                    {
+                        "proposed_direction": directed,
+                        "effective_direction": directed,
+                        "direction_basis": "explicit",
+                        "review_status": "confirmed",
+                        "evaluation_boundary": boundary,
+                        "review_key": review_key,
+                        "review_required": False,
+                        "object_id": str(path["id"]),
+                    }
+                )
+                continue
+            annotation = annotations.get(review_key)
+            if annotation is None:
+                pending_reviews.append(
+                    self._direction_review_item(
+                        topology=topology,
+                        proposed_direction=directed,
+                        basis=basis,
+                        boundary=boundary,
+                        source_id=source_id,
+                        review_key=review_key,
+                        primary=path,
+                    )
+                )
+                continue
+            review_status = str(annotation["review_status"])
+            resolved_directions.append(
+                {
+                    "proposed_direction": directed,
+                    "effective_direction": effective_direction(
+                        proposed_direction=directed, review_status=review_status
+                    ),
+                    "direction_basis": basis,
+                    "review_status": review_status,
+                    "evaluation_boundary": boundary,
+                    "review_key": review_key,
+                    "review_required": False,
+                    "object_id": str(path["id"]),
+                }
             )
 
-        review_status = str(annotation["review_status"])
-        direction = {
-            "proposed_direction": directed,
-            "effective_direction": effective_direction(
-                proposed_direction=directed, review_status=review_status
-            ),
-            "direction_basis": basis,
-            "review_status": review_status,
-            "evaluation_boundary": boundary,
-            "review_key": review_key,
-            "review_required": False,
-        }
-        return self._answered_payload(session_id, answer, direction=direction)
+        if pending_reviews:
+            return self._needs_direction_reviews_payload(
+                session_id=session_id,
+                question=question,
+                reviews=pending_reviews,
+            )
+
+        if len(resolved_directions) == 1:
+            return self._answered_payload(
+                session_id, answer, direction=resolved_directions[0]
+            )
+        return self._answered_payload(
+            session_id, answer, direction_batch=resolved_directions
+        )
 
     def submit_direction_review(
         self,
         *,
         session_id: str,
         question: str,
-        decision: str,
-        review_key: str,
+        decision: str | None = None,
+        review_key: str | None = None,
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None = None,
+        decisions: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
-        review_status = {
-            "confirm": "confirmed",
-            "reverse": "reversed",
-            "unknown": "unknown",
-        }.get(decision)
-        if review_status is None:
-            raise ValueError(
-                "direction review decision must be confirm, reverse, or unknown"
-            )
+        review_decisions = decisions or [
+            {"decision": decision, "review_key": review_key}
+        ]
         # Ensure the session is ready before recording the annotation.
         self._topology_for_session(session_id)
 
-        # Persist the reviewer's judgement keyed to the exact witness identity the
-        # review card was raised for. The session annotation never mutates the graph.
-        self._direction_annotations_by_session.setdefault(session_id, {})[review_key] = {
-            "review_status": review_status,
-        }
+        annotations = self._direction_annotations_by_session.setdefault(session_id, {})
+        for item in review_decisions:
+            item_decision = str(item.get("decision") or "")
+            item_review_key = str(item.get("review_key") or "")
+            review_status = {
+                "confirm": "confirmed",
+                "reverse": "reversed",
+                "unknown": "unknown",
+            }.get(item_decision)
+            if review_status is None or not item_review_key:
+                raise ValueError(
+                    "direction review decision must include review_key and decision confirm, reverse, or unknown"
+                )
+            # Persist the reviewer's judgement keyed to the exact witness identity the
+            # review card was raised for. The session annotation never mutates the graph.
+            annotations[item_review_key] = {"review_status": review_status}
 
-        # Resume the original question; run_qa_turn recomputes the same key from the
-        # (source, path, evaluation boundary) and applies the stored annotation.
+        # Resume the original question; run_qa_turn recomputes the same keys from
+        # the (source, path, evaluation boundary) and applies the stored annotations.
         return self.run_qa_turn(
             session_id=session_id,
             question=question,
@@ -1308,12 +1336,25 @@ class ChainlitReviewFlow:
             key=lambda p: (-len(p["edge_ids"]), str(p["id"])),
         )[0]
 
+    def _direction_review_paths(
+        self, valid_paths: list[dict[str, object]], *, batch: bool
+    ) -> list[dict[str, object]]:
+        if not batch:
+            primary = self._primary_witness_path(valid_paths)
+            return [primary] if primary is not None else []
+        return sorted(valid_paths, key=lambda p: (str(p["id"]), tuple(p["edge_ids"])))
+
+    @staticmethod
+    def _is_universal_direction_question(question: str) -> bool:
+        return re.search(r"\b(all|each|every)\b", question.lower()) is not None
+
     def _answered_payload(
         self,
         session_id: str,
         answer: dict[str, object],
         *,
         direction: dict[str, object] | None = None,
+        direction_batch: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
         topology = self._topology_for_session(session_id)
         result = answer["result"]
@@ -1330,6 +1371,10 @@ class ChainlitReviewFlow:
             answer_text = f"{result.disclosure} {answer_text}"
         if direction is not None:
             answer_text = self._direction_prefixed_answer(answer_text, direction)
+        if direction_batch is not None:
+            answer_text = self._batched_direction_prefixed_answer(
+                answer_text, direction_batch
+            )
 
         payload = {
             "status": "answered",
@@ -1346,6 +1391,11 @@ class ChainlitReviewFlow:
         }
         if direction is not None:
             payload["direction"] = direction
+        if direction_batch is not None:
+            payload["direction_reviews"] = direction_batch
+            payload["per_object_outcomes"] = [
+                self._direction_outcome_item(item) for item in direction_batch
+            ]
         return payload
 
     @staticmethod
@@ -1364,11 +1414,34 @@ class ChainlitReviewFlow:
             prefix = "Flow direction marked unknown by reviewer."
         return f"{prefix} {answer_text}"
 
-    def _needs_direction_review_payload(
+    def _batched_direction_prefixed_answer(
+        self, answer_text: str, directions: list[dict[str, object]]
+    ) -> str:
+        outcomes = [self._direction_outcome_item(item) for item in directions]
+        summary = "; ".join(
+            f"{item['object_id']}: {item['outcome']}" for item in outcomes
+        )
+        return f"Per-object direction outcomes: {summary}. {answer_text}"
+
+    @staticmethod
+    def _direction_outcome_item(direction: dict[str, object]) -> dict[str, object]:
+        status = str(direction.get("review_status") or "")
+        if status == "unknown":
+            outcome = "indeterminate"
+        elif status == "reversed":
+            outcome = "violated"
+        else:
+            outcome = "satisfied"
+        return {
+            "object_id": str(direction.get("object_id") or ""),
+            "outcome": outcome,
+            "review_key": str(direction.get("review_key") or ""),
+            "effective_direction": str(direction.get("effective_direction") or ""),
+        }
+
+    def _direction_review_item(
         self,
         *,
-        session_id: str,
-        question: str,
         topology: dict[str, object],
         proposed_direction: str,
         basis: str,
@@ -1376,7 +1449,6 @@ class ChainlitReviewFlow:
         source_id: object,
         review_key: str,
         primary: dict[str, object],
-        answer: dict[str, object],
     ) -> dict[str, object]:
         witness_highlight = build_evidence_highlight_payload(
             topology_view=topology,
@@ -1384,32 +1456,65 @@ class ChainlitReviewFlow:
             matched_object_ids=[str(primary["id"])],
             paths=[primary],
         )
-        self._evidence_highlight_by_session[session_id] = witness_highlight
+        return {
+            "review_key": review_key,
+            "object_id": str(primary["id"]),
+            "proposed_direction": proposed_direction,
+            "direction_basis": basis,
+            "review_status": "pending",
+            "evaluation_boundary": boundary,
+            "source_id": source_id,
+            "basis_explanation": (
+                "Flow direction along this witness is "
+                f"{basis}; confirm, reverse, or mark it unknown."
+            ),
+            "witness": {
+                "node_ids": list(primary["node_ids"]),
+                "edge_ids": list(primary["edge_ids"]),
+            },
+            "evidence_highlight": witness_highlight,
+            "actions": ["confirm", "reverse", "unknown"],
+        }
+
+    def _needs_direction_reviews_payload(
+        self,
+        *,
+        session_id: str,
+        question: str,
+        reviews: list[dict[str, object]],
+    ) -> dict[str, object]:
+        paths = []
+        matched_object_ids = []
+        for review in reviews:
+            matched_object_ids.append(str(review.get("object_id") or ""))
+            witness = review.get("witness")
+            if isinstance(witness, dict):
+                paths.append(
+                    {
+                        "id": str(review.get("object_id") or ""),
+                        "node_ids": list(witness.get("node_ids", [])),
+                        "edge_ids": list(witness.get("edge_ids", [])),
+                    }
+                )
+        topology = self._topology_for_session(session_id)
+        batch_highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=[],
+            matched_object_ids=matched_object_ids,
+            paths=paths,
+        )
+        self._evidence_highlight_by_session[session_id] = batch_highlight
         return {
             "status": "needs_direction_review",
             "session_id": session_id,
             "question": question,
-            "direction_review": {
-                "review_key": review_key,
-                "proposed_direction": proposed_direction,
-                "direction_basis": basis,
-                "review_status": "pending",
-                "evaluation_boundary": boundary,
-                "source_id": source_id,
-                "basis_explanation": (
-                    "Flow direction along this witness is "
-                    f"{basis}; confirm, reverse, or mark it unknown."
-                ),
-                "witness": {
-                    "node_ids": list(primary["node_ids"]),
-                    "edge_ids": list(primary["edge_ids"]),
-                },
-                "evidence_highlight": witness_highlight,
-                "actions": ["confirm", "reverse", "unknown"],
-            },
+            "direction_reviews": reviews,
+            # Back-compat: legacy clients/tests read the first pending item here.
+            "direction_review": reviews[0] if reviews else {},
             "answer_text": (
                 "Before answering, please review the inferred flow direction for "
-                "the highlighted witness."
+                f"{len(reviews)} highlighted witness"
+                f"{'es' if len(reviews) != 1 else ''}."
             ),
         }
 

@@ -19,7 +19,11 @@ import {
   type GroundedQAAnswerState,
   type EvidencePath,
 } from "@/lib/grounded-qa-answer";
-import { parseDirectionReviewMessage, type DirectionReviewState } from "@/lib/direction-review";
+import {
+  parseDirectionReviewMessage,
+  type DirectionReviewItem,
+  type DirectionReviewState,
+} from "@/lib/direction-review";
 import {
   readTurnIdentity,
   resumeDatalogReview,
@@ -594,28 +598,49 @@ function readTemporaryProposalResult(raw: Record<string, unknown>) {
 
 const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) => {
   const aui = useAui();
-  const { setHighlightedNodeIds } = usePidGraph();
+  const { setHighlightedNodeIds, setGraphOpen } = usePidGraph();
   const [state, setState] = useState<"ready" | "submitting" | "done">("ready");
   const [error, setError] = useState<string | null>(null);
+  const [decisions, setDecisions] = useState<Record<string, "confirm" | "reverse" | "unknown">>({});
 
   const witnessIds = Array.from(
-    new Set(review.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids])),
+    new Set(
+      review.items.flatMap((item) =>
+        item.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids]),
+      ),
+    ),
   );
 
-  const turnIdentity = readTurnIdentity(review.raw);
+  // Auto-open the topology panel for this answer's evidence (bead 2ki.9).
+  // Runs once per card mount (i.e. once per new answer), so a manual close
+  // afterward sticks -- it isn't re-triggered by this same answer again.
+  useEffect(() => {
+    if (witnessIds.length > 0) setGraphOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const submit = async (decision: "confirm" | "reverse" | "unknown") => {
-    if (state !== "ready") return;
+  const turnIdentity = readTurnIdentity(review.raw);
+  const allResolved = review.items.every((item) => decisions[item.reviewKey]);
+
+  const submit = async (
+    overrideReviews?: Array<{ reviewKey: string; decision: "confirm" | "reverse" | "unknown" }>,
+  ) => {
+    if (state !== "ready" || (!overrideReviews && !allResolved)) return;
     setState("submitting");
     setError(null);
+    const directionReviews =
+      overrideReviews ??
+      review.items.map((item) => ({
+        reviewKey: item.reviewKey,
+        decision: decisions[item.reviewKey]!,
+      }));
     try {
       let result: { message: string; highlightedNodeIds?: string[] };
       if (turnIdentity.turnId && turnIdentity.sessionId) {
-        // Turn-lifecycle path: resume the paused turn with the decision; the
+        // Turn-lifecycle path: resume the paused turn with all decisions; the
         // response carries the turn's final state.
         const turn = await resumeDirectionReview(turnIdentity.sessionId, turnIdentity.turnId, {
-          decision,
-          reviewKey: review.reviewKey,
+          directionReviews,
         });
         result = turnToMessage(turn);
       } else {
@@ -626,8 +651,10 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               question: review.question,
-              decision,
-              reviewKey: review.reviewKey,
+              direction_reviews: directionReviews.map((item) => ({
+                review_key: item.reviewKey,
+                decision: item.decision,
+              })),
               conversation: review.conversation,
             }),
           },
@@ -654,6 +681,11 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
     }
   };
 
+  const choose = (item: DirectionReviewItem, decision: "confirm" | "reverse" | "unknown") => {
+    if (state !== "ready") return;
+    setDecisions((current) => ({ ...current, [item.reviewKey]: decision }));
+  };
+
   return (
     <section
       className="direction-review-card"
@@ -675,38 +707,70 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
           data-testid="direction-witness-chip"
           className="qa-evidence-chip"
           onClick={() => setHighlightedNodeIds(witnessIds)}
-          title="Highlight the structural witness"
+          title="Highlight the structural witnesses"
         >
-          Show witness
+          Show witnesses
         </button>
       )}
 
-      <div className="direction-review-actions">
-        <button
-          type="button"
-          data-testid="direction-confirm"
-          disabled={state !== "ready"}
-          onClick={() => submit("confirm")}
-        >
-          Confirm
-        </button>
-        <button
-          type="button"
-          data-testid="direction-reverse"
-          disabled={state !== "ready"}
-          onClick={() => submit("reverse")}
-        >
-          Reverse
-        </button>
-        <button
-          type="button"
-          data-testid="direction-unknown"
-          disabled={state !== "ready"}
-          onClick={() => submit("unknown")}
-        >
-          Unknown
-        </button>
-      </div>
+      <ol className="direction-review-items" data-testid="direction-review-items">
+        {review.items.map((item, index) => {
+          const itemWitnessIds = Array.from(
+            new Set(item.evidenceHighlight.paths.flatMap((p) => [...p.node_ids, ...p.edge_ids])),
+          );
+          return (
+            <li key={item.reviewKey} data-testid="direction-review-item">
+              <p className="pid-eyebrow">Item {index + 1}</p>
+              <p>
+                Object: <strong>{item.objectId || item.reviewKey}</strong>
+              </p>
+              <p>
+                Proposed direction: <strong>{item.proposedDirection}</strong> ({item.directionBasis})
+              </p>
+              <p>{item.basisExplanation}</p>
+              {itemWitnessIds.length > 0 && (
+                <button
+                  type="button"
+                  data-testid={`direction-witness-chip-${index}`}
+                  className="qa-evidence-chip"
+                  onClick={() => setHighlightedNodeIds(itemWitnessIds)}
+                >
+                  Show item witness
+                </button>
+              )}
+              <div className="direction-review-actions">
+                {(["confirm", "reverse", "unknown"] as const).map((decision) => (
+                  <button
+                    key={decision}
+                    type="button"
+                    data-testid={review.items.length === 1 ? `direction-${decision}` : `direction-${decision}-${index}`}
+                    aria-pressed={decisions[item.reviewKey] === decision}
+                    disabled={state !== "ready"}
+                    onClick={() => {
+                      if (review.items.length === 1) {
+                        void submit([{ reviewKey: item.reviewKey, decision }]);
+                        return;
+                      }
+                      choose(item, decision);
+                    }}
+                  >
+                    {decision === "confirm" ? "Confirm" : decision === "reverse" ? "Reverse" : "Unknown"}
+                  </button>
+                ))}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      <button
+        type="button"
+        data-testid="direction-submit-all"
+        disabled={state !== "ready" || !allResolved}
+        onClick={() => void submit()}
+      >
+        Submit direction reviews
+      </button>
       {error && (
         <p className="direction-review-error" data-testid="direction-review-error">
           {error}

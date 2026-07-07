@@ -327,8 +327,9 @@ def create_review_api_app(
     def resume_direction_review(
         session_id: str, turn_id: str, body: dict[str, object]
     ) -> dict[str, object]:
-        decision = _required_string(body, "decision")
-        review_key = _required_string(body, "review_key")
+        decisions = _direction_review_decisions(body)
+        decision = _optional_string(body, "decision")
+        review_key = _optional_string(body, "review_key")
         existing = turns.get(session_id=session_id, turn_id=turn_id)
         if existing is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
@@ -340,6 +341,7 @@ def create_review_api_app(
                 question=str(existing["question"]),
                 decision=decision,
                 review_key=review_key,
+                decisions=decisions,
                 qa_provider=_resolve_qa_provider(session_id),
             ),
         )
@@ -375,8 +377,9 @@ def create_review_api_app(
         session_id: str, body: dict[str, object]
     ) -> dict[str, object]:
         question = _required_string(body, "question")
-        decision = _required_string(body, "decision")
-        review_key = _required_string(body, "review_key")
+        decisions = _direction_review_decisions(body)
+        decision = _optional_string(body, "decision")
+        review_key = _optional_string(body, "review_key")
         conversation = body.get("conversation")
         conversation_turns = (
             [turn for turn in conversation if isinstance(turn, dict)]
@@ -389,6 +392,7 @@ def create_review_api_app(
                 question=question,
                 decision=decision,
                 review_key=review_key,
+                decisions=decisions,
                 qa_provider=_resolve_qa_provider(session_id),
                 conversation=conversation_turns,
             )
@@ -450,6 +454,35 @@ def _required_string(body: dict[str, object], key: str) -> str:
     if not isinstance(value, str) or value == "":
         raise _bad_request(f"request body must include a non-empty {key}")
     return value
+
+
+def _optional_string(body: dict[str, object], key: str) -> str | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or value == "":
+        raise _bad_request(f"request body {key} must be a non-empty string")
+    return value
+
+
+def _direction_review_decisions(body: dict[str, object]) -> list[dict[str, object]] | None:
+    raw = body.get("direction_reviews")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise _bad_request("request body direction_reviews must be a non-empty list")
+    decisions: list[dict[str, object]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise _bad_request("each direction_reviews item must be an object")
+        review_key = item.get("review_key")
+        decision = item.get("decision")
+        if not isinstance(review_key, str) or not review_key:
+            raise _bad_request("each direction_reviews item must include review_key")
+        if decision not in {"confirm", "reverse", "unknown"}:
+            raise _bad_request("each direction_reviews item must include decision confirm, reverse, or unknown")
+        decisions.append({"review_key": review_key, "decision": decision})
+    return decisions
 
 
 def _filename(body: dict[str, object], key: str) -> str:

@@ -21,6 +21,33 @@ E06_FIXTURE = (
 )
 
 
+def test_review_required_event_preserves_batched_direction_review_items() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir))
+        turn = store.start(
+            session_id="session-batch",
+            request_id="request-batch",
+            question="Do all pumps have downstream valves?",
+            execute=lambda: {
+                "status": "needs_direction_review",
+                "direction_reviews": [
+                    {"review_key": "review-a", "object_id": "pump-a"},
+                    {"review_key": "review-b", "object_id": "pump-b"},
+                ],
+                "direction_review": {"review_key": "review-a", "object_id": "pump-a"},
+            },
+        )
+
+        assert turn["status"] == "paused"
+        review_event = turn["events"][-1]
+        assert review_event["type"] == "review-required"
+        review = review_event["data"]["review"]
+        assert [item["review_key"] for item in review["direction_reviews"]] == [
+            "review-a",
+            "review-b",
+        ]
+
+
 class CountingProvider:
     def __init__(self) -> None:
         self.calls = 0
