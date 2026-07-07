@@ -218,7 +218,23 @@ def default_grounded_qa_manifest() -> GroundedQACapabilityManifest:
                         },
                         "generated_datalog": {
                             "type": "string",
-                            "description": "The exact temporary Souffle Datalog program proposed for confirmation.",
+                            "description": (
+                                "The exact temporary Souffle Datalog program proposed for "
+                                "confirmation. Contract (violations are rejected before "
+                                "confirmation): declare `.decl answer(x:symbol)` and output "
+                                "exactly `.output answer`; rules and facts may use ONLY the "
+                                "predicates `answer` and `reachable`; "
+                                "`reachable(source, target)` holds when target is "
+                                "structurally reachable from source over the topology graph "
+                                "(undirected, bounded hops); refer to objects exclusively by "
+                                "their exact quoted evidence IDs already resolved through "
+                                "read-only retrieval (never invented names); no `.input`, "
+                                "`.include`, or filesystem directives. `reachable` facts are "
+                                "supplied by the engine -- never define or redeclare it. "
+                                "Canonical shape: `.decl answer(x:symbol)` then "
+                                "`.output answer` then "
+                                '`answer(x) :- reachable("<evidence-id>", x).`'
+                            ),
                         },
                         "formal_restatement": {
                             "type": "string",

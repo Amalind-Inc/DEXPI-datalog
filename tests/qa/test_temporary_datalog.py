@@ -193,6 +193,54 @@ def test_propose_temporary_datalog_rejects_basic_syntax_errors() -> None:
     assert result["validation"]["diagnostics"][0]["code"] == "temporary_datalog.syntax_invalid"
 
 
+def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_two() -> None:
+    """
+    Behavior: a confirmed query built only from approved predicates executes for
+    real even when it is not one of the two historical text shapes. The reversed
+    reachable argument order used to silently return zero evidence.
+    """
+    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "What can reach the valve?",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable(x, "node-valve-v102").',
+            "formal_restatement": "Return objects that can reach the valve.",
+        },
+    )
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal)
+
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["status"] == "answered"
+    assert [item["id"] for item in answer["evidence"]["items"]] == ["node-pump-p101"]
+
+
+def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> None:
+    """
+    Behavior: a query that passes static validation but cannot execute (wrong
+    reachable arity) surfaces an explicit execution error instead of silently
+    answering with zero evidence.
+    """
+    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Use reachable with the wrong arity",
+            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable(x).',
+            "formal_restatement": "Return reachable objects.",
+        },
+    )
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal)
+
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["status"] == "execution_failed"
+    assert answer["executed"] is False
+    assert answer["diagnostics"], "engine failure must carry diagnostics"
+    assert answer["diagnostics"][0]["code"] == "temporary_datalog.souffle_execution_failed"
+
+
 def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule() -> None:
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
     proposal = tools.execute(

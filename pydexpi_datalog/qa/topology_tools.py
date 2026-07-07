@@ -13,6 +13,10 @@ from pydexpi_datalog.qa.capability_manifest import (
 )
 
 from pydexpi_datalog.semantics.derive_graph_semantics import TOPOLOGY_ATTR_NAMES
+from pydexpi_datalog.semantics.souffle_runner import (
+    SouffleExecutionError,
+    run_souffle_program,
+)
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 
 
@@ -360,35 +364,51 @@ class TopologyTools:
         }
 
     def _temporary_datalog_answer_ids(self, generated_datalog: str) -> list[str]:
+        """Execute a validated temporary Datalog program on real Souffle.
+
+        The program runs against a materialized `reachable(src, dst)` relation
+        derived from the same undirected topology traversal the read-only
+        tools use (max 6 hops, per-source result limit preserved from the
+        previous executor). Raises SouffleExecutionError on any engine
+        failure so callers surface an explicit error instead of a silent
+        empty result.
+        """
+        program = self._temporary_datalog_program(generated_datalog)
+        relations = run_souffle_program(program)
         matched_ids: list[str] = []
-        for line in generated_datalog.splitlines():
-            candidate = line.strip()
-            if (
-                candidate.startswith("answer(")
-                and candidate.endswith(").")
-                and ":-" not in candidate
-            ):
-                topology_id = (
-                    candidate.removeprefix("answer(")
-                    .removesuffix(").")
-                    .strip()
-                    .strip('"')
-                )
-                if topology_id in self._evidence_map and topology_id not in matched_ids:
-                    matched_ids.append(topology_id)
+        for row in relations.get("answer", []):
+            if not row:
                 continue
-            reachable_match = re.fullmatch(
-                r'answer\(x\)\s*:-\s*reachable\("([^"]+)",\s*x\)\.',
-                candidate,
-            )
-            if reachable_match:
-                result = self._interpretation.reachable_from(
-                    reachable_match.group(1), max_hops=6
-                )
-                for reachable in result.reachable:
-                    if reachable.topology_id not in matched_ids:
-                        matched_ids.append(reachable.topology_id)
+            value = row[0]
+            if value not in matched_ids:
+                matched_ids.append(value)
         return matched_ids
+
+    def _temporary_datalog_program(self, generated_datalog: str) -> str:
+        prelude: list[str] = []
+        if ".decl reachable(" not in generated_datalog:
+            prelude.append(".decl reachable(src:symbol, dst:symbol)")
+        for source_id, target_id in self._reachable_fact_pairs():
+            prelude.append(
+                "reachable("
+                f'"{self._souffle_symbol(source_id)}", '
+                f'"{self._souffle_symbol(target_id)}").'
+            )
+        return "\n".join(prelude + [generated_datalog])
+
+    def _reachable_fact_pairs(self) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for source_id in sorted(self._interpretation.known_topology_ids()):
+            result = self._interpretation.reachable_from(source_id, max_hops=6)
+            if result.error is not None:
+                continue
+            for reachable in result.reachable:
+                pairs.append((source_id, reachable.topology_id))
+        return pairs
+
+    @staticmethod
+    def _souffle_symbol(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
 
     def execute_confirmed_temporary_datalog(
         self, proposal_result: dict[str, object]
@@ -450,7 +470,21 @@ class TopologyTools:
                 "confirmation": confirmation,
                 "diagnostics": validation["diagnostics"],
             }
-        matched_ids = self._temporary_datalog_answer_ids(generated_datalog)
+        try:
+            matched_ids = self._temporary_datalog_answer_ids(generated_datalog)
+        except SouffleExecutionError as error:
+            diagnostic: dict[str, object] = {
+                "code": f"temporary_datalog.{error.code}",
+                "message": str(error),
+            }
+            if error.detail:
+                diagnostic["detail"] = error.detail
+            return {
+                "status": "execution_failed",
+                "executed": False,
+                "confirmation": confirmation,
+                "diagnostics": [diagnostic],
+            }
         evidence_items = [
             {
                 "id": topology_id,

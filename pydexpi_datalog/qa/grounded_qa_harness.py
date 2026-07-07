@@ -475,10 +475,14 @@ class ScriptedQATurnProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": self._question,
+                    # Deliberately not the historical `answer(x) :- ...` text
+                    # shape: the executor is a real Souffle engine
+                    # (37x.22.34.4), not a regex over two blessed spellings,
+                    # so the OSS default provider exercises that for real.
                     "generated_datalog": (
                         ".decl answer(x:symbol)\n"
                         ".output answer\n"
-                        f'answer(x) :- reachable("{self._anchor}", x).'
+                        f'answer(result) :- reachable("{self._anchor}", result).'
                     ),
                     "formal_restatement": (
                         "Return every object structurally reachable from "
