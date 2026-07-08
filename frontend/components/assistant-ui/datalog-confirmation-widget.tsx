@@ -98,7 +98,7 @@ export const DatalogConfirmationWidget: FC<{
     setStatus("running");
     setError(null);
     try {
-      let result: { message: string; highlightedNodeIds?: string[] };
+      let result: { status?: string; message: string; highlightedNodeIds?: string[] };
       const turnIdentity = readTurnIdentity(confirmation.raw);
       if (turnIdentity.turnId && turnIdentity.sessionId) {
         const turn = await resumeDatalogReview(turnIdentity.sessionId, turnIdentity.turnId, {
@@ -141,7 +141,14 @@ export const DatalogConfirmationWidget: FC<{
         role: "assistant",
         content: [{ type: "text", text: result.message }],
       });
-      setDecidedMessage(ACTIONS.run.decidedMessage);
+      // The resumed turn reports whether execution actually succeeded --
+      // "Approved and run" on a failed execution hid the real outcome and
+      // left only a bare "Turn failed" in the thread (bead 3cq).
+      setDecidedMessage(
+        result.status === "failed"
+          ? "Approved, but the Datalog execution failed. The failure reason is posted below."
+          : ACTIONS.run.decidedMessage,
+      );
       setStatus("decided");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Execution failed.");
@@ -338,7 +345,6 @@ export const DatalogConfirmationWidget: FC<{
   );
 };
 
-
 function readAllowedActions(
   datalogConfirmation: Record<string, unknown>,
   fallback: string[],
@@ -374,7 +380,6 @@ function readTemporaryProposalResult(raw: Record<string, unknown>) {
   }
   return {};
 }
-
 
 function readStringEntries(value: unknown): [string, string][] {
   if (typeof value !== "object" || value === null) return [];

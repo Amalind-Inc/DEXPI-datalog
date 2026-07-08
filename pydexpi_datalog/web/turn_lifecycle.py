@@ -205,7 +205,20 @@ class TurnLifecycleStore:
             return
         if status in {"failed", "execution_failed"}:
             turn["status"] = "failed"
-            self._append(turn, "failure", {"result": result})
+            # Surface the result's diagnostics through `message` -- the
+            # frontend renders event.data.message and otherwise shows a bare
+            # "Turn failed" (bead 3cq).
+            data: dict[str, object] = {"result": result}
+            diagnostics = result.get("diagnostics")
+            if isinstance(diagnostics, list):
+                messages = [
+                    str(item["message"])
+                    for item in diagnostics
+                    if isinstance(item, dict) and item.get("message")
+                ]
+                if messages:
+                    data["message"] = "; ".join(messages)
+            self._append(turn, "failure", data)
             return
         turn["status"] = "completed"
         self._append(turn, "completion", {"status": "completed"})

@@ -158,6 +158,45 @@ def test_execution_failure_is_persisted_as_typed_terminal_event() -> None:
         assert "provider unavailable" in turn["events"][-1]["data"]["message"]
 
 
+def test_execution_failed_result_surfaces_diagnostics_in_failure_message() -> None:
+    """
+    Bead 3cq: a confirmed Datalog execution that fails must carry its
+    diagnostics through the failure event's `message` -- the frontend renders
+    event.data.message and otherwise falls back to a bare "Turn failed",
+    hiding the actual reason from the user.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        turn = store.start(
+            session_id="failure-session",
+            request_id="request-1",
+            question="Do all pumps have a check valve?",
+            execute=lambda: {"status": "needs_datalog_confirmation"},
+        )
+
+        resumed = store.resume(
+            session_id="failure-session",
+            turn_id=str(turn["turn_id"]),
+            execute=lambda: {
+                "status": "execution_failed",
+                "executed": False,
+                "diagnostics": [
+                    {
+                        "code": "temporary_datalog.predicate_not_approved",
+                        "message": "Temporary Datalog used unapproved predicate(s): pump",
+                    }
+                ],
+            },
+        )
+
+        assert resumed is not None
+        assert resumed["status"] == "failed"
+        failure = resumed["events"][-1]
+        assert failure["type"] == "failure"
+        assert "unapproved predicate" in failure["data"]["message"]
+        assert failure["data"]["result"]["status"] == "execution_failed"
+
+
 def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"

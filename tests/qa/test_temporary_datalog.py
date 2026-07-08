@@ -362,3 +362,68 @@ def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule()
     assert proposal["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert [item["id"] for item in answer["evidence"]["items"]] == ["node-valve-v102"]
+
+
+def test_temporary_datalog_allows_program_defined_helper_predicates() -> None:
+    """
+    Behavior (bead 3cq): 'Do all pumps have a check valve?' style questions
+    need intermediate predicates (pump, pump_with_check_valve) defined inside
+    the temporary program. Predicates the program itself defines are not
+    "unapproved" -- only reading a relation that is neither engine-supplied
+    nor locally defined is. The confirmed program must execute for real.
+    """
+    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Which pumps have a check valve?",
+            "generated_datalog": (
+                ".decl answer(x:symbol)\n"
+                ".decl pump(x:symbol)\n"
+                ".decl pump_with_check_valve(x:symbol)\n"
+                ".output answer\n"
+                'pump(x) :- node_attribute(x, "label", "Pump").\n'
+                "pump_with_check_valve(x) :- pump(x), reachable(x, v), "
+                'node_attribute(v, "label", "Valve").\n'
+                "answer(x) :- pump_with_check_valve(x).\n"
+            ),
+            "formal_restatement": "Return pumps with a reachable check valve.",
+        },
+    )
+
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+
+    answer = tools.execute_confirmed_temporary_datalog(proposal)
+
+    assert answer["status"] == "answered"
+    assert answer["executed"] is True
+    assert [item["id"] for item in answer["evidence"]["items"]] == ["node-pump-p101"]
+
+
+def test_temporary_datalog_still_rejects_read_of_undefined_predicate() -> None:
+    """
+    Guard for the helper-predicate allowance: a body atom that is neither
+    engine-supplied nor defined by the program stays rejected, including a
+    misspelled reference to the program's own helper.
+    """
+    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Misspell the helper",
+            "generated_datalog": (
+                ".decl answer(x:symbol)\n"
+                ".decl pump(x:symbol)\n"
+                ".output answer\n"
+                'pump(x) :- node_attribute(x, "label", "Pump").\n'
+                "answer(x) :- pumps(x).\n"
+            ),
+            "formal_restatement": "Return pumps.",
+        },
+    )
+
+    assert result["validation"]["status"] == "rejected"
+    assert result["validation"]["diagnostics"][0]["code"] == (
+        "temporary_datalog.predicate_not_approved"
+    )
+    assert "pumps" in result["validation"]["diagnostics"][0]["message"]

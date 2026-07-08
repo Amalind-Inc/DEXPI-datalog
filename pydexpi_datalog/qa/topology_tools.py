@@ -315,7 +315,13 @@ class TopologyTools:
                     "message": "Temporary Datalog must use complete line-oriented Souffle declarations, outputs, facts, or rules.",
                 }
             )
+        # Predicates the program itself defines (rule heads and literal facts)
+        # are legitimate intermediates -- e.g. pump / pump_with_check_valve for
+        # "do all pumps have a check valve?" (bead 3cq). Only reading a
+        # relation that is neither engine-supplied nor locally defined is
+        # unapproved; local heads can only derive from approved inputs.
         predicate_names = []
+        defined_predicates: set[str] = set()
         for line in stripped.splitlines():
             candidate = line.strip()
             if not candidate or candidate.startswith("."):
@@ -323,12 +329,17 @@ class TopologyTools:
             predicate_names.extend(
                 re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", candidate)
             )
+            head = candidate.split(":-", 1)[0]
+            head_names = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", head)
+            if head_names:
+                defined_predicates.add(head_names[0])
         approved_predicates = self._temporary_datalog_approved_predicates()
         unapproved_predicates = sorted(
             {
                 predicate
                 for predicate in predicate_names
                 if predicate not in approved_predicates
+                and predicate not in defined_predicates
             }
         )
         if unapproved_predicates:
@@ -416,9 +427,10 @@ class TopologyTools:
         predicate_list = ", ".join(f"`{predicate}`" for predicate in predicates)
         return (
             "declare `.decl answer(x:symbol)` and output exactly `.output answer`; "
-            "rules and facts may define ONLY `answer` and may read only these "
-            f"engine-supplied predicates: {predicate_list}. Do not redeclare or "
-            "define engine-supplied predicates. "
+            "rules may define `answer` plus program-local helper predicates "
+            "(declare each helper with its own `.decl`; output only `answer`), "
+            f"and may read only helpers or these engine-supplied predicates: {predicate_list}. "
+            "Do not redeclare or define engine-supplied predicates. "
             "`reachable(source, target)` is the schema's topology reachability relation."
         )
 
