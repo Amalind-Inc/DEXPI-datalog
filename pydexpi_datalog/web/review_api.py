@@ -9,7 +9,7 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..llm.byok_provider import create_byok_provider
+from ..llm.byok_provider import OPENAI_COMPATIBLE_BASE_URLS, create_byok_provider
 from ..llm.model_access import ModelProvider
 from ..qa.grounded_qa_harness import (
     DEFAULT_MAX_CONVERSATION_TURNS,
@@ -17,9 +17,11 @@ from ..qa.grounded_qa_harness import (
     ScriptedQATurnProvider,
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
+from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
+from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
-from .turn_lifecycle import TurnLifecycleStore
+from .turn_lifecycle import TurnLifecycleStore, compute_turn_id
 
 
 class TopologyAwareFakeModelProvider:
@@ -127,14 +129,25 @@ def create_review_api_app(
         if qa_provider_factory is not None:
             return qa_provider_factory()
         if force_scripted:
-            return ScriptedQATurnProvider()
+            step_delay_ms = float(os.environ.get("PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS", "0"))
+            return ScriptedQATurnProvider(step_delay_seconds=step_delay_ms / 1000)
         settings = flow.provider_settings_state(session_id)
-        if settings.get("provider") == "ollama" and settings.get("configured"):
-            return OllamaQATurnProvider(
-                model=str(settings["model"]),
-                base_url=str(settings.get("base_url", "http://localhost:11434/v1")),
-            )
-        return ScriptedQATurnProvider()
+        provider = str(settings.get("provider", ""))
+        if not settings.get("configured") or provider not in OPENAI_COMPATIBLE_BASE_URLS:
+            # Providers outside the OpenAI-compatible tool-calling family (e.g.
+            # anthropic, gemini) have no QATurnProvider implementation yet and
+            # fall back to the deterministic stub rather than silently
+            # mismatching a different wire format.
+            return ScriptedQATurnProvider()
+        base_url = str(settings.get("base_url") or OPENAI_COMPATIBLE_BASE_URLS[provider])
+        if provider == "ollama":
+            return OllamaQATurnProvider(model=str(settings["model"]), base_url=base_url)
+        return OpenAICompatibleQATurnProvider(
+            provider=provider,
+            model=str(settings["model"]),
+            base_url=base_url,
+            credential=flow.local_credential_for_test(session_id),
+        )
 
     @app.exception_handler(HTTPException)
     def http_exception_handler(
@@ -239,6 +252,48 @@ def create_review_api_app(
             )
         )
 
+    @app.get("/api/review/sessions/{session_id}/rule-packs")
+    def list_rule_packs(session_id: str) -> dict[str, object]:
+        return flow.list_bundled_rule_packs(session_id=session_id)
+
+    @app.get("/api/rule-packs")
+    def list_all_rule_packs() -> dict[str, object]:
+        return {
+            "packs": [
+                {
+                    "pack_id": pack["pack_id"],
+                    "version": pack["version"],
+                    "title": pack["title"],
+                    "authoritative": pack["authoritative"],
+                    "trust_notice": pack["trust_notice"],
+                    "markdown": pack["markdown"],
+                    "rules": [
+                        {
+                            "rule_id": rule["rule_id"],
+                            "title": rule["title"],
+                            "outcomes": rule["outcomes"],
+                            "restatement": rule["restatement"],
+                            "executable_logic": rule["executable_logic"],
+                        }
+                        for rule in pack["rules"]
+                    ],
+                }
+                for pack in bundled_rule_packs()
+            ]
+        }
+
+    @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/load")
+    def load_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+        return _call_ready(
+            lambda: flow.load_rule_pack(session_id=session_id, pack_id=pack_id)
+        )
+
+    @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/run")
+    def run_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+        return _call_ready(
+            lambda: flow.run_rule_pack(session_id=session_id, pack_id=pack_id)
+        )
+
     @app.post("/api/review/sessions/{session_id}/qa-turns")
     def run_qa_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
         question = _required_string(body, "question")
@@ -270,6 +325,17 @@ def create_review_api_app(
             else None
         )
 
+        turn_id = compute_turn_id(session_id, request_id)
+
+        def _report_round(round_index: int, max_rounds: int, tool_name: str | None) -> None:
+            turns.append_progress(
+                session_id=session_id,
+                turn_id=turn_id,
+                round_index=round_index,
+                max_rounds=max_rounds,
+                tool_name=tool_name,
+            )
+
         def _execute() -> dict[str, object]:
             # The bundled pump check is a trusted rule-pack execution command,
             # not a QA question; run it inside the turn so dedupe, replay, and
@@ -284,6 +350,7 @@ def create_review_api_app(
                 question=question,
                 qa_provider=_resolve_qa_provider(session_id),
                 conversation=conversation_turns,
+                on_round=_report_round,
             )
 
         return _call_ready(

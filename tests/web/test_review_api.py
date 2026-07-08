@@ -121,6 +121,23 @@ class ReviewApiTests(unittest.TestCase):
             self.assertEqual(not_ready_status, 409)
             self.assertEqual(not_ready["error"]["code"], "session.not_ready")
 
+            list_before_status, packs_before = request(
+                "GET", f"/api/review/sessions/{session_id}/rule-packs"
+            )
+            self.assertEqual(list_before_status, 200)
+            self.assertFalse(packs_before["packs"][0]["loaded"])
+
+            all_packs_status, all_packs = request("GET", "/api/rule-packs")
+            self.assertEqual(all_packs_status, 200)
+            self.assertNotIn("session_id", all_packs)
+            self.assertEqual(
+                all_packs["packs"][0]["pack_id"], packs_before["packs"][0]["pack_id"]
+            )
+            self.assertNotIn("loaded", all_packs["packs"][0])
+            # The pack's canonical markdown source travels with the
+            # session-independent payload (document-style detail page).
+            self.assertIn("```souffle-datalog", all_packs["packs"][0]["markdown"])
+
             prepare_status, prepared = request(
                 "POST",
                 f"/api/review/sessions/{session_id}/prepare",
@@ -203,6 +220,44 @@ class ReviewApiTests(unittest.TestCase):
             self.assertEqual(rule_result["status"], "answered")
             self.assertEqual(rule_result["confirmation"], {"required": False})
 
+            load_unknown_status, load_unknown = request(
+                "POST",
+                f"/api/review/sessions/{session_id}/rule-packs/not-a-real-pack/load",
+            )
+            self.assertEqual(load_unknown_status, 400)
+            self.assertEqual(load_unknown["error"]["code"], "request.invalid")
+
+            load_status, load_result = request(
+                "POST",
+                f"/api/review/sessions/{session_id}/rule-packs/demo-process-safety/load",
+            )
+            self.assertEqual(load_status, 200)
+            self.assertEqual(load_result["loaded"], True)
+
+            list_after_status, packs_after = request(
+                "GET", f"/api/review/sessions/{session_id}/rule-packs"
+            )
+            self.assertEqual(list_after_status, 200)
+            self.assertTrue(packs_after["packs"][0]["loaded"])
+
+            run_status, run_result = request(
+                "POST",
+                f"/api/review/sessions/{session_id}/rule-packs/demo-process-safety/run",
+            )
+            self.assertEqual(run_status, 200)
+            self.assertEqual(run_result["status"], "answered")
+            self.assertEqual(run_result["confirmation"], {"required": False})
+            self.assertEqual(len(run_result["results"]), 2)
+            self.assertEqual(
+                [item["rule_id"] for item in run_result["results"]],
+                ["pump_discharge_check_valve", "discharge_line_min_diameter"],
+            )
+            run_item = run_result["results"][0]
+            self.assertIn(
+                run_item["outcome"], {"satisfied", "violated", "indeterminate"}
+            )
+            self.assertTrue(run_item["evidence"]["items"])
+
             export_status, export = request(
                 "POST",
                 f"/api/review/sessions/{session_id}/exports",
@@ -212,7 +267,7 @@ class ReviewApiTests(unittest.TestCase):
             self.assertEqual(export["status"], "exported")
             self.assertTrue(Path(str(export["manifest_path"])).exists())
             self.assertEqual(len(export["manifest"]["logic_request_results"]), 1)
-            self.assertEqual(len(export["manifest"]["rule_pack_results"]), 1)
+            self.assertEqual(len(export["manifest"]["rule_pack_results"]), 3)
 
             response_text = json.dumps(
                 [
