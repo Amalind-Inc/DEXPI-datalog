@@ -179,6 +179,11 @@ class SampledPathThenDatalogProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Check whether every pump has a reachable valve.",
+                    "generated_datalog": (
+                        '.decl answer(x:symbol)\n.output answer\n'
+                        f'answer(x) :- reachable("{PUMP_ID}", x).'
+                    ),
+                    "formal_restatement": "Return objects reachable from pump P-101.",
                     "resolved_identity_ids": [PUMP_ID],
                 },
                 tool_call_id="escalate-datalog",
@@ -277,6 +282,83 @@ def test_confirmation_required_proposal_short_circuits_before_model_answer():
     ]
     assert len(proposal_traces) == 1
     assert proposal_traces[0]["tool_result"]["status"] == "confirmation_required"
+
+
+class RetryAfterRejectionProvider:
+    """Mirrors the live 3cq follow-up: the first proposal omits `.output
+    answer` (exactly what the BYOK model generated live). The harness must
+    hand the rejection back to the model as tool feedback instead of pausing
+    the turn, and only the corrected re-proposal may pause for confirmation."""
+
+    def __init__(self) -> None:
+        self.rejection_feedback: list[str] = []
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        if self._step == 0:
+            self._step += 1
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every segment reach a valve?",
+                    "generated_datalog": (
+                        '.decl answer(x:symbol)\n'
+                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    ),
+                    "formal_restatement": "Return objects reachable from segment S-1.",
+                    "resolved_identity_ids": [SEGMENT_ID],
+                },
+                tool_call_id="proposal-invalid",
+            )
+        if self._step == 1:
+            self._step += 1
+            last = messages[-1]
+            if last.get("role") == "tool":
+                self.rejection_feedback.append(str(last.get("content", "")))
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every segment reach a valve?",
+                    "generated_datalog": (
+                        '.decl answer(x:symbol)\n.output answer\n'
+                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    ),
+                    "formal_restatement": "Return objects reachable from segment S-1.",
+                    "resolved_identity_ids": [SEGMENT_ID],
+                },
+                tool_call_id="proposal-corrected",
+            )
+        return FinalAnswer(answer_text="Model-authored answer that must not appear.")
+
+
+def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
+    """An invalid temporary-Datalog proposal must not reach the user as a
+    confirmation card (it can never execute). The rejection diagnostics go
+    back to the model as an ordinary tool result so it can revise within the
+    same turn; the corrected proposal is the one that pauses."""
+    provider = RetryAfterRejectionProvider()
+    result = run_grounded_qa_turn(
+        question="Must every segment reach a valve?",
+        topology_tools=make_tools(),
+        provider=provider,
+    )
+
+    proposal_traces = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposal_traces) == 2
+    assert proposal_traces[0]["tool_result"]["status"] == "rejected"
+    assert proposal_traces[1]["tool_result"]["status"] == "confirmation_required"
+    assert proposal_traces[1]["tool_result"]["validation"]["status"] == "safe_to_confirm"
+    # The model saw the rejection diagnostics and the authoring contract.
+    assert provider.rejection_feedback
+    assert "answer(x:symbol)" in provider.rejection_feedback[0]
+    # The paused proposal is the corrected program, not the invalid one.
+    assert ".output answer" in str(
+        proposal_traces[1]["tool_result"]["proposal"]["generated_datalog"]
+    )
 
 
 def test_scripted_provider_escalates_rule_evaluation_to_datalog_proposal():

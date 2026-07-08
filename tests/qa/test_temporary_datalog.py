@@ -108,10 +108,14 @@ def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:
         },
     )
 
-    assert result["status"] == "confirmation_required"
+    # Invalid proposals never pause for confirmation (bead 3cq follow-up):
+    # the rejection returns to the model as a retryable tool result.
+    assert result["status"] == "rejected"
+    assert result["code"] == "tool.proposal_rejected"
     assert result["executed"] is False
     assert result["validation"]["status"] == "rejected"
     assert result["validation"]["diagnostics"][0]["code"] == "temporary_datalog.filesystem_forbidden"
+    assert "Authoring contract" in result["message"]
 
 
 def test_execute_confirmed_temporary_datalog_returns_witnessed_answer() -> None:

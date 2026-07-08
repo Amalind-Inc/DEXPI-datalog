@@ -97,11 +97,29 @@ def test_topology_tools_reject_unknown_tools_before_execution() -> None:
 def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> None:
     tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
 
-    result = tools.execute("propose_temporary_datalog", {"request": "find pumps"})
+    # A valid proposal pauses for user confirmation without executing; an
+    # invalid one is rejected back to the model (bead 3cq follow-up), so the
+    # confirmation gate is only ever reached by an executable pair.
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "find pumps",
+            "generated_datalog": (
+                '.decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable("node-pump", x).'
+            ),
+            "formal_restatement": "Return objects reachable from the pump.",
+        },
+    )
 
     assert result["status"] == "confirmation_required"
     assert result["code"] == "tool.confirmation_required"
     assert result["tool_name"] == "propose_temporary_datalog"
+    assert result["executed"] is False
+
+    rejected = tools.execute("propose_temporary_datalog", {"request": "find pumps"})
+    assert rejected["status"] == "rejected"
+    assert rejected["code"] == "tool.proposal_rejected"
+    assert rejected["executed"] is False
 
 
 def test_system_prompt_includes_grounding_disclosure_policy() -> None:

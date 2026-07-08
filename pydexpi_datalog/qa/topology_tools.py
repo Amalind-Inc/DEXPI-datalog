@@ -217,6 +217,36 @@ class TopologyTools:
             generated_datalog=generated_datalog,
             formal_restatement=formal_restatement,
         )
+        # A proposal that fails validation can never execute, so pausing the
+        # turn for user confirmation would be a guaranteed dead end (bead 3cq
+        # follow-up: the live BYOK model omitted `.output answer` and the user
+        # approved a program that could only re-fail). Return the rejection as
+        # an ordinary tool result instead -- the harness feeds it back to the
+        # model, which revises and re-proposes within the same turn. Only
+        # safe_to_confirm proposals reach the user.
+        if validation.get("status") == "rejected":
+            diagnostics = list(validation.get("diagnostics", []))
+            reasons = "; ".join(
+                str(item.get("message", ""))
+                for item in diagnostics
+                if isinstance(item, dict)
+            )
+            return {
+                "status": "rejected",
+                "code": "tool.proposal_rejected",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "validation": validation,
+                "diagnostics": diagnostics,
+                "message": (
+                    f"Temporary Datalog proposal rejected: {reasons} "
+                    "Revise the program and call propose_temporary_datalog "
+                    "again. Authoring contract: "
+                    + self._temporary_datalog_contract_description()
+                ),
+                "matches": [],
+                "reachable": [],
+            }
         proposal_id = self._temporary_datalog_proposal_id(
             request=request,
             generated_datalog=generated_datalog,
