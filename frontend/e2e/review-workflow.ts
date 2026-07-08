@@ -63,7 +63,9 @@ export function reviewWorkflow(page: Page) {
     },
 
     async openRulePacksFlyout() {
-      await page.getByRole("button", { name: "Rule Packs" }).click();
+      // The attach trigger lives inside the composer's action row, next to
+      // the + attachment button (bead 2c5.4, MikeOSS composer reference).
+      await page.locator(".aui-composer-root").getByRole("button", { name: "Rule Packs" }).click();
       await expect(page.getByTestId("rule-pack-picker")).toBeVisible();
     },
 

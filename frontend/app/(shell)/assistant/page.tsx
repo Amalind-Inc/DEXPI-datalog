@@ -6,7 +6,6 @@ import type { LayoutStorage, PanelImperativeHandle } from "react-resizable-panel
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
-import { RulePacksTrigger } from "@/components/chat/rule-packs-trigger";
 import { PidGraphPanel } from "@/components/pid/graph-panel";
 import { usePidGraph } from "@/components/pid/graph-context";
 
@@ -85,8 +84,8 @@ export default function AssistantPage() {
     >
       <Panel id="chat" minSize="30%" className="assistant-chat-panel">
         <section className="calm-chat-column" aria-label="Chat">
-          <div className="calm-chat-bar">
-            {hasPid && !isGraphOpen && (
+          {hasPid && !isGraphOpen && (
+            <div className="calm-chat-bar">
               <button
                 type="button"
                 className="calm-reopen-graph-btn"
@@ -96,9 +95,8 @@ export default function AssistantPage() {
                 <PanelRightOpen size={15} aria-hidden="true" />
                 <span>View topology · {loadedFileName}</span>
               </button>
-            )}
-            <RulePacksTrigger />
-          </div>
+            </div>
+          )}
           <Thread />
         </section>
       </Panel>

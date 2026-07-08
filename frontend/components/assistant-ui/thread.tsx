@@ -11,6 +11,7 @@ import { RulePackRunCard } from "@/components/assistant-ui/rule-pack-run-card";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { usePidGraph } from "@/components/pid/graph-context";
+import { RulePacksTrigger } from "@/components/chat/rule-packs-trigger";
 import {
   parseDatalogConfirmationMessage,
   parseGroundedLogicAnswerMessage,
@@ -209,7 +210,10 @@ const Composer: FC = () => {
 const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div className="flex items-center gap-1">
+        <ComposerAddAttachment />
+        <RulePacksTrigger />
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
@@ -479,15 +483,18 @@ const DatalogConfirmationCard: FC<{
           proposalResult: readTemporaryProposalResult(confirmation.raw),
         });
       } else {
-        await fetch(`/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question: confirmation.raw.question,
-            decision: "cancel",
-            proposalResult: readTemporaryProposalResult(confirmation.raw),
-          }),
-        });
+        await fetch(
+          `/api/review/sessions/${encodeURIComponent(sessionId)}/temporary-datalog-reviews`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: confirmation.raw.question,
+              decision: "cancel",
+              proposalResult: readTemporaryProposalResult(confirmation.raw),
+            }),
+          },
+        );
       }
     } catch {
       // A cancel action is still locally final: no query is executed from this card.
@@ -557,11 +564,7 @@ const DatalogConfirmationCard: FC<{
         >
           Revise interpretation
         </button>
-        <button
-          type="button"
-          disabled={state !== "ready"}
-          onClick={() => setState("revise-query")}
-        >
+        <button type="button" disabled={state !== "ready"} onClick={() => setState("revise-query")}>
           Revise query
         </button>
         <button type="button" disabled={state !== "ready"} onClick={cancel}>
@@ -570,14 +573,14 @@ const DatalogConfirmationCard: FC<{
       </div>
       {state === "revise-interpretation" && (
         <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
-          Nothing was executed. Send a message describing what the interpretation got
-          wrong and a corrected proposal will be raised for review.
+          Nothing was executed. Send a message describing what the interpretation got wrong and a
+          corrected proposal will be raised for review.
         </p>
       )}
       {state === "revise-query" && (
         <p className="datalog-confirmation-note" data-testid="datalog-revise-note">
-          Nothing was executed. Send a message describing how the query should change
-          and a corrected proposal will be raised for review.
+          Nothing was executed. Send a message describing how the query should change and a
+          corrected proposal will be raised for review.
         </p>
       )}
       {state === "canceled" && (
@@ -644,7 +647,6 @@ function readTemporaryProposalResult(raw: Record<string, unknown>) {
   }
   return {};
 }
-
 
 const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) => {
   const aui = useAui();
@@ -775,7 +777,8 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
                 Object: <strong>{item.objectId || item.reviewKey}</strong>
               </p>
               <p>
-                Proposed direction: <strong>{item.proposedDirection}</strong> ({item.directionBasis})
+                Proposed direction: <strong>{item.proposedDirection}</strong> ({item.directionBasis}
+                )
               </p>
               <p>{item.basisExplanation}</p>
               {itemWitnessIds.length > 0 && (
@@ -793,7 +796,11 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
                   <button
                     key={decision}
                     type="button"
-                    data-testid={review.items.length === 1 ? `direction-${decision}` : `direction-${decision}-${index}`}
+                    data-testid={
+                      review.items.length === 1
+                        ? `direction-${decision}`
+                        : `direction-${decision}-${index}`
+                    }
                     aria-pressed={decisions[item.reviewKey] === decision}
                     disabled={state !== "ready"}
                     onClick={() => {
@@ -804,7 +811,11 @@ const DirectionReviewCard: FC<{ review: DirectionReviewState }> = ({ review }) =
                       choose(item, decision);
                     }}
                   >
-                    {decision === "confirm" ? "Confirm" : decision === "reverse" ? "Reverse" : "Unknown"}
+                    {decision === "confirm"
+                      ? "Confirm"
+                      : decision === "reverse"
+                        ? "Reverse"
+                        : "Unknown"}
                   </button>
                 ))}
               </div>
