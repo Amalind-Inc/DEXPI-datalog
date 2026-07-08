@@ -1,3 +1,5 @@
+import type { TurnStep } from "./turn-steps.ts";
+
 export const QA_ANSWER_PREFIX = "pydexpi:qa-answer:";
 
 export type EvidencePath = {
@@ -18,6 +20,7 @@ export type GroundedQAAnswerState = {
   interpretedObjectIds: string[];
   evidenceHighlight: EvidenceHighlight;
   raw: Record<string, unknown>;
+  steps?: TurnStep[];
 };
 
 export function serializeGroundedQAAnswer(state: GroundedQAAnswerState): string {
@@ -52,6 +55,7 @@ export function parseGroundedQAAnswerMessage(text: string): GroundedQAAnswerStat
         paths: Array.isArray(highlight.paths) ? (highlight.paths as EvidencePath[]) : [],
       },
       raw: isRecord(parsed.raw) ? parsed.raw : {},
+      steps: Array.isArray(parsed.steps) ? (parsed.steps as TurnStep[]) : [],
     };
   } catch {
     return null;

@@ -34,6 +34,11 @@ export const c03DexpiFixture = path.resolve(
   "C03V04-VER.EX02.xml",
 );
 
+// C01, minus the <Position> of Tank-1 -- one shelved item (bead 2ki.7),
+// otherwise identical to c01DexpiFixture (frame, other four equipment, and
+// piping all stay exactly as drawn).
+export const c01ShelfFixture = path.resolve("e2e", "fixtures", "C01-shelf.xml");
+
 export function reviewWorkflow(page: Page) {
   const chat = page.getByRole("region", { name: "Chat" });
   const graphPanel = page.getByRole("complementary", {
@@ -49,13 +54,21 @@ export function reviewWorkflow(page: Page) {
     evidenceSummaries: page.locator('[data-testid="evidence-summary"]'),
     rawEvidenceDetails: page.locator('[data-testid="raw-evidence-details"]'),
     datalogDetails: page.locator('[data-testid="datalog-details"]'),
+    rulePackListItems: page.locator('[data-testid="rule-pack-list-item"]'),
+    rulePackDetail: page.locator('[data-testid="rule-pack-detail"]'),
+    ruleRunSteps: page.locator('[data-testid="rule-run-step"]'),
 
     graphNode(label: string): Locator {
       return graphPanel.getByRole("button", { name: `Select ${label}` });
     },
 
+    async openRulePacksFlyout() {
+      await page.getByRole("button", { name: "Rule Packs" }).click();
+      await expect(page.getByTestId("rule-pack-picker")).toBeVisible();
+    },
+
     async open() {
-      await page.goto("/");
+      await page.goto("/assistant");
       await expect(chat).toBeVisible();
       await expect(composer).toBeVisible();
     },
@@ -75,9 +88,11 @@ export function reviewWorkflow(page: Page) {
 
     async expectPreparedTopology(filename: string) {
       await expect(graphPanel.getByText(filename)).toBeVisible();
-      // Graphics-bearing topologies render the compressed Cytoscape P&ID view
-      // (a canvas, so node interactivity is not exposed as DOM buttons).
-      await expect(page.getByTestId("cytoscape-pid-graph")).toBeVisible();
+      // E06 carries no drawable geometry, so it fails the geometry sanity
+      // gate (bead 2ki.5) and degrades to the auto-layout schematic rather
+      // than the legacy Cytoscape view, which is now reached only when
+      // neither schematic tier is available.
+      await expect(page.getByTestId("auto-layout-schematic")).toBeVisible();
     },
 
     async expectPreparedSchematicScene(filename: string) {

@@ -4,6 +4,7 @@ import {
   serializeDatalogConfirmation,
   serializeGroundedLogicAnswer,
 } from "./datalog-confirmation.ts";
+import { deriveTurnSteps } from "./turn-steps.ts";
 
 export type TurnEvent = { sequence: number; type: string; data: Record<string, unknown> };
 export type TurnState = {
@@ -27,7 +28,8 @@ export type ReducedTurn =
     }
   | { kind: "review-required"; review: Record<string, unknown> }
   | { kind: "canceled" }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  | { kind: "in-progress" };
 
 type TurnClientOptions = {
   baseUrl?: string;
@@ -74,6 +76,12 @@ export function reduceTurn(turn: TurnState): ReducedTurn {
   if (failureMessage !== null) return { kind: "failed", message: failureMessage };
   if (reviewRequired !== null && !completed) {
     return { kind: "review-required", review: reviewRequired };
+  }
+  // A still-active turn with no terminal event yet (bead 2ki.12): the turn
+  // is mid-execution, not answered -- fall through to "answered" only once
+  // the backend has actually produced a result.
+  if (turn.status === "active" && !completed) {
+    return { kind: "in-progress" };
   }
 
   const raw = turn.result ?? {};
@@ -307,7 +315,14 @@ function readEvidenceHighlight(value: unknown) {
  * endpoints rather than the legacy session-scoped ones. */
 export function turnToMessage(turn: TurnState): TurnMessage {
   const reduced = reduceTurn(turn);
+  const steps = deriveTurnSteps(turn, reduced);
 
+  if (reduced.kind === "in-progress") {
+    // turnToMessage is only ever meant to be called on a resolved turn; the
+    // in-progress placeholder is built directly from deriveTurnSteps by the
+    // streaming poll loop (pid-runtime-provider.tsx), not through here.
+    return { status: "active", message: "", highlightedNodeIds: [] };
+  }
   if (reduced.kind === "canceled") {
     return { status: "canceled", message: "The turn was canceled.", highlightedNodeIds: [] };
   }
@@ -352,6 +367,7 @@ export function turnToMessage(turn: TurnState): TurnMessage {
           conversation: [],
           raw: withTurnIdentity(review, turn),
           items,
+          steps,
         }),
         highlightedNodeIds: readEvidenceHighlightIds(review.direction_reviews ?? directionReview.evidence_highlight),
       };
@@ -378,6 +394,7 @@ export function turnToMessage(turn: TurnState): TurnMessage {
           typeof validation.status === "string" ? validation.status : "pending_safety_validation",
         allowedActions: readStringArray(confirmation.allowed_actions),
         raw: withTurnIdentity({ confirmation_kind: "temporary_datalog", ...review }, turn),
+        steps,
       }),
       highlightedNodeIds: [],
     };
@@ -399,6 +416,7 @@ export function turnToMessage(turn: TurnState): TurnMessage {
         rawEvidence: evidence,
         highlightedNodeIds: reduced.highlightedNodeIds,
         raw: reduced.raw,
+        steps,
       }),
       highlightedNodeIds: reduced.highlightedNodeIds,
     };
@@ -412,6 +430,7 @@ export function turnToMessage(turn: TurnState): TurnMessage {
       interpretedObjectIds: readStringArray(reduced.raw.interpreted_object_ids),
       evidenceHighlight: readEvidenceHighlight(reduced.evidenceHighlight),
       raw: reduced.raw,
+      steps,
     }),
     highlightedNodeIds: reduced.highlightedNodeIds,
   };

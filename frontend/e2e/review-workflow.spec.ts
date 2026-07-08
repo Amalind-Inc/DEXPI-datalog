@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { reviewWorkflow } from "./review-workflow";
+import { c01DexpiFixture, reviewWorkflow } from "./review-workflow";
 
 test("uploads E06 XML and a direct topology question gets a grounded QA answer without Datalog confirmation", async ({
   page,
@@ -24,6 +24,12 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
   await expect(page.getByTestId("qa-answer-text")).toBeVisible();
   await workflow.expectLatestAssistantReplyNotToContain(/I am grounding this QA answer/);
   await workflow.expectViewportHeightStable();
+
+  // Stepped presentation (bead 2ki.11): no pause happened, so there is no
+  // validation step -- just retrieval and the final evidence/answer step.
+  await expect(page.locator('[data-testid="turn-step"][data-step-id="validation"]')).toHaveCount(
+    0,
+  );
 });
 
 test("QA answer evidence chips open the topology panel and highlight structural witnesses on click", async ({
@@ -119,6 +125,12 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   await expect(page.getByTestId("direction-reverse")).toBeVisible();
   await expect(page.getByTestId("direction-unknown")).toBeVisible();
 
+  // Stepped presentation (bead 2ki.11): the review card is the blocking
+  // Validation step, nested inside the paused turn's step list.
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
+  ).toBeVisible();
+
   // Clicking the witness chip highlights the structural witness in the
   // auto-layout schematic (E06 fails the geometry sanity gate).
   const graph = page.getByTestId("auto-layout-schematic");
@@ -132,6 +144,70 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   await expect(page.getByTestId("qa-answer-text").last()).toContainText(
     /Confirmed downstream flow direction/,
   );
+
+  // The resumed message is its own step list: retrieval (resumed) + the
+  // final evidence/answer step, no validation step this time -- the
+  // decision belonged to the first message.
+  const resumedSteps = page
+    .getByTestId("grounded-qa-answer")
+    .last()
+    .locator("xpath=ancestor::*[@data-testid='stepped-turn-card']")
+    .getByTestId("turn-step");
+  await expect(resumedSteps).toHaveCount(2);
+  await expect(resumedSteps.nth(0)).toHaveAttribute("data-step-id", "retrieval");
+  await expect(resumedSteps.nth(1)).toHaveAttribute("data-step-id", "evidence-answer");
+});
+
+test("a multi-step scripted turn renders as ordered step rows with per-step disclosure (bead 2ki.11)", async ({
+  page,
+}) => {
+  // Mocked paused turn, independent of a real XML upload -- exercises the
+  // step-list rendering directly against a controlled review-required event
+  // log, matching the pattern used by the Datalog confirmation test below.
+  const pausedTurn = {
+    turn_id: "turn-e2e-2",
+    session_id: "session-e2e-2",
+    status: "paused",
+    question: "What is downstream of the segment?",
+    request_id: "req-e2e-2",
+    events: [
+      { sequence: 1, type: "tool-progress", data: { status: "started" } },
+      {
+        sequence: 2,
+        type: "review-required",
+        data: {
+          review: {
+            status: "needs_direction_review",
+            direction_review: {
+              review_key: "review-key-1",
+              proposed_direction: "downstream",
+              direction_basis: "inferred",
+              review_status: "pending",
+              basis_explanation: "Flow direction along this witness is inferred.",
+              witness: { node_ids: ["node-a"], edge_ids: ["edge-a"] },
+              evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+              actions: ["confirm", "reverse", "unknown"],
+            },
+          },
+        },
+      },
+    ],
+  };
+  await page.route("**/api/review/sessions/*/turns", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(pausedTurn) });
+  });
+
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.sendPrompt("What is downstream of the segment?");
+  await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
+
+  const steps = page.getByTestId("turn-step");
+  await expect(steps).toHaveCount(2);
+  await expect(steps.nth(0)).toHaveAttribute("data-step-id", "retrieval");
+  await expect(steps.nth(0)).toHaveAttribute("data-step-status", "done");
+  await expect(steps.nth(1)).toHaveAttribute("data-step-id", "validation");
+  await expect(steps.nth(1)).toHaveAttribute("data-step-status", "blocked");
 });
 
 test("reversing an inferred flow direction resumes with the opposite direction", async ({
@@ -145,6 +221,9 @@ test("reversing an inferred flow direction resumes with the opposite direction",
 
   await workflow.sendPrompt("What is downstream of the segment?");
   await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
+  ).toBeVisible();
   await page.getByTestId("direction-reverse").click();
 
   await page.getByTestId("grounded-qa-answer").last().waitFor({ state: "visible" });
@@ -211,7 +290,7 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
       { sequence: 2, type: "review-required", data: { review } },
     ],
   });
-  let resumeDecisions: string[] = [];
+  let resumeBodies: Array<{ decision?: string; proposal_result?: unknown }> = [];
   await page.route("**/api/review/sessions/*/turns", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -219,8 +298,11 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
     });
   });
   await page.route("**/api/review/sessions/*/turns/*/datalog-review", async (route) => {
-    const body = route.request().postDataJSON() as { decision?: string };
-    resumeDecisions.push(body.decision ?? "");
+    const body = route.request().postDataJSON() as {
+      decision?: string;
+      proposal_result?: unknown;
+    };
+    resumeBodies.push(body);
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(
@@ -277,42 +359,86 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
   const workflow = reviewWorkflow(page);
   await workflow.open();
   await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
-  await expect(workflow.confirmationCards).toHaveCount(1);
+  const widgets = page.getByTestId("datalog-confirmation-widget");
+  await expect(widgets).toHaveCount(1);
+  await expect(workflow.confirmationCards).toHaveCount(0);
 
-  // The consent surface: interpretation, scope, assumptions, exact Datalog,
-  // and the fixed read-only effect line, plus all four review actions.
-  await expect(page.getByTestId("datalog-plain-language")).toContainText(
+  // Stepped presentation (bead 2ki.11): the confirmation widget is the
+  // blocking Validation step.
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
+  ).toBeVisible();
+
+  // The inline consent surface leads with the plain-language restatement and
+  // scope, keeps exact Datalog collapsed but inspectable, and exposes all four
+  // numbered keyboard-selectable actions.
+  const widget = widgets.first();
+  await expect(widget.getByTestId("datalog-plain-language")).toContainText(
     "Return objects matching the temporary topology rule.",
   );
-  await expect(page.getByTestId("datalog-scope")).toContainText("undirected traversal");
-  await expect(page.getByTestId("datalog-assumptions")).toContainText(
+  await expect(widget.getByTestId("datalog-scope")).toContainText("undirected traversal");
+  await expect(widget.getByTestId("datalog-assumptions")).toContainText(
     "process-flow piping connectivity",
   );
-  await expect(page.getByTestId("datalog-effect")).toHaveText(
+  await expect(widget.getByTestId("datalog-effect")).toHaveText(
     "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
   );
-  await expect(page.getByRole("button", { name: "Approve and run" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Revise interpretation" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Revise query" })).toBeEnabled();
-
-  await workflow.datalogDetails.locator("summary").click();
-  await expect(workflow.datalogDetails).toContainText('answer("node-p101")');
-
-  // Cancel drives the paused turn to its terminal canceled state via the
-  // turn-scoped resume endpoint.
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByTestId("datalog-cancel-note")).toContainText(
-    "No Datalog query was executed",
+  await expect(widget.getByTestId("datalog-widget-option-run")).toContainText("1.");
+  await expect(widget.getByTestId("datalog-widget-option-run")).toContainText("Run");
+  await expect(widget.getByTestId("datalog-widget-option-revise-interpretation")).toContainText(
+    "2.",
   );
-  expect(resumeDecisions).toEqual(["cancel"]);
+  await expect(widget.getByTestId("datalog-widget-option-revise-query")).toContainText("3.");
+  await expect(widget.getByTestId("datalog-widget-option-cancel")).toContainText("4.");
+
+  const exactQuery = widget.getByTestId("datalog-exact-query");
+  await expect(exactQuery.locator("summary")).toHaveText("Exact Datalog");
+  await expect(exactQuery).not.toHaveAttribute("open", "");
+  await exactQuery.locator("summary").click();
+  await expect(exactQuery).toHaveAttribute("open", "");
+  await expect(exactQuery).toContainText('answer("node-p101")');
+
+  // Keyboard cancel: focus the widget, move the visible selection to option 4,
+  // and activate it with Enter. The paused turn resumes through the turn-scoped
+  // endpoint with the exact proposal_result payload.
+  await widget.focus();
+  await widget.press("ArrowDown");
+  await widget.press("ArrowDown");
+  await widget.press("ArrowDown");
+  await expect(widget.getByTestId("datalog-widget-option-cancel")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await widget.press("Enter");
+  await expect(widget.getByTestId("datalog-widget-decided")).toContainText(/cancel/i);
+  expect(resumeBodies.map((body) => body.decision)).toEqual(["cancel"]);
+  expect(resumeBodies[0]?.proposal_result).toEqual(review.datalog_confirmation.proposal_result);
 
   await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
-  await expect(workflow.confirmationCards).toHaveCount(2);
-  await workflow.confirmationCards.last().getByRole("button", { name: "Run" }).click();
+  await expect(widgets).toHaveCount(2);
+  await expect(workflow.confirmationCards).toHaveCount(0);
+  const runWidget = widgets.last();
+  await runWidget.focus();
+  await runWidget.press("1");
+  await expect(runWidget.getByTestId("datalog-widget-option-run")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await runWidget.press("Enter");
   await expect(page.getByTestId("qa-answer-text").last()).toContainText(
     "Return objects matching the temporary topology rule.",
   );
-  expect(resumeDecisions).toEqual(["cancel", "confirm"]);
+  await expect(runWidget.getByTestId("datalog-widget-decided")).toContainText(/run/i);
+  expect(resumeBodies.map((body) => body.decision)).toEqual(["cancel", "confirm"]);
+  expect(resumeBodies[1]?.proposal_result).toEqual(review.datalog_confirmation.proposal_result);
+
+  // The resumed answer's own final step is done -- no fabricated data, just
+  // the real terminal state of the completed turn.
+  const finalStep = page
+    .getByTestId("qa-answer-text")
+    .last()
+    .locator("xpath=ancestor::*[@data-testid='turn-step'][1]");
+  await expect(finalStep).toHaveAttribute("data-step-status", "done");
 });
 
 test("paused direction review survives a page refresh and resumes from persisted state", async ({
@@ -422,6 +548,72 @@ test("canceling an active turn from the chat composer reaches a terminal cancele
   // The composer switches to a stop control while the turn is running.
   await page.getByRole("button", { name: "Stop generating" }).click();
 
-  // The turn reaches its terminal canceled state and the user can see it.
-  await workflow.expectAssistantReply(/The turn was canceled/);
+  // Bead 2ki.12: run() now streams via an AsyncGenerator so steps can tick
+  // live. assistant-ui's own runtime marks a message "incomplete/cancelled"
+  // the instant it observes abortSignal.aborted, discarding whatever content
+  // that final yield carried -- so the terminal state is no longer a custom
+  // "The turn was canceled." text, it is the composer returning to its idle
+  // (non-running) state with the step trail exactly as it last stood, not
+  // replaced by an error or stuck spinner.
+  await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+  await expect(page.locator('[data-role="assistant"]').last()).not.toContainText(/error/i);
+});
+
+test("a turn's step list ticks live against the real scripted backend before the final answer lands (bead 2ki.12)", async ({
+  page,
+}) => {
+  // Exercises real timing (not a route mock): the scripted backend sleeps
+  // PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS between each of its multi-round tool
+  // calls (playwright.config.ts) specifically so this window is observable.
+  const workflow = reviewWorkflow(page);
+
+  await workflow.open();
+  await workflow.uploadPlantXml(c01DexpiFixture);
+  await workflow.expectPreparedSchematicScene("C01V04-VER.EX01.xml");
+
+  await workflow.sendPrompt("What is downstream of the segment?");
+
+  // The in-progress placeholder ticks in before the turn resolves.
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-status="pending"]'),
+  ).toBeVisible();
+
+  // ...and the real answer eventually replaces it.
+  await page.getByTestId("grounded-qa-answer").last().waitFor({ state: "visible" });
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-status="pending"]'),
+  ).toHaveCount(0);
+});
+
+test("canceling mid-stream against the real scripted backend leaves the step trail intact (bead 2ki.12)", async ({
+  page,
+}) => {
+  const workflow = reviewWorkflow(page);
+
+  await workflow.open();
+  await workflow.uploadPlantXml(c01DexpiFixture);
+  await workflow.expectPreparedSchematicScene("C01V04-VER.EX01.xml");
+
+  await workflow.sendPrompt("What is downstream of the segment?");
+
+  // Cancel while the in-progress placeholder is showing -- not after it has
+  // already resolved to a real answer.
+  await page
+    .locator('[data-testid="turn-step"][data-step-status="pending"]')
+    .waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Stop generating" }).click();
+
+  // The composer returns to idle and the last-rendered step trail is left
+  // exactly as it stood -- no error, no further step ticks, no stale spinner.
+  await expect(page.getByRole("button", { name: "Send message" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+  await expect(page.locator('[data-role="assistant"]').last()).not.toContainText(/error/i);
+  const pendingStepCountAfterCancel = await page
+    .locator('[data-testid="turn-step"][data-step-status="pending"]')
+    .count();
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-testid="turn-step"][data-step-status="pending"]')).toHaveCount(
+    pendingStepCountAfterCancel,
+  );
 });

@@ -10,6 +10,7 @@ import pytest
 
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
+    DEFAULT_MAX_ROUNDS,
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
@@ -739,6 +740,55 @@ def test_harness_raises_on_max_rounds_exceeded():
             provider=InfiniteToolCallProvider(),
             max_rounds=3,
         )
+
+
+def test_default_max_rounds_is_20():
+    """
+    Behavior: the default round budget is 20, not the original 10 -- heavier
+    reasoning models routed through BYOK/OpenRouter (e.g. large MoE models)
+    were observed hitting the old cap on broad, open-ended questions well
+    before exhausting useful tool calls.
+    """
+    assert DEFAULT_MAX_ROUNDS == 20
+
+
+def test_on_round_is_reported_once_per_tool_call_not_before_a_first_round_final_answer():
+    """
+    Behavior: on_round fires with (round_number, max_rounds, tool_name) for
+    each round that dispatches a tool call, so a caller can surface live
+    progress instead of a static "working" placeholder for a long-running
+    turn. A round that answers immediately (no tool call at all) must not
+    report progress -- there's nothing "in flight" to describe.
+    """
+
+    class TwoToolCallsThenAnswerProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def complete_with_tools(self, *, messages, tools):
+            self.calls += 1
+            if self.calls <= 2:
+                return ToolCall(
+                    tool_name="find_equipment",
+                    tool_input={"pattern": "pump"},
+                    tool_call_id=f"call-{self.calls}",
+                )
+            return FinalAnswer(answer_text="Found it.")
+
+    reported: list[tuple[int, int, str | None]] = []
+    tools = make_tools()
+    run_grounded_qa_turn(
+        question="find the pump",
+        topology_tools=tools,
+        provider=TwoToolCallsThenAnswerProvider(),
+        on_round=lambda round_number, max_rounds, tool_name: reported.append(
+            (round_number, max_rounds, tool_name)
+        ),
+    )
+    assert reported == [
+        (1, DEFAULT_MAX_ROUNDS, "find_equipment"),
+        (2, DEFAULT_MAX_ROUNDS, "find_equipment"),
+    ]
 
 
 def test_harness_raises_on_unknown_tool_name_error():

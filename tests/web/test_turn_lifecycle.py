@@ -556,3 +556,63 @@ def test_bundled_pump_check_command_runs_rule_pack_inside_turn() -> None:
         # Duplicate request replays the persisted turn without re-execution.
         duplicate = client.post(path, json=body).json()
         assert duplicate == first
+
+
+class _MultiRoundProvider:
+    """Calls a tool twice before answering, to exercise round-progress events."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete_with_tools(self, *, messages, tools):  # type: ignore[no-untyped-def]
+        from pydexpi_datalog.qa.grounded_qa_harness import ToolCall
+
+        self.calls += 1
+        if self.calls <= 2:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": "pump"},
+                tool_call_id=f"call-{self.calls}",
+            )
+        return FinalAnswer(answer_text="Found it after two rounds.")
+
+
+def test_multi_round_turn_persists_live_round_progress_events() -> None:
+    """Regression: the tool-calling loop used to report nothing while running,
+    leaving the frontend's poll-while-waiting loop with a static placeholder
+    for the whole (potentially long, multi-round) turn. Each round with an
+    active tool call must now append its own progress event as it happens."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        provider = _MultiRoundProvider()
+        app = create_review_api_app(
+            artifact_root=root, qa_provider_factory=lambda: provider
+        )
+        client = TestClient(app)
+        session_id = "multi-round-session"
+        prepared = client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": E06_FIXTURE.name,
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        assert prepared.status_code == 200
+
+        path = f"/api/review/sessions/{session_id}/turns"
+        first = client.post(
+            path, json={"request_id": "multi-round-1", "question": "Hello"}
+        ).json()
+
+        assert first["status"] == "completed"
+        round_events = [
+            event
+            for event in first["events"]
+            if event["type"] == "tool-progress" and event["data"].get("status") == "round"
+        ]
+        assert [event["data"]["round"] for event in round_events] == [1, 2]
+        assert [event["data"]["tool_name"] for event in round_events] == [
+            "find_equipment",
+            "find_equipment",
+        ]
+        assert all(event["data"]["max_rounds"] == 20 for event in round_events)

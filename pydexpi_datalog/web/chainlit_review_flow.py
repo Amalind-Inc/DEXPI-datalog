@@ -28,6 +28,7 @@ from ..qa.grounded_qa_harness import (
     DEFAULT_MAX_CONVERSATION_TURNS,
     ConversationTurn,
     QATurnProvider,
+    RoundProgress,
     compact_conversation,
     run_grounded_qa_turn,
 )
@@ -37,7 +38,11 @@ from ..workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
-from ..verification.bundled_rule_pack import evaluate_bundled_rule
+from ..verification.bundled_rule_pack import (
+    bundled_rule_packs,
+    evaluate_bundled_rule,
+    pack_metadata,
+)
 
 
 ANSWER_FACT_RE = re.compile(r'^\s*answer\s*\(\s*"([^"]+)"\s*\)\s*\.\s*$')
@@ -656,6 +661,13 @@ class ChainlitReviewFlow:
         pack_id: str = "demo-process-safety",
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
+        return self._execute_bundled_rule(
+            session_id=session_id, pack_id=pack_id, rule_id=rule_id
+        )
+
+    def _execute_bundled_rule(
+        self, *, session_id: str, pack_id: str, rule_id: str
+    ) -> dict[str, object]:
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
         )
@@ -719,6 +731,71 @@ class ChainlitReviewFlow:
         }
         self._rule_pack_results_by_session.setdefault(session_id, []).append(result)
         return result
+
+    def list_bundled_rule_packs(self, *, session_id: str) -> dict[str, object]:
+        loaded = self._loaded_rule_packs_by_session.get(session_id, set())
+        return {
+            "session_id": session_id,
+            "packs": [
+                {
+                    "pack_id": pack["pack_id"],
+                    "version": pack["version"],
+                    "title": pack["title"],
+                    "authoritative": pack["authoritative"],
+                    "trust_notice": pack["trust_notice"],
+                    "loaded": pack["pack_id"] in loaded,
+                    "rules": [
+                        {
+                            "rule_id": rule["rule_id"],
+                            "title": rule["title"],
+                            "outcomes": rule["outcomes"],
+                            "restatement": rule["restatement"],
+                            "executable_logic": rule["executable_logic"],
+                        }
+                        for rule in pack["rules"]
+                    ],
+                }
+                for pack in bundled_rule_packs()
+            ],
+        }
+
+    def load_rule_pack(self, *, session_id: str, pack_id: str) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        pack = pack_metadata(pack_id)
+        self._loaded_rule_packs_by_session.setdefault(session_id, set()).add(pack_id)
+        return {
+            "session_id": session_id,
+            "pack_id": pack_id,
+            "loaded": True,
+            "pack": {
+                "pack_id": pack["pack_id"],
+                "version": pack["version"],
+                "title": pack["title"],
+                "authoritative": pack["authoritative"],
+                "trust_notice": pack["trust_notice"],
+            },
+        }
+
+    def run_rule_pack(
+        self, *, session_id: str, pack_id: str = "demo-process-safety"
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        pack = pack_metadata(pack_id)
+        results = [
+            self._execute_bundled_rule(
+                session_id=session_id,
+                pack_id=pack_id,
+                rule_id=str(rule["rule_id"]),
+            )
+            for rule in pack["rules"]
+        ]
+        return {
+            "status": "answered",
+            "session_id": session_id,
+            "pack_id": pack_id,
+            "confirmation": {"required": False},
+            "results": results,
+        }
 
     def configure_provider_settings(
         self,
@@ -839,6 +916,7 @@ class ChainlitReviewFlow:
         question: str,
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None = None,
+        on_round: RoundProgress | None = None,
     ) -> dict[str, object]:
         topology = self._topology_for_session(session_id)
         answer = self._compute_qa_answer(
@@ -847,6 +925,7 @@ class ChainlitReviewFlow:
             question=question,
             qa_provider=qa_provider,
             conversation=conversation,
+            on_round=on_round,
         )
         datalog_confirmation = self._temporary_datalog_confirmation_payload(
             session_id=session_id,
@@ -1223,6 +1302,7 @@ class ChainlitReviewFlow:
         question: str,
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None,
+        on_round: RoundProgress | None = None,
     ) -> dict[str, object]:
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
@@ -1255,6 +1335,7 @@ class ChainlitReviewFlow:
             provider=qa_provider,
             conversation=prior_turns,
             max_conversation_turns=self._max_conversation_turns,
+            on_round=on_round,
         )
         conversation_state = self._compacted_conversation_state(
             prior_turns, question=question, result=result

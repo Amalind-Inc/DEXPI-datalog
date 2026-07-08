@@ -434,3 +434,74 @@ class ForceScriptedProviderTests(unittest.TestCase):
             self.assertEqual(body["status"], "completed")
             event_types = [e["type"] for e in body["events"]]
             self.assertIn("completion", event_types)
+
+
+class OpenRouterProviderRoutingTests(unittest.TestCase):
+    """Regression for a session configured with an OpenAI-compatible BYOK
+    provider (e.g. openrouter) silently answering via the deterministic
+    ScriptedQATurnProvider instead of actually calling the model. Only the
+    ollama branch used to be wired into turn resolution; any other BYOK
+    provider fell through to the stub even though provider-settings accepted
+    it."""
+
+    def test_configured_openrouter_provider_is_actually_called(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, mock.patch(
+            "httpx.post"
+        ) as mock_post:
+            mock_post.return_value.raise_for_status = mock.Mock()
+            mock_post.return_value.json.return_value = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "provide_answer",
+                                        "arguments": '{"answer_text": "From OpenRouter."}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = TestClient(app)
+            session_id = "openrouter-session"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            assert prepared.status_code == 200, prepared.text
+
+            configured = client.put(
+                f"/api/review/sessions/{session_id}/provider-settings",
+                json={
+                    "provider": "openrouter",
+                    "model": "anthropic/claude-sonnet-4",
+                    "credential": "sk-or-test-key",
+                },
+            )
+            assert configured.status_code == 200, configured.text
+
+            turn = client.post(
+                f"/api/review/sessions/{session_id}/turns",
+                json={"question": "What equipment is here?", "request_id": "or-1"},
+            )
+            self.assertEqual(turn.status_code, 200, turn.text)
+            body = turn.json()
+            self.assertEqual(body["result"]["answer_text"], "From OpenRouter.")
+
+            mock_post.assert_called()
+            call_url = mock_post.call_args[0][0]
+            self.assertIn("openrouter.ai", call_url)
+            call_headers = mock_post.call_args[1]["headers"]
+            self.assertEqual(call_headers["Authorization"], "Bearer sk-or-test-key")

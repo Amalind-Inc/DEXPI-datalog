@@ -88,6 +88,15 @@ test("reduceTurn returns failed for failure event", () => {
   assert.deepEqual(reduceTurn(turn), { kind: "failed", message: "backend failed" });
 });
 
+test("reduceTurn returns in-progress for an active turn with no terminal event yet (bead 2ki.12)", () => {
+  const turn = mockTurn({
+    status: "active",
+    events: [{ sequence: 1, type: "tool-progress", data: { status: "started" } }],
+  });
+
+  assert.deepEqual(reduceTurn(turn), { kind: "in-progress" });
+});
+
 test("startTurn POSTs to correct path with request_id and returns TurnState", async () => {
   const returned = mockTurn();
   const calls: Array<{ path: string; method: string | undefined; body: unknown }> = [];

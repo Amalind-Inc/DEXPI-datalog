@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from .bundled_symbols import BUNDLED_SYMBOLS
+
 _EQUIPMENT_CATEGORIES = frozenset({"equipment", "instrument"})
 _COMPOSITION = "composition"
 
@@ -70,7 +72,17 @@ def build_pid_view(
         for n in topology_nodes
         if str(n.get("category")) == "structural"
     ]
-    return {"units": units, "lines": lines, "hidden_topology_ids": hidden}
+    generic_placeholders = [
+        {"unit_id": unit["id"], "class_name": unit["raw_class_name"], "reason": "unknown_component_class"}
+        for unit in units
+        if unit["symbol_key"] == "generic"
+    ]
+    return {
+        "units": units,
+        "lines": lines,
+        "hidden_topology_ids": hidden,
+        "symbol_report": {"generic_placeholders": generic_placeholders},
+    }
 
 
 def _build_units(
@@ -93,6 +105,7 @@ def _build_units(
         if str(node.get("category")) not in _EQUIPMENT_CATEGORIES:
             continue
         raw = str(node.get("source_graph_node_id"))
+        raw_class_name = str(node.get("label") or "")
         units.append(
             {
                 "id": str(node["id"]),
@@ -101,6 +114,8 @@ def _build_units(
                 "category": str(node.get("category") or ""),
                 "description": str(node.get("description") or ""),
                 "ports": sorted(ports_by_owner.get(raw, []), key=lambda p: p["label"]),
+                "raw_class_name": raw_class_name,
+                "symbol_key": raw_class_name if raw_class_name in BUNDLED_SYMBOLS else "generic",
             }
         )
     return units

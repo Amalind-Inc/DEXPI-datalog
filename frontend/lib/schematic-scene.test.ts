@@ -76,6 +76,7 @@ test("symbolTransform composes translate, rotate, mirror, and scale in file orde
     mirror: true,
     sx: 0.8,
     sy: 0.4,
+    shelved: false,
   });
   assert.equal(transform, "translate(10 20) rotate(90) scale(1,-1) scale(0.8 0.4)");
 });
@@ -92,6 +93,7 @@ test("symbolTransform omits scale when the symbol is unscaled", () => {
     mirror: false,
     sx: 1,
     sy: 1,
+    shelved: false,
   });
   assert.equal(transform, "translate(0 0) rotate(0)");
 });
@@ -109,8 +111,8 @@ test("catalogueShapesUsed returns only shapes referenced by placed symbols, dedu
       UNUSED_SHAPE: [],
     },
     symbols: [
-      { id: "a", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1 },
-      { id: "b", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 5, ty: 5, angle: 0, mirror: false, sx: 1, sy: 1 },
+      { id: "a", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+      { id: "b", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 5, ty: 5, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
     ],
   });
   const used = catalogueShapesUsed(s);
@@ -120,7 +122,7 @@ test("catalogueShapesUsed returns only shapes referenced by placed symbols, dedu
 
 test("hitTestableObjects includes symbols and pipe/signal lines but not frame or leader polylines", () => {
   const s = scene({
-    symbols: [{ id: "sym-1", topologyId: "topo-1", className: "", shape: "X", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1 }],
+    symbols: [{ id: "sym-1", topologyId: "topo-1", className: "", shape: "X", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false }],
     polylines: [
       { id: "line-1", topologyId: "topo-2", kind: "pipe", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
       { id: "sheet", topologyId: null, kind: "frame", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },

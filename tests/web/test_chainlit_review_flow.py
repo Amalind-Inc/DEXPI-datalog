@@ -904,6 +904,117 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                         [result],
                     )
 
+    def test_list_bundled_rule_packs_returns_restatement_first_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            state = flow.list_bundled_rule_packs(session_id="no-upload-session")
+
+            self.assertEqual(state["session_id"], "no-upload-session")
+            packs = state["packs"]
+            self.assertEqual(len(packs), 1)
+            pack = packs[0]
+            self.assertEqual(pack["pack_id"], "demo-process-safety")
+            self.assertFalse(pack["authoritative"])
+            self.assertFalse(pack["loaded"])
+            self.assertEqual(len(pack["rules"]), 2)
+            self.assertEqual(
+                [rule["rule_id"] for rule in pack["rules"]],
+                ["pump_discharge_check_valve", "discharge_line_min_diameter"],
+            )
+            rule = pack["rules"][0]
+            self.assertEqual(rule["rule_id"], "pump_discharge_check_valve")
+            self.assertTrue(rule["restatement"]["plain_language_meaning"])
+            self.assertTrue(rule["executable_logic"]["inspectable"])
+
+    def test_load_rule_pack_marks_session_state_without_executing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="load-session",
+            )
+
+            load_result = flow.load_rule_pack(
+                session_id="load-session", pack_id="demo-process-safety"
+            )
+
+            self.assertEqual(load_result["loaded"], True)
+            self.assertEqual(load_result["pack_id"], "demo-process-safety")
+
+            state = flow.list_bundled_rule_packs(session_id="load-session")
+            self.assertTrue(state["packs"][0]["loaded"])
+
+            self.assertEqual(
+                flow.rule_pack_results_state(session_id="load-session")["results"],
+                [],
+            )
+
+    def test_load_unknown_pack_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+            flow.prepare_upload(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="load-unknown-session",
+            )
+
+            with self.assertRaises(ValueError):
+                flow.load_rule_pack(
+                    session_id="load-unknown-session", pack_id="not-a-real-pack"
+                )
+
+    def test_run_rule_pack_executes_all_rules_and_matches_run_one_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                artifact_root=Path(tmp_dir) / "sessions",
+                clock=FakeClock(),
+            )
+
+            for session_id, dexpi_xml_path in RULE_PACK_ACCEPTANCE_DOCUMENTS:
+                with self.subTest(session_id=session_id):
+                    flow.prepare_upload(
+                        dexpi_xml_path=dexpi_xml_path,
+                        session_id=session_id,
+                    )
+
+                    run_result = flow.run_rule_pack(
+                        session_id=session_id, pack_id="demo-process-safety"
+                    )
+
+                    self.assertEqual(run_result["status"], "answered")
+                    self.assertEqual(run_result["pack_id"], "demo-process-safety")
+                    self.assertEqual(run_result["confirmation"], {"required": False})
+                    self.assertEqual(len(run_result["results"]), 2)
+                    self.assertEqual(
+                        [item["rule_id"] for item in run_result["results"]],
+                        [
+                            "pump_discharge_check_valve",
+                            "discharge_line_min_diameter",
+                        ],
+                    )
+                    item = run_result["results"][0]
+                    self.assertIn(
+                        item["outcome"], {"satisfied", "violated", "indeterminate"}
+                    )
+                    self.assertEqual(item["evidence"]["display"], "expandable")
+                    self.assertTrue(item["evidence"]["items"])
+
+                    self.assertEqual(
+                        flow.rule_pack_results_state(session_id=session_id)[
+                            "results"
+                        ],
+                        run_result["results"],
+                    )
+
     def test_provider_settings_are_visible_without_exposing_local_credentials(
         self,
     ) -> None:

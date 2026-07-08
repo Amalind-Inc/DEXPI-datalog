@@ -18,6 +18,7 @@ import {
   cancelTurn,
   computeTurnId,
   getTurn,
+  reduceTurn,
   sha256Hex,
   startTurn,
   TurnRequestError,
@@ -25,9 +26,11 @@ import {
   type TurnState,
 } from "@/lib/turn-client";
 import { parseGroundedQAAnswerMessage } from "@/lib/grounded-qa-answer";
+import { deriveTurnSteps } from "@/lib/turn-steps";
+import { serializeInProgressTurn } from "@/lib/in-progress-turn";
+import { readOrCreateSessionId, SESSION_KEY } from "@/lib/session-id";
 
 const HISTORY_KEY = "pydexpi.pidQa.threadHistory.v2";
-const SESSION_KEY = "pydexpi.pidQa.sessionId.v1";
 const ACTIVE_TURN_KEY_PREFIX = "pydexpi.pidQa.activeTurn.v1.";
 
 type ActiveTurnRecord = {
@@ -60,7 +63,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
 
   const modelAdapter = useMemo<ChatModelAdapter>(
     () => ({
-      async run({ messages, abortSignal }) {
+      async *run({ messages, abortSignal }) {
         const backendMessages = messages.map(toBackendMessage);
         const question = lastUserText(backendMessages);
         const conversation = buildTurnConversation(backendMessages);
@@ -80,48 +83,79 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         // turn via getTurn() on the next load(). Cleared in history.append().
         writeActiveTurn({ sessionId, requestId, turnId, question });
 
+        // A signal already aborted before any request went out means this
+        // turn (deterministic id) was started by an earlier run() and this
+        // invocation only needs to tell the backend to cancel it. The
+        // runtime discards any content we yield once abortSignal.aborted is
+        // true (it marks the message incomplete/cancelled itself instead —
+        // see local-thread-runtime-core.js), so the yield below exists only
+        // to give the runtime one more iteration to observe that and apply
+        // the correct status rather than falling through to "complete".
+        if (abortSignal.aborted) {
+          await cancelTurn(sessionId, turnId).catch(() => {});
+          yield {};
+          return;
+        }
+
         // The backend executes turns synchronously inside the POST; the
         // abort signal can only fire while that request is in flight. Do NOT
         // pass the signal to fetch — the turn keeps executing server-side
-        // regardless, so an aborted fetch would only lose the response. On
-        // abort, cancel the backend turn and surface its terminal state.
-        let turn: TurnState;
-        if (abortSignal.aborted) {
-          turn = await cancelTurn(sessionId, turnId);
-        } else {
-          const startPromise = startTurn(sessionId, {
-            question,
-            requestId,
-            conversation,
-            selectedNodeId,
-          });
-          // Swallow the eventual start result if cancellation wins the race:
-          // the cancel response carries the turn's terminal state.
-          const { promise: abortPromise, resolve: abortResolve } =
-            Promise.withResolvers<"aborted">();
-          const onAbort = () => abortResolve("aborted");
-          abortSignal.addEventListener("abort", onAbort, { once: true });
-          try {
-            const raced = await Promise.race([startPromise, abortPromise]);
-            if (raced === "aborted") {
-              turn = await cancelTurnWithRetry(sessionId, turnId, startPromise);
-            } else {
-              turn = raced;
-            }
-          } finally {
-            abortSignal.removeEventListener("abort", onAbort);
-          }
-        }
+        // regardless, so an aborted fetch would only lose the response.
+        const startPromise = startTurn(sessionId, {
+          question,
+          requestId,
+          conversation,
+          selectedNodeId,
+        });
+        // Errors surface through the poll loop below (via the persisted turn's
+        // failure event), not through this promise directly.
+        startPromise.catch(() => {});
 
-        const result = turnToMessage(turn);
-        if (result.status === "failed") {
-          clearActiveTurn(sessionId);
-          throw new Error(result.message);
+        // On abort, tell the backend to cancel; the poll loop below is what
+        // actually renders the terminal state once it lands on disk, so we
+        // don't need this promise's resolved value here.
+        const onAbort = () => {
+          cancelTurnWithRetry(sessionId, turnId, startPromise).catch(() => {});
+        };
+        abortSignal.addEventListener("abort", onAbort, { once: true });
+
+        try {
+          // Polling supplies the live incremental ticks: begin() persists the
+          // turn before execute() runs, so GET already reflects reality the
+          // instant the backend pauses, completes, fails, or is canceled —
+          // no need to wait for the POST response to arrive (bead 2ki.12).
+          // startPromise is raced alongside every tick as a fallback source
+          // of the terminal state: some callers (Playwright route mocks, in
+          // particular) only ever stub the POST/cancel endpoints, never GET,
+          // so polling alone must never be the sole way this loop can end.
+          for (;;) {
+            let polled: TurnState | null = null;
+            try {
+              polled = await getTurn(sessionId, turnId);
+            } catch {
+              polled = null;
+            }
+            if (polled) {
+              const reduced = reduceTurn(polled);
+              if (reduced.kind !== "in-progress") {
+                yield* yieldTerminal(polled, sessionId, setHighlightedNodeIds);
+                return;
+              }
+              const steps = deriveTurnSteps(polled, reduced);
+              yield { content: [{ type: "text", text: serializeInProgressTurn({ steps }) }] };
+            }
+            const raced = await Promise.race([
+              startPromise.then((turn) => ({ settled: true as const, turn })),
+              sleep(250).then(() => ({ settled: false as const })),
+            ]);
+            if (raced.settled) {
+              yield* yieldTerminal(raced.turn, sessionId, setHighlightedNodeIds);
+              return;
+            }
+          }
+        } finally {
+          abortSignal.removeEventListener("abort", onAbort);
         }
-        if (result.highlightedNodeIds.length > 0) {
-          setHighlightedNodeIds(result.highlightedNodeIds);
-        }
-        return { content: [{ type: "text", text: result.message }] };
       },
     }),
     [sessionId, setHighlightedNodeIds],
@@ -185,6 +219,30 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
+function sleep(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+}
+
+/** Convert a resolved turn into the final yielded chunk, applying the same
+ * highlight/failure side effects the single-shot run() used to apply inline. */
+function* yieldTerminal(
+  turn: TurnState,
+  sessionId: string,
+  setHighlightedNodeIds: (nodeIds: string[]) => void,
+): Generator<{ content: [{ type: "text"; text: string }] }, void> {
+  const result = turnToMessage(turn);
+  if (result.status === "failed") {
+    clearActiveTurn(sessionId);
+    throw new Error(result.message);
+  }
+  if (result.highlightedNodeIds.length > 0) {
+    setHighlightedNodeIds(result.highlightedNodeIds);
+  }
+  yield { content: [{ type: "text", text: result.message }] };
+}
+
 /**
  * Cancel a turn whose start POST is still in flight. The cancel can 404 when
  * the abort outruns turn creation on the backend, so retry while the start
@@ -231,15 +289,6 @@ async function cancelTurnWithRetry(
   return cancelTurn(sessionId, turnId);
 }
 
-function readOrCreateSessionId(): string {
-  if (typeof window === "undefined") return `pid-${crypto.randomUUID()}`;
-  const existing = window.localStorage.getItem(SESSION_KEY);
-  if (existing) return existing;
-  const created = `pid-${crypto.randomUUID()}`;
-  window.localStorage.setItem(SESSION_KEY, created);
-  return created;
-}
-
 function activeTurnKey(sessionId: string): string {
   return `${ACTIVE_TURN_KEY_PREFIX}${sessionId}`;
 }
@@ -273,6 +322,25 @@ function readActiveTurn(sessionId: string): ActiveTurnRecord | null {
 function clearActiveTurn(sessionId: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(activeTurnKey(sessionId));
+}
+
+/**
+ * Starts a fresh session: clears the single persisted thread history and the
+ * current session's active-turn record, writes a new session id, and
+ * reloads. `sessionId` is a one-time lazy useState initializer in
+ * PidRuntimeProvider (not reactive to localStorage), so a reload is the only
+ * way to pick up the new value.
+ */
+export function startNewSession(): void {
+  if (typeof window === "undefined") return;
+  const currentSessionId = window.localStorage.getItem(SESSION_KEY);
+  window.localStorage.removeItem(HISTORY_KEY);
+  if (currentSessionId) {
+    window.localStorage.removeItem(activeTurnKey(currentSessionId));
+  }
+  const created = `pid-${crypto.randomUUID()}`;
+  window.localStorage.setItem(SESSION_KEY, created);
+  window.location.reload();
 }
 
 function readStoredHistory(): StoredHistory {

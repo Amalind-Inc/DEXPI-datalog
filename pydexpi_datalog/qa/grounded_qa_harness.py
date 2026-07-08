@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
 
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
@@ -338,7 +339,7 @@ class ScriptedQATurnProvider:
     - It discloses which objects it interpreted the question to mean.
     """
 
-    def __init__(self, *, max_candidates: int = 3) -> None:
+    def __init__(self, *, max_candidates: int = 3, step_delay_seconds: float = 0.0) -> None:
         self._step = 0
         self._max_candidates = max_candidates
         self._mode = "direct"
@@ -346,6 +347,7 @@ class ScriptedQATurnProvider:
         self._reachable_ids: list[str] = []
         self._question = ""
         self._anchor = ""
+        self._step_delay_seconds = step_delay_seconds
 
     def complete_with_tools(
         self,
@@ -353,6 +355,11 @@ class ScriptedQATurnProvider:
         messages: list[dict[str, object]],
         tools: list[dict[str, object]],
     ) -> ToolCall | FinalAnswer:
+        # Test-only pacing (bead 2ki.12): gives a polling client a real window
+        # to observe the turn mid-flight instead of it resolving before the
+        # first poll tick. Zero by default -- never sleeps in production.
+        if self._step_delay_seconds:
+            time.sleep(self._step_delay_seconds)
         step = self._step
         self._step += 1
 
@@ -539,6 +546,19 @@ class ScriptedQATurnProvider:
 # can never smuggle prose in as engineering evidence.
 DEFAULT_MAX_CONVERSATION_TURNS = 12
 
+# Heavier reasoning models (large MoE models routed through OpenRouter/BYOK)
+# can need more tool-call round trips than the harness was originally tuned
+# against (claude-sonnet-4, ornith:35b) to converge on a final answer for
+# broad, open-ended questions -- 10 was too tight and produced hard failures
+# with no partial credit. There is no guarantee any fixed cap prevents this
+# for a given model; raising it only widens the window.
+DEFAULT_MAX_ROUNDS = 20
+
+# Reported to an optional progress callback once per round so callers (e.g. the
+# web API's turn lifecycle) can surface live progress instead of a static
+# "working" placeholder for the whole (potentially long) tool-calling loop.
+RoundProgress = Callable[[int, int, str | None], None]
+
 
 def compact_conversation(
     conversation: list[ConversationTurn],
@@ -591,8 +611,9 @@ def run_grounded_qa_turn(
     topology_tools: TopologyTools,
     provider: QATurnProvider,
     conversation: list[ConversationTurn] | None = None,
-    max_rounds: int = 10,
+    max_rounds: int = DEFAULT_MAX_ROUNDS,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
+    on_round: RoundProgress | None = None,
 ) -> QATurnResult:
     """Execute a grounded QA turn: model calls tools, backend executes them, model answers.
 
@@ -646,8 +667,10 @@ def run_grounded_qa_turn(
     tool_call_trace: list[dict[str, object]] = []
     tools = topology_tools.tool_definitions()
 
-    for _ in range(max_rounds):
+    for round_index in range(max_rounds):
         response = provider.complete_with_tools(messages=messages, tools=tools)
+        if on_round is not None and isinstance(response, ToolCall):
+            on_round(round_index + 1, max_rounds, response.tool_name)
 
         if isinstance(response, FinalAnswer):
             if _tool_trace_satisfies_intent(intent, tool_call_trace):

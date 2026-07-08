@@ -37,11 +37,11 @@ export const fakePidScene: SchematicScene = {
     ],
   },
   symbols: [
-    { id: "PU-1101", topologyId: "PU-1101", className: "Pump", shape: "pump", tx: 90, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1 },
-    { id: "PU-1102", topologyId: "PU-1102", className: "Pump", shape: "pump", tx: 90, ty: 60, angle: 0, mirror: false, sx: 1, sy: 1 },
-    { id: "TK-2201", topologyId: "TK-2201", className: "Tank", shape: "tank", tx: 320, ty: 90, angle: 0, mirror: false, sx: 1, sy: 1 },
-    { id: "V-1", topologyId: null, className: "Valve", shape: "valve", tx: 180, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1 },
-    { id: "FI-401", topologyId: null, className: "Instrument", shape: "instrument", tx: 250, ty: 130, angle: 0, mirror: false, sx: 1, sy: 1 },
+    { id: "PU-1101", topologyId: "PU-1101", className: "Pump", shape: "pump", tx: 90, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+    { id: "PU-1102", topologyId: "PU-1102", className: "Pump", shape: "pump", tx: 90, ty: 60, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+    { id: "TK-2201", topologyId: "TK-2201", className: "Tank", shape: "tank", tx: 320, ty: 90, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+    { id: "V-1", topologyId: null, className: "Valve", shape: "valve", tx: 180, ty: 110, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+    { id: "FI-401", topologyId: null, className: "Instrument", shape: "instrument", tx: 250, ty: 130, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
   ],
   polylines: [
     {

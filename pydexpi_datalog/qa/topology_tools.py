@@ -4,6 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from time import monotonic
+from typing import Callable
 
 from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_ALLOWED_READ_ONLY,
@@ -79,7 +80,17 @@ class TopologyTools:
         self._session_id = session_id
         self._retrieval_budgets = retrieval_budgets or RetrievalBudgets()
         self._retrieval_steps = 0
-        self._retrieval_started_at = monotonic()
+        # Accumulates only time actually spent executing a tool's retrieval
+        # work (see execute()'s timing wrapper below) -- deliberately excludes
+        # time spent waiting on the model between tool calls, so the budget
+        # measures retrieval cost, not turn wall-clock. A wall-clock-since-
+        # session-start version of this previously double-charged the budget
+        # for the model's own inference latency: a slower model (e.g. a large
+        # reasoning model over BYOK/OpenRouter) could exhaust the whole budget
+        # on thinking time alone, making every subsequent retrieval call
+        # return a spurious time_limit rejection regardless of how trivial
+        # the actual graph traversal was.
+        self._retrieval_seconds_used = 0.0
         self._nodes: list[dict[str, object]] = list(topology_view.get("nodes", []))  # type: ignore[arg-type]
         self._edges: list[dict[str, object]] = list(topology_view.get("edges", []))  # type: ignore[arg-type]
         self._evidence_map: dict[str, object] = dict(
@@ -148,22 +159,35 @@ class TopologyTools:
             return budget_rejection
         self._retrieval_steps += 1
         if tool_name == "find_equipment":
-            return self._find_equipment(
-                str(tool_input.get("pattern", "")),
-                claim_type=str(tool_input.get("claim_type", "existential")),
-                evidence_role=str(tool_input.get("evidence_role", "witness")),
+            return self._timed_retrieval(
+                lambda: self._find_equipment(
+                    str(tool_input.get("pattern", "")),
+                    claim_type=str(tool_input.get("claim_type", "existential")),
+                    evidence_role=str(tool_input.get("evidence_role", "witness")),
+                )
             )
         if tool_name == "get_reachable_equipment":
-            return self._get_reachable_equipment(
-                str(tool_input.get("equipment_id", "")),
-                int(tool_input.get("max_hops", 6)),
-                claim_type=str(tool_input.get("claim_type", "existential")),
+            return self._timed_retrieval(
+                lambda: self._get_reachable_equipment(
+                    str(tool_input.get("equipment_id", "")),
+                    int(tool_input.get("max_hops", 6)),
+                    claim_type=str(tool_input.get("claim_type", "existential")),
+                )
             )
         return self._tool_rejection(
             tool_name=tool_name,
             code="tool.unimplemented",
             message=f"no adapter registered for tool: {tool_name}",
         )
+
+    def _timed_retrieval(
+        self, run: Callable[[], dict[str, object]]
+    ) -> dict[str, object]:
+        started_at = monotonic()
+        try:
+            return run()
+        finally:
+            self._retrieval_seconds_used += monotonic() - started_at
 
     @staticmethod
     def _tool_rejection(
@@ -820,10 +844,7 @@ class TopologyTools:
     def _operation_budget_rejection(self) -> dict[str, object] | None:
         if self._retrieval_steps >= self._retrieval_budgets.max_steps:
             return self._limited_result("step_limit", self._retrieval_budgets.max_steps)
-        if (
-            monotonic() - self._retrieval_started_at
-            >= self._retrieval_budgets.max_seconds
-        ):
+        if self._retrieval_seconds_used >= self._retrieval_budgets.max_seconds:
             return self._limited_result(
                 "time_limit", self._retrieval_budgets.max_seconds
             )

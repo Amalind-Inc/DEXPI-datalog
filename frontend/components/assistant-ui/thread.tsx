@@ -3,8 +3,11 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
+import { DatalogConfirmationWidget } from "@/components/assistant-ui/datalog-confirmation-widget";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { SteppedTurnCard } from "@/components/assistant-ui/stepped-turn-card";
+import { RulePackRunCard } from "@/components/assistant-ui/rule-pack-run-card";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
 import { usePidGraph } from "@/components/pid/graph-context";
@@ -24,6 +27,8 @@ import {
   type DirectionReviewItem,
   type DirectionReviewState,
 } from "@/lib/direction-review";
+import { parseRulePackRunMessage } from "@/lib/rule-pack-run";
+import { parseInProgressTurnMessage } from "@/lib/in-progress-turn";
 import {
   readTurnIdentity,
   resumeDatalogReview,
@@ -59,7 +64,7 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import { type FC, useState } from "react";
+import { type FC, useEffect, useState } from "react";
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -106,6 +111,11 @@ export const Thread: FC = () => {
           >
             <ThreadScrollToBottom />
             <Composer />
+            <AuiIf condition={isNewChatView}>
+              <p className="text-center text-xs text-[var(--calm-ink-muted)]">
+                Answers are grounded in the P&amp;ID you upload here — nothing outside it.
+              </p>
+            </AuiIf>
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />
             </AuiIf>
@@ -141,8 +151,8 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-semibold duration-500">
+    <div className="aui-thread-welcome-root mb-10 flex flex-col items-center px-4 text-center">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-[family-name:var(--calm-display-font)] text-4xl leading-[1.1] text-[var(--calm-ink)] duration-500 md:text-5xl">
         How can I help you with your P&ID today?
       </h1>
     </div>
@@ -179,7 +189,7 @@ const Composer: FC = () => {
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
-          className="border-[color-mix(in_oklab,var(--ring)_50%,transparent)] data-[dragging=true]:border-ring focus-within:border-[color-mix(in_oklab,var(--ring)_70%,transparent)] flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="flex w-full flex-col gap-2 rounded-2xl border border-[var(--calm-line)] bg-white p-(--composer-padding) shadow-[0_1px_2px_rgba(28,24,21,0.05),0_20px_40px_-20px_rgba(28,24,21,0.25)] transition-[border-color,box-shadow] focus-within:border-[var(--calm-accent)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[var(--calm-accent-soft)]"
         >
           <ComposerAttachments />
           <ComposerPrimitive.Input
@@ -241,7 +251,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-send size-7 rounded-full"
+              className="aui-composer-send size-7 rounded-full bg-[var(--calm-accent)] text-white hover:bg-[var(--calm-accent)]/90"
               aria-label="Send message"
             >
               <ArrowUpIcon className="aui-composer-send-icon size-4.5" />
@@ -254,7 +264,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-cancel size-7 rounded-full"
+              className="aui-composer-cancel size-7 rounded-full bg-[var(--calm-accent)] text-white hover:bg-[var(--calm-accent)]/90"
               aria-label="Stop generating"
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
@@ -296,19 +306,59 @@ const AssistantMessage: FC = () => {
             if (part.type === "text") {
               const confirmation = parseDatalogConfirmationMessage(part.text);
               if (confirmation) {
-                return <DatalogConfirmationCard confirmation={confirmation} />;
+                return (
+                  <SteppedTurnCard steps={confirmation.steps ?? []}>
+                    {confirmation.raw.confirmation_kind === "temporary_datalog" ? (
+                      <DatalogConfirmationWidget confirmation={confirmation} />
+                    ) : (
+                      <DatalogConfirmationCard confirmation={confirmation} />
+                    )}
+                  </SteppedTurnCard>
+                );
               }
               const directionReview = parseDirectionReviewMessage(part.text);
               if (directionReview) {
-                return <DirectionReviewCard review={directionReview} />;
+                return (
+                  <SteppedTurnCard steps={directionReview.steps ?? []}>
+                    <DirectionReviewCard review={directionReview} />
+                  </SteppedTurnCard>
+                );
               }
               const qaAnswer = parseGroundedQAAnswerMessage(part.text);
               if (qaAnswer) {
-                return <GroundedQAAnswerCard answer={qaAnswer} />;
+                return (
+                  <SteppedTurnCard steps={qaAnswer.steps ?? []}>
+                    <GroundedQAAnswerCard answer={qaAnswer} />
+                  </SteppedTurnCard>
+                );
               }
               const answer = parseGroundedLogicAnswerMessage(part.text);
               if (answer) {
-                return <GroundedLogicAnswerCard answer={answer} />;
+                return (
+                  <SteppedTurnCard steps={answer.steps ?? []}>
+                    <GroundedLogicAnswerCard answer={answer} />
+                  </SteppedTurnCard>
+                );
+              }
+              const rulePackRun = parseRulePackRunMessage(part.text);
+              if (rulePackRun) {
+                return <RulePackRunCard state={rulePackRun} />;
+              }
+              const inProgress = parseInProgressTurnMessage(part.text);
+              if (inProgress) {
+                const lastStep = inProgress.steps[inProgress.steps.length - 1];
+                const detail = lastStep?.detail;
+                const bodyText =
+                  detail?.kind === "retrieval-progress"
+                    ? `Round ${detail.round} of ${detail.maxRounds}${
+                        detail.toolName ? ` — calling ${detail.toolName}` : ""
+                      }…`
+                    : "Working…";
+                return (
+                  <SteppedTurnCard steps={inProgress.steps}>
+                    <p className="calm-step-body">{bodyText}</p>
+                  </SteppedTurnCard>
+                );
               }
               return <MarkdownText />;
             }
@@ -785,7 +835,17 @@ function readSessionIdFromRaw(raw: Record<string, unknown>) {
 }
 
 const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer }) => {
-  const { setHighlightedNodeIds } = usePidGraph();
+  const { setHighlightedNodeIds, setGraphOpen } = usePidGraph();
+  const hasEvidence =
+    answer.evidenceHighlight.paths.length > 0 || answer.evidenceReferences.length > 0;
+
+  // Auto-open the topology panel when this answer carries evidence (bead
+  // 2ki.9). Runs once per card mount (i.e. once per new answer), so closing
+  // the panel afterward sticks until a later answer's evidence reopens it.
+  useEffect(() => {
+    if (hasEvidence) setGraphOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEvidenceChipClick = (path: EvidencePath) => {
     const ids = Array.from(new Set([...path.node_ids, ...path.edge_ids]));

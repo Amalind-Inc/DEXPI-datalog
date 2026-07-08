@@ -22,6 +22,8 @@ import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from .bundled_symbols import BUNDLED_SYMBOLS, GENERIC_PLACEHOLDER
+
 _NON_ITEM_TAGS = frozenset(
     {
         "GenericAttributes", "GenericAttribute", "Presentation", "Position",
@@ -106,6 +108,8 @@ class _SceneBuilder:
         self._namespace = namespace
         self._fallback_seq = 0
         self._position_by_raw_id: dict[str, tuple[float, float]] = {}
+        self._connection_index: dict[str, list[str]] = {}
+        self._pending_shelf: list[dict[str, object]] = []
 
     def build(self, root: ET.Element) -> dict[str, object]:
         plant_info = root.find("PlantInformation")
@@ -120,14 +124,17 @@ class _SceneBuilder:
             "texts": [],
             "report": {
                 "items_with_shape": 0,
-                "items_missing_shape": 0,
+                "items_with_bundled_shape": 0,
                 "items_missing_position": 0,
                 "segments": 0,
                 "segments_with_centerline": 0,
                 "routed_pipe_runs": [],
+                "shelved_equipment": [],
+                "generic_placeholders": [],
             },
         }
         self._position_by_raw_id = _index_positions(root)
+        self._connection_index = _index_connections(root)
         catalogue_el = root.find("ShapeCatalogue")
         self._walk(root, scene, catalogue_el, in_drawing=False)
 
@@ -140,6 +147,7 @@ class _SceneBuilder:
                     "x0": _fnum(mn.get("X")), "y0": _fnum(mn.get("Y")),
                     "x1": _fnum(mx.get("X")), "y1": _fnum(mx.get("Y")),
                 }
+        self._finalize_shelf(scene)
         return scene
 
     def _walk(
@@ -220,11 +228,21 @@ class _SceneBuilder:
     ) -> None:
         report = scene["report"]
         position = _read_position(element)
-        if component_name not in catalogue:
-            report["items_missing_shape"] += 1
-            return
+        shape_key = self._resolve_shape_key(
+            scene,
+            catalogue=catalogue,
+            component_name=component_name,
+            class_name=class_name,
+            raw_id=raw_id,
+        )
         if position is None:
             report["items_missing_position"] += 1
+            self._defer_shelf(
+                shape_key=shape_key,
+                class_name=class_name,
+                raw_id=raw_id,
+                element=element,
+            )
             return
         report["items_with_shape"] += 1
         tx, ty, angle, mirrored = position
@@ -234,11 +252,159 @@ class _SceneBuilder:
                 "id": self._identity(raw_id, kind="symbol"),
                 "topology_id": self._topology_id_of.get(raw_id),
                 "class_name": class_name,
-                "shape": component_name,
+                "shape": shape_key,
                 "tx": tx, "ty": ty, "angle": angle, "mirror": mirrored,
                 "sx": sx, "sy": sy,
+                "shelved": False,
             }
         )
+
+    def _resolve_shape_key(
+        self,
+        scene: dict[str, object],
+        *,
+        catalogue: dict[str, object],
+        component_name: str,
+        class_name: str,
+        raw_id: str,
+    ) -> str:
+        """Resolve the shape to paint: file catalogue, then bundled, then generic.
+
+        Never returns without a usable key (bead 2ki.15) -- a catalogue miss
+        used to silently drop the item. A generic-placeholder resolution is
+        recorded as a typed diagnostic so it stays distinguishable from a
+        real (file or bundled) shape.
+        """
+        report = scene["report"]
+        if component_name in catalogue:
+            return component_name
+        bundled = BUNDLED_SYMBOLS.get(class_name)
+        if bundled is not None:
+            shape_key = f"__bundled__:{class_name}"
+            catalogue.setdefault(shape_key, bundled)
+            report["items_with_bundled_shape"] += 1
+            return shape_key
+        shape_key = "__generic__"
+        catalogue.setdefault(shape_key, GENERIC_PLACEHOLDER)
+        report["generic_placeholders"].append(
+            {
+                "topology_id": self._topology_id_of.get(raw_id),
+                "raw_id": raw_id,
+                "class_name": class_name,
+                "reason": "unknown_component_class",
+            }
+        )
+        return shape_key
+
+    def _defer_shelf(
+        self,
+        *,
+        shape_key: str,
+        class_name: str,
+        raw_id: str,
+        element: ET.Element,
+    ) -> None:
+        """Queue equipment lacking a source Position for the shelf (bead 2ki.7).
+
+        Placement is deferred until `_finalize_shelf`, once the drawing
+        extent is known -- the shelf sits just outside the frame, so its
+        slots cannot be laid out until the frame's own bounds are read.
+        """
+        sx, sy = _read_scale(element)
+        self._pending_shelf.append(
+            {
+                "raw_id": raw_id,
+                "topology_id": self._topology_id_of.get(raw_id),
+                "class_name": class_name,
+                "shape": shape_key,
+                "sx": sx,
+                "sy": sy,
+                "leader_target": self._find_connection_point(element, raw_id),
+            }
+        )
+
+    def _find_connection_point(self, element: ET.Element, raw_id: str) -> tuple[float, float] | None:
+        """Where this unplaced item's own ports actually sit in the drawing.
+
+        A nozzle can carry its own authored Position even when its parent
+        equipment has none -- that is a real connection point, not an
+        invented one, so it is checked first. Only if no candidate id has
+        its own Position do we fall back to the position of whatever it is
+        piped to, as a best-effort anchor for the leader line.
+        """
+        candidates = [raw_id] + [
+            nozzle.attrib.get("ID", "") for nozzle in element.findall("Nozzle") if nozzle.attrib.get("ID")
+        ]
+        for candidate in candidates:
+            position = self._position_by_raw_id.get(candidate)
+            if position is not None:
+                return position
+        for candidate in candidates:
+            for other in self._connection_index.get(candidate, []):
+                position = self._position_by_raw_id.get(other)
+                if position is not None:
+                    return position
+        return None
+
+    def _finalize_shelf(self, scene: dict[str, object]) -> None:
+        if not self._pending_shelf:
+            return
+        origin_x, origin_y = self._shelf_origin(scene)
+        margin = 20.0
+        spacing = 30.0
+        for index, item in enumerate(self._pending_shelf):
+            tx = origin_x + index * spacing
+            ty = origin_y - margin
+            raw_id = str(item["raw_id"])
+            topology_id = item["topology_id"]
+            scene["symbols"].append(
+                {
+                    "id": self._identity(raw_id, kind="symbol"),
+                    "topology_id": topology_id,
+                    "class_name": item["class_name"],
+                    "shape": item["shape"],
+                    "tx": tx, "ty": ty, "angle": 0.0, "mirror": False,
+                    "sx": item["sx"], "sy": item["sy"],
+                    "shelved": True,
+                }
+            )
+            leader_target = item["leader_target"]
+            if leader_target is not None:
+                lx, ly = leader_target
+                scene["polylines"].append(
+                    {
+                        "id": self._fallback_id("shelf-leader"),
+                        "topology_id": topology_id,
+                        "kind": "leader",
+                        "points": [[tx, ty], [lx, ly]],
+                        "stroke": "#333333",
+                        "width": 0.25,
+                        "dash": None,
+                        "inferred": True,
+                    }
+                )
+            scene["report"]["shelved_equipment"].append(
+                {"topology_id": topology_id, "raw_id": raw_id, "reason": "missing_position"}
+            )
+
+    def _shelf_origin(self, scene: dict[str, object]) -> tuple[float, float]:
+        """Bottom-left corner the shelf row starts from: the drawing extent when
+        known, otherwise the bounding box of whatever else is already drawn."""
+        extent = scene.get("extent")
+        if isinstance(extent, dict):
+            return float(extent["x0"]), float(extent["y0"])
+        xs: list[float] = []
+        ys: list[float] = []
+        for symbol in scene["symbols"]:
+            xs.append(symbol["tx"])
+            ys.append(symbol["ty"])
+        for polyline in scene["polylines"]:
+            for x, y in polyline["points"]:
+                xs.append(x)
+                ys.append(y)
+        if xs and ys:
+            return min(xs), min(ys)
+        return 0.0, 0.0
 
     def _emit_routed_pipe(self, segment: ET.Element, scene: dict[str, object]) -> None:
         """Route a pipe run whose source carries no CenterLine (bead 2ki.6).
@@ -307,6 +473,7 @@ class _SceneBuilder:
                     "shape": component_name,
                     "tx": tx, "ty": ty, "angle": angle, "mirror": mirrored,
                     "sx": sx, "sy": sy,
+                    "shelved": False,
                 }
             )
         for child in label:
@@ -362,6 +529,24 @@ def _index_positions(root: ET.Element) -> dict[str, tuple[float, float]]:
         if position is not None:
             positions[raw_id] = (position[0], position[1])
     return positions
+
+
+def _index_connections(root: ET.Element) -> dict[str, list[str]]:
+    """Map every id named by a segment `Connection` to the ids it connects to.
+
+    Undirected: a shelved item's own id (or a nozzle id) may appear as either
+    `FromID` or `ToID` depending on how the source authored the run.
+    """
+    index: dict[str, list[str]] = {}
+    for segment in root.iter("PipingNetworkSegment"):
+        for connection in segment.findall("Connection"):
+            from_id = connection.attrib.get("FromID")
+            to_id = connection.attrib.get("ToID")
+            if not from_id or not to_id:
+                continue
+            index.setdefault(from_id, []).append(to_id)
+            index.setdefault(to_id, []).append(from_id)
+    return index
 
 
 def _build_catalogue(root: ET.Element) -> dict[str, list[dict[str, object]]]:

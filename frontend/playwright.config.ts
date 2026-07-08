@@ -21,7 +21,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "PYDEXPI_QA_PROVIDER=scripted PYTHONPATH=.. PYDEXPI_REVIEW_ARTIFACT_ROOT=../.tmp/review-sessions ../.venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --host 127.0.0.1 --port 8000",
+        "PYDEXPI_QA_PROVIDER=scripted PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS=300 PYTHONPATH=.. PYDEXPI_REVIEW_ARTIFACT_ROOT=../.tmp/review-sessions ../.venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --host 127.0.0.1 --port 8000",
       url: "http://127.0.0.1:8000/docs",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

@@ -1,7 +1,8 @@
 "use client";
 
 import { Search, SlidersHorizontal, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { cn } from "@/lib/utils";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PidNodeKind } from "@/components/pid/types";
@@ -10,6 +11,9 @@ import { CytoscapePidGraph } from "@/components/pid/cytoscape-pid-graph";
 import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
 import { AutoLayoutSchematicView } from "@/components/pid/auto-layout-scene-view";
 import { PidLegend } from "@/components/pid/pid-legend";
+import { GeometryHealthCard } from "@/components/pid/geometry-health-card";
+import { ZoomableScene, ZoomControls } from "@/components/pid/zoomable-scene";
+import { describeSchematicTier } from "@/lib/schematic-scene";
 
 const filters: Array<PidNodeKind | "All"> = [
   "All",
@@ -25,6 +29,7 @@ export function PidGraphPanel() {
     pidView,
     schematicScene,
     schematicSceneKind,
+    geometryReport,
     highlightedNodeIds,
     loadedFileName,
     selectedNode,
@@ -32,11 +37,21 @@ export function PidGraphPanel() {
     setSelectedNodeId,
     setGraphOpen,
   } = usePidGraph();
+  const shelvedTopologyIds = useMemo(() => {
+    if (!schematicScene) return new Set<string>();
+    return new Set(
+      schematicScene.symbols
+        .filter((symbol) => symbol.shelved && symbol.topologyId !== null)
+        .map((symbol) => symbol.topologyId as string),
+    );
+  }, [schematicScene]);
+  const selectedIsShelved = selectedNodeId !== null && shelvedTopologyIds.has(selectedNodeId);
   const hasPidView = pidView.units.length > 0;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PidNodeKind | "All">("All");
   const [showLegend, setShowLegend] = useState(false);
   const [processFlow, setProcessFlow] = useState(true);
+  const schematicZoomRef = useRef<ReactZoomPanPinchRef>(null);
 
   const visibleNodes = useMemo(
     () =>
@@ -88,6 +103,8 @@ export function PidGraphPanel() {
         </div>
       </div>
 
+      <GeometryHealthCard />
+
       <div className="pid-search-row">
         <label className="pid-search">
           <Search size={15} aria-hidden="true" />
@@ -117,12 +134,24 @@ export function PidGraphPanel() {
       <section className="pid-graph-canvas" aria-label="Graph visualization">
         {schematicScene ? (
           <div className="pid-schematic-wrap" data-testid="schematic-panel">
-            <SchematicSceneView
-              scene={schematicScene}
-              selectedId={selectedNodeId}
-              highlightedIds={highlightedNodeIds}
-              onSelect={setSelectedNodeId}
-            />
+            <div className="pid-schematic-header">
+              <div
+                className="pid-tier-badge"
+                data-testid="schematic-tier-badge"
+                data-tier={describeSchematicTier("as-drawn", geometryReport).tier}
+              >
+                {describeSchematicTier("as-drawn", geometryReport).label}
+              </div>
+              <ZoomControls zoomRef={schematicZoomRef} />
+            </div>
+            <ZoomableScene ref={schematicZoomRef}>
+              <SchematicSceneView
+                scene={schematicScene}
+                selectedId={selectedNodeId}
+                highlightedIds={highlightedNodeIds}
+                onSelect={setSelectedNodeId}
+              />
+            </ZoomableScene>
           </div>
         ) : schematicSceneKind === "auto-layout" && hasPidView ? (
           <div className="pid-schematic-wrap" data-testid="auto-layout-panel">
@@ -246,6 +275,11 @@ export function PidGraphPanel() {
               </div>
             </dl>
             <p>{selectedNode.description}</p>
+            {selectedIsShelved && (
+              <p className="pid-shelved-disclosure" data-testid="shelved-disclosure">
+                Position not in source — shown on the shelf. Connectivity is exact.
+              </p>
+            )}
             {connectedLines.length > 0 && (
               <div className="pid-connections" data-testid="pid-connections">
                 <p className="pid-eyebrow">Connections</p>

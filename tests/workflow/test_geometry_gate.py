@@ -21,6 +21,7 @@ def _scene(
     items_with_shape=0,
     items_missing_position=0,
     routed_pipe_runs=None,
+    shelved_equipment=None,
 ):
     return {
         "units": units,
@@ -32,6 +33,7 @@ def _scene(
             "segments": segments,
             "segments_with_centerline": segments_with_centerline,
             "routed_pipe_runs": routed_pipe_runs or [],
+            "shelved_equipment": shelved_equipment or [],
         },
     }
 
@@ -113,6 +115,44 @@ class GeometryGateTests(unittest.TestCase):
     def test_none_scene_reports_no_routed_pipe_runs(self) -> None:
         report = evaluate_geometry_gate(None)
         self.assertEqual(report["routed_pipe_runs"], [])
+
+    def test_none_scene_reports_no_shelved_equipment(self) -> None:
+        report = evaluate_geometry_gate(None)
+        self.assertEqual(report["shelved_equipment"], [])
+
+    def test_shelved_equipment_passes_through_when_under_threshold(self) -> None:
+        # One shelved item out of five positionable equipment (20% share) is
+        # exactly at the threshold, still passing -- the shelf, not a gate
+        # failure, is how a low unplaced share is disclosed.
+        entries = [{"topology_id": "topo-valve", "raw_id": "Equipment-2", "reason": "missing_position"}]
+        scene = _scene(
+            extent={"x0": 0, "y0": 0, "x1": 420, "y1": 297},
+            items_with_shape=4,
+            items_missing_position=1,
+            shelved_equipment=entries,
+        )
+        report = evaluate_geometry_gate(scene)
+        self.assertTrue(report["passed"])
+        self.assertEqual(report["shelved_equipment"], entries)
+
+    def test_shelved_equipment_over_threshold_still_demotes_the_gate(self) -> None:
+        # Shelving is per-item disclosure, not an escape hatch from the
+        # whole-file threshold: once unplaced share exceeds 20%, the file
+        # still demotes to auto-layout.
+        entries = [
+            {"topology_id": "topo-1", "raw_id": "Equipment-1", "reason": "missing_position"},
+            {"topology_id": "topo-2", "raw_id": "Equipment-2", "reason": "missing_position"},
+        ]
+        scene = _scene(
+            extent={"x0": 0, "y0": 0, "x1": 420, "y1": 297},
+            items_with_shape=3,
+            items_missing_position=2,
+            shelved_equipment=entries,
+        )
+        report = evaluate_geometry_gate(scene)
+        self.assertFalse(report["passed"])
+        self.assertIn("unpositioned_equipment", report["reasons"])
+        self.assertEqual(report["shelved_equipment"], entries)
 
     def test_routed_pipe_runs_pass_through_independent_of_gate_outcome(self) -> None:
         # Per-pipe demotion (bead 2ki.6) is orthogonal to the gate's pass/fail --

@@ -7,6 +7,12 @@ from threading import RLock
 from typing import Callable
 
 
+def compute_turn_id(session_id: str, request_id: str) -> str:
+    """Deterministic turn_id, matching the frontend's computeTurnId() formula
+    (frontend/lib/turn-client.ts) so the client can know a turn's id up front."""
+    return hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[:20]
+
+
 class TurnLifecycleStore:
     """Disk-backed, replayable lifecycle for one server-owned QA turn."""
 
@@ -22,9 +28,7 @@ class TurnLifecycleStore:
         question: str,
         execute: Callable[[], dict[str, object]],
     ) -> dict[str, object]:
-        turn_id = hashlib.sha256(
-            f"{session_id}\n{request_id}".encode("utf-8")
-        ).hexdigest()[:20]
+        turn_id = compute_turn_id(session_id, request_id)
         with self._lock:
             existing = self.get(session_id=session_id, turn_id=turn_id)
             if existing is not None:
@@ -43,6 +47,11 @@ class TurnLifecycleStore:
                 current = self.get(session_id=session_id, turn_id=turn_id)
                 if current is not None and current.get("status") == "canceled":
                     return current
+                # Reload before appending: execute() may have persisted
+                # progress events directly to disk (append_progress) while it
+                # ran -- reusing the pre-execute() in-memory snapshot here
+                # would silently overwrite those with a stale copy.
+                turn = current if current is not None else turn
                 turn["status"] = "failed"
                 self._append(turn, "failure", {"message": str(error)})
                 self._save(turn)
@@ -52,6 +61,7 @@ class TurnLifecycleStore:
             current = self.get(session_id=session_id, turn_id=turn_id)
             if current is not None and current.get("status") == "canceled":
                 return current
+            turn = current if current is not None else turn
             turn["result"] = result
             self._append_result_events(turn, result)
             self._save(turn)
@@ -80,6 +90,37 @@ class TurnLifecycleStore:
             }
             self._save(turn)
             return turn
+
+    def append_progress(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        round_index: int,
+        max_rounds: int,
+        tool_name: str | None,
+    ) -> None:
+        """Append a live round-progress event while a turn is still executing.
+
+        Called from inside the (synchronous, in-request) tool-calling loop, so
+        the frontend's existing poll-while-waiting loop has something new to
+        render instead of a static "working" placeholder for the whole turn.
+        """
+        with self._lock:
+            turn = self.get(session_id=session_id, turn_id=turn_id)
+            if turn is None or turn.get("status") != "active":
+                return
+            self._append(
+                turn,
+                "tool-progress",
+                {
+                    "status": "round",
+                    "round": round_index,
+                    "max_rounds": max_rounds,
+                    "tool_name": tool_name,
+                },
+            )
+            self._save(turn)
 
     def get(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
         path = self._path(session_id, turn_id)
@@ -124,6 +165,7 @@ class TurnLifecycleStore:
                 current = self.get(session_id=session_id, turn_id=turn_id)
                 if current is not None and current.get("status") == "canceled":
                     return current
+                turn = current if current is not None else turn
                 turn["status"] = "failed"
                 self._append(turn, "failure", {"message": str(error)})
                 self._save(turn)
@@ -132,6 +174,7 @@ class TurnLifecycleStore:
             current = self.get(session_id=session_id, turn_id=turn_id)
             if current is not None and current.get("status") == "canceled":
                 return current
+            turn = current if current is not None else turn
             turn["result"] = result
             self._append_result_events(turn, result)
             self._save(turn)

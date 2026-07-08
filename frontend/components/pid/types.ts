@@ -29,6 +29,9 @@ export type PidUnit = {
   category: string;
   description: string;
   ports: PidPort[];
+  // Backend-resolved bundled-symbol key (bead pydexpi-datalog-1-2ki.15): the
+  // raw DEXPI component class if a bundled symbol covers it, else "generic".
+  symbolKey: string;
 };
 
 export type PidLine = {
@@ -81,6 +84,12 @@ export type SchematicSymbol = {
   mirror: boolean;
   sx: number;
   sy: number;
+  // Unplaced-equipment shelf (bead pydexpi-datalog-1-2ki.7): true when this
+  // symbol carries no source Position and was placed in the shelf region
+  // outside the drawing frame instead. The drawn frame itself never carries
+  // an invented position -- this is the only place a backend-computed
+  // symbol coordinate appears in an otherwise as-drawn scene.
+  shelved: boolean;
 };
 
 export type SchematicPolyline = {
@@ -137,6 +146,14 @@ export type InferredPipeRun = {
   reason: string;
 };
 
+// Unplaced-equipment shelf diagnostic (bead pydexpi-datalog-1-2ki.7): one
+// entry per shelved item, independent of the gate's pass/fail.
+export type ShelvedEquipmentEntry = {
+  topologyId: string | null;
+  rawId: string;
+  reason: string;
+};
+
 export type GeometryReport = {
   passed: boolean;
   reasons: string[];
@@ -144,6 +161,7 @@ export type GeometryReport = {
   pipeCoverage: GeometryGateMetric & { segments: number; segmentsWithCenterline: number };
   unpositionedEquipment: GeometryGateMetric & { total: number; missing: number };
   routedPipeRuns: InferredPipeRun[];
+  shelvedEquipment: ShelvedEquipmentEntry[];
 };
 
 export type PrepareResult = {

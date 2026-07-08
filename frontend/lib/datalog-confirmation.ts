@@ -1,3 +1,5 @@
+import type { TurnStep } from "./turn-steps.ts";
+
 export const DATALOG_CONFIRMATION_PREFIX = "pydexpi:datalog-confirmation:";
 export const LOGIC_ANSWER_PREFIX = "pydexpi:logic-answer:";
 
@@ -7,6 +9,7 @@ export type DatalogConfirmationState = {
   validationStatus: string;
   allowedActions: string[];
   raw: Record<string, unknown>;
+  steps?: TurnStep[];
 };
 
 export type GroundedLogicAnswerState = {
@@ -14,6 +17,7 @@ export type GroundedLogicAnswerState = {
   rawEvidence: Record<string, unknown>;
   highlightedNodeIds: string[];
   raw: Record<string, unknown>;
+  steps?: TurnStep[];
 };
 
 export function serializeDatalogConfirmation(state: DatalogConfirmationState) {
@@ -42,6 +46,7 @@ export function parseDatalogConfirmationMessage(text: string): DatalogConfirmati
       validationStatus: parsed.validationStatus,
       allowedActions: parsed.allowedActions,
       raw: isRecord(parsed.raw) ? parsed.raw : {},
+      steps: Array.isArray(parsed.steps) ? (parsed.steps as TurnStep[]) : [],
     };
   } catch {
     return null;
@@ -64,6 +69,7 @@ export function parseGroundedLogicAnswerMessage(text: string): GroundedLogicAnsw
       rawEvidence: parsed.rawEvidence,
       highlightedNodeIds: parsed.highlightedNodeIds,
       raw: isRecord(parsed.raw) ? parsed.raw : {},
+      steps: Array.isArray(parsed.steps) ? (parsed.steps as TurnStep[]) : [],
     };
   } catch {
     return null;

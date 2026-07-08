@@ -9,6 +9,17 @@ _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1"
+
+# Providers reachable through a plain OpenAI-compatible /chat/completions
+# endpoint (including native tool_calls). Anthropic and Gemini use different
+# request/response shapes and are not part of this family.
+OPENAI_COMPATIBLE_BASE_URLS = {
+    "openai": _OPENAI_BASE_URL,
+    "openrouter": _OPENROUTER_BASE_URL,
+    "ollama": _OLLAMA_DEFAULT_BASE_URL,
+}
+
 _NATIVE_TOOL_REJECTION_TOKENS = (
     "tool_calls",
     "tool call",

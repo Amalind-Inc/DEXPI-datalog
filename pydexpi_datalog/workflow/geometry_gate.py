@@ -45,6 +45,8 @@ def evaluate_geometry_gate(scene: dict[str, object] | None) -> dict[str, object]
             },
             "reasons": ["no_geometry_source"],
             "routed_pipe_runs": [],
+            "shelved_equipment": [],
+            "generic_placeholders": [],
         }
 
     factor = _UNIT_TO_MM.get(str(scene.get("units", "mm")), 1.0)
@@ -108,4 +110,16 @@ def evaluate_geometry_gate(scene: dict[str, object] | None) -> dict[str, object]
         # centerline in an otherwise geometry-bearing drawing does not sink
         # the whole scene.
         "routed_pipe_runs": list(report.get("routed_pipe_runs", [])),
+        # Unplaced-equipment shelf (bead pydexpi-datalog-1-2ki.7): equipment
+        # with no source Position, rendered outside the drawing frame and
+        # linked to its real connection points. Independent of pass/fail --
+        # the gate's unpositioned_equipment ratio (above) is what demotes the
+        # whole file to auto-layout once the unplaced share is too high.
+        "shelved_equipment": list(report.get("shelved_equipment", [])),
+        # Bundled/generic symbol resolution (bead pydexpi-datalog-1-2ki.15):
+        # how many placed items used the bundled library rather than the
+        # file's own catalogue, and which ones fell all the way through to a
+        # generic placeholder (typed diagnostic, independent of pass/fail).
+        "items_with_bundled_shape": int(report.get("items_with_bundled_shape", 0)),
+        "generic_placeholders": list(report.get("generic_placeholders", [])),
     }

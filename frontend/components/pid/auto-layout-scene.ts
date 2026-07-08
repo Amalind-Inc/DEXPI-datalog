@@ -1,7 +1,7 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api";
 import type { PidView, SchematicScene } from "@/components/pid/types";
-import { autoLayoutCatalogue, autoLayoutSymbolKeyFor } from "@/components/pid/auto-layout-catalogue";
+import { autoLayoutCatalogue } from "@/components/pid/auto-layout-catalogue";
 
 const elk = new ELK();
 const NODE_SIZE = 64;
@@ -71,7 +71,7 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
   for (const unit of pidView.units) {
     const center = nodeCenters.get(unit.id);
     if (!center) continue;
-    const shape = autoLayoutSymbolKeyFor(unit.category, unit.className);
+    const shape = autoLayoutCatalogue[unit.symbolKey] ? unit.symbolKey : "generic";
     scene.symbols.push({
       id: unit.id,
       topologyId: unit.id,
@@ -83,6 +83,7 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
       mirror: false,
       sx: 1,
       sy: 1,
+      shelved: false,
     });
     scene.texts.push({
       kind: "text",

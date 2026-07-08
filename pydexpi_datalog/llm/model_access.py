@@ -28,6 +28,10 @@ SUPPORTED_BYOK_PROVIDERS = {
         "api_key_env_var": "OLLAMA_BASE_URL",
         "default_model": "ornith:35b",
     },
+    "openrouter": {
+        "api_key_env_var": "OPENROUTER_API_KEY",
+        "default_model": "deepseek/deepseek-v4-pro",
+    },
 }
 
 NATIVE_TOOL_CAPABLE_MODELS = {
@@ -35,6 +39,7 @@ NATIVE_TOOL_CAPABLE_MODELS = {
     ("anthropic", "claude-sonnet-4"),
     ("gemini", "gemini-2.5-pro"),
     ("openrouter", "anthropic/claude-sonnet-4"),
+    ("openrouter", "deepseek/deepseek-v4-pro"),
     ("ollama", "ornith:35b"),
 }
 

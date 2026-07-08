@@ -144,3 +144,33 @@ def test_zero_time_budget_returns_explicit_indeterminate_result() -> None:
     assert result["outcome"] == "indeterminate"
     assert result["coverage"]["complete"] is False
     assert result["limitations"][0]["code"] == "retrieval.time_limit"
+
+
+def test_time_budget_is_not_consumed_by_time_between_tool_calls() -> None:
+    """
+    Regression: the time budget used to be measured as wall-clock time since
+    TopologyTools was constructed, which included time spent waiting on the
+    model between tool calls. A slower model (larger reasoning model over
+    BYOK/OpenRouter) could burn through the whole budget on its own thinking
+    time alone, so every retrieval call after the first one or two would be
+    spuriously time_limit-rejected regardless of how trivial the query was.
+    The budget must only count time actually spent inside tool execution.
+    """
+    import time
+
+    tools = TopologyTools(
+        topology_view=TOPOLOGY,
+        session_id="s",
+        retrieval_budgets=RetrievalBudgets(max_seconds=0.02),
+    )
+
+    # Simulate model "thinking time" between tool calls, comfortably longer
+    # than the budget itself -- under the old (buggy) wall-clock-since-init
+    # measurement this alone would exhaust the budget before any tool ever
+    # ran; it must not count against the budget now.
+    time.sleep(0.05)
+
+    result = tools.execute("find_equipment", {"pattern": "pump"})
+
+    limitation_codes = [limitation["code"] for limitation in result.get("limitations", [])]
+    assert "retrieval.time_limit" not in limitation_codes

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
 import { buildAutoLayoutScene } from "@/components/pid/auto-layout-scene";
+import { ZoomableScene, ZoomControls } from "@/components/pid/zoomable-scene";
 import type { PidView, SchematicScene } from "@/components/pid/types";
 
 type Props = {
@@ -19,6 +21,7 @@ type Props = {
 // claiming the render is as drawn.
 export function AutoLayoutSchematicView({ pidView, selectedId, highlightedIds, onSelect }: Props) {
   const [scene, setScene] = useState<SchematicScene | null>(null);
+  const zoomRef = useRef<ReactZoomPanPinchRef>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,16 +40,21 @@ export function AutoLayoutSchematicView({ pidView, selectedId, highlightedIds, o
       data-testid="auto-layout-schematic"
       data-highlight-active={highlightedIds.length > 0}
     >
-      <div className="pid-auto-layout-badge" data-testid="auto-layout-badge">
-        Auto-layout — positions inferred, not as drawn
+      <div className="pid-auto-layout-header">
+        <div className="pid-auto-layout-badge" data-testid="auto-layout-badge">
+          Auto-layout — positions inferred, not as drawn
+        </div>
+        {scene && <ZoomControls zoomRef={zoomRef} />}
       </div>
       {scene ? (
-        <SchematicSceneView
-          scene={scene}
-          selectedId={selectedId}
-          highlightedIds={highlightedIds}
-          onSelect={onSelect}
-        />
+        <ZoomableScene ref={zoomRef}>
+          <SchematicSceneView
+            scene={scene}
+            selectedId={selectedId}
+            highlightedIds={highlightedIds}
+            onSelect={onSelect}
+          />
+        </ZoomableScene>
       ) : (
         <p className="pid-auto-layout-loading">Laying out P&amp;ID…</p>
       )}

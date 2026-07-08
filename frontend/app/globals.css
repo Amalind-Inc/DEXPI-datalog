@@ -71,6 +71,16 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Calm shell design tokens (bead pydexpi-datalog-1-2ki.10) -- kept
+     separate from the shadcn tokens above so restyling the app shell
+     never bleeds into the answer-card components built on those tokens. */
+  --calm-paper: #fbfaf8;
+  --calm-ink: #1c1815;
+  --calm-ink-muted: #6b6259;
+  --calm-accent: #b9542e;
+  --calm-accent-soft: #f4e3d8;
+  --calm-line: #e8e3dc;
 }
 
 .dark {
@@ -118,265 +128,686 @@
 }
 
 .pid-app-shell {
-  --sidebar-w: 240px;
-  background: #ffffff;
-  color: #1f2937;
-  display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  background: var(--calm-paper);
+  color: var(--calm-ink);
+  display: flex;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  transition: grid-template-columns 0.22s ease;
 }
 
-.pid-app-shell.with-graph {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(0, 1fr);
+.calm-rail-mark {
+  color: var(--calm-ink);
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.15rem;
+  font-style: italic;
+  margin-bottom: 10px;
 }
 
-.pid-app-shell.sidebar-collapsed {
-  --sidebar-w: 0px;
+.calm-rail-divider {
+  background: var(--calm-line);
+  height: 1px;
+  margin-block: 6px;
+  width: 26px;
 }
 
-/* Empty grid track the fixed sidebar is layered over: animating its width
-   reflows the content while the sidebar itself slides via transform. */
-.sidebar-spacer {
-  min-width: 0;
-}
-
-.pid-app-shell.sidebar-collapsed .conversation-sidebar {
-  transform: translateX(-100%);
-  box-shadow: none;
-}
-
-.pid-app-shell.sidebar-collapsed .conversation-sidebar.peeking {
-  transform: translateX(0);
-  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
-  border-right: 1px solid #e5e7eb;
-  border-radius: 0 14px 14px 0;
-}
-
-.sidebar-hover-zone {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 14px;
-  z-index: 49;
-}
-
-.sidebar-expand-btn {
-  position: fixed;
-  left: 12px;
-  top: 12px;
-  z-index: 48;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  border: 1px solid #e5e7eb;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(4px);
-  color: #4b5563;
-  cursor: pointer;
-}
-
-.sidebar-expand-btn:hover {
-  background: #f3f4f6;
-}
-
-.conversation-sidebar .sidebar-collapse-btn {
-  background: transparent;
-  border-color: transparent;
-}
-
-.conversation-sidebar .sidebar-collapse-btn:hover {
-  background: #f0f1f3;
-}
-
-.sidebar-section {
-  align-content: start;
-  display: grid;
+/* Page-navigated app shell (ADR 0006): wide icon+label sidebar, desktop
+   collapse fully hides it (bead pydexpi-datalog-1-2c5.1). */
+.app-sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--calm-line);
+  display: flex;
+  flex: none;
+  flex-direction: column;
   gap: 2px;
-  margin-top: 10px;
-  min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  padding: 16px 12px;
+  position: relative;
+  transition:
+    width 260ms ease-out,
+    padding 260ms ease-out,
+    opacity 220ms ease-out;
+  width: var(--app-sidebar-width, 220px);
 }
 
-.sidebar-section-toggle {
+/* Full-hide desktop collapse (ADR 0006): width/padding animate to 0 rather
+   than unmounting, so the sidebar can slide away instead of popping out. */
+.app-sidebar--collapsed {
+  border-right-color: transparent;
+  opacity: 0;
+  padding-inline: 0;
+  width: 0;
+}
+
+/* Drag-resize (bead 2c5.1 follow-up): skip the width transition while the
+   user is actively dragging so the panel tracks the pointer 1:1. */
+.app-sidebar--dragging {
+  transition: none;
+}
+
+/* A real flex sibling of .app-sidebar (not absolutely positioned inside it)
+   so it isn't clipped by the sidebar's overflow:hidden (needed for the
+   collapse transition). */
+.app-sidebar-resize-handle {
+  cursor: col-resize;
+  flex: none;
+  margin-left: -3px;
+  touch-action: none;
+  width: 6px;
+  z-index: 5;
+}
+
+.app-sidebar-resize-handle:hover,
+.app-sidebar-resize-handle--active {
+  background: var(--calm-accent-soft);
+}
+
+.app-sidebar-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-inline: 4px;
+}
+
+.app-sidebar-collapse-btn,
+.app-shell-reopen-btn {
   align-items: center;
   background: none;
   border: none;
-  color: #9ca3af;
+  border-radius: 8px;
+  color: var(--calm-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.app-sidebar-collapse-btn:hover,
+.app-shell-reopen-btn:hover {
+  background: var(--calm-paper);
+}
+
+.app-shell-reopen-btn {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  flex: none;
+  margin: 12px;
+}
+
+.app-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.app-sidebar-item {
+  align-items: center;
+  border-radius: 10px;
+  color: var(--calm-ink);
   cursor: pointer;
   display: flex;
-  font-size: 0.72rem;
+  font-size: 0.88rem;
+  gap: 10px;
+  padding: 8px 10px;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.app-sidebar-item:hover {
+  background: var(--calm-paper);
+}
+
+.app-sidebar-item.active {
+  background: var(--calm-accent-soft);
+  color: var(--calm-accent);
+}
+
+.app-sidebar-new-chat {
+  background: none;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.app-sidebar-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.app-sidebar-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-sidebar-section-header {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--calm-ink-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.78rem;
   font-weight: 700;
   justify-content: space-between;
+  padding: 8px 10px;
+  text-align: left;
+  transition: background-color 150ms ease;
+}
+
+.app-sidebar-section-header:hover {
+  background: var(--calm-paper);
+}
+
+.app-sidebar-section-chevron {
+  transition: transform 220ms ease-out;
+}
+
+.app-sidebar-section-chevron--open {
+  transform: rotate(90deg);
+}
+
+/* CSS-grid accordion (0fr -> 1fr): animates height without JS measurement. */
+.app-sidebar-section-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 220ms ease-out,
+    opacity 220ms ease-out;
+}
+
+.app-sidebar-section-panel--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.app-sidebar-section-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-sidebar-section-empty {
+  color: var(--calm-ink-muted);
+  font-size: 0.8rem;
+  padding: 4px 10px 8px;
+}
+
+.app-sidebar-history-row {
+  border-radius: 8px;
+  color: var(--calm-ink-muted);
+  display: block;
+  font-size: 0.84rem;
+  overflow: hidden;
+  padding: 6px 10px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  transition: background-color 150ms ease;
+  white-space: nowrap;
+}
+
+.app-sidebar-history-row:hover {
+  background: var(--calm-paper);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar,
+  .app-sidebar-item,
+  .app-sidebar-section-chevron,
+  .app-sidebar-section-panel,
+  .app-sidebar-history-row {
+    transition: none;
+  }
+}
+
+.app-shell-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  overflow: auto;
+}
+
+.assistant-page-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-chat-panel,
+.assistant-pid-panel {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* react-resizable-panels puts the actual sizing (flex-grow) on an outer
+   [data-panel] wrapper div, one level above the div our own className props
+   reach (per the library's docs, className is applied to a nested div "to
+   avoid styles that interfere with Flex layout"). Its flex-grow otherwise
+   only changes from live dragging (kept snappy/instant below); the open/
+   close toggle is a separate, deliberate override (next rule) so it can
+   have its own slower, always-smooth transition regardless of drag state. */
+.assistant-page-row [data-panel] {
+  transition: flex-grow 260ms ease-out;
+}
+
+.assistant-page-row--resizing [data-panel] {
+  transition: none;
+}
+
+/* Open/close is a pure CSS override on the outer [data-panel] div, forced
+   via :has() since our className only reaches the nested div one level in
+   -- deliberately NOT using the library's own collapsible/collapsedSize
+   mechanism, which auto-snaps shut (harshly, mid-drag) once dragged past
+   half of minSize. This keeps "closed" entirely decoupled from drag/resize:
+   dragging only ever resizes between minSize and maxSize, and the only way
+   to close/reopen is the explicit close-tab / "View topology" buttons. */
+.assistant-page-row [data-panel]:has(> .assistant-pid-panel--collapsed) {
+  flex-grow: 0 !important;
+  overflow: hidden !important;
+  transition: flex-grow 260ms ease-out !important;
+}
+
+.assistant-pid-panel--collapsed {
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-page-row [data-panel],
+  .assistant-pid-panel--collapsed {
+    transition: none;
+  }
+}
+
+/* react-resizable-panels drives width via the Panel wrapper's own inline
+   flex-basis; the inner section/aside just needs to fill that box. */
+.assistant-chat-panel .calm-chat-column,
+.assistant-pid-panel .pid-panel {
+  height: 100%;
+  width: 100%;
+}
+
+.assistant-panel-resize-handle {
+  background: transparent;
+  cursor: col-resize;
+  flex: none;
+  position: relative;
+  width: 6px;
+  z-index: 1;
+}
+
+.assistant-panel-resize-handle::after {
+  background: var(--calm-accent);
+  border-radius: 2px;
+  content: "";
+  inset: 0 2px;
+  opacity: 0;
+  position: absolute;
+  transition: opacity 150ms ease;
+}
+
+.assistant-panel-resize-handle:hover::after,
+.assistant-panel-resize-handle:active::after {
+  opacity: 0.4;
+}
+
+/* While the P&ID panel is closed, the handle can't do anything (the
+   Separator's own `disabled` prop already blocks the drag) -- also hide it
+   and drop the pointer cursor so it doesn't look like a live control. */
+.assistant-panel-resize-handle--disabled {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel-resize-handle::after {
+    transition: none;
+  }
+}
+
+.shell-page {
+  max-width: 720px;
+  padding: 40px 32px;
+}
+
+.shell-page-title {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.6rem;
+  margin: 0 0 12px;
+}
+
+.shell-page-empty {
+  color: var(--calm-ink-muted);
+  font-size: 0.9rem;
+}
+
+.calm-chat-bar-btn {
+  align-items: center;
+  background: none;
+  border: 1px solid var(--calm-line);
+  border-radius: 999px;
+  color: var(--calm-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  padding: 6px 12px;
+}
+
+.calm-chat-bar-btn:hover {
+  background: var(--calm-paper);
+}
+
+.calm-flyout-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+
+/* Centered modal-style overlay rather than rail-anchored (bead 2c5.1 removes
+   the sidebar flyout anchor point; bead 2c5.4 replaces this with the full
+   attach modal). */
+.calm-flyout {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 1rem;
+  box-shadow: 0 16px 36px -20px rgba(28, 24, 21, 0.2);
+  left: 50%;
+  padding: 16px;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  z-index: 40;
+}
+
+.calm-flyout-title {
+  color: var(--calm-ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
-  padding: 6px 9px;
+  margin: 0 0 10px;
   text-transform: uppercase;
 }
 
-.sidebar-section-toggle:hover {
-  color: #6b7280;
+.calm-flyout-session-card {
+  border-radius: 0.75rem;
+  padding: 8px;
 }
 
-.sidebar-chevron {
-  transition: transform 0.15s ease;
-}
-
-.sidebar-chevron.collapsed {
-  transform: rotate(-90deg);
-}
-
-.sidebar-section nav {
-  margin-top: 2px;
-}
-
-.conversation-sidebar {
-  background: #fafafa;
-  border-right: 1px solid #ececec;
-  color: #374151;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
-  padding: 14px 12px;
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 240px;
-  z-index: 50;
-  transform: translateX(0);
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
-}
-
-.conversation-sidebar header,
-.pid-panel-header {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.conversation-sidebar h2,
-.pid-panel h2,
-.pid-details h3 {
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.2;
+.calm-flyout-session-title {
+  color: var(--calm-ink);
+  font-size: 0.9rem;
   margin: 0;
 }
 
-.pid-eyebrow {
-  color: #728176;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  margin: 0 0 4px;
-  text-transform: uppercase;
+.calm-flyout-session-meta {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+  margin: 4px 0 0;
 }
 
-.conversation-sidebar .pid-eyebrow {
-  color: #9ca3af;
+.calm-flyout-placeholder {
+  color: var(--calm-ink-muted);
+  font-size: 0.85rem;
+  margin: 0;
 }
 
-.conversation-sidebar header button,
-.conversation-sidebar nav button {
-  border: 1px solid transparent;
-  border-radius: 8px;
+/* Rule-pack picker (bead pydexpi-datalog-1-2ki.14): the list+detail two-pane
+   layout needs meaningfully more width than the single-column Sessions
+   flyout, so it opts into a wider variant rather than changing .calm-flyout
+   for every flyout. */
+.calm-flyout--wide {
+  max-width: calc(100vw - 100px);
+  width: 560px;
 }
 
-.conversation-sidebar header button {
-  align-items: center;
-  background: #f3f4f6;
-  border-color: #e5e7eb;
-  color: #4b5563;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
-}
-
-.conversation-sidebar header button:hover {
-  background: #e9eaec;
-}
-
-.conversation-sidebar nav {
+.rule-pack-search-row {
   display: grid;
   gap: 8px;
-  margin-top: 18px;
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 10px;
 }
 
-.conversation-sidebar nav button {
+.rule-pack-error {
+  align-items: center;
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.85rem;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.rule-pack-layout {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.rule-pack-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  max-height: min(480px, calc(100dvh - 260px));
+  overflow-y: auto;
+  padding: 0;
+}
+
+.rule-pack-list-empty {
+  color: var(--calm-ink-muted);
+  font-size: 0.82rem;
+  padding: 7px 9px;
+}
+
+.rule-pack-list-item {
   align-items: center;
   background: transparent;
-  color: #4b5563;
-  display: grid;
-  gap: 9px;
-  grid-template-columns: 18px minmax(0, 1fr);
-  min-height: 48px;
-  padding: 8px 9px;
-  text-align: left;
-}
-
-.conversation-sidebar nav button:hover {
-  background: #f0f1f3;
-}
-
-.conversation-sidebar nav button.active {
-  background: #eceef1;
-  border-color: #e0e2e6;
-}
-
-.conversation-sidebar strong,
-.conversation-sidebar small {
-  display: block;
-}
-
-.conversation-sidebar small,
-.conversation-sidebar footer {
-  color: #9ca3af;
-  font-size: 0.78rem;
-}
-
-.conversation-sidebar footer {
-  border-top: 1px solid #ececec;
-  padding-top: 12px;
-}
-
-.chat-column {
-  background: lab(97.26 0 0);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
   display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 7px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.rule-pack-list-item.active {
+  background: var(--calm-accent-soft);
+  border-color: var(--calm-accent);
+}
+
+.rule-pack-list-item-title {
+  color: var(--calm-ink);
+  font-size: 0.85rem;
+}
+
+.rule-pack-loaded-badge {
+  color: var(--calm-accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.rule-pack-detail {
+  display: grid;
+  gap: 12px;
+  max-height: min(480px, calc(100dvh - 260px));
+  overflow-y: auto;
+}
+
+.rule-pack-empty-state {
+  color: var(--calm-ink-muted);
+  font-size: 0.85rem;
+}
+
+.rule-pack-detail-content {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-pack-detail-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.rule-pack-detail-header h3 {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.rule-pack-detail-version {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+  margin: 2px 0 0;
+}
+
+.rule-pack-load-status {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.rule-pack-trust-notice {
+  color: var(--calm-ink-muted);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.rule-pack-badge {
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
+  border-radius: 999px;
+  color: var(--calm-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.rule-pack-rule {
+  border-top: 1px solid var(--calm-line);
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.rule-pack-rule-title {
+  color: var(--calm-ink);
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-weight: 600;
+  margin: 0;
+}
+
+.rule-pack-rule button {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 0.5rem;
+  color: var(--calm-ink);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.rule-pack-rule button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.rule-pack-action-error {
+  background: #fff1f0;
+  border: 1px solid #e2a19b;
+  border-radius: 0.5rem;
+  color: #8a2820;
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 9px 11px;
+}
+
+.rule-pack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rule-pack-run-all-button {
+  background: var(--calm-accent);
+  border: 1px solid var(--calm-accent);
+  border-radius: 0.5rem;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.rule-pack-run-all-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.rule-pack-run-card .rule-pack-run-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.calm-chat-column {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  min-height: 100dvh;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 /* The assistant-ui thread paints bg-background on its root and footer; make
-   them transparent so the chat-column background shows through. */
-.chat-column .aui-thread-root,
-.chat-column .aui-thread-viewport-footer {
+   them transparent so the calm-chat-column background shows through. */
+.calm-chat-column .aui-thread-root,
+.calm-chat-column .aui-thread-viewport-footer {
   background: transparent;
 }
 
-.chat-column-bar {
-  border-bottom: 1px solid #f0f0f0;
+.calm-chat-bar {
+  border-bottom: 1px solid var(--calm-line);
   display: flex;
+  gap: 10px;
   justify-content: flex-end;
   padding: 10px 16px;
 }
 
-.reopen-graph-btn {
+.calm-reopen-graph-btn {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--calm-line);
   border-radius: 999px;
-  color: #4b5563;
+  color: var(--calm-ink-muted);
   cursor: pointer;
   display: inline-flex;
   font-size: 12.5px;
@@ -388,44 +819,69 @@
   white-space: nowrap;
 }
 
-.reopen-graph-btn:hover {
-  background: #f7f8f9;
-  border-color: #d1d5db;
+.calm-reopen-graph-btn:hover {
+  background: var(--calm-paper);
+  border-color: var(--calm-accent);
+  color: var(--calm-accent);
 }
 
-.reopen-graph-btn span {
+.calm-reopen-graph-btn span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.chat-column .aui-thread-root {
+.calm-chat-column .aui-thread-root {
   flex: 1 1 auto;
   height: auto;
   min-height: 0;
 }
 
-/* Black, simple type for the conversation. */
-.chat-column,
-.chat-column .aui-thread-root {
-  color: #000000;
+.calm-chat-column,
+.calm-chat-column .aui-thread-root {
+  color: var(--calm-ink);
   font-family: var(--font-sans);
 }
 
 .pid-panel {
   background: #ffffff;
-  border-left: 1px solid #ececec;
+  border-left: 1px solid var(--calm-line);
+  box-shadow: 0 16px 36px -20px rgba(28, 24, 21, 0.2);
   display: grid;
+  flex: 1 1 auto;
   gap: 12px;
-  grid-template-rows: auto auto minmax(250px, 1fr) auto;
-  min-height: 100dvh;
+  grid-template-rows: auto auto auto minmax(250px, 1fr) auto;
   min-height: 0;
   overflow: hidden;
   padding: 12px 16px 16px;
 }
 
-/* Mike-style document tab header for the on-demand topology view. */
+.pid-panel-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.pid-panel h2,
+.pid-details h3 {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.pid-eyebrow {
+  color: var(--calm-ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
 .pid-tabbar {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--calm-line);
   display: flex;
   margin: -12px -16px 4px;
   padding: 0 10px;
@@ -433,8 +889,8 @@
 
 .pid-tab {
   align-items: center;
-  border-bottom: 2px solid #3b82f6;
-  color: #111827;
+  border-bottom: 2px solid var(--calm-accent);
+  color: var(--calm-ink);
   display: inline-flex;
   font-size: 13px;
   font-weight: 500;
@@ -454,7 +910,7 @@
   background: none;
   border: none;
   border-radius: 5px;
-  color: #9ca3af;
+  color: var(--calm-ink-muted);
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
@@ -463,21 +919,139 @@
 }
 
 .pid-tab-close:hover {
-  background: #f0f1f3;
-  color: #4b5563;
+  background: var(--calm-paper);
+  color: var(--calm-ink);
+}
+
+/* Geometry health summary card (bead pydexpi-datalog-1-2ki.8): a calm,
+   collapsed-by-default disclosure so per-file diagnostics never crowd the
+   panel -- everything inside traces to the same typed geometry report the
+   renderer badges below read from. */
+.geometry-health-card {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 0.75rem;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+}
+
+.geometry-health-summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--calm-ink);
+  list-style: none;
+}
+
+.geometry-health-summary::-webkit-details-marker {
+  display: none;
+}
+
+.geometry-health-summary[data-tier="auto-layout"] {
+  color: #92400e;
+}
+
+.geometry-health-summary[data-tier="partially-inferred"] {
+  color: #92400e;
+}
+
+.geometry-health-stats {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.geometry-health-stat {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+}
+
+/* Stepped turn presentation (bead pydexpi-datalog-1-2ki.11): the outer frame
+   is now .calm-step-card -- these card classes are content-only (no border/
+   shadow/radius of their own) since they're nested one level inside it. */
+.calm-step-card {
+  background: var(--calm-paper);
+  border: 1px solid var(--calm-line);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(28, 24, 21, 0.05), 0 20px 40px -20px rgba(28, 24, 21, 0.25);
+  max-height: min(620px, calc(100dvh - 180px));
+  overflow: auto;
+  padding: 14px;
+}
+
+.calm-step-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calm-step-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.calm-step-glyph {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--calm-ink-muted);
+}
+
+.calm-step-glyph[data-status="done"],
+.calm-step-glyph[data-status="blocked"] {
+  color: var(--calm-accent);
+}
+
+.calm-step-glyph[data-status="failed"],
+.calm-step-glyph[data-status="canceled"] {
+  color: #8a2820;
+}
+
+/* Rule-pack run outcomes (bead 2ki.14) use a separate data-outcome attribute
+   -- kept namespaced apart from data-status, which is turn-lifecycle-specific
+   (TurnStepStatus is a closed 5-value union unrelated to rule outcomes). */
+.calm-step-glyph[data-outcome="satisfied"] {
+  color: var(--calm-accent);
+}
+
+.calm-step-glyph[data-outcome="violated"] {
+  color: #8a2820;
+}
+
+.calm-step-glyph[data-outcome="indeterminate"] {
+  color: var(--calm-ink-muted);
+}
+
+.calm-step-label {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-weight: 600;
+  color: var(--calm-ink);
+  font-size: 0.92rem;
+  margin: 0 0 2px;
+}
+
+.calm-step-content--body {
+  display: grid;
+  gap: 4px;
+}
+
+.calm-step-body {
+  display: grid;
+  gap: 12px;
 }
 
 .datalog-confirmation-card,
 .grounded-logic-answer-card {
-  background: #ffffff;
-  border: 1px solid #cbd5ca;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.08);
   display: grid;
   gap: 12px;
-  max-height: min(560px, calc(100dvh - 180px));
-  overflow: auto;
-  padding: 14px;
 }
 
 .datalog-confirmation-card header,
@@ -489,48 +1063,52 @@
 }
 
 .datalog-confirmation-card h3 {
+  font-family: var(--calm-display-font), Georgia, serif;
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.2;
   margin: 0;
 }
 
 .datalog-confirmation-card header span {
-  background: #edf3ed;
-  border: 1px solid #cbd5ca;
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
   border-radius: 999px;
-  color: #415249;
+  color: var(--calm-accent);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   padding: 5px 9px;
   white-space: nowrap;
 }
 
 .datalog-confirmation-card p,
 .grounded-logic-answer-card p {
-  color: #26342d;
+  color: var(--calm-ink);
   line-height: 1.5;
   margin: 0;
 }
 
 .datalog-confirmation-card details,
-.grounded-logic-answer-card details {
-  border: 1px solid #d7ded5;
+.grounded-logic-answer-card details,
+.rule-pack-detail details {
+  border: 1px solid var(--calm-line);
   border-radius: 7px;
   overflow: hidden;
 }
 
 .datalog-confirmation-card summary,
-.grounded-logic-answer-card summary {
-  background: #f4f6f2;
+.grounded-logic-answer-card summary,
+.rule-pack-detail summary {
+  background: var(--calm-paper);
   cursor: pointer;
-  font-weight: 800;
+  font-weight: 700;
   padding: 9px 11px;
 }
 
 .datalog-confirmation-card pre,
-.grounded-logic-answer-card pre {
-  background: #17201b;
+.grounded-logic-answer-card pre,
+.rule-pack-detail pre {
+  background: var(--calm-ink);
   color: #ecf2ed;
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -548,8 +1126,8 @@
 }
 
 .datalog-consent-section {
-  border-left: 3px solid #d7ded5;
-  color: #26342d;
+  border-left: 3px solid var(--calm-line);
+  color: var(--calm-ink);
   display: grid;
   font-size: 0.86rem;
   gap: 3px;
@@ -559,7 +1137,7 @@
 }
 
 .datalog-consent-section dt {
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .datalog-consent-section dd {
@@ -575,12 +1153,12 @@
 }
 
 .datalog-confirmation-actions button {
-  background: #17201b;
-  border: 1px solid #17201b;
-  border-radius: 7px;
+  background: var(--calm-accent);
+  border: 1px solid var(--calm-accent);
+  border-radius: 0.5rem;
   color: #ffffff;
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 700;
   min-height: 34px;
   padding: 0 12px;
 }
@@ -589,7 +1167,8 @@
 .datalog-confirmation-actions button:nth-child(3),
 .datalog-confirmation-actions button:nth-child(4) {
   background: #ffffff;
-  color: #17201b;
+  border-color: var(--calm-line);
+  color: var(--calm-ink);
 }
 
 .datalog-confirmation-actions button:disabled {
@@ -597,26 +1176,275 @@
   opacity: 0.55;
 }
 
-.datalog-confirmation-note {
-  background: #fff7df;
-  border: 1px solid #dfc779;
+.datalog-confirmation-widget {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 12px;
+  outline: none;
+  padding: 12px;
+}
+
+.datalog-confirmation-widget:focus-visible {
+  border-color: var(--calm-accent);
+  box-shadow: 0 0 0 3px var(--calm-accent-soft);
+}
+
+.datalog-widget-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.datalog-widget-header h3 {
+  color: var(--calm-ink);
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.datalog-widget-header span {
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
+  border-radius: 999px;
+  color: var(--calm-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.datalog-confirmation-widget p {
+  color: var(--calm-ink);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.datalog-widget-context {
+  display: grid;
+  gap: 8px;
+}
+
+.datalog-widget-context-card {
+  background: var(--calm-paper);
+  border: 1px solid var(--calm-line);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 6px;
+  padding: 10px 11px;
+}
+
+.datalog-widget-context-card--meaning {
+  border-color: color-mix(in srgb, var(--calm-accent) 45%, var(--calm-line));
+}
+
+.datalog-widget-context-label {
+  color: var(--calm-ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.datalog-widget-meaning {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.datalog-widget-definition-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.datalog-widget-definition-list div {
+  display: grid;
+  gap: 2px;
+}
+
+.datalog-widget-definition-list dt {
+  color: var(--calm-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.datalog-widget-definition-list dd {
+  color: var(--calm-ink);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.datalog-confirmation-widget details {
+  border: 1px solid var(--calm-line);
   border-radius: 7px;
+  overflow: hidden;
+}
+
+.datalog-confirmation-widget summary {
+  background: var(--calm-paper);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 9px 11px;
+}
+
+.datalog-confirmation-widget pre {
+  background: var(--calm-ink);
+  color: #ecf2ed;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre;
+}
+
+.datalog-widget-options {
+  display: grid;
+  gap: 7px;
+}
+
+.datalog-widget-option-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.datalog-widget-option {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 0.65rem;
+  color: var(--calm-ink);
+  cursor: pointer;
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.datalog-widget-option[aria-selected="true"] {
+  background: var(--calm-accent-soft);
+  border-color: var(--calm-accent);
+  box-shadow: inset 3px 0 0 var(--calm-accent);
+}
+
+.datalog-widget-option[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.datalog-widget-option-number {
+  color: var(--calm-accent);
+  font-family: var(--font-mono);
+}
+
+.datalog-widget-key-hint {
+  color: var(--calm-ink-muted);
+  font-size: 0.76rem;
+}
+
+.datalog-confirmation-note {
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
+  border-radius: 0.5rem;
   padding: 9px 11px;
 }
 
 .datalog-confirmation-error {
   background: #fff1f0;
   border: 1px solid #e2a19b;
-  border-radius: 7px;
+  border-radius: 0.5rem;
   color: #8a2820;
   padding: 9px 11px;
 }
 
-.pid-file-chip {
-  background: #fff7df;
-  border: 1px solid #dfc779;
+.direction-review-card,
+.grounded-qa-answer-card {
+  display: grid;
+  gap: 10px;
+}
+
+.direction-review-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.direction-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.direction-review-actions button {
+  background: var(--calm-accent);
+  border: 1px solid var(--calm-accent);
+  border-radius: 0.5rem;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.direction-review-actions button:nth-child(2),
+.direction-review-actions button:nth-child(3) {
+  background: #ffffff;
+  color: var(--calm-ink);
+}
+
+.direction-review-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.direction-review-error {
+  background: #fff1f0;
+  border: 1px solid #e2a19b;
+  border-radius: 0.5rem;
+  color: #8a2820;
+  padding: 9px 11px;
+}
+
+.qa-interpretation {
+  color: var(--calm-ink-muted);
+  font-size: 0.9rem;
+}
+
+.qa-evidence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qa-evidence-chip {
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
   border-radius: 999px;
-  color: #5c4814;
+  color: var(--calm-accent);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.pid-file-chip {
+  background: var(--calm-accent-soft);
+  border: 1px solid var(--calm-accent);
+  border-radius: 999px;
+  color: var(--calm-accent);
   font-size: 0.75rem;
   font-weight: 700;
   max-width: 160px;
@@ -636,9 +1464,9 @@
 .pid-filter {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #cbd5ca;
+  border: 1px solid var(--calm-line);
   border-radius: 7px;
-  color: #647068;
+  color: var(--calm-ink-muted);
   display: flex;
   gap: 7px;
   min-height: 36px;
@@ -649,7 +1477,7 @@
 .pid-filter select {
   background: transparent;
   border: 0;
-  color: #17201b;
+  color: var(--calm-ink);
   min-width: 0;
   outline: 0;
   width: 100%;
@@ -662,7 +1490,10 @@
   overflow: hidden;
 }
 
-.pid-graph-canvas svg {
+/* Direct-child only -- the plain topology-fallback SVG. A descendant
+   selector here would also catch the small lucide icon <svg>s nested inside
+   the zoom toolbar buttons and blow them up to fill the canvas. */
+.pid-graph-canvas > svg {
   display: block;
   height: 100%;
   min-height: 310px;
@@ -699,11 +1530,56 @@
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 
-/* Tier-1 drawing-faithful schematic (ADR 0004): painted verbatim from the backend scene. */
+/* Tier-1 drawing-faithful schematic (ADR 0004): painted verbatim from the backend scene.
+   min-height matches .pid-panel's grid-guaranteed canvas row (minmax(250px, 1fr)) --
+   a larger value here would force this flex container past that row's actual
+   height and get clipped by the row's overflow: hidden. */
 .pid-schematic-wrap {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  min-height: 310px;
+  min-height: 250px;
+}
+
+.pid-schematic-wrap .schematic-scene-svg {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Zoom/pan wrapper (react-zoom-pan-pinch) around the schematic/auto-layout
+   scene -- transforms an outer div, never the SVG's own viewBox, so the
+   scene's hit-test geometry is unaffected. Sits in the header row alongside
+   the tier badge, not floating over the canvas, so it never occludes real
+   clickable schematic content. */
+.pid-zoom-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.pid-schematic-header,
+.pid-auto-layout-header {
+  align-items: stretch;
+  border-bottom: 1px dashed #d1d5db;
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+}
+
+.pid-schematic-header .pid-tier-badge,
+.pid-auto-layout-header .pid-auto-layout-badge {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pid-zoom-toolbar {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding-right: 8px;
 }
 
 /* Only hit-testable objects (a topology identity behind them) catch clicks --
@@ -727,12 +1603,49 @@
   filter: drop-shadow(0 0 0.6mm #f59e0b);
 }
 
+/* Hover preview: shows what a click would select before it's committed, to
+   pair with the enlarged (invisible) hit-areas below -- fixes "not knowing
+   what you clicked on" without changing the drawing itself. */
+.schematic-scene-svg .hovered {
+  filter: drop-shadow(0 0 0.5mm #94a3b8);
+}
+
+/* Invisible click targets, sized independently of (and usually larger than)
+   the shape/stroke they sit on top of -- painted geometry stays exact, but
+   clicking no longer requires pixel precision. */
+.schematic-scene-svg .schematic-hit-area {
+  fill: transparent;
+  stroke: transparent;
+}
+
 /* Per-pipe demotion (bead pydexpi-datalog-1-2ki.6): the single uniform cue
    for a routed run whose source carried no CenterLine. Opacity is the visual
    half of the cue; the dash pattern itself is set inline (schematic-scene-view.tsx)
    since it must override whatever source Presentation/LineType supplied. */
 .schematic-scene-svg .schematic-inferred {
   opacity: 0.65;
+}
+
+/* Unplaced-equipment shelf (bead pydexpi-datalog-1-2ki.7): a visually
+   distinct region outside the drawing frame for equipment with no source
+   Position. The backdrop and label mark the whole row as backend-placed;
+   individual shelved symbols get a muted tint so they read as "not drawn"
+   even at a glance, matching the inferred-run cue's opacity language. */
+.schematic-scene-svg .schematic-shelf-region rect {
+  fill: #f3f4f6;
+  stroke: #9ca3af;
+  stroke-dasharray: 2 1.5;
+  stroke-width: 0.3;
+}
+
+.schematic-scene-svg .schematic-shelf-region text {
+  font-size: 3px;
+  fill: #6b7280;
+  letter-spacing: 0.2px;
+}
+
+.schematic-scene-svg .schematic-shelved {
+  opacity: 0.7;
 }
 
 /* Tier-2 auto-layout schematic (bead pydexpi-datalog-1-2ki.5): connectivity
@@ -743,7 +1656,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  min-height: 310px;
+  min-height: 250px;
   border: 1px dashed #d1d5db;
   border-radius: 8px;
   overflow: hidden;
@@ -758,7 +1671,29 @@
   text-transform: uppercase;
   color: #92400e;
   background: #fef3c7;
-  border-bottom: 1px dashed #d1d5db;
+}
+
+/* Tier-1/mixed renderer badge (bead pydexpi-datalog-1-2ki.8): mirrors
+   .pid-auto-layout-badge's box model but reads its label from the same
+   describeSchematicTier() helper the geometry health card uses, so the two
+   can never disagree. */
+.pid-tier-badge {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pid-tier-badge[data-tier="as-drawn"] {
+  color: #166534;
+  background: #ecfdf5;
+}
+
+.pid-tier-badge[data-tier="partially-inferred"] {
+  color: #92400e;
+  background: #fef3c7;
 }
 
 .pid-auto-layout-loading {
@@ -930,8 +1865,8 @@
 
 .pid-details {
   background: #ffffff;
-  border: 1px solid #cbd5ca;
-  border-radius: 8px;
+  border: 1px solid var(--calm-line);
+  border-radius: 1rem;
   padding: 12px;
 }
 
@@ -943,7 +1878,7 @@
 }
 
 .pid-details dt {
-  color: #657168;
+  color: var(--calm-ink-muted);
   font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -954,46 +1889,268 @@
 }
 
 .pid-details p {
-  color: #3f4a43;
+  color: var(--calm-ink-muted);
   font-size: 0.9rem;
   margin: 0;
 }
 
-@media (max-width: 1180px) {
-  .pid-app-shell {
-    grid-template-columns: 220px minmax(380px, 1fr) 360px;
-  }
-}
-
 @media (max-width: 900px) {
   .pid-app-shell {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
-  .conversation-sidebar,
-  .chat-column,
-  .pid-panel {
-    min-height: auto;
+  /* Narrow-viewport fallback (ADR 0006): icon-only rail, session-history
+     item dropped entirely, desktop collapse toggle hidden. */
+  .app-sidebar {
+    align-items: center;
+    flex-direction: row;
+    gap: 4px;
+    padding: 8px 12px;
+    width: auto;
   }
 
-  .conversation-sidebar {
-    grid-template-rows: auto auto;
+  .app-sidebar-header {
+    margin-bottom: 0;
   }
 
-  .conversation-sidebar footer {
+  .app-sidebar-header .calm-rail-mark {
+    margin-bottom: 0;
+  }
+
+  .app-sidebar-collapse-btn {
     display: none;
   }
 
-  .conversation-sidebar nav {
-    grid-auto-flow: column;
-    overflow-x: auto;
+  .app-sidebar-nav {
+    flex-direction: row;
+    margin-top: 0;
   }
 
-  .conversation-sidebar nav button {
-    min-width: 220px;
+  .app-sidebar-item {
+    justify-content: center;
+    padding: 8px;
   }
 
-  .chat-column {
+  .app-sidebar-new-chat {
+    justify-content: center;
+    padding: 8px;
+    width: auto;
+  }
+
+  .app-sidebar-label {
+    display: none;
+  }
+
+  .app-sidebar-sections,
+  .app-sidebar-resize-handle {
+    display: none;
+  }
+
+  .calm-rail-divider {
+    display: none;
+  }
+
+  .calm-chat-column,
+  .pid-panel {
     min-height: 70dvh;
   }
+
+  .pid-panel {
+    border-left: none;
+    border-top: 1px solid var(--calm-line);
+  }
+}
+
+/* Rule-pack browse table + document page (bead 2c5.3 rework) */
+
+.shell-page-wide {
+  max-width: 960px;
+}
+
+.rule-pack-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 16px;
+  width: 100%;
+}
+
+.rule-pack-table th {
+  border-bottom: 1px solid var(--calm-line);
+  color: var(--calm-ink-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.rule-pack-table td {
+  border-bottom: 1px solid var(--calm-line);
+  color: var(--calm-ink);
+  padding: 10px 12px;
+}
+
+.rule-pack-table tbody tr[data-testid="rule-pack-row"] {
+  cursor: pointer;
+}
+
+.rule-pack-table tbody tr[data-testid="rule-pack-row"]:hover,
+.rule-pack-table tbody tr[data-testid="rule-pack-row"]:focus-visible {
+  background: var(--calm-accent-soft);
+  outline: none;
+}
+
+.rule-pack-table-name {
+  font-weight: 600;
+}
+
+.rule-pack-table-empty {
+  color: var(--calm-ink-muted);
+  font-size: 0.82rem;
+  padding: 14px 12px;
+}
+
+.rule-pack-breadcrumb {
+  align-items: baseline;
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.85rem;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.rule-pack-breadcrumb a {
+  color: var(--calm-ink-muted);
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.2rem;
+  text-decoration: none;
+}
+
+.rule-pack-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.rule-pack-breadcrumb-current {
+  color: var(--calm-ink);
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.rule-pack-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 0 0 10px;
+}
+
+.rule-pack-meta-strip dt {
+  color: var(--calm-ink-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+.rule-pack-meta-strip dd {
+  color: var(--calm-ink);
+  font-size: 0.85rem;
+  margin: 2px 0 0;
+}
+
+.rule-pack-doc {
+  border: 1px solid var(--calm-line);
+  border-radius: 10px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.rule-pack-doc-toolbar {
+  align-items: center;
+  background: var(--calm-paper);
+  border-bottom: 1px solid var(--calm-line);
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  padding: 8px 14px;
+}
+
+.rule-pack-doc-toolbar button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--calm-line);
+  border-radius: 6px;
+  color: var(--calm-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 4px 8px;
+}
+
+.rule-pack-doc-toolbar button[aria-pressed="true"] {
+  background: var(--calm-accent-soft);
+  border-color: var(--calm-accent);
+  color: var(--calm-ink);
+}
+
+.rule-pack-doc-source {
+  background: #fff;
+  color: var(--calm-ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.9;
+  margin: 0;
+  overflow-x: auto;
+  padding: 18px 24px;
+  white-space: pre-wrap;
+}
+
+.rule-pack-markdown {
+  background: #fff;
+  color: var(--calm-ink);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  padding: 20px 24px 26px;
+}
+
+.rule-pack-markdown h1 {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.35rem;
+  margin: 0 0 14px;
+}
+
+.rule-pack-markdown h2 {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.05rem;
+  margin: 22px 0 8px;
+}
+
+.rule-pack-markdown p {
+  margin: 0 0 12px;
+}
+
+.rule-pack-markdown details {
+  border: 1px solid var(--calm-line);
+  border-radius: 7px;
+  margin: 0 0 14px;
+  overflow: hidden;
+}
+
+.rule-pack-markdown summary {
+  background: var(--calm-paper);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 7px 11px;
+}
+
+.rule-pack-markdown details pre {
+  background: var(--calm-ink);
+  color: #ecf2ed;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  margin: 0;
+  overflow-x: auto;
+  padding: 12px 14px;
 }

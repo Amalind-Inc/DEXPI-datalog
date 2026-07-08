@@ -646,6 +646,7 @@ function readPidView(data: Record<string, unknown>): PidView {
           className: String(unit.class_name ?? ""),
           category: String(unit.category ?? ""),
           description: String(unit.description ?? ""),
+          symbolKey: String(unit.symbol_key ?? "generic"),
           ports: Array.isArray(unit.ports)
             ? unit.ports.map((p) => {
                 const port = p as Record<string, unknown>;
@@ -752,6 +753,16 @@ function readGeometryReport(data: Record<string, unknown>): GeometryReport | nul
           };
         })
       : [],
+    shelvedEquipment: Array.isArray(raw.shelved_equipment)
+      ? raw.shelved_equipment.map((entry) => {
+          const e = entry as Record<string, unknown>;
+          return {
+            topologyId: typeof e.topology_id === "string" ? e.topology_id : null,
+            rawId: String(e.raw_id ?? ""),
+            reason: String(e.reason ?? ""),
+          };
+        })
+      : [],
   };
 }
 
@@ -776,6 +787,7 @@ function readSchematicSymbol(value: unknown): SchematicSymbol {
     mirror: Boolean(symbol.mirror),
     sx: Number(symbol.sx ?? 1),
     sy: Number(symbol.sy ?? 1),
+    shelved: Boolean(symbol.shelved),
   };
 }
 
@@ -1087,7 +1099,9 @@ function inferHighlights(prompt: string, fallbackId: string | undefined) {
 function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   // Explicit escape hatch for deterministic e2e: force the stub provider even
   // when a real key is present in the environment or a .env file.
-  if (process.env.PYDEXPI_DISABLE_BYOK) return null;
+  if (process.env.PYDEXPI_DISABLE_BYOK) {
+    return null;
+  }
 
   const ollamaModel = readEnvValue("OLLAMA_MODEL");
   const openrouterKey = readEnvValue("OPENROUTER_API_KEY");
@@ -1284,4 +1298,57 @@ export async function resumeDatalogReviewOnBackend(
   });
   if (!result) throw new Error("datalog-review resume failed");
   return result;
+}
+
+export async function listRulePacks(
+  sessionId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/rule-packs`);
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function listAllRulePacks(
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/rule-packs`);
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function loadRulePack(
+  sessionId: string,
+  packId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(
+    `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/load`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function runRulePack(
+  sessionId: string,
+  packId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(
+    `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/run`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function runSingleRule(
+  sessionId: string,
+  packId: string,
+  ruleId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/rule-pack-results`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pack_id: packId, rule_id: ruleId }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
