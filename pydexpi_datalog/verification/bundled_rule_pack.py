@@ -2,77 +2,25 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from .rule_pack_markdown import parse_rule_pack_markdown
 from .souffle_rule_pack import (
-    DIAMETER_RULE_MIN_DN,
+    RULE_PACKS_DIR,
     evaluate_discharge_line_min_diameter_rule,
     evaluate_pump_discharge_rule,
-    load_diameter_rule_datalog,
-    load_rule_datalog,
 )
 
 
-_DEMO_PACK: dict[str, object] = {
-    "pack_id": "demo-process-safety",
-    "version": 1,
-    "title": "Demo process-safety checks",
-    "authoritative": False,
-    "trust_notice": (
-        "Demonstration content only; this pack is not an authoritative code, "
-        "standard, compliance determination, or engineering approval."
-    ),
-    "rules": [
-        {
-            "rule_id": "pump_discharge_check_valve",
-            "title": "Pump discharge check valve",
-            "outcomes": ["satisfied", "violated", "indeterminate"],
-            "restatement": {
-                "kind": "engineer_readable_rule_restatement",
-                "plain_language_meaning": (
-                    "If a pump has a discharge nozzle, then a check valve must "
-                    "be reachable downstream on that discharge path before the "
-                    "scope boundary is reached."
-                ),
-            },
-            "executable_logic": {
-                "kind": "collapsed_executable_logic",
-                "language": "souffle_datalog",
-                "content": load_rule_datalog(),
-                "inspectable": True,
-                "editable": False,
-                "disclosure": "collapsed",
-            },
-        },
-        {
-            "rule_id": "discharge_line_min_diameter",
-            "title": "Discharge line minimum nominal diameter",
-            "outcomes": ["satisfied", "violated", "indeterminate"],
-            "restatement": {
-                "kind": "engineer_readable_rule_restatement",
-                "plain_language_meaning": (
-                    "The piping line on a pump's discharge side must declare a "
-                    f"nominal diameter of at least DN {DIAMETER_RULE_MIN_DN} in "
-                    "the loaded source. The check compares only source-provided "
-                    "values; if the source carries no numeric diameter for the "
-                    "line, the outcome is indeterminate (source data "
-                    "unavailable), never an assumed value."
-                ),
-            },
-            "executable_logic": {
-                "kind": "collapsed_executable_logic",
-                "language": "souffle_datalog",
-                "content": load_diameter_rule_datalog(),
-                "inspectable": True,
-                "editable": False,
-                "disclosure": "collapsed",
-            },
-        },
-    ],
-}
-
-
 def bundled_rule_packs() -> list[dict[str, object]]:
-    """Return provider-independent metadata for repository-bundled rule packs."""
-    return [deepcopy(_DEMO_PACK)]
+    """Return provider-independent metadata for repository-bundled rule packs.
+
+    Each pack is authored as a canonical markdown document under
+    ``rule_packs/`` (frontmatter metadata, per-rule restatement prose, and
+    fenced Souffle programs); see ``rule_pack_markdown``.
+    """
+    return [
+        parse_rule_pack_markdown(path.read_text(encoding="utf-8"))
+        for path in sorted(RULE_PACKS_DIR.glob("*.md"))
+    ]
 
 
 def pack_metadata(pack_id: str) -> dict[str, object]:

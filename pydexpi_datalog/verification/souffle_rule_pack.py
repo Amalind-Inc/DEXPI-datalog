@@ -4,13 +4,12 @@ from pathlib import Path
 
 from ..semantics.derive_graph_semantics import build_graph_facts_datalog, load_graph_topology_idb
 from ..semantics.souffle_runner import run_souffle_program
+from .rule_pack_markdown import parse_rule_pack_markdown
 from .verify_suite import build_evaluation_diagnostic
 
 
-RULE_DATALOG_PATH = Path(__file__).resolve().parent / "datalog" / "pump_discharge_check_valve.dl"
-DIAMETER_RULE_DATALOG_PATH = (
-    Path(__file__).resolve().parent / "datalog" / "discharge_line_min_diameter.dl"
-)
+RULE_PACKS_DIR = Path(__file__).resolve().parent / "rule_packs"
+DEMO_PACK_MARKDOWN_PATH = RULE_PACKS_DIR / "demo_process_safety.md"
 DIAMETER_RULE_MIN_DN = 25
 
 _MESSAGES = {
@@ -36,12 +35,21 @@ _RESULT_TYPES = {
 
 def load_rule_datalog() -> str:
     """Return the executed Souffle rule program text (inspectable logic)."""
-    return RULE_DATALOG_PATH.read_text(encoding="utf-8")
+    return _demo_pack_rule_datalog("pump_discharge_check_valve")
 
 
 def load_diameter_rule_datalog() -> str:
     """Return the executed diameter-rule Souffle program text (inspectable logic)."""
-    return DIAMETER_RULE_DATALOG_PATH.read_text(encoding="utf-8")
+    return _demo_pack_rule_datalog("discharge_line_min_diameter")
+
+
+def _demo_pack_rule_datalog(rule_id: str) -> str:
+    """Extract a rule's fenced Souffle program from the canonical pack markdown."""
+    pack = parse_rule_pack_markdown(DEMO_PACK_MARKDOWN_PATH.read_text(encoding="utf-8"))
+    for rule in pack["rules"]:
+        if rule["rule_id"] == rule_id:
+            return str(rule["executable_logic"]["content"])
+    raise ValueError(f"demo pack markdown declares no rule '{rule_id}'")
 
 
 def evaluate_discharge_line_min_diameter_rule(
