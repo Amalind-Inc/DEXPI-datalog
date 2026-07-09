@@ -1,0 +1,16 @@
+version = "1.0"
+
+[metadata]
+author_name = "pyDEXPI Datalog"
+difficulty_explanation = "A toy structured-answer task used only to prove the Harbor/Terminus-KIRA integration."
+category = "integration-spike"
+tags = ["terminus-kira", "structured-answer", "pydexpi-datalog-1-3q1.1"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 120.0
+
+[environment]
+build_timeout_sec = 120.0

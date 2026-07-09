@@ -1,0 +1,11 @@
+{
+  "drawing_id": "hello-world-pid",
+  "graph_facts": {
+    "violations": [
+      {
+        "verdict": "violation_found",
+        "witness_ids": ["P-101", "CV-201"]
+      }
+    ]
+  }
+}
