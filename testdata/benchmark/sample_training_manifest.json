@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "e06-approval-date",
+      "question": "What calendar date was this P&ID approved?",
+      "slice": "trap",
+      "drawing": "../graph_contract/e06-pump-hex/graph_facts.json",
+      "ground_truth": {
+        "verdict": "unanswerable"
+      }
+    }
+  ]
+}

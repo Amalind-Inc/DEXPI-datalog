@@ -20,10 +20,29 @@ from pydexpi_datalog.benchmark.contract import (
     StructuredAnswer,
 )
 from pydexpi_datalog.benchmark.grader import Grade, grade, known_node_ids
+from pydexpi_datalog.benchmark.dataset import (
+    DATASET_SCHEMA_VERSION,
+    SLICES,
+    SLICE_HAND_AUTHORED,
+    SLICE_SYNTHETIC,
+    SLICE_TRAP,
+    BenchmarkDataset,
+    BenchmarkQuestion,
+    DatasetManifestError,
+    load_question_manifest,
+)
 
 __all__ = [
+    "BenchmarkDataset",
+    "BenchmarkQuestion",
+    "DATASET_SCHEMA_VERSION",
+    "DatasetManifestError",
     "Grade",
     "GroundTruth",
+    "SLICES",
+    "SLICE_HAND_AUTHORED",
+    "SLICE_SYNTHETIC",
+    "SLICE_TRAP",
     "POSTURE_GENERAL_KNOWLEDGE",
     "POSTURE_OUT_OF_SCOPE",
     "POSTURE_SOURCE_DATA_UNAVAILABLE",
@@ -38,4 +57,5 @@ __all__ = [
     "VERDICTS",
     "grade",
     "known_node_ids",
+    "load_question_manifest",
 ]
