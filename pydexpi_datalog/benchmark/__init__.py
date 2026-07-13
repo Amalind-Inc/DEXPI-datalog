@@ -28,6 +28,11 @@ from pydexpi_datalog.benchmark.direct_arm import (
     create_direct_arm,
     parse_structured_answer,
 )
+from pydexpi_datalog.benchmark.incumbent_arm import (
+    INCUMBENT_ARM_MODELS,
+    IncumbentArm,
+    create_incumbent_arm,
+)
 from pydexpi_datalog.benchmark.dataset import (
     DATASET_SCHEMA_VERSION,
     SLICES,
@@ -57,6 +62,9 @@ __all__ = [
     "DEGRADED_VERDICT",
     "DIRECT_ARM_MODELS",
     "DirectArm",
+    "INCUMBENT_ARM_MODELS",
+    "IncumbentArm",
+    "create_incumbent_arm",
     "BenchmarkQuestion",
     "DATASET_SCHEMA_VERSION",
     "DatasetManifestError",
