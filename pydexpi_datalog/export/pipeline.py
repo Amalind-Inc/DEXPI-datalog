@@ -60,6 +60,8 @@ def build_drawing_bundle(
             fixture_id=fixture_id,
             node_count=graph_facts_artifact["graph"]["node_count"],
             edge_count=graph_facts_artifact["graph"]["edge_count"],
+            extractor=graph_facts_artifact["provenance"]["extractor"],
+            extractor_version=graph_facts_artifact["provenance"]["extractor_version"],
         ),
         encoding="utf-8",
     )
@@ -237,7 +239,14 @@ def _networkx_graph_from_facts(facts: dict[str, object]) -> nx.MultiDiGraph:
     return graph
 
 
-def render_bundle_readme(*, fixture_id: str, node_count: int, edge_count: int) -> str:
+def render_bundle_readme(
+    *,
+    fixture_id: str,
+    node_count: int,
+    edge_count: int,
+    extractor: str,
+    extractor_version: str,
+) -> str:
     return "\n".join(
         [
             f"# Drawing bundle: {fixture_id}",
@@ -247,7 +256,7 @@ def render_bundle_readme(*, fixture_id: str, node_count: int, edge_count: int) -
             "## Files",
             "",
             "- `drawing.xml`: the original DEXPI source drawing.",
-            "- `graph_facts.json`: the canonical base fact layer extracted from the drawing.",
+            "- `graph_facts.json`: the canonical base fact layer extracted from `drawing.xml`.",
             "- `graph.json`: a NetworkX node-link JSON export of those same graph facts.",
             "- `README.md`: this orientation and witness-citation guide.",
             "",
@@ -256,6 +265,10 @@ def render_bundle_readme(*, fixture_id: str, node_count: int, edge_count: int) -
             "- Cite a node with its `node_id` from `graph_facts.json` under `facts.nodes`.",
             "- Cite an edge with its `source_id`, `target_id`, and `edge_key` under `facts.edges`.",
             "- The node and edge IDs in `graph.json` are the same IDs as in `graph_facts.json`.",
+            "",
+            "## Extraction provenance",
+            "",
+            f"`graph_facts.json` was produced by {extractor} {extractor_version}.",
             "",
             f"Graph size: {node_count} nodes and {edge_count} edges.",
             "",

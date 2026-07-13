@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 from pathlib import Path
 import tempfile
@@ -97,6 +98,17 @@ class DrawingBundleTests(unittest.TestCase):
                 "edge_key",
             ):
                 self.assertIn(expected_term, readme)
+            self.assertIn("extracted from `drawing.xml`", readme)
+            provenance = facts["provenance"]
+            self.assertEqual(provenance["extractor"], "pyDEXPI")
+            self.assertEqual(
+                provenance["extractor_version"],
+                importlib.metadata.version("pyDEXPI"),
+            )
+            self.assertIn(
+                f"{provenance['extractor']} {provenance['extractor_version']}",
+                readme,
+            )
 
     @unittest.skipUnless(
         E06_FIXTURE.is_file(),
