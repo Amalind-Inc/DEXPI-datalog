@@ -45,6 +45,8 @@ def create_byok_provider(*, provider: str, model: str, credential: str) -> Model
 
 
 def build_system_prompt(context: dict[str, object]) -> str:
+    if context.get("task") == "benchmark_direct_answer":
+        return str(context.get("system_prompt", ""))
     if context.get("task") == "grounded_logic_answer":
         return _grounded_answer_system_prompt(context)
     return _datalog_generation_system_prompt(context)
