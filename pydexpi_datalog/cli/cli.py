@@ -129,6 +129,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where logic-request artifacts will be written.",
     )
 
+    run_benchmark = subparsers.add_parser(
+        "run-benchmark",
+        help="Run a benchmark question manifest through a scripted arm and write a report.",
+    )
+    run_benchmark.add_argument(
+        "manifest", type=Path, help="Path to a benchmark question manifest."
+    )
+    run_benchmark.add_argument(
+        "--scripted-answers",
+        type=Path,
+        required=True,
+        help="JSON file mapping question IDs to scripted StructuredAnswer payloads.",
+    )
+    run_benchmark.add_argument(
+        "--arm-id",
+        default="scripted",
+        help="Arm identifier recorded in the benchmark report.",
+    )
+    run_benchmark.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where the benchmark report artifact will be written.",
+    )
+
     return parser
 
 
@@ -187,6 +212,16 @@ def main(argv: list[str] | None = None) -> int:
             source_tag=args.source_tag,
             source_proteus_id=args.source_proteus_id,
             allow_raw_attributes=args.allow_raw_attributes,
+            output_dir=args.output_dir,
+        )
+
+    if args.command == "run-benchmark":
+        from ..benchmark.runner import run_scripted_benchmark
+
+        return run_scripted_benchmark(
+            manifest_path=args.manifest,
+            scripted_answers_path=args.scripted_answers,
+            arm_id=args.arm_id,
             output_dir=args.output_dir,
         )
 

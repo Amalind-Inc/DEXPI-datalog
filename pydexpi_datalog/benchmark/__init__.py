@@ -31,8 +31,20 @@ from pydexpi_datalog.benchmark.dataset import (
     DatasetManifestError,
     load_question_manifest,
 )
+from pydexpi_datalog.benchmark.runner import (
+    BENCHMARK_REPORT_FILENAME,
+    BENCHMARK_REPORT_SCHEMA_VERSION,
+    ArmAdapter,
+    ScriptedArm,
+    load_scripted_answers,
+    run_benchmark,
+    run_scripted_benchmark,
+)
 
 __all__ = [
+    "ArmAdapter",
+    "BENCHMARK_REPORT_FILENAME",
+    "BENCHMARK_REPORT_SCHEMA_VERSION",
     "BenchmarkDataset",
     "BenchmarkQuestion",
     "DATASET_SCHEMA_VERSION",
@@ -43,6 +55,7 @@ __all__ = [
     "SLICE_HAND_AUTHORED",
     "SLICE_SYNTHETIC",
     "SLICE_TRAP",
+    "ScriptedArm",
     "POSTURE_GENERAL_KNOWLEDGE",
     "POSTURE_OUT_OF_SCOPE",
     "POSTURE_SOURCE_DATA_UNAVAILABLE",
@@ -58,4 +71,7 @@ __all__ = [
     "grade",
     "known_node_ids",
     "load_question_manifest",
+    "load_scripted_answers",
+    "run_benchmark",
+    "run_scripted_benchmark",
 ]
