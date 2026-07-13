@@ -27,6 +27,17 @@ def export_drawing_bundle(
     )
 
 
+def export_drawing_bundle_corpus(
+    *, fixture_root: Path, output_dir: Path
+) -> dict[str, object]:
+    from ..export.pipeline import export_drawing_bundle_corpus as export_corpus
+
+    return export_corpus(
+        fixture_root=fixture_root,
+        output_dir=output_dir,
+    )
+
+
 def build_base_fact_artifact(
     *, dexpi_xml_path: Path, fixture_id: str, pydexpi_full_graph: object
 ) -> dict[str, object]:

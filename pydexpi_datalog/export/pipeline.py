@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import tempfile
 
 import networkx as nx
 from networkx.readwrite import json_graph
@@ -25,7 +26,11 @@ def run_export_facts(
 
 
 def build_drawing_bundle(
-    *, dexpi_xml_path: Path, fixture_id: str, output_dir: Path
+    *,
+    dexpi_xml_path: Path,
+    fixture_id: str,
+    output_dir: Path,
+    source_reference: str | None = None,
 ) -> dict[str, object]:
     """Build a self-contained drawing bundle for an agentic sandbox."""
     source_path = dexpi_xml_path.resolve()
@@ -62,6 +67,7 @@ def build_drawing_bundle(
             edge_count=graph_facts_artifact["graph"]["edge_count"],
             extractor=graph_facts_artifact["provenance"]["extractor"],
             extractor_version=graph_facts_artifact["provenance"]["extractor_version"],
+            source_reference=source_reference,
         ),
         encoding="utf-8",
     )
@@ -78,7 +84,98 @@ def build_drawing_bundle(
     }
 
 
-def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
+def export_drawing_bundle_corpus(
+    *, fixture_root: Path, output_dir: Path
+) -> dict[str, object]:
+    """Build independent drawing bundles and report per-fixture failures."""
+    fixture_root_for_summary = fixture_root.as_posix()
+    resolved_fixture_root = fixture_root.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fixture_summaries: list[dict[str, object]] = []
+
+    for dexpi_xml_path in sorted(resolved_fixture_root.glob("**/*.xml")):
+        relative_path = dexpi_xml_path.relative_to(resolved_fixture_root)
+        relative_source = relative_path.as_posix()
+        fixture_id = fixture_id_from_path(relative_path)
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=f".{fixture_id}-",
+                dir=output_dir,
+            ) as staging_dir:
+                staging_root = Path(staging_dir)
+                bundle = build_drawing_bundle(
+                    dexpi_xml_path=dexpi_xml_path,
+                    fixture_id=fixture_id,
+                    output_dir=staging_root,
+                    source_reference=relative_source,
+                )
+                staged_bundle_dir = staging_root / fixture_id
+                final_bundle_dir = output_dir / fixture_id
+                previous_bundle_dir = staging_root / ".previous"
+                if final_bundle_dir.exists():
+                    final_bundle_dir.replace(previous_bundle_dir)
+                try:
+                    staged_bundle_dir.replace(final_bundle_dir)
+                except Exception:
+                    if previous_bundle_dir.exists():
+                        previous_bundle_dir.replace(final_bundle_dir)
+                    raise
+        except Exception as error:  # pyDEXPI raises several parser-specific exceptions.
+            fixture_summaries.append(
+                {
+                    "fixture_id": fixture_id,
+                    "relative_path": relative_source,
+                    "status": "failed",
+                    "error": str(error),
+                }
+            )
+            continue
+
+        graph = bundle["graph"]
+        fixture_summaries.append(
+            {
+                "fixture_id": fixture_id,
+                "relative_path": relative_source,
+                "status": "bundled",
+                "node_count": graph["node_count"],
+                "edge_count": graph["edge_count"],
+                "bundle_path": fixture_id,
+            }
+        )
+
+    bundled = [
+        fixture for fixture in fixture_summaries if fixture["status"] == "bundled"
+    ]
+    failed = [
+        fixture for fixture in fixture_summaries if fixture["status"] == "failed"
+    ]
+    summary = {
+        "fixture_root": fixture_root_for_summary,
+        "totals": {
+            "discovered": len(fixture_summaries),
+            "bundled": len(bundled),
+            "failed": len(failed),
+        },
+        "fixtures": fixture_summaries,
+    }
+    (output_dir / "bundle_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return summary
+
+
+def run_export_corpus(
+    *, fixture_root: Path, output_dir: Path, bundles: bool = False
+) -> int:
+    if bundles:
+        summary = export_drawing_bundle_corpus(
+            fixture_root=fixture_root,
+            output_dir=output_dir,
+        )
+        print(render_bundle_corpus_report(summary))
+        return 0
+
     fixture_root_for_summary = fixture_root.as_posix()
     fixture_root = fixture_root.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -246,6 +343,7 @@ def render_bundle_readme(
     edge_count: int,
     extractor: str,
     extractor_version: str,
+    source_reference: str | None,
 ) -> str:
     return "\n".join(
         [
@@ -269,6 +367,11 @@ def render_bundle_readme(
             "## Extraction provenance",
             "",
             f"`graph_facts.json` was produced by {extractor} {extractor_version}.",
+            *(
+                ["", f"Original corpus source: `{source_reference}`."]
+                if source_reference
+                else []
+            ),
             "",
             f"Graph size: {node_count} nodes and {edge_count} edges.",
             "",
@@ -321,5 +424,18 @@ def render_corpus_report(summary: dict[str, object]) -> str:
             f"Parsed: {totals['parsed']}",
             f"Failed: {totals['failed']}",
             f"Excluded: {totals['excluded']}",
+        ]
+    )
+
+
+def render_bundle_corpus_report(summary: dict[str, object]) -> str:
+    totals = summary["totals"]
+    return "\n".join(
+        [
+            "Exported DEXPI Drawing Bundle Corpus",
+            f"Fixture Root: {summary['fixture_root']}",
+            f"Discovered: {totals['discovered']}",
+            f"Bundled: {totals['bundled']}",
+            f"Failed: {totals['failed']}",
         ]
     )

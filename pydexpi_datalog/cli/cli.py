@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_corpus = subparsers.add_parser(
         "export-corpus",
-        help="Export graph-mirrored base facts for a DEXPI XML fixture corpus.",
+        help="Export graph facts or drawing bundles for a DEXPI XML fixture corpus.",
     )
     export_corpus.add_argument(
         "fixture_root", type=Path, help="Directory containing DEXPI XML fixtures."
@@ -42,7 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         required=True,
-        help="Directory where corpus fact artifacts and summary will be written.",
+        help="Directory where corpus artifacts and summary will be written.",
+    )
+    export_corpus.add_argument(
+        "--bundles",
+        action="store_true",
+        help=(
+            "Export self-contained agent drawing bundles instead of facts-only artifacts. "
+            "Use a separate output directory for each mode."
+        ),
     )
 
     derive_graph_semantics = subparsers.add_parser(
@@ -146,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_export_corpus(
             fixture_root=args.fixture_root,
             output_dir=args.output_dir,
+            bundles=args.bundles,
         )
     if args.command == "derive-graph-semantics":
         from ..semantics.derive_graph_semantics import run_derive_graph_semantics
