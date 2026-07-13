@@ -83,9 +83,30 @@ class ExportFactsCliTests(unittest.TestCase):
 
             artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
             self.assertEqual(artifact["fixture_id"], fixture_id)
-            self.assertEqual(artifact["source_path"], str(E03_FIXTURE.resolve()))
+            self.assertEqual(
+                artifact["source_path"],
+                E03_FIXTURE.relative_to(REPO_ROOT).as_posix(),
+            )
             self.assertTrue(artifact["facts"]["nodes"])
             self.assertTrue(artifact["facts"]["edges"])
+
+    def test_export_facts_preserves_absolute_path_for_external_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_root = Path(tmp_dir)
+            external_fixture = temp_root / E03_FIXTURE.name
+            output_dir = temp_root / "exported-facts"
+            fixture_id = "external-e03"
+            shutil.copyfile(E03_FIXTURE, external_fixture)
+
+            result = self.run_export_facts(external_fixture, fixture_id, output_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            artifact = json.loads(
+                (output_dir / fixture_id / "graph_facts.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(artifact["source_path"], str(external_fixture.resolve()))
 
     def test_export_corpus_persists_parse_coverage_summary_for_dexpi_13_fixtures(
         self,
@@ -200,6 +221,9 @@ class ExportFactsCliTests(unittest.TestCase):
                 self.assertEqual(artifact["fixture_id"], fixture_id)
                 self.assertTrue(artifact["facts"]["nodes"])
                 self.assertTrue(artifact["facts"]["edges"])
+                source_path = Path(artifact["source_path"])
+                self.assertFalse(source_path.is_absolute())
+                self.assertEqual(source_path.parts[0], "TrainingTestCases")
 
     def test_repo_persists_fixture_manifest_with_expected_graph_sizes(self) -> None:
         self.assertTrue(GOLDEN_MANIFEST_PATH.exists(), GOLDEN_MANIFEST_PATH)

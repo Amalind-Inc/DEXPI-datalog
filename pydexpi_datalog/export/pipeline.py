@@ -270,6 +270,15 @@ def fixture_id_from_path(relative_path: Path) -> str:
     return slug
 
 
+def _default_source_path(dexpi_xml_path: Path) -> str:
+    resolved_source = dexpi_xml_path.resolve()
+    project_root = Path(__file__).resolve().parents[2]
+    try:
+        return resolved_source.relative_to(project_root).as_posix()
+    except ValueError:
+        return str(resolved_source)
+
+
 def build_graph_facts_artifact(
     *, dexpi_xml_path: Path, fixture_id: str, graph: object, source_path: str | None = None
 ) -> dict[str, object]:
@@ -296,7 +305,11 @@ def build_graph_facts_artifact(
     ]
     return {
         "fixture_id": fixture_id,
-        "source_path": source_path or str(dexpi_xml_path.resolve()),
+        "source_path": (
+            source_path
+            if source_path is not None
+            else _default_source_path(dexpi_xml_path)
+        ),
         "graph": {
             "node_count": len(nodes),
             "edge_count": len(edges),

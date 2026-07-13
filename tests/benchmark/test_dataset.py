@@ -36,9 +36,10 @@ def test_checked_in_manifest_loads_a_trap_over_the_e06_training_fixture() -> Non
     assert question.question_id == "e06-approval-date"
     assert question.slice == "trap"
     assert question.drawing_ref == E06_GRAPH_FACTS
-    assert E06_SOURCE.is_file()
     graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
-    assert graph_facts["source_path"] == str(E06_SOURCE)
+    assert graph_facts["source_path"] == E06_SOURCE.relative_to(REPO_ROOT).as_posix()
+    if (REPO_ROOT / "TrainingTestCases").exists():
+        assert E06_SOURCE.is_file()
     assert question.ground_truth.verdict == VERDICT_UNANSWERABLE
     assert question.ground_truth.witness_ids == ()
 
