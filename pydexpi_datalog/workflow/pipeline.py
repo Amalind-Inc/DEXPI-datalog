@@ -15,6 +15,18 @@ def export_base_facts(
     )
 
 
+def export_drawing_bundle(
+    *, dexpi_xml_path: Path, fixture_id: str, output_dir: Path
+) -> dict[str, object]:
+    from ..export.pipeline import build_drawing_bundle
+
+    return build_drawing_bundle(
+        dexpi_xml_path=dexpi_xml_path,
+        fixture_id=fixture_id,
+        output_dir=output_dir,
+    )
+
+
 def build_base_fact_artifact(
     *, dexpi_xml_path: Path, fixture_id: str, pydexpi_full_graph: object
 ) -> dict[str, object]:

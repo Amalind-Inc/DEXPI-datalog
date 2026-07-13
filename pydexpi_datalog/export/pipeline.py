@@ -4,7 +4,10 @@ import importlib.metadata
 import json
 from pathlib import Path
 import re
+import shutil
 
+import networkx as nx
+from networkx.readwrite import json_graph
 from pydexpi import __file__ as pydexpi_file
 from pydexpi.loaders import GraphLoader, ProteusSerializer
 
@@ -19,6 +22,58 @@ def run_export_facts(
     )
     print(render_console_report(artifact))
     return 0
+
+
+def build_drawing_bundle(
+    *, dexpi_xml_path: Path, fixture_id: str, output_dir: Path
+) -> dict[str, object]:
+    """Build a self-contained drawing bundle for an agentic sandbox."""
+    source_path = dexpi_xml_path.resolve()
+    if not source_path.is_file():
+        raise FileNotFoundError(f"DEXPI drawing does not exist: {source_path}")
+
+    bundle_dir = output_dir / fixture_id
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_source_path = bundle_dir / "drawing.xml"
+    shutil.copyfile(source_path, bundle_source_path)
+
+    graph_facts_artifact = export_graph_facts_artifact(
+        dexpi_xml_path=source_path,
+        fixture_id=fixture_id,
+        output_dir=output_dir,
+        source_path=bundle_source_path.name,
+    )
+    networkx_graph = _networkx_graph_from_facts(graph_facts_artifact["facts"])
+    networkx_path = bundle_dir / "graph.json"
+    networkx_path.write_text(
+        json.dumps(
+            json_graph.node_link_data(networkx_graph, edges="edges"),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    readme_path = bundle_dir / "README.md"
+    readme_path.write_text(
+        render_bundle_readme(
+            fixture_id=fixture_id,
+            node_count=graph_facts_artifact["graph"]["node_count"],
+            edge_count=graph_facts_artifact["graph"]["edge_count"],
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "fixture_id": fixture_id,
+        "bundle_dir": bundle_dir,
+        "files": {
+            "drawing": bundle_source_path,
+            "graph_facts": bundle_dir / "graph_facts.json",
+            "networkx": networkx_path,
+            "readme": readme_path,
+        },
+        "graph": graph_facts_artifact["graph"],
+    }
 
 
 def run_export_corpus(*, fixture_root: Path, output_dir: Path) -> int:
@@ -166,6 +221,46 @@ def persist_graph_facts_artifact(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifact_dir / "graph_facts.json"
     artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _networkx_graph_from_facts(facts: dict[str, object]) -> nx.MultiDiGraph:
+    graph = nx.MultiDiGraph()
+    for node in facts["nodes"]:
+        graph.add_node(node["node_id"], **node["attributes"])
+    for edge in facts["edges"]:
+        graph.add_edge(
+            edge["source_id"],
+            edge["target_id"],
+            key=edge["edge_key"],
+            **edge["attributes"],
+        )
+    return graph
+
+
+def render_bundle_readme(*, fixture_id: str, node_count: int, edge_count: int) -> str:
+    return "\n".join(
+        [
+            f"# Drawing bundle: {fixture_id}",
+            "",
+            "This directory is a self-contained, read-only input for an agentic sandbox.",
+            "",
+            "## Files",
+            "",
+            "- `drawing.xml`: the original DEXPI source drawing.",
+            "- `graph_facts.json`: the canonical base fact layer extracted from the drawing.",
+            "- `graph.json`: a NetworkX node-link JSON export of those same graph facts.",
+            "- `README.md`: this orientation and witness-citation guide.",
+            "",
+            "## Witness IDs",
+            "",
+            "- Cite a node with its `node_id` from `graph_facts.json` under `facts.nodes`.",
+            "- Cite an edge with its `source_id`, `target_id`, and `edge_key` under `facts.edges`.",
+            "- The node and edge IDs in `graph.json` are the same IDs as in `graph_facts.json`.",
+            "",
+            f"Graph size: {node_count} nodes and {edge_count} edges.",
+            "",
+        ]
+    )
 
 
 def render_console_report(artifact: dict[str, object]) -> str:

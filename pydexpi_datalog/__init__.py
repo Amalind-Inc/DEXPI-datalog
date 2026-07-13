@@ -6,6 +6,7 @@ from .workflow.pipeline import (
     derive_graph_semantics_datalog,
     evaluate_rule,
     export_base_facts,
+    export_drawing_bundle,
 )
 from .workflow.review_session import ReviewSessionService
 from .llm.logic_requests import draft_logic_request, run_draft_logic_request
@@ -18,6 +19,7 @@ __all__ = [
     "draft_logic_request",
     "evaluate_rule",
     "export_base_facts",
+    "export_drawing_bundle",
     "FakeModelProvider",
     "ReviewSessionService",
     "resolve_model_access_config",
