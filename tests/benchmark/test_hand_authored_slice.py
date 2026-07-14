@@ -37,6 +37,23 @@ def test_manifest_is_loader_valid_with_thirty_balanced_questions() -> None:
         } == {"violation_found", "no_violation"}
 
 
+def test_retrieval_questions_state_the_exact_verdict_mapping() -> None:
+    dataset = load_question_manifest(MANIFEST_PATH)
+    retrieval_questions = [
+        question
+        for question in dataset.questions
+        if question.category == CATEGORY_RETRIEVAL_LOCAL
+    ]
+
+    assert len(retrieval_questions) == 15
+    assert all(
+        "violation_found" in question.question
+        and "no_violation" in question.question
+        and "witness" in question.question
+        for question in retrieval_questions
+    )
+
+
 def test_questions_use_real_dexpi_training_fixtures() -> None:
     dataset = load_question_manifest(MANIFEST_PATH)
 

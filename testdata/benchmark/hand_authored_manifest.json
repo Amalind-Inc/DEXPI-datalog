@@ -35,14 +35,14 @@
           "fd59bcdb-8f42-46f0-9a59-9ef35c7c2088"
         ]
       },
-      "id": "ha-e02-nozzle-ownership-retrieval",
+      "id": "ha-e02-nozzles-retrieval",
       "oracle": {
         "node": {
           "label": "Nozzle"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every nozzle on the drawing.",
+      "question": "Does this drawing contain any nozzles? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -78,7 +78,7 @@
           "4ff53869-c0c2-4602-b52a-d907eb6fb601"
         ]
       },
-      "id": "ha-e03-pump-nozzles-retrieval",
+      "id": "ha-e03-pump-p4713-retrieval",
       "oracle": {
         "node": {
           "label": "CentrifugalPump",
@@ -86,7 +86,7 @@
         },
         "operation": "match_nodes"
       },
-      "question": "Return the centrifugal pump tagged P-4713.",
+      "question": "Does this drawing contain the centrifugal pump tagged P-4713? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -122,7 +122,7 @@
           "71958cd7-493a-47aa-8397-f600df9b16cd"
         ]
       },
-      "id": "ha-e04-exchanger-nozzles-retrieval",
+      "id": "ha-e04-exchanger-h1009-retrieval",
       "oracle": {
         "node": {
           "label": "PlateHeatExchanger",
@@ -130,7 +130,7 @@
         },
         "operation": "match_nodes"
       },
-      "question": "Return the plate heat exchanger tagged H-1009.",
+      "question": "Does this drawing contain the plate heat exchanger tagged H-1009? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -167,14 +167,14 @@
           "d3690c04-535b-4da7-b08b-b929992fbdd3"
         ]
       },
-      "id": "ha-e05-nozzle-ownership-retrieval",
+      "id": "ha-e05-nozzles-retrieval",
       "oracle": {
         "node": {
           "label": "Nozzle"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every nozzle on the drawing.",
+      "question": "Does this drawing contain any nozzles? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -206,14 +206,14 @@
         "verdict": "no_violation",
         "witness_ids": []
       },
-      "id": "ha-e06-segment-source-retrieval",
+      "id": "ha-e06-swing-check-valves-retrieval",
       "oracle": {
         "node": {
           "label": "SwingCheckValve"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every swing check valve on the drawing.",
+      "question": "Does this drawing contain any swing check valves? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -248,14 +248,14 @@
           "40333c45-fb45-4f77-bbcb-bbfba2e08387"
         ]
       },
-      "id": "ha-e07-nozzle-ownership-retrieval",
+      "id": "ha-e07-tagged-column-sections-retrieval",
       "oracle": {
         "node": {
           "label": "TaggedColumnSection"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every tagged column section on the drawing.",
+      "question": "Does this drawing contain any tagged column sections? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -290,14 +290,14 @@
           "a8a377c6-3339-4f8b-ba14-d27d635b1dbe"
         ]
       },
-      "id": "ha-e08-section-ownership-retrieval",
+      "id": "ha-e08-subtagged-column-sections-retrieval",
       "oracle": {
         "node": {
           "label": "SubTaggedColumnSection"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every sub-tagged column section on the drawing.",
+      "question": "Does this drawing contain any sub-tagged column sections? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -332,14 +332,14 @@
           "7ee0bbf4-9afe-4f2c-915d-6b62aa9293c0"
         ]
       },
-      "id": "ha-e12-nozzle-chamber-retrieval",
+      "id": "ha-e12-chambers-retrieval",
       "oracle": {
         "node": {
           "label": "Chamber"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every chamber on the drawing.",
+      "question": "Does this drawing contain any chambers? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -373,14 +373,14 @@
         "verdict": "no_violation",
         "witness_ids": []
       },
-      "id": "ha-i01-system-segments-retrieval",
+      "id": "ha-i01-globe-valves-retrieval",
       "oracle": {
         "node": {
           "label": "GlobeValve"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every globe valve on the drawing.",
+      "question": "Does this drawing contain any globe valves? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -414,14 +414,14 @@
           "697b56e3-1e89-4abe-ac37-7c4abdcc5af1"
         ]
       },
-      "id": "ha-i02-valve-reference-retrieval",
+      "id": "ha-i02-globe-valves-retrieval",
       "oracle": {
         "node": {
           "label": "GlobeValve"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every globe valve on the drawing.",
+      "question": "Does this drawing contain any globe valves? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -456,14 +456,14 @@
           "f40a16d4-917b-4f69-af24-37ea3d0f366f"
         ]
       },
-      "id": "ha-i03-system-segments-retrieval",
+      "id": "ha-i03-piping-systems-retrieval",
       "oracle": {
         "node": {
           "label": "PipingNetworkSystem"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every piping network system on the drawing.",
+      "question": "Does this drawing contain any piping network systems? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -497,14 +497,14 @@
           "4e33bb03-fa76-44bd-a7b8-53cd3c1dca2c"
         ]
       },
-      "id": "ha-i04-function-ownership-retrieval",
+      "id": "ha-i04-flow-measuring-elements-retrieval",
       "oracle": {
         "node": {
           "label": "FlowMeasuringElement"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every flow measuring element on the drawing.",
+      "question": "Does this drawing contain any flow measuring elements? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -541,14 +541,14 @@
           "f357eff1-0b63-4751-aa3a-0360b9f9edb0"
         ]
       },
-      "id": "ha-i05-signal-function-ownership-retrieval",
+      "id": "ha-i05-instrumentation-functions-retrieval",
       "oracle": {
         "node": {
           "label": "ProcessInstrumentationFunction"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every process instrumentation function on the drawing.",
+      "question": "Does this drawing contain any process instrumentation functions? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -585,14 +585,14 @@
           "593b26ba-aa18-4b06-87de-17eb8c7cede5"
         ]
       },
-      "id": "ha-c01-segment-source-retrieval",
+      "id": "ha-c01-centrifugal-pumps-retrieval",
       "oracle": {
         "node": {
           "label": "CentrifugalPump"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every centrifugal pump on the drawing.",
+      "question": "Does this drawing contain any centrifugal pumps? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     },
     {
@@ -624,14 +624,14 @@
         "verdict": "no_violation",
         "witness_ids": []
       },
-      "id": "ha-c02-nozzle-ownership-retrieval",
+      "id": "ha-c02-centrifugal-pumps-retrieval",
       "oracle": {
         "node": {
           "label": "CentrifugalPump"
         },
         "operation": "match_nodes"
       },
-      "question": "Return every centrifugal pump on the drawing.",
+      "question": "Does this drawing contain any centrifugal pumps? If matches exist, answer violation_found and return every matching object as a witness; otherwise answer no_violation with no witnesses.",
       "slice": "hand_authored"
     }
   ],
