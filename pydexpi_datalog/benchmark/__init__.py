@@ -44,6 +44,12 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     create_agentic_arm,
     load_episode_budgets,
 )
+from pydexpi_datalog.benchmark.souffle_arm import (
+    PROGRAM_FILENAME,
+    SOUFFLE_ARM_MODELS,
+    build_souffle_harbor_task,
+    create_souffle_arm,
+)
 from pydexpi_datalog.benchmark.dataset import (
     DATASET_SCHEMA_VERSION,
     SLICES,
@@ -76,6 +82,10 @@ __all__ = [
     "build_harbor_task",
     "create_agentic_arm",
     "load_episode_budgets",
+    "PROGRAM_FILENAME",
+    "SOUFFLE_ARM_MODELS",
+    "build_souffle_harbor_task",
+    "create_souffle_arm",
     "BENCHMARK_REPORT_FILENAME",
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "BenchmarkDataset",

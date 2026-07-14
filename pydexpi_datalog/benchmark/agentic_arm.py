@@ -33,7 +33,7 @@ import subprocess
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Callable, Mapping, Sequence, Protocol, runtime_checkable
 
 from pydexpi_datalog.benchmark.contract import (
     POSTURES,
@@ -58,6 +58,9 @@ AGENTIC_ARM_MODELS = {
 BUNDLE_FILES = ("drawing.xml", "graph_facts.json", "graph.json", "README.md")
 
 ANSWER_FILENAME = "structured_answer.json"
+
+# The executed Datalog program an engine-mediated arm ships for audit.
+PROGRAM_FILENAME = "analysis.dl"
 
 
 # --------------------------------------------------------------------------
@@ -131,7 +134,7 @@ def build_harbor_task(
     output_dir: Path,
     budgets: EpisodeBudgets,
 ) -> Path:
-    """Generate a Harbor task directory for one benchmark question.
+    """Generate the Arm A agentic Harbor task for one benchmark question.
 
     The drawing bundle is copied into the Docker build context and mounted
     read-only inside the sandbox (root-owned ``0555`` ``/input`` with
@@ -140,6 +143,18 @@ def build_harbor_task(
     The verifier never sees ground truth: correctness is graded by the
     benchmark grader, not inside the episode.
     """
+    return build_task(
+        question=question,
+        drawing_ref=drawing_ref,
+        output_dir=output_dir,
+        budgets=budgets,
+        instruction=_render_instruction(question),
+        tags=("arm-a-agentic", "pydexpi-datalog-1-3q1.8"),
+    )
+
+
+def validate_bundle(drawing_ref: Path) -> Path:
+    """Resolve and validate one 3q1.4 drawing bundle directory."""
     bundle_dir = drawing_ref.resolve()
     if not bundle_dir.is_dir():
         raise FileNotFoundError(
@@ -150,6 +165,29 @@ def build_harbor_task(
         raise FileNotFoundError(
             f"drawing bundle {bundle_dir} is missing files: {missing}"
         )
+    return bundle_dir
+
+
+def build_task(
+    *,
+    question: BenchmarkQuestion,
+    drawing_ref: Path,
+    output_dir: Path,
+    budgets: EpisodeBudgets,
+    instruction: str,
+    tags: Sequence[str],
+    extra_input_files: Mapping[str, str] | None = None,
+    engine_setup: str = "",
+    extra_workspace_files: Sequence[str] = (),
+) -> Path:
+    """Shared Harbor task generation every agentic arm composes from.
+
+    The arm delta is declarative: extra read-only input files (name ->
+    content) beside the bundle, extra Dockerfile setup (e.g. installing an
+    engine), the arm's prompt framing, and extra required workspace
+    submissions preserved for post-hoc audit.
+    """
+    bundle_dir = validate_bundle(drawing_ref)
 
     task_dir = output_dir / f"benchmark-{question.question_id}"
     environment_dir = task_dir / "environment"
@@ -157,26 +195,33 @@ def build_harbor_task(
     environment_dir.mkdir(parents=True, exist_ok=True)
     tests_dir.mkdir(parents=True, exist_ok=True)
 
+    extra_files = dict(extra_input_files or {})
     digests: dict[str, str] = {}
     for name in BUNDLE_FILES:
         source = bundle_dir / name
         shutil.copyfile(source, environment_dir / name)
         digests[name] = hashlib.sha256(source.read_bytes()).hexdigest()
+    for name, content in extra_files.items():
+        (environment_dir / name).write_text(content, encoding="utf-8")
+        digests[name] = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    (task_dir / "instruction.md").write_text(
-        _render_instruction(question), encoding="utf-8"
-    )
+    input_names = tuple(BUNDLE_FILES) + tuple(extra_files)
+    (task_dir / "instruction.md").write_text(instruction, encoding="utf-8")
     (task_dir / "task.toml").write_text(
-        _render_task_toml(question=question, budgets=budgets), encoding="utf-8"
+        _render_task_toml(question=question, budgets=budgets, tags=tags),
+        encoding="utf-8",
     )
     (environment_dir / "Dockerfile").write_text(
-        _render_dockerfile(), encoding="utf-8"
+        _render_dockerfile(input_names, engine_setup=engine_setup),
+        encoding="utf-8",
     )
+    preserved = (ANSWER_FILENAME, *extra_workspace_files)
     test_sh_path = tests_dir / "test.sh"
-    test_sh_path.write_text(_render_test_sh(), encoding="utf-8")
+    test_sh_path.write_text(_render_test_sh(preserved), encoding="utf-8")
     test_sh_path.chmod(0o755)
     (tests_dir / "test_outputs.py").write_text(
-        _render_verifier(digests), encoding="utf-8"
+        _render_verifier(digests, required_nonempty=tuple(extra_workspace_files)),
+        encoding="utf-8",
     )
     return task_dir
 
@@ -235,8 +280,15 @@ Verify the file exists and is valid JSON before marking the task complete.
 
 
 def _render_task_toml(
-    *, question: BenchmarkQuestion, budgets: EpisodeBudgets
+    *,
+    question: BenchmarkQuestion,
+    budgets: EpisodeBudgets,
+    tags: Sequence[str],
 ) -> str:
+    all_tags = ", ".join(
+        json.dumps(tag)
+        for tag in (*tags, question.question_id, question.slice)
+    )
     return f"""\
 version = "1.0"
 
@@ -244,7 +296,7 @@ version = "1.0"
 author_name = "pyDEXPI Datalog benchmark"
 difficulty_explanation = "One reasoning-architecture benchmark question over a drawing bundle."
 category = "benchmark-episode"
-tags = ["arm-a-agentic", "pydexpi-datalog-1-3q1.8", {json.dumps(question.question_id)}, {json.dumps(question.slice)}]
+tags = [{all_tags}]
 
 [verifier]
 timeout_sec = {budgets.verifier_timeout_sec}
@@ -257,11 +309,13 @@ build_timeout_sec = 600.0
 """
 
 
-def _render_dockerfile() -> str:
-    copy_lines = "\n".join(f"COPY {name} /input/{name}" for name in BUNDLE_FILES)
+def _render_dockerfile(
+    input_names: Sequence[str], *, engine_setup: str = ""
+) -> str:
+    copy_lines = "\n".join(f"COPY {name} /input/{name}" for name in input_names)
     chmod_lines = " \\\n    && ".join(
         f"chown root:root /input/{name} && chmod 0444 /input/{name}"
-        for name in BUNDLE_FILES
+        for name in input_names
     )
     return f"""\
 FROM python:3.12-slim
@@ -275,7 +329,7 @@ RUN apt-get update \\
     && chown agent:agent /workspace \\
     && rm -rf /var/lib/apt/lists/* \\
     && pip install --no-cache-dir networkx
-
+{engine_setup}
 {copy_lines}
 RUN {chmod_lines}
 
@@ -284,13 +338,17 @@ USER agent
 """
 
 
-def _render_test_sh() -> str:
+def _render_test_sh(preserved: Sequence[str]) -> str:
+    copy_lines = "\n".join(
+        f"cp /workspace/{name} /logs/verifier/{name} 2>/dev/null || true"
+        for name in preserved
+    )
     return f"""\
 #!/bin/sh
 set -eu
 
 mkdir -p /logs/verifier
-cp /workspace/{ANSWER_FILENAME} /logs/verifier/{ANSWER_FILENAME} 2>/dev/null || true
+{copy_lines}
 if python3 /tests/test_outputs.py; then
   echo 1 > /logs/verifier/reward.txt
 else
@@ -299,11 +357,16 @@ fi
 """
 
 
-def _render_verifier(digests: Mapping[str, str]) -> str:
+def _render_verifier(
+    digests: Mapping[str, str], *, required_nonempty: Sequence[str] = ()
+) -> str:
     """The independent verifier: input integrity + submission shape only.
 
-    ``INPUT_DIR``/``WORKSPACE_DIR`` environment overrides exist so the
-    verifier logic itself is testable outside the container.
+    ``required_nonempty`` names extra workspace files that must exist with
+    non-whitespace content (e.g. the executed Datalog program an
+    engine-mediated arm ships for audit).  ``INPUT_DIR``/``WORKSPACE_DIR``
+    environment overrides exist so the verifier logic itself is testable
+    outside the container.
     """
     return f"""\
 from __future__ import annotations
@@ -316,6 +379,7 @@ from pathlib import Path
 INPUT_DIR = Path(os.environ.get("INPUT_DIR", "/input"))
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
 EXPECTED_SHA256 = {json.dumps(dict(digests), indent=4, sort_keys=True)}
+REQUIRED_NONEMPTY = {json.dumps(list(required_nonempty))}
 
 
 def main() -> int:
@@ -330,6 +394,12 @@ def main() -> int:
     answer = json.loads(answer_path.read_text(encoding="utf-8"))
     if not isinstance(answer, dict):
         raise AssertionError(f"structured answer is not a JSON object: {{answer!r}}")
+    for name in REQUIRED_NONEMPTY:
+        path = WORKSPACE_DIR / name
+        if not path.exists():
+            raise AssertionError(f"missing required submission: {{path}}")
+        if not path.read_text(encoding="utf-8").strip():
+            raise AssertionError(f"required submission is empty: {{path}}")
     return 0
 
 
@@ -351,6 +421,9 @@ class EpisodeResult:
     submission exists, is a JSON object, and the read-only input is
     unchanged).  ``command_batches`` records the executed terminal analysis:
     one tuple per model command batch, in execution order.
+    ``executed_program`` is the Datalog program an engine-mediated arm
+    submitted beside its answer for post-hoc audit (``None`` for arms that
+    do not execute Datalog).
     """
 
     structured_answer_text: str | None
@@ -358,6 +431,7 @@ class EpisodeResult:
     command_batches: tuple[tuple[str, ...], ...] = ()
     model_calls: int = 0
     usage: dict[str, object] = field(default_factory=dict)
+    executed_program: str | None = None
 
 
 @runtime_checkable
@@ -376,12 +450,19 @@ class EpisodeRunner(Protocol):
 
 @dataclass(frozen=True)
 class AgenticArm:
-    """Arm A agentic over any :class:`EpisodeRunner`."""
+    """A sandbox-episode arm over any :class:`EpisodeRunner`.
+
+    Arm A agentic by default; Arm C composes the same machinery with a
+    Souffle task builder, its own arm label, and a required executed
+    program (see :mod:`pydexpi_datalog.benchmark.souffle_arm`).
+    """
 
     runner: EpisodeRunner
     budgets: EpisodeBudgets
     model_name: str = "scripted"
     arm_label: str = "a-agentic"
+    task_builder: Callable[..., Path] = build_harbor_task
+    require_executed_program: bool = False
 
     @property
     def arm_id(self) -> str:
@@ -392,7 +473,7 @@ class AgenticArm:
     ) -> StructuredAnswer:
         with tempfile.TemporaryDirectory(prefix="pydexpi-agentic-") as temp:
             temp_dir = Path(temp)
-            task_dir = build_harbor_task(
+            task_dir = self.task_builder(
                 question=question,
                 drawing_ref=drawing_ref,
                 output_dir=temp_dir / "tasks",
@@ -418,6 +499,12 @@ class AgenticArm:
         if result.reward != 1.0:
             return self._degraded(
                 "verification_gate_rejected", transcript=transcript, usage=usage
+            )
+        if self.require_executed_program and not (
+            result.executed_program or ""
+        ).strip():
+            return self._degraded(
+                "missing_executed_program", transcript=transcript, usage=usage
             )
         if result.structured_answer_text is None:
             return self._degraded(
@@ -448,6 +535,14 @@ class AgenticArm:
                     "role": "tool",
                     "tool_name": "execute_commands",
                     "commands": list(batch),
+                }
+            )
+        if result.executed_program is not None:
+            entries.append(
+                {
+                    "role": "tool",
+                    "tool_name": "executed_datalog_program",
+                    "content": result.executed_program,
                 }
             )
         entries.append(
@@ -544,9 +639,10 @@ class HarborKiraEpisodeRunner:
 def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
     """Map Harbor's persisted episode artifacts into an :class:`EpisodeResult`.
 
-    Reads the verifier reward, the copied structured answer, and the agent
-    trajectory (terminal command batches and model call count).  Missing
-    artifacts degrade to a rejected episode rather than crashing the run.
+    Reads the verifier reward, the copied structured answer, the executed
+    Datalog program (engine-mediated arms), and the agent trajectory
+    (terminal command batches and model call count).  Missing artifacts
+    degrade to a rejected episode rather than crashing the run.
     """
     reward: float | None = None
     reward_files = sorted(jobs_dir.rglob("reward.txt"))
@@ -560,6 +656,11 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
     answer_files = sorted(jobs_dir.rglob(ANSWER_FILENAME))
     if answer_files:
         structured_answer_text = answer_files[0].read_text(encoding="utf-8")
+
+    executed_program: str | None = None
+    program_files = sorted(jobs_dir.rglob(PROGRAM_FILENAME))
+    if program_files:
+        executed_program = program_files[0].read_text(encoding="utf-8")
 
     command_batches: list[tuple[str, ...]] = []
     model_calls = 0
@@ -578,6 +679,7 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
         command_batches=tuple(command_batches),
         model_calls=model_calls,
         usage=usage,
+        executed_program=executed_program,
     )
 
 
