@@ -1,0 +1,639 @@
+{
+  "questions": [
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e02-tank-with-nozzles-e02v02-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e02-nozzle-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every nozzle have exactly one incoming composition/nozzles ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e02-tank-with-nozzles-e02v02-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "237ea9d2-1f33-45eb-a3d3-84c233d0bf8a",
+          "b2492284-33da-4c96-917c-3369b70f9524",
+          "d335646c-fda3-4137-b3a6-75992adaa0a8",
+          "e17da9ca-c4cd-4e1a-a617-053d5bda1314",
+          "fd59bcdb-8f42-46f0-9a59-9ef35c7c2088"
+        ]
+      },
+      "id": "ha-e02-nozzle-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every nozzle on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e03-pump-with-nozzles-e03v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "4ff53869-c0c2-4602-b52a-d907eb6fb601"
+        ]
+      },
+      "id": "ha-e03-pump-nozzles-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 2,
+        "node": {
+          "label": "CentrifugalPump"
+        },
+        "operation": "outgoing_edge_count_less_than"
+      },
+      "question": "Does every centrifugal pump own at least two nozzles through composition/nozzles?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e03-pump-with-nozzles-e03v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "4ff53869-c0c2-4602-b52a-d907eb6fb601"
+        ]
+      },
+      "id": "ha-e03-pump-nozzles-retrieval",
+      "oracle": {
+        "node": {
+          "label": "CentrifugalPump",
+          "tagName": "P-4713"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return the centrifugal pump tagged P-4713.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e04-heatexchanger-with-nozzles-e04v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "71958cd7-493a-47aa-8397-f600df9b16cd"
+        ]
+      },
+      "id": "ha-e04-exchanger-nozzles-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 4,
+        "node": {
+          "label": "PlateHeatExchanger"
+        },
+        "operation": "outgoing_edge_count_less_than"
+      },
+      "question": "Does every plate heat exchanger own at least four nozzles through composition/nozzles?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e04-heatexchanger-with-nozzles-e04v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "71958cd7-493a-47aa-8397-f600df9b16cd"
+        ]
+      },
+      "id": "ha-e04-exchanger-nozzles-retrieval",
+      "oracle": {
+        "node": {
+          "label": "PlateHeatExchanger",
+          "tagName": "H-1009"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return the plate heat exchanger tagged H-1009.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e05-pump-with-nozzles-and-heatexchanger-with-nozzles-e05v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e05-nozzle-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every nozzle have exactly one incoming composition/nozzles ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e05-pump-with-nozzles-and-heatexchanger-with-nozzles-e05v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "9dd12608-9be8-4df4-a9a7-07bf330a7dad",
+          "b6a934e3-c791-4d87-825f-1ba21283cc9e",
+          "c8c97440-0ea2-4f05-b71d-4104d6a39017",
+          "d3690c04-535b-4da7-b08b-b929992fbdd3"
+        ]
+      },
+      "id": "ha-e05-nozzle-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every nozzle on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e06-segment-source-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "expected": 1,
+        "node": {
+          "label": "PipingNetworkSegment"
+        },
+        "operation": "outgoing_edge_count_not_equal"
+      },
+      "question": "Does every piping network segment have exactly one sourceItem reference?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e06-segment-source-retrieval",
+      "oracle": {
+        "node": {
+          "label": "SwingCheckValve"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every swing check valve on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e07-pressurevessel-with-columnsections-e07v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e07-nozzle-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every nozzle have exactly one incoming composition/nozzles ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e07-pressurevessel-with-columnsections-e07v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "1704045f-14c2-41ba-83d8-81f36a0c7e3e",
+          "40333c45-fb45-4f77-bbcb-bbfba2e08387"
+        ]
+      },
+      "id": "ha-e07-nozzle-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "TaggedColumnSection"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every tagged column section on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e08-processcolumn-with-columnsections-e08v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e08-section-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "columnSections",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "SubTaggedColumnSection"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every sub-tagged column section have exactly one incoming composition/columnSections ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e08-processcolumn-with-columnsections-e08v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "29e8d196-a7d2-410e-aaab-bf5297162e87",
+          "a8a377c6-3339-4f8b-ba14-d27d635b1dbe"
+        ]
+      },
+      "id": "ha-e08-section-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "SubTaggedColumnSection"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every sub-tagged column section on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/e12-heat-exchanger-with-chambers-nozzles-and-equipment-bar-e12v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-e12-nozzle-chamber-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "chamber",
+          "label": "reference"
+        },
+        "expected": 1,
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "outgoing_edge_count_not_equal"
+      },
+      "question": "Does every nozzle have exactly one outgoing chamber reference?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/e12-heat-exchanger-with-chambers-nozzles-and-equipment-bar-e12v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "7a57e7ec-0c25-4f12-a520-3ed7083332fa",
+          "7ee0bbf4-9afe-4f2c-915d-6b62aa9293c0"
+        ]
+      },
+      "id": "ha-e12-nozzle-chamber-retrieval",
+      "oracle": {
+        "node": {
+          "label": "Chamber"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every chamber on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/i01-measurement-i01v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "4b42746c-313b-4f52-9908-4af693c74008"
+        ]
+      },
+      "id": "ha-i01-system-segments-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "expected": 2,
+        "node": {
+          "label": "PipingNetworkSystem"
+        },
+        "operation": "outgoing_edge_count_less_than"
+      },
+      "question": "Does every piping network system own at least two segments through composition/segments?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/i01-measurement-i01v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-i01-system-segments-retrieval",
+      "oracle": {
+        "node": {
+          "label": "GlobeValve"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every globe valve on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/i02-control-i02v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-i02-valve-reference-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "valve",
+          "label": "reference"
+        },
+        "expected": 1,
+        "node": {
+          "label": "OperatedValveReference"
+        },
+        "operation": "outgoing_edge_count_not_equal"
+      },
+      "question": "Does every operated valve reference have exactly one outgoing valve reference?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/i02-control-i02v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "697b56e3-1e89-4abe-ac37-7c4abdcc5af1"
+        ]
+      },
+      "id": "ha-i02-valve-reference-retrieval",
+      "oracle": {
+        "node": {
+          "label": "GlobeValve"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every globe valve on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/i03-measurement-and-control-i03v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-i03-system-segments-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "segments",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "PipingNetworkSystem"
+        },
+        "operation": "outgoing_edge_count_less_than"
+      },
+      "question": "Does every piping network system own at least one segment through composition/segments?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/i03-measurement-and-control-i03v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "dfa60df9-4941-41c5-bcda-678601c87017",
+          "f40a16d4-917b-4f69-af24-37ea3d0f366f"
+        ]
+      },
+      "id": "ha-i03-system-segments-retrieval",
+      "oracle": {
+        "node": {
+          "label": "PipingNetworkSystem"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every piping network system on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/i04-measurement-and-control-i04v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-i04-function-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "processInstrumentationFunctions",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "ProcessInstrumentationFunction"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every process instrumentation function have exactly one incoming composition/processInstrumentationFunctions ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/i04-measurement-and-control-i04v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "4e33bb03-fa76-44bd-a7b8-53cd3c1dca2c"
+        ]
+      },
+      "id": "ha-i04-function-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "FlowMeasuringElement"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every flow measuring element on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/i05-two-flow-indications-and-flow-ratio-control-in-ccr-i05v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-i05-signal-function-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "processSignalGeneratingFunctions",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "ProcessSignalGeneratingFunction"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every process signal generating function have exactly one incoming composition/processSignalGeneratingFunctions ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/i05-two-flow-indications-and-flow-ratio-control-in-ccr-i05v01-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "895c9220-739e-48be-85ab-f96de0c13467",
+          "9237541a-505f-483f-a77b-086ac927f7f5",
+          "a02c88b0-b28e-4165-a5bb-c4cb97b037ad",
+          "f357eff1-0b63-4751-aa3a-0360b9f9edb0"
+        ]
+      },
+      "id": "ha-i05-signal-function-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "ProcessInstrumentationFunction"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every process instrumentation function on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "afdeca44-c107-4dc3-9091-c223e9e4a7e5",
+          "ebdfdc98-95e3-4ea1-af51-340ade133895"
+        ]
+      },
+      "id": "ha-c01-segment-source-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "sourceItem",
+          "label": "reference"
+        },
+        "expected": 1,
+        "node": {
+          "label": "PipingNetworkSegment"
+        },
+        "operation": "outgoing_edge_count_not_equal"
+      },
+      "question": "Does every piping network segment have exactly one sourceItem reference?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+      "ground_truth": {
+        "verdict": "violation_found",
+        "witness_ids": [
+          "593b26ba-aa18-4b06-87de-17eb8c7cede5"
+        ]
+      },
+      "id": "ha-c01-segment-source-retrieval",
+      "oracle": {
+        "node": {
+          "label": "CentrifugalPump"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every centrifugal pump on the drawing.",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "compliance_universal",
+      "drawing": "../graph_contract/corpus/c02-process-column-basf-c02v03-ver-ex02",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-c02-nozzle-ownership-compliance",
+      "oracle": {
+        "edge": {
+          "attr_name": "nozzles",
+          "label": "composition"
+        },
+        "expected": 1,
+        "node": {
+          "label": "Nozzle"
+        },
+        "operation": "incoming_edge_count_not_equal"
+      },
+      "question": "Does every nozzle have exactly one incoming composition/nozzles ownership relationship?",
+      "slice": "hand_authored"
+    },
+    {
+      "category": "retrieval_local",
+      "drawing": "../graph_contract/corpus/c02-process-column-basf-c02v03-ver-ex02",
+      "ground_truth": {
+        "verdict": "no_violation",
+        "witness_ids": []
+      },
+      "id": "ha-c02-nozzle-ownership-retrieval",
+      "oracle": {
+        "node": {
+          "label": "CentrifugalPump"
+        },
+        "operation": "match_nodes"
+      },
+      "question": "Return every centrifugal pump on the drawing.",
+      "slice": "hand_authored"
+    }
+  ],
+  "schema_version": 2
+}
