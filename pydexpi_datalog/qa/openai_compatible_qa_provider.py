@@ -113,6 +113,7 @@ class OpenAICompatibleQATurnProvider:
         self.model = model
         self._base_url = base_url.rstrip("/")
         self._credential = credential
+        self.usage: dict[str, object] = {}
 
     def complete_with_tools(
         self,
@@ -136,7 +137,25 @@ class OpenAICompatibleQATurnProvider:
             timeout=120.0,
         )
         response.raise_for_status()
-        return self._interpret(response.json())
+        body = response.json()
+        self._record_usage(body)
+        return self._interpret(body)
+
+    def _record_usage(self, body: dict[str, object]) -> None:
+        usage = body.get("usage", {})
+        if not isinstance(usage, dict):
+            return
+        for source, target in (
+            ("prompt_tokens", "input_tokens"),
+            ("completion_tokens", "output_tokens"),
+            ("total_tokens", "total_tokens"),
+            ("cost", "cost_usd"),
+        ):
+            value = usage.get(source)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                current = self.usage.get(target, 0)
+                if isinstance(current, (int, float)) and not isinstance(current, bool):
+                    self.usage[target] = current + value
 
     def _interpret(self, body: dict[str, object]) -> ToolCall | FinalAnswer:
         message = self._first_message(body)
@@ -195,9 +214,7 @@ def _parse_arguments(raw: object) -> dict[str, object]:
 def _final_answer_from_args(arguments: dict[str, object]) -> FinalAnswer:
     answer_text = str(arguments.get("answer_text", "")).strip()
     evidence = [
-        str(x)
-        for x in arguments.get("evidence_object_ids", [])
-        if isinstance(x, str)
+        str(x) for x in arguments.get("evidence_object_ids", []) if isinstance(x, str)
     ]
     interpreted = [
         str(x)

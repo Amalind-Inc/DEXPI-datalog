@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import httpx
 
-from .model_access import ModelCapabilityError, ModelProvider, native_tool_capability_diagnostic
+from .model_access import (
+    ModelCapabilityError,
+    ModelProvider,
+    native_tool_capability_diagnostic,
+)
 
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -30,10 +34,13 @@ _NATIVE_TOOL_REJECTION_TOKENS = (
 )
 
 
-
-def create_byok_provider(*, provider: str, model: str, credential: str) -> ModelProvider:
+def create_byok_provider(
+    *, provider: str, model: str, credential: str
+) -> ModelProvider:
     if provider in ("openai", "openrouter"):
-        base_url = _OPENROUTER_BASE_URL if provider == "openrouter" else _OPENAI_BASE_URL
+        base_url = (
+            _OPENROUTER_BASE_URL if provider == "openrouter" else _OPENAI_BASE_URL
+        )
         return _OpenAICompatibleProvider(
             provider=provider, model=model, credential=credential, base_url=base_url
         )
@@ -82,7 +89,9 @@ def _datalog_generation_system_prompt(context: dict[str, object]) -> str:
             return f'  "{nid}"  ({label}, class: {class_name})'
         return f'  "{nid}"  ({label})'
 
-    nodes_block = "\n".join(_node_line(n) for n in topology_nodes if isinstance(n, dict))
+    nodes_block = "\n".join(
+        _node_line(n) for n in topology_nodes if isinstance(n, dict)
+    )
 
     def _edge_line(e: object) -> str:
         if not isinstance(e, dict):
@@ -94,16 +103,24 @@ def _datalog_generation_system_prompt(context: dict[str, object]) -> str:
         tgt_label = labels_by_id.get(tgt, tgt)
         return f'  "{src}" ({src_label}) --[{rel}]--> "{tgt}" ({tgt_label})'
 
-    edges_block = "\n".join(_edge_line(e) for e in topology_edges if isinstance(e, dict))
+    edges_block = "\n".join(
+        _edge_line(e) for e in topology_edges if isinstance(e, dict)
+    )
     if not edges_block:
         edges_block = "  (no edges)"
 
     scope_clause = ""
-    if scope.get("kind") == "visible_source_scope" and isinstance(source_scope_ids, list) and source_scope_ids:
+    if (
+        scope.get("kind") == "visible_source_scope"
+        and isinstance(source_scope_ids, list)
+        and source_scope_ids
+    ):
         scope_items = ", ".join(
             f'"{s}" ({labels_by_id.get(s, s)})' for s in source_scope_ids
         )
-        scope_clause = f"\nSOURCE SCOPE — focus your answer on these objects: {scope_items}\n"
+        scope_clause = (
+            f"\nSOURCE SCOPE — focus your answer on these objects: {scope_items}\n"
+        )
 
     return f"""\
 You are a Souffle Datalog query generator for P&ID (Piping and Instrumentation Diagram) topology analysis.
@@ -177,6 +194,7 @@ class _OpenAICompatibleProvider:
         self.model = model
         self._credential = credential
         self._base_url = base_url.rstrip("/")
+        self.last_usage: dict[str, object] = {}
 
     def complete(self, *, request: str, context: dict[str, object]) -> str:
         system_prompt = build_system_prompt(context)
@@ -198,8 +216,20 @@ class _OpenAICompatibleProvider:
         _raise_for_status_with_native_tool_diagnostic(
             response, provider=self.provider, model=self.model
         )
-        return str(response.json()["choices"][0]["message"]["content"])
-
+        payload = response.json()
+        usage = payload.get("usage", {})
+        self.last_usage = {}
+        if isinstance(usage, dict):
+            for source, target in (
+                ("prompt_tokens", "input_tokens"),
+                ("completion_tokens", "output_tokens"),
+                ("total_tokens", "total_tokens"),
+                ("cost", "cost_usd"),
+            ):
+                value = usage.get(source)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    self.last_usage[target] = value
+        return str(payload["choices"][0]["message"]["content"])
 
 
 def _raise_for_status_with_native_tool_diagnostic(
@@ -232,6 +262,7 @@ def _raise_native_tool_capability_error_if_present(
         model=model,
         message=diagnostic["message"],
     ) from error
+
 
 class _AnthropicProvider:
     provider = "anthropic"
@@ -284,6 +315,4 @@ class _GeminiProvider:
         _raise_for_status_with_native_tool_diagnostic(
             response, provider=self.provider, model=self.model
         )
-        return str(
-            response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        )
+        return str(response.json()["candidates"][0]["content"]["parts"][0]["text"])

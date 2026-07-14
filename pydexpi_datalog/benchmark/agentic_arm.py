@@ -80,11 +80,18 @@ class EpisodeBudgets:
 
     max_turns: int = 20
     max_commands: int = 40
+    max_output_tokens: int = 8192
     agent_timeout_sec: float = 1800.0
     verifier_timeout_sec: float = 300.0
 
 
-_BUDGET_FIELDS = ("max_turns", "max_commands", "agent_timeout_sec", "verifier_timeout_sec")
+_BUDGET_FIELDS = (
+    "max_turns",
+    "max_commands",
+    "max_output_tokens",
+    "agent_timeout_sec",
+    "verifier_timeout_sec",
+)
 
 
 def load_episode_budgets(manifest_path: Path) -> EpisodeBudgets:
@@ -99,17 +106,13 @@ def load_episode_budgets(manifest_path: Path) -> EpisodeBudgets:
         raise ValueError(f"run manifest is not a JSON object: {manifest_path}")
     raw_budgets = raw.get("episode_budgets", {})
     if not isinstance(raw_budgets, dict):
-        raise ValueError(
-            f"episode_budgets must be a JSON object: {manifest_path}"
-        )
+        raise ValueError(f"episode_budgets must be a JSON object: {manifest_path}")
     unknown = sorted(set(raw_budgets) - set(_BUDGET_FIELDS))
     if unknown:
-        raise ValueError(
-            f"unknown episode_budgets fields {unknown} in {manifest_path}"
-        )
+        raise ValueError(f"unknown episode_budgets fields {unknown} in {manifest_path}")
     defaults = EpisodeBudgets()
     values: dict[str, object] = {}
-    for name in ("max_turns", "max_commands"):
+    for name in ("max_turns", "max_commands", "max_output_tokens"):
         value = raw_budgets.get(name, getattr(defaults, name))
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise ValueError(f"{name} must be a positive integer: {value!r}")
@@ -289,8 +292,7 @@ def _render_task_toml(
     tags: Sequence[str],
 ) -> str:
     all_tags = ", ".join(
-        json.dumps(tag)
-        for tag in (*tags, question.question_id, question.slice)
+        json.dumps(tag) for tag in (*tags, question.question_id, question.slice)
     )
     return f"""\
 version = "1.0"
@@ -312,9 +314,7 @@ build_timeout_sec = 600.0
 """
 
 
-def _render_dockerfile(
-    input_names: Sequence[str], *, engine_setup: str = ""
-) -> str:
+def _render_dockerfile(input_names: Sequence[str], *, engine_setup: str = "") -> str:
     copy_lines = "\n".join(f"COPY {name} /input/{name}" for name in input_names)
     chmod_lines = " \\\n    && ".join(
         f"chown root:root /input/{name} && chmod 0444 /input/{name}"
@@ -466,6 +466,7 @@ class AgenticArm:
     arm_label: str = "a-agentic"
     task_builder: Callable[..., Path] = build_harbor_task
     require_executed_program: bool = False
+    artifact_root: Path | None = None
 
     @property
     def arm_id(self) -> str:
@@ -474,21 +475,22 @@ class AgenticArm:
     def answer(
         self, *, question: BenchmarkQuestion, drawing_ref: Path
     ) -> StructuredAnswer:
-        with tempfile.TemporaryDirectory(prefix="pydexpi-agentic-") as temp:
-            temp_dir = Path(temp)
-            task_dir = self.task_builder(
+        if self.artifact_root is None:
+            with tempfile.TemporaryDirectory(prefix="pydexpi-agentic-") as temp:
+                instruction, result = self._run_episode(
+                    question=question,
+                    drawing_ref=drawing_ref,
+                    episode_dir=Path(temp),
+                )
+        else:
+            episode_dir = self.artifact_root / question.question_id
+            if episode_dir.exists():
+                shutil.rmtree(episode_dir)
+            episode_dir.mkdir(parents=True)
+            instruction, result = self._run_episode(
                 question=question,
                 drawing_ref=drawing_ref,
-                output_dir=temp_dir / "tasks",
-                budgets=self.budgets,
-            )
-            instruction = (task_dir / "instruction.md").read_text(
-                encoding="utf-8"
-            )
-            result = self.runner.run(
-                task_dir=task_dir,
-                jobs_dir=temp_dir / "jobs",
-                budgets=self.budgets,
+                episode_dir=episode_dir,
             )
 
         transcript = self._transcript(instruction=instruction, result=result)
@@ -503,9 +505,10 @@ class AgenticArm:
             return self._degraded(
                 "verification_gate_rejected", transcript=transcript, usage=usage
             )
-        if self.require_executed_program and not (
-            result.executed_program or ""
-        ).strip():
+        if (
+            self.require_executed_program
+            and not (result.executed_program or "").strip()
+        ):
             return self._degraded(
                 "missing_executed_program", transcript=transcript, usage=usage
             )
@@ -527,12 +530,31 @@ class AgenticArm:
             usage=usage,
         )
 
+    def _run_episode(
+        self,
+        *,
+        question: BenchmarkQuestion,
+        drawing_ref: Path,
+        episode_dir: Path,
+    ) -> tuple[str, EpisodeResult]:
+        task_dir = self.task_builder(
+            question=question,
+            drawing_ref=drawing_ref,
+            output_dir=episode_dir / "tasks",
+            budgets=self.budgets,
+        )
+        instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+        result = self.runner.run(
+            task_dir=task_dir,
+            jobs_dir=episode_dir / "jobs",
+            budgets=self.budgets,
+        )
+        return instruction, result
+
     def _transcript(
         self, *, instruction: str, result: EpisodeResult
     ) -> tuple[dict[str, object], ...]:
-        entries: list[dict[str, object]] = [
-            {"role": "user", "content": instruction}
-        ]
+        entries: list[dict[str, object]] = [{"role": "user", "content": instruction}]
         for batch in result.command_batches:
             entries.append(
                 {
@@ -621,6 +643,12 @@ class HarborKiraEpisodeRunner:
             self.model,
             "--agent-kwarg",
             f"max_turns={budgets.max_turns}",
+            "--agent-kwarg",
+            "model_info="
+            + json.dumps(
+                {"max_output_tokens": budgets.max_output_tokens},
+                separators=(",", ":"),
+            ),
             "--env",
             "docker",
             "--jobs-dir",
@@ -675,7 +703,9 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
         command_batches.extend(batches)
         model_calls += calls
         for key, value in tokens.items():
-            usage[key] = int(usage.get(key, 0)) + value
+            current = usage.get(key, 0)
+            if isinstance(current, (int, float)) and not isinstance(current, bool):
+                usage[key] = current + value
 
     return EpisodeResult(
         structured_answer_text=structured_answer_text,
@@ -689,11 +719,11 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
 
 def _walk_trajectory(
     value: object,
-) -> tuple[list[tuple[str, ...]], int, dict[str, int]]:
+) -> tuple[list[tuple[str, ...]], int, dict[str, int | float]]:
     """Collect command batches, function-call count, and token totals."""
     batches: list[tuple[str, ...]] = []
     calls = 0
-    tokens: dict[str, int] = {}
+    tokens: dict[str, int | float] = {}
     if isinstance(value, dict):
         if "function_name" in value:
             calls += 1
@@ -709,6 +739,9 @@ def _walk_trajectory(
             if isinstance(raw, int) and not isinstance(raw, bool):
                 mapped = "input_tokens" if key == "prompt_tokens" else "output_tokens"
                 tokens[mapped] = tokens.get(mapped, 0) + raw
+        raw_cost = value.get("cost_usd")
+        if isinstance(raw_cost, (int, float)) and not isinstance(raw_cost, bool):
+            tokens["cost_usd"] = tokens.get("cost_usd", 0) + raw_cost
         for child in value.values():
             child_batches, child_calls, child_tokens = _walk_trajectory(child)
             batches.extend(child_batches)
@@ -766,9 +799,7 @@ def create_agentic_arm(
             f"expected one of {sorted(AGENTIC_ARM_MODELS)}"
         )
     if not env.get("OPENROUTER_API_KEY"):
-        raise ValueError(
-            "OPENROUTER_API_KEY is required for live agentic episodes"
-        )
+        raise ValueError("OPENROUTER_API_KEY is required for live agentic episodes")
     runner = HarborKiraEpisodeRunner(
         kira_dir=kira_dir,
         model=AGENTIC_ARM_MODELS[model_key],

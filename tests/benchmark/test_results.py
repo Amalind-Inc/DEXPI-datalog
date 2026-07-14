@@ -136,7 +136,8 @@ def make_run(
         "episodes": episodes,
     }
     report_path = (
-        tmp_path / f"{configuration}-{model}".replace(":", "_")
+        tmp_path
+        / f"{configuration}-{model}".replace(":", "_")
         / "benchmark_report.json"
     )
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -183,9 +184,7 @@ def test_breakdown_cells_cover_arm_model_slice_and_size_bucket(
 ) -> None:
     def arm_episodes() -> list[dict[str, object]]:
         return [
-            episode(
-                "small-hit", slice_name="synthetic", size_bucket="small"
-            ),
+            episode("small-hit", slice_name="synthetic", size_bucket="small"),
             episode(
                 "large-miss",
                 slice_name="synthetic",
@@ -286,9 +285,9 @@ def test_one_model_at_97_9_percent_compliance_triggers_build(
         ),
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_BUILD
     assert "build" in decision["verdict_line"].lower()
@@ -310,9 +309,9 @@ def test_exactly_98_percent_compliance_meets_the_bar(tmp_path: Path) -> None:
         for model in ("sonnet", "gpt")
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_STAND_DOWN
     assert decision["models"]["sonnet"]["compliance_universal"]["met_bar"] is True
@@ -330,9 +329,9 @@ def test_just_below_the_bar_never_displays_as_the_bar(tmp_path: Path) -> None:
         for model in ("sonnet", "gpt")
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_BUILD
     gate = decision["models"]["sonnet"]["compliance_universal"]
@@ -371,9 +370,9 @@ def test_retrieval_bar_is_95_percent(tmp_path: Path) -> None:
         ),
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_BUILD
     assert decision["models"]["sonnet"]["retrieval_local"]["met_bar"] is False
@@ -391,9 +390,9 @@ def test_exact_verdict_with_witnesses_not_posture_decides(tmp_path: Path) -> Non
         for model in ("sonnet", "gpt")
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_STAND_DOWN
 
@@ -415,9 +414,9 @@ def test_crossed_winners_across_configurations_still_build(tmp_path: Path) -> No
         make_run(tmp_path, configuration="a-agentic", model="gpt", episodes=strong),
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["verdict"] == DECISION_BUILD
 
@@ -438,15 +437,17 @@ def test_qualifying_configuration_outranks_a_lopsided_one(tmp_path: Path) -> Non
         retrieval_total=100,
     )
     runs = [
-        make_run(tmp_path, configuration="a-agentic", model="sonnet", episodes=qualifying),
+        make_run(
+            tmp_path, configuration="a-agentic", model="sonnet", episodes=qualifying
+        ),
         make_run(tmp_path, configuration="a-agentic", model="gpt", episodes=qualifying),
         make_run(tmp_path, configuration="a-direct", model="sonnet", episodes=lopsided),
         make_run(tmp_path, configuration="a-direct", model="gpt", episodes=lopsided),
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     assert decision["strongest_arm_a_configuration"] == "a-agentic"
     assert decision["verdict"] == DECISION_STAND_DOWN
@@ -503,9 +504,9 @@ def test_decision_inputs_enumerate_only_verdict_tier_arm_a_gating_runs(
         )
     ]
 
-    decision = generate_results_report(
-        runs=runs, output_dir=tmp_path / "results"
-    )["decision"]
+    decision = generate_results_report(runs=runs, output_dir=tmp_path / "results")[
+        "decision"
+    ]
 
     input_keys = {
         (entry["configuration"], entry["model"]) for entry in decision["inputs"]
@@ -554,6 +555,23 @@ def test_latency_and_prose_quality_are_informational_only(tmp_path: Path) -> Non
     }
     assert prose[("a-direct", "sonnet")]["trap_rubric_passed"] == 1
     assert prose[("a-direct", "deepseek")]["trap_rubric_passed"] == 0
+
+    usage = {
+        (entry["configuration"], entry["model"]): entry
+        for entry in informational["usage_and_cost"]
+    }
+    assert usage[("a-direct", "sonnet")] == {
+        "configuration": "a-direct",
+        "arm": "a-direct:sonnet",
+        "model": "sonnet",
+        "episodes": 1021,
+        "episodes_with_token_accounting": 1021,
+        "input_tokens": 10210,
+        "output_tokens": 5105,
+        "total_tokens": 15315,
+        "episodes_with_cost_accounting": 1021,
+        "cost_usd": pytest.approx(1.021),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -621,20 +639,18 @@ def test_a_gating_episode_tampered_to_gating_false_is_rejected(
         for model in ("sonnet", "gpt")
     ]
 
-    with pytest.raises(
-        ResultsReportError, match=r"comp-0010.+gating=False.+tampered"
-    ):
+    with pytest.raises(ResultsReportError, match=r"comp-0010.+gating=False.+tampered"):
         generate_results_report(runs=runs, output_dir=tmp_path / "results")
-
 
 
 def test_decision_run_missing_a_gating_category_fails_fast(tmp_path: Path) -> None:
     compliance_only = [
-        episode(f"comp-{index}", category="compliance_universal")
-        for index in range(5)
+        episode(f"comp-{index}", category="compliance_universal") for index in range(5)
     ]
     runs = [
-        make_run(tmp_path, configuration="a-direct", model=model, episodes=compliance_only)
+        make_run(
+            tmp_path, configuration="a-direct", model=model, episodes=compliance_only
+        )
         for model in ("sonnet", "gpt")
     ]
 
@@ -672,28 +688,21 @@ def test_a_run_dropping_a_failed_question_cannot_stand_down(
         make_run(tmp_path, configuration="a-direct", model="gpt", episodes=shed),
     ]
 
-    with pytest.raises(
-        ResultsReportError, match=r"different gating question sets"
-    ):
+    with pytest.raises(ResultsReportError, match=r"different gating question sets"):
         generate_results_report(runs=runs, output_dir=tmp_path / "results")
 
 
 def test_a_question_graded_twice_in_one_run_fails_fast(tmp_path: Path) -> None:
     """One logical question cannot be counted toward two gates."""
     episodes = gating_episodes(compliance_passed=10, compliance_total=10)
-    episodes.append(
-        episode("comp-0000", category="retrieval_local", passed=True)
-    )
+    episodes.append(episode("comp-0000", category="retrieval_local", passed=True))
     runs = [
         make_run(tmp_path, configuration="a-direct", model=model, episodes=episodes)
         for model in ("sonnet", "gpt")
     ]
 
-    with pytest.raises(
-        ResultsReportError, match=r"'comp-0000' more than once"
-    ):
+    with pytest.raises(ResultsReportError, match=r"'comp-0000' more than once"):
         generate_results_report(runs=runs, output_dir=tmp_path / "results")
-
 
 
 def test_a_non_object_episode_entry_fails_fast(tmp_path: Path) -> None:
@@ -878,6 +887,7 @@ def test_cli_reports_a_bad_run_index_as_a_clean_error(tmp_path: Path) -> None:
     assert "non-empty 'runs' list" in result.stderr
     assert "Traceback" not in result.stderr
     assert not output_dir.exists()
+
 
 def test_cli_reports_a_tampered_run_report_as_a_clean_error(
     tmp_path: Path,

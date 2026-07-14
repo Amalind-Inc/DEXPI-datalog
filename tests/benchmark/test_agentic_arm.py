@@ -145,9 +145,7 @@ def test_verified_episode_maps_to_structured_answer(tmp_path: Path) -> None:
     bundle = make_bundle(tmp_path)
     witness = witness_node_id()
     runner = ScriptedEpisodeRunner(passing_result(witness))
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.verdict == VERDICT_VIOLATION_FOUND
     assert answer.witness_ids == (witness,)
     assert answer.posture == POSTURE_SOURCE_GROUNDED
@@ -162,14 +160,10 @@ def test_transcript_exposes_executed_analysis_and_submission(
 ) -> None:
     bundle = make_bundle(tmp_path)
     runner = ScriptedEpisodeRunner(passing_result(witness_node_id()))
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     roles = [str(entry.get("role")) for entry in answer.transcript]
     assert roles[0] == "user"  # the task instruction the agent received
-    assert "Is any pump missing a check valve?" in str(
-        answer.transcript[0]["content"]
-    )
+    assert "Is any pump missing a check valve?" in str(answer.transcript[0]["content"])
     command_entries = [
         entry for entry in answer.transcript if entry.get("role") == "tool"
     ]
@@ -186,12 +180,11 @@ def test_transcript_exposes_executed_analysis_and_submission(
 def test_usage_records_budgets_and_command_accounting(tmp_path: Path) -> None:
     bundle = make_bundle(tmp_path)
     runner = ScriptedEpisodeRunner(passing_result(witness_node_id()))
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.usage["budgets"] == {
         "max_turns": 8,
         "max_commands": 10,
+        "max_output_tokens": 8192,
         "agent_timeout_sec": 600.0,
         "verifier_timeout_sec": 120.0,
     }
@@ -210,14 +203,10 @@ def test_command_budget_overrun_degrades(tmp_path: Path) -> None:
     bundle = make_bundle(tmp_path)
     over_budget = replace(
         passing_result(witness_node_id()),
-        command_batches=tuple(
-            (f"echo step-{index}",) for index in range(11)
-        ),
+        command_batches=tuple((f"echo step-{index}",) for index in range(11)),
     )
     runner = ScriptedEpisodeRunner(over_budget)
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.verdict == DEGRADED_VERDICT
     assert answer.witness_ids == ()
     assert answer.usage["degraded_reason"] == "command_budget_exceeded"
@@ -227,9 +216,7 @@ def test_failed_verification_gate_degrades(tmp_path: Path) -> None:
     bundle = make_bundle(tmp_path)
     rejected = replace(passing_result(witness_node_id()), reward=0.0)
     runner = ScriptedEpisodeRunner(rejected)
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.verdict == DEGRADED_VERDICT
     assert answer.usage["degraded_reason"] == "verification_gate_rejected"
 
@@ -242,9 +229,7 @@ def test_missing_submission_degrades(tmp_path: Path) -> None:
         reward=0.0,
     )
     runner = ScriptedEpisodeRunner(silent)
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.verdict == DEGRADED_VERDICT
 
 
@@ -257,9 +242,7 @@ def test_malformed_submission_degrades_but_keeps_audit_payload(
         structured_answer_text='{"verdict": "maybe"}',
     )
     runner = ScriptedEpisodeRunner(malformed)
-    answer = _arm(runner).answer(
-        question=make_question(bundle), drawing_ref=bundle
-    )
+    answer = _arm(runner).answer(question=make_question(bundle), drawing_ref=bundle)
     assert answer.verdict == DEGRADED_VERDICT
     assert answer.witness_ids == ()
     # The executed analysis stays inspectable even on degradation.
@@ -379,9 +362,7 @@ def test_task_generation_copies_bundle_and_writes_harbor_layout(
     task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
     assert "timeout_sec = 600.0" in task_toml
     assert "timeout_sec = 120.0" in task_toml
-    dockerfile = (task_dir / "environment" / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (task_dir / "environment" / "Dockerfile").read_text(encoding="utf-8")
     assert "chmod 0555 /input" in dockerfile
     assert "chmod 0444 /input/drawing.xml" in dockerfile
     assert "networkx" in dockerfile
@@ -432,7 +413,9 @@ def test_generated_verifier_accepts_intact_input_and_json_submission(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "structured_answer.json").write_text(
-        json.dumps({"verdict": "unanswerable", "witness_ids": [], "posture": "out_of_scope"}),
+        json.dumps(
+            {"verdict": "unanswerable", "witness_ids": [], "posture": "out_of_scope"}
+        ),
         encoding="utf-8",
     )
     result = _run_generated_verifier(
@@ -452,9 +435,7 @@ def test_generated_verifier_rejects_mutated_input(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "structured_answer.json").write_text("{}", encoding="utf-8")
-    (task_dir / "environment" / "graph_facts.json").write_text(
-        "{}", encoding="utf-8"
-    )
+    (task_dir / "environment" / "graph_facts.json").write_text("{}", encoding="utf-8")
     result = _run_generated_verifier(
         task_dir, input_dir=task_dir / "environment", workspace_dir=workspace
     )
@@ -511,6 +492,8 @@ def test_live_runner_command_wires_budgets_and_released_agent() -> None:
         "openrouter/anthropic/claude-sonnet-4",
         "--agent-kwarg",
         "max_turns=8",
+        "--agent-kwarg",
+        'model_info={"max_output_tokens":8192}',
         "--env",
         "docker",
         "--jobs-dir",
@@ -564,11 +547,13 @@ def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
                         },
                         "prompt_tokens": 120,
                         "completion_tokens": 30,
+                        "cost_usd": 0.01,
                     },
                     {
                         "function_name": "mark_task_complete",
                         "prompt_tokens": 40,
                         "completion_tokens": 5,
+                        "cost_usd": 0.002,
                     },
                     {"function_name": "mark_task_complete"},
                 ]
@@ -580,11 +565,13 @@ def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
     assert result.reward == 1.0
     assert result.structured_answer_text is not None
     assert json.loads(result.structured_answer_text)["verdict"] == "violation_found"
-    assert result.command_batches == (
-        ("cat /input/README.md", "python3 analyze.py"),
-    )
+    assert result.command_batches == (("cat /input/README.md", "python3 analyze.py"),)
     assert result.model_calls == 3
-    assert result.usage == {"input_tokens": 160, "output_tokens": 35}
+    assert result.usage == {
+        "input_tokens": 160,
+        "output_tokens": 35,
+        "cost_usd": 0.012,
+    }
 
 
 def test_missing_harbor_artifacts_parse_as_rejected_episode(
@@ -678,9 +665,7 @@ def test_run_benchmark_grades_agentic_episode_end_to_end(
     assert episode["grade"]["passed"] is True
     assert episode["usage"]["budgets"]["max_commands"] == 10
     tool_entries = [
-        entry
-        for entry in episode["transcript"]
-        if entry.get("role") == "tool"
+        entry for entry in episode["transcript"] if entry.get("role") == "tool"
     ]
     assert tool_entries, "executed analysis must be inspectable in the report"
 
@@ -794,6 +779,33 @@ def test_scripted_model_episode_flows_through_task_verifier_and_artifacts(
         for command in entry["commands"]  # type: ignore[union-attr]
     ]
     assert "cat /input/README.md" in executed
+
+
+def test_agentic_arm_retains_live_task_and_harbor_artifacts(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    witness = witness_node_id()
+    archive = tmp_path / "archive"
+    runner = ScriptedModelEpisodeRunner(
+        answer={
+            "verdict": VERDICT_VIOLATION_FOUND,
+            "witness_ids": [witness],
+            "posture": POSTURE_SOURCE_GROUNDED,
+        }
+    )
+    arm = AgenticArm(
+        runner=runner,
+        budgets=BUDGETS,
+        model_name="scripted",
+        artifact_root=archive,
+    )
+
+    arm.answer(question=make_question(bundle), drawing_ref=bundle)
+
+    episode_dir = archive / "agentic-q1"
+    assert (episode_dir / "tasks" / "benchmark-agentic-q1" / "instruction.md").is_file()
+    assert (episode_dir / "jobs" / "trial-0" / "agent-trajectory.json").is_file()
 
 
 def test_scripted_model_episode_verifier_gates_invalid_submission(

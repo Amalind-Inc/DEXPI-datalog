@@ -163,6 +163,31 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
         url = mock_post.call_args[0][0]
         self.assertIn("openrouter.ai", url)
 
+    def test_openrouter_exposes_token_and_cost_usage_for_benchmark_accounting(
+        self,
+    ) -> None:
+        provider = self._make_provider("openrouter")
+        response = _openai_response(_FAKE_DATALOG_RESPONSE)
+        response.json.return_value["usage"] = {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cost": 0.004,
+        }
+
+        with patch("httpx.post", return_value=response):
+            provider.complete(request="What is connected?", context=_DATALOG_CONTEXT)
+
+        self.assertEqual(
+            provider.last_usage,
+            {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cost_usd": 0.004,
+            },
+        )
+
     def test_bearer_auth_header_uses_credential(self) -> None:
         provider = self._make_provider("openai")
         with patch(

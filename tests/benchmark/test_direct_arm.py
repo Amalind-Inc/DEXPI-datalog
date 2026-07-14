@@ -30,11 +30,7 @@ from pydexpi_datalog.llm.model_access import FakeModelProvider
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = (
-    REPO_ROOT
-    / "testdata"
-    / "graph_contract"
-    / "e06-pump-hex"
-    / "graph_facts.json"
+    REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
 )
 
 XML_BODY = '<?xml version="1.0"?><PlantModel><Equipment ID="P-100"/></PlantModel>'
@@ -126,6 +122,52 @@ class DirectArmPromptTests(unittest.TestCase):
             roles = [m.get("role") for m in answer.transcript]
             self.assertIn("assistant", roles)
 
+    def test_answer_carries_provider_token_and_cost_accounting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle = make_bundle(Path(tmp_dir))
+            provider = FakeModelProvider(
+                json.dumps(
+                    {
+                        "verdict": "violation_found",
+                        "witness_ids": ["node-1"],
+                        "posture": "source_grounded",
+                        "answer_text": "Grounded result.",
+                    }
+                )
+            )
+            provider.last_usage = {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cost_usd": 0.004,
+            }
+
+            answer = DirectArm(provider=provider).answer(
+                question=make_question(bundle),
+                drawing_ref=bundle,
+            )
+
+            self.assertEqual(answer.usage, provider.last_usage)
+
+    def test_provider_failure_degrades_to_gradeable_answer(self) -> None:
+        class FailingProvider:
+            provider = "openrouter"
+            model = "failing-model"
+
+            def complete(self, *, request, context):
+                raise RuntimeError("provider rejected request")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle = make_bundle(Path(tmp_dir))
+            answer = DirectArm(provider=FailingProvider()).answer(
+                question=make_question(bundle),
+                drawing_ref=bundle,
+            )
+
+        self.assertEqual(answer.verdict, DEGRADED_VERDICT)
+        self.assertEqual(answer.usage["degraded_reason"], "provider_failure")
+        self.assertIn("provider rejected request", answer.transcript[-1]["content"])
+
     def test_answer_parses_fenced_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             bundle = make_bundle(Path(tmp_dir))
@@ -171,9 +213,7 @@ class DirectArmDegradationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             bundle = make_bundle(Path(tmp_dir))
             question = make_question(bundle)
-            provider = FakeModelProvider(
-                "I cannot analyze this diagram, sorry."
-            )
+            provider = FakeModelProvider("I cannot analyze this diagram, sorry.")
             arm = DirectArm(provider=provider)
 
             answer = arm.answer(question=question, drawing_ref=bundle)
@@ -181,9 +221,7 @@ class DirectArmDegradationTests(unittest.TestCase):
             self.assertEqual(answer.verdict, DEGRADED_VERDICT)
             self.assertEqual(answer.witness_ids, ())
             self.assertEqual(answer.posture, POSTURE_UNSPECIFIED)
-            graph_facts = json.loads(
-                E06_GRAPH_FACTS.read_text(encoding="utf-8")
-            )
+            graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
             episode_grade = grade(
                 answer=answer,
                 ground_truth=question.ground_truth,
@@ -209,9 +247,7 @@ class DirectArmDegradationTests(unittest.TestCase):
             answer = arm.answer(question=trap_question, drawing_ref=bundle)
 
             self.assertEqual(answer.verdict, DEGRADED_VERDICT)
-            graph_facts = json.loads(
-                E06_GRAPH_FACTS.read_text(encoding="utf-8")
-            )
+            graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
             episode_grade = grade(
                 answer=answer,
                 ground_truth=trap_question.ground_truth,
@@ -253,9 +289,7 @@ class DirectArmDegradationTests(unittest.TestCase):
                 provider = FakeModelProvider(json.dumps(payload))
                 arm = DirectArm(provider=provider)
                 answer = arm.answer(question=question, drawing_ref=bundle)
-                self.assertEqual(
-                    answer.verdict, DEGRADED_VERDICT, msg=str(payload)
-                )
+                self.assertEqual(answer.verdict, DEGRADED_VERDICT, msg=str(payload))
 
     def test_non_string_model_output_degrades_not_crashes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -266,9 +300,7 @@ class DirectArmDegradationTests(unittest.TestCase):
                 provider = "fake"
                 model = "fake-none"
 
-                def complete(
-                    self, *, request: str, context: dict[str, object]
-                ) -> str:
+                def complete(self, *, request: str, context: dict[str, object]) -> str:
                     return None  # type: ignore[return-value]
 
             arm = DirectArm(provider=NoneProvider())

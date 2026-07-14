@@ -201,6 +201,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where the results report artifact will be written.",
     )
 
+    live_matrix = subparsers.add_parser(
+        "live-matrix",
+        help=(
+            "Execute or resume the full live arms x models x slices benchmark "
+            "matrix and compute the locked architecture verdict."
+        ),
+    )
+    live_matrix.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where all run, transcript, cost, and results artifacts are archived.",
+    )
+    live_matrix.add_argument(
+        "--kira-dir",
+        type=Path,
+        required=True,
+        help="Pinned checkout of the released krafton-ai/KIRA repository.",
+    )
+    live_matrix.add_argument(
+        "--hand-authored-manifest",
+        type=Path,
+        default=Path("testdata/benchmark/hand_authored_manifest.json"),
+    )
+    live_matrix.add_argument(
+        "--trap-manifest",
+        type=Path,
+        default=Path("testdata/benchmark/trap_manifest.json"),
+    )
+    live_matrix.add_argument(
+        "--models",
+        nargs="+",
+        choices=("sonnet", "gpt", "deepseek"),
+        default=("sonnet", "gpt", "deepseek"),
+    )
+
     return parser
 
 
@@ -286,6 +322,20 @@ def main(argv: list[str] | None = None) -> int:
             return run_results_report(
                 run_index_path=args.runs,
                 output_dir=args.output_dir,
+            )
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+
+    if args.command == "live-matrix":
+        from ..benchmark.live_matrix import run_default_live_matrix
+
+        try:
+            return run_default_live_matrix(
+                output_dir=args.output_dir,
+                kira_dir=args.kira_dir,
+                hand_authored_manifest=args.hand_authored_manifest,
+                trap_manifest=args.trap_manifest,
+                models=tuple(args.models),
             )
         except (OSError, ValueError) as error:
             parser.error(str(error))

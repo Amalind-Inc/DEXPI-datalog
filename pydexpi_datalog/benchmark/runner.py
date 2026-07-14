@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Protocol, runtime_checkable
@@ -85,6 +86,7 @@ def run_benchmark(
     arm: ArmAdapter,
     output_dir: Path,
     trap_judge: TrapJudge | None = None,
+    episode_workers: int = 1,
 ) -> dict[str, object]:
     """Run every manifest question through one arm and persist the report.
 
@@ -103,15 +105,18 @@ def run_benchmark(
             "trap-slice questions."
         )
 
-    episodes: list[dict[str, object]] = []
-    for question in dataset.questions:
-        episodes.append(
-            _run_episode(
-                question=question,
-                arm=arm,
-                trap_judge=trap_judge,
-            )
+    def execute(question: BenchmarkQuestion) -> dict[str, object]:
+        return _run_episode(
+            question=question,
+            arm=arm,
+            trap_judge=trap_judge,
         )
+
+    if episode_workers == 1:
+        episodes = [execute(question) for question in dataset.questions]
+    else:
+        with ThreadPoolExecutor(max_workers=episode_workers) as executor:
+            episodes = list(executor.map(execute, dataset.questions))
 
     gating_episodes = [episode for episode in episodes if episode["gating"]]
     informational_episodes = [episode for episode in episodes if not episode["gating"]]
@@ -336,8 +341,7 @@ def _scripted_trap_judge(
     missing = sorted(trap_question_ids - judgments.keys())
     if missing:
         raise ValueError(
-            "Scripted trap judgments are missing question IDs: "
-            + ", ".join(missing)
+            "Scripted trap judgments are missing question IDs: " + ", ".join(missing)
         )
     return ScriptedTrapJudge(judgments)
 

@@ -173,6 +173,30 @@ class OllamaQATurnProviderTests(unittest.TestCase):
         self.assertIn("localhost:11434", url)
         self.assertIn("chat/completions", url)
 
+    def test_usage_is_accumulated_for_benchmark_cost_accounting(self) -> None:
+        provider = self._make_provider()
+        response = _text_response("ok")
+        response.json.return_value["usage"] = {
+            "prompt_tokens": 12,
+            "completion_tokens": 3,
+            "total_tokens": 15,
+            "cost": 0.002,
+        }
+
+        with patch("httpx.post", return_value=response):
+            provider.complete_with_tools(messages=[], tools=[])
+            provider.complete_with_tools(messages=[], tools=[])
+
+        self.assertEqual(
+            provider.usage,
+            {
+                "input_tokens": 24,
+                "output_tokens": 6,
+                "total_tokens": 30,
+                "cost_usd": 0.004,
+            },
+        )
+
     def test_internal_message_keys_are_stripped_before_sending(self) -> None:
         """grounded_evidence_ids must never be forwarded to the model API."""
         provider = self._make_provider()

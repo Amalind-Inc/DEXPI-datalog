@@ -156,9 +156,7 @@ def load_run_index(path: Path) -> tuple[BenchmarkRun, ...]:
 def _required_index_string(raw: Mapping[str, object], field: str, context: str) -> str:
     value = raw.get(field)
     if not isinstance(value, str) or not value.strip():
-        raise ResultsReportError(
-            f"{context} requires a non-empty string {field!r}."
-        )
+        raise ResultsReportError(f"{context} requires a non-empty string {field!r}.")
     return value
 
 
@@ -278,8 +276,7 @@ def _validate_episode(run: BenchmarkRun, episode: object) -> None:
     grade = episode.get("grade")
     if not isinstance(grade, Mapping):
         raise ResultsReportError(
-            f"Run report {run.report_path} episode {question_id!r} has no "
-            "grade object."
+            f"Run report {run.report_path} episode {question_id!r} has no grade object."
         )
     for field in ("passed", "verdict_match", "witness_match"):
         if not isinstance(grade.get(field), bool):
@@ -385,9 +382,7 @@ def _breakdown(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
         )
     return [
         cells[key]
-        for key in sorted(
-            cells, key=lambda key: (key[0], key[1], key[2], key[3] or "")
-        )
+        for key in sorted(cells, key=lambda key: (key[0], key[1], key[2], key[3] or ""))
     ]
 
 
@@ -436,8 +431,7 @@ def _require_identical_gating_questions(runs: Sequence[BenchmarkRun]) -> None:
         identity = _gating_identity(run)
         if identity != reference_identity:
             differing = sorted(
-                question_id
-                for question_id, *_ in reference_identity ^ identity
+                question_id for question_id, *_ in reference_identity ^ identity
             )
             raise ResultsReportError(
                 "Decision runs grade different gating question sets: "
@@ -597,9 +591,7 @@ def _gating_counts(run: BenchmarkRun) -> dict[str, tuple[int, int]]:
                 f"{DECISION_BARS_PERMILLE[category] / 10}% bar cannot be "
                 "assessed."
             )
-    return {
-        category: (passed, total) for category, (passed, total) in counts.items()
-    }
+    return {category: (passed, total) for category, (passed, total) in counts.items()}
 
 
 def _model_evaluation(run: BenchmarkRun) -> dict[str, object]:
@@ -639,15 +631,62 @@ def _informational(runs: Sequence[BenchmarkRun]) -> dict[str, object]:
         ),
         "latency": _latency(runs),
         "prose_quality": _prose_quality(runs),
+        "usage_and_cost": _usage_and_cost(runs),
     }
+
+
+def _usage_and_cost(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for run in runs:
+        episodes = _episodes(run)
+        input_tokens = 0
+        output_tokens = 0
+        total_tokens = 0
+        token_episodes = 0
+        cost_usd = 0.0
+        cost_episodes = 0
+        for episode in episodes:
+            tokens = episode.get("tokens")
+            if isinstance(tokens, Mapping):
+                values = (
+                    tokens.get("input"),
+                    tokens.get("output"),
+                    tokens.get("total"),
+                )
+                if all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in values
+                ):
+                    input_tokens += int(values[0])
+                    output_tokens += int(values[1])
+                    total_tokens += int(values[2])
+                    token_episodes += 1
+            cost = episode.get("cost_usd")
+            if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+                cost_usd += float(cost)
+                cost_episodes += 1
+        entries.append(
+            {
+                "configuration": run.configuration,
+                "arm": run.arm_id,
+                "model": run.model,
+                "episodes": len(episodes),
+                "episodes_with_token_accounting": token_episodes,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "episodes_with_cost_accounting": cost_episodes,
+                "cost_usd": cost_usd,
+            }
+        )
+    return entries
 
 
 def _latency(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     for run in runs:
         wall_times = [
-            float(episode.get("wall_time_seconds") or 0.0)
-            for episode in _episodes(run)
+            float(episode.get("wall_time_seconds") or 0.0) for episode in _episodes(run)
         ]
         if not wall_times:
             continue
@@ -668,9 +707,7 @@ def _prose_quality(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     for run in runs:
         trap_episodes = [
-            episode
-            for episode in _episodes(run)
-            if episode.get("slice") == SLICE_TRAP
+            episode for episode in _episodes(run) if episode.get("slice") == SLICE_TRAP
         ]
         if not trap_episodes:
             continue
@@ -680,13 +717,9 @@ def _prose_quality(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
                 "arm": run.arm_id,
                 "model": run.model,
                 "trap_questions": len(trap_episodes),
-                "trap_rubric_passed": _count_true(
-                    trap_episodes, "trap_rubric_passed"
-                ),
+                "trap_rubric_passed": _count_true(trap_episodes, "trap_rubric_passed"),
                 "grounded_refusal": _count_true(trap_episodes, "grounded_refusal"),
-                "graceful_redirect": _count_true(
-                    trap_episodes, "graceful_redirect"
-                ),
+                "graceful_redirect": _count_true(trap_episodes, "graceful_redirect"),
                 "human_spot_check_question_ids": [
                     episode["question_id"]
                     for episode in trap_episodes

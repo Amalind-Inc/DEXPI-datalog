@@ -135,10 +135,7 @@ def _pending_datalog_proposal(
         if entry.get("tool_name") != "propose_temporary_datalog":
             continue
         result = entry.get("tool_result")
-        if (
-            isinstance(result, dict)
-            and result.get("status") == "confirmation_required"
-        ):
+        if isinstance(result, dict) and result.get("status") == "confirmation_required":
             return result
     return None
 
@@ -178,6 +175,7 @@ class IncumbentArm:
                     {"role": "user", "content": question.question},
                     {"role": "system", "content": f"harness failure: {error}"},
                 ),
+                usage=_provider_usage(provider),
             )
         trace = list(result.tool_call_trace)
         proposal = _pending_datalog_proposal(trace)
@@ -194,6 +192,7 @@ class IncumbentArm:
             posture=posture,
             answer_text=answer_text,
             transcript=self._transcript(question.question, trace, answer_text),
+            usage=_provider_usage(provider),
         )
 
     def _confirm_and_map(
@@ -223,9 +222,7 @@ class IncumbentArm:
             )
         evidence = execution.get("evidence")
         items = evidence.get("items", []) if isinstance(evidence, dict) else []
-        stable_ids = [
-            str(item.get("id")) for item in items if isinstance(item, dict)
-        ]
+        stable_ids = [str(item.get("id")) for item in items if isinstance(item, dict)]
         witnesses = _raw_witnesses(stable_ids, topology_view)
         if witnesses:
             return (
@@ -248,9 +245,7 @@ class IncumbentArm:
             result.grounding_posture, POSTURE_UNSPECIFIED
         )
         if result.grounding_posture == HARNESS_SOURCE_GROUNDED:
-            witnesses = _raw_witnesses(
-                list(result.evidence_references), topology_view
-            )
+            witnesses = _raw_witnesses(list(result.evidence_references), topology_view)
             if witnesses:
                 return VERDICT_VIOLATION_FOUND, POSTURE_SOURCE_GROUNDED, witnesses
             return VERDICT_NO_VIOLATION, POSTURE_SOURCE_GROUNDED, ()
@@ -274,6 +269,11 @@ class IncumbentArm:
         return tuple(messages)
 
 
+def _provider_usage(provider: object) -> dict[str, object]:
+    usage = getattr(provider, "usage", {})
+    return dict(usage) if isinstance(usage, Mapping) else {}
+
+
 def create_incumbent_arm(
     model_key: str, *, environ: Mapping[str, str] | None = None
 ) -> IncumbentArm:
@@ -287,9 +287,7 @@ def create_incumbent_arm(
     provider_name, model_name = INCUMBENT_ARM_MODELS[model_key]
     credential = env.get("OPENROUTER_API_KEY", "")
     if not credential:
-        raise ValueError(
-            "OPENROUTER_API_KEY is required to run the live incumbent arm"
-        )
+        raise ValueError("OPENROUTER_API_KEY is required to run the live incumbent arm")
     base_url = OPENAI_COMPATIBLE_BASE_URLS[provider_name]
     return IncumbentArm(
         provider_factory=lambda: OpenAICompatibleQATurnProvider(

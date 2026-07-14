@@ -95,14 +95,31 @@ class DirectArm:
         self, *, question: BenchmarkQuestion, drawing_ref: Path
     ) -> StructuredAnswer:
         prompt = build_direct_prompt(question=question, drawing_ref=drawing_ref)
-        raw_text = self.provider.complete(
-            request=prompt,
-            context={
-                "task": "benchmark_direct_answer",
-                "system_prompt": _SYSTEM_PROMPT,
-            },
-        )
+        try:
+            raw_text = self.provider.complete(
+                request=prompt,
+                context={
+                    "task": "benchmark_direct_answer",
+                    "system_prompt": _SYSTEM_PROMPT,
+                },
+            )
+        except Exception as error:
+            return StructuredAnswer(
+                verdict=DEGRADED_VERDICT,
+                witness_ids=(),
+                posture=POSTURE_UNSPECIFIED,
+                transcript=(
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                    {
+                        "role": "assistant",
+                        "content": f"Provider failure: {error}",
+                    },
+                ),
+                usage={"degraded_reason": "provider_failure"},
+            )
         parsed = parse_structured_answer(raw_text)
+        provider_usage = getattr(self.provider, "last_usage", {})
         return StructuredAnswer(
             verdict=parsed.verdict,
             witness_ids=parsed.witness_ids,
@@ -113,7 +130,7 @@ class DirectArm:
                 {"role": "user", "content": prompt},
                 {"role": "assistant", "content": raw_text},
             ),
-            usage=dict(parsed.usage),
+            usage=dict(provider_usage) if isinstance(provider_usage, dict) else {},
         )
 
 
@@ -235,9 +252,7 @@ def _load_drawing_xml(drawing_ref: Path) -> str:
     if drawing_ref.is_dir():
         xml_path = drawing_ref / "drawing.xml"
         if not xml_path.is_file():
-            raise FileNotFoundError(
-                f"drawing bundle {drawing_ref} has no drawing.xml"
-            )
+            raise FileNotFoundError(f"drawing bundle {drawing_ref} has no drawing.xml")
         return xml_path.read_text(encoding="utf-8")
 
     artifact = json.loads(drawing_ref.read_text(encoding="utf-8"))
@@ -250,9 +265,7 @@ def _load_drawing_xml(drawing_ref: Path) -> str:
     if not xml_path.is_absolute():
         artifact_relative = (drawing_ref.parent / xml_path).resolve()
         cwd_relative = (Path.cwd() / xml_path).resolve()
-        xml_path = (
-            artifact_relative if artifact_relative.is_file() else cwd_relative
-        )
+        xml_path = artifact_relative if artifact_relative.is_file() else cwd_relative
     if not xml_path.is_file():
         raise FileNotFoundError(
             f"DEXPI XML for {drawing_ref} does not exist: {xml_path}"

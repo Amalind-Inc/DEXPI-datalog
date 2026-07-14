@@ -57,6 +57,12 @@ class ImmediateFinalAnswerProvider:
     def __init__(self, final: FinalAnswer) -> None:
         self._final = final
         self.calls = 0
+        self.usage = {
+            "input_tokens": 80,
+            "output_tokens": 10,
+            "total_tokens": 90,
+            "cost_usd": 0.003,
+        }
 
     def complete_with_tools(self, *, messages, tools):
         self.calls += 1
@@ -195,6 +201,7 @@ def test_source_data_unavailable_answer_maps_to_unanswerable() -> None:
     assert answer.posture == POSTURE_SOURCE_DATA_UNAVAILABLE
     assert answer.witness_ids == ()
     assert provider.calls == 1
+    assert answer.usage == provider.usage
 
 
 def test_out_of_scope_answer_maps_to_unanswerable() -> None:
