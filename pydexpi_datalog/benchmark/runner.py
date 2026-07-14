@@ -34,7 +34,8 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     load_scripted_trap_judgments,
 )
 
-BENCHMARK_REPORT_SCHEMA_VERSION = 2
+# Version 3: episodes carry the decision category and size bucket.
+BENCHMARK_REPORT_SCHEMA_VERSION = 3
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -195,6 +196,8 @@ def _run_episode(
         "question_id": question.question_id,
         "question": question.question,
         "slice": question.slice,
+        "category": question.category,
+        "size_bucket": question.size_bucket,
         "drawing_ref": str(question.drawing_ref),
         "gating": question.slice != SLICE_TRAP,
         "human_spot_check_required": bool(

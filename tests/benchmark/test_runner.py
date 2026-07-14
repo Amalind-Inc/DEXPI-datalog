@@ -42,7 +42,7 @@ def write_manifest(tmp_path: Path) -> tuple[Path, str]:
     manifest_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "questions": [
                     {
                         "id": "e06-trap",
@@ -61,6 +61,8 @@ def write_manifest(tmp_path: Path) -> tuple[Path, str]:
                         "id": "e06-violation",
                         "question": "Is any pump missing a check valve?",
                         "slice": "hand_authored",
+                        "category": "compliance_universal",
+                        "size_bucket": "small",
                         "drawing": str(E06_GRAPH_FACTS),
                         "ground_truth": {
                             "verdict": "violation_found",
@@ -152,11 +154,16 @@ class RunBenchmarkTests(unittest.TestCase):
 
             trap = episodes["e06-trap"]
             self.assertEqual(trap["slice"], "trap")
+            self.assertIsNone(trap["category"])
+            self.assertIsNone(trap["size_bucket"])
             self.assertTrue(trap["grade"]["passed"])
             self.assertIn("Approval history", trap["answer"]["answer_text"])
             self.assertFalse(trap["gating"])
             self.assertTrue(trap["human_spot_check_required"])
             self.assertTrue(trap["grade"]["trap_rubric_passed"])
+            violation = episodes["e06-violation"]
+            self.assertEqual(violation["category"], "compliance_universal")
+            self.assertEqual(violation["size_bucket"], "small")
             self.assertEqual(
                 report["human_spot_check"]["question_ids"],
                 ["e06-trap"],
@@ -258,7 +265,7 @@ class RunBenchmarkTests(unittest.TestCase):
             manifest_path.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "questions": [
                             {
                                 "id": "e06-bundle-trap",

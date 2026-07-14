@@ -178,6 +178,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where drawing bundles and the manifest will be written.",
     )
 
+    results_report = subparsers.add_parser(
+        "results-report",
+        help=(
+            "Aggregate benchmark run reports into the results report with "
+            "the locked decision rule; the verdict line is computed."
+        ),
+    )
+    results_report.add_argument(
+        "--runs",
+        type=Path,
+        required=True,
+        help=(
+            "Runs-index JSON declaring configuration, arm, arm_family, "
+            "model, and report path for every benchmark run."
+        ),
+    )
+    results_report.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where the results report artifact will be written.",
+    )
+
     return parser
 
 
@@ -256,6 +279,16 @@ def main(argv: list[str] | None = None) -> int:
         from ..benchmark.synthetic import run_generate_synthetic_slice
 
         return run_generate_synthetic_slice(output_dir=args.output_dir)
+    if args.command == "results-report":
+        from ..benchmark.results import run_results_report
+
+        try:
+            return run_results_report(
+                run_index_path=args.runs,
+                output_dir=args.output_dir,
+            )
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
 
     parser.error(f"unsupported command: {args.command}")
     return 2

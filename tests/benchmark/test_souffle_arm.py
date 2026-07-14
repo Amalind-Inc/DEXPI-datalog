@@ -519,13 +519,14 @@ def test_run_benchmark_grades_souffle_arm_end_to_end(tmp_path: Path) -> None:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "episode_budgets": {"max_turns": 8, "max_commands": 10},
                 "questions": [
                     {
                         "id": "souffle-q1",
                         "question": "Is any pump missing a check valve?",
                         "slice": "hand_authored",
+                        "category": "compliance_universal",
                         "drawing": str(bundle),
                         "ground_truth": {
                             "verdict": "violation_found",

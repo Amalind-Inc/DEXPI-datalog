@@ -22,7 +22,11 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from pydexpi_datalog.benchmark.dataset import SLICE_SYNTHETIC
+from pydexpi_datalog.benchmark.dataset import (
+    CATEGORY_COMPLIANCE_UNIVERSAL,
+    DATASET_SCHEMA_VERSION,
+    SLICE_SYNTHETIC,
+)
 from pydexpi_datalog.export.pipeline import (
     persist_graph_facts_artifact,
     write_bundle_derivatives,
@@ -100,7 +104,7 @@ def generate_synthetic_slice(*, output_dir: Path) -> dict[str, object]:
         }
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": DATASET_SCHEMA_VERSION,
         "slice": SLICE_SYNTHETIC,
         "fidelity": {
             "mode": SYNTHETIC_FIDELITY_MODE,
@@ -337,6 +341,7 @@ def _questions_from_construction(record: dict[str, object]) -> list[dict[str, ob
                 "slice": SLICE_SYNTHETIC,
                 "drawing": str(fixture_id),
                 "size_bucket": record["size_bucket"],
+                "category": CATEGORY_COMPLIANCE_UNIVERSAL,
                 "ground_truth": {
                     "verdict": "violation_found" if witnesses else "no_violation",
                     "witness_ids": sorted(witnesses),

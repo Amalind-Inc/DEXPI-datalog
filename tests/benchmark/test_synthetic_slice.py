@@ -222,12 +222,13 @@ def test_datasets_without_fidelity_note_load_as_before(tmp_path: Path) -> None:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "questions": [
                     {
                         "id": "plain",
                         "question": "Is any pump missing a check valve?",
                         "slice": "hand_authored",
+                        "category": "compliance_universal",
                         "drawing": str(e06_graph_facts),
                         "ground_truth": {
                             "verdict": "violation_found",

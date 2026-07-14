@@ -300,7 +300,7 @@ def test_budgets_load_from_run_manifest(tmp_path: Path) -> None:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "questions": [],
                 "episode_budgets": {
                     "max_turns": 5,
@@ -324,7 +324,7 @@ def test_budgets_load_from_run_manifest(tmp_path: Path) -> None:
 def test_budgets_default_when_manifest_omits_them(tmp_path: Path) -> None:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
-        json.dumps({"schema_version": 1, "questions": []}), encoding="utf-8"
+        json.dumps({"schema_version": 2, "questions": []}), encoding="utf-8"
     )
     assert load_episode_budgets(manifest) == EpisodeBudgets()
 
@@ -334,7 +334,7 @@ def test_budgets_reject_unknown_or_invalid_fields(tmp_path: Path) -> None:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "questions": [],
                 "episode_budgets": {"max_turns": 5, "max_tools": 3},
             }
@@ -644,13 +644,14 @@ def test_run_benchmark_grades_agentic_episode_end_to_end(
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "episode_budgets": {"max_turns": 8, "max_commands": 10},
                 "questions": [
                     {
                         "id": "agentic-q1",
                         "question": "Is any pump missing a check valve?",
                         "slice": "hand_authored",
+                        "category": "compliance_universal",
                         "drawing": str(bundle),
                         "ground_truth": {
                             "verdict": "violation_found",

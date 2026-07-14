@@ -66,7 +66,7 @@ def write_graph_facts(tmp_path: Path, node_ids: list[str]) -> Path:
 def write_manifest(tmp_path: Path, questions: list[dict[str, object]]) -> Path:
     manifest_path = tmp_path / "questions.json"
     manifest_path.write_text(
-        json.dumps({"schema_version": 1, "questions": questions}),
+        json.dumps({"schema_version": 2, "questions": questions}),
         encoding="utf-8",
     )
     return manifest_path
@@ -79,7 +79,7 @@ def question_data(
     drawing: str = "drawing/graph_facts.json",
     ground_truth: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "id": question_id,
         "question": "Does this fixture satisfy the stated condition?",
         "slice": slice_name,
@@ -88,6 +88,9 @@ def question_data(
         if ground_truth is not None
         else {"verdict": "no_violation", "witness_ids": []},
     }
+    if slice_name != "trap":
+        data["category"] = "compliance_universal"
+    return data
 
 
 def test_manifest_supports_all_slices_and_grounded_witnesses(tmp_path: Path) -> None:
@@ -129,6 +132,92 @@ def test_manifest_supports_all_slices_and_grounded_witnesses(tmp_path: Path) -> 
         "trap",
     ]
     assert dataset.questions[2].ground_truth.witness_ids == ()
+
+
+def test_gating_questions_carry_a_validated_decision_category(
+    tmp_path: Path,
+) -> None:
+    """Every gating question declares which decision bar it counts toward."""
+    write_graph_facts(tmp_path, ["P-101"])
+    manifest_path = write_manifest(
+        tmp_path,
+        [
+            question_data(
+                question_id="universal-check",
+                slice_name="hand_authored",
+                ground_truth={"verdict": "no_violation", "witness_ids": ["P-101"]},
+            )
+            | {"category": "compliance_universal"},
+            question_data(
+                question_id="local-lookup",
+                slice_name="hand_authored",
+                ground_truth={"verdict": "no_violation", "witness_ids": ["P-101"]},
+            )
+            | {"category": "retrieval_local"},
+        ],
+    )
+
+    dataset = load_question_manifest(manifest_path)
+
+    assert [question.category for question in dataset.questions] == [
+        "compliance_universal",
+        "retrieval_local",
+    ]
+
+
+def test_manifest_rejects_an_unknown_decision_category(tmp_path: Path) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    question = question_data(
+        question_id="bad-category",
+        slice_name="hand_authored",
+        ground_truth={"verdict": "no_violation", "witness_ids": []},
+    ) | {"category": "vibes"}
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'bad-category'.+invalid category 'vibes'",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [question]))
+
+
+def test_gating_question_requires_a_decision_category(tmp_path: Path) -> None:
+    """A benchmark run must never start on gating data the rule cannot score."""
+    write_graph_facts(tmp_path, ["P-101"])
+    question = question_data(
+        question_id="uncategorised",
+        slice_name="synthetic",
+        ground_truth={"verdict": "no_violation", "witness_ids": []},
+    )
+    del question["category"]
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'uncategorised'.+invalid category None",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [question]))
+
+
+def test_trap_manifest_rejects_a_decision_category(tmp_path: Path) -> None:
+    """Traps never gate the verdict, so they cannot claim a decision bar."""
+    write_graph_facts(tmp_path, ["P-101"])
+    trap = question_data(
+        question_id="categorised-trap",
+        slice_name="trap",
+        ground_truth={"verdict": "unanswerable"},
+    ) | {
+        "category": "compliance_universal",
+        "trap_rubric": {
+            "expected_posture": "source_data_unavailable",
+            "refusal_basis": "Required source data is absent.",
+            "redirect_target": "Offer a source-grounded check.",
+        },
+    }
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'categorised-trap'.+category.+never gate",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [trap]))
 
 
 def test_trap_manifest_loads_explicit_expected_posture_and_rubric(

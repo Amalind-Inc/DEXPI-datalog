@@ -21,11 +21,16 @@ from pydexpi_datalog.benchmark.contract import (
 from pydexpi_datalog.benchmark.grader import known_node_ids
 
 
-DATASET_SCHEMA_VERSION = 1
+# Version 2: every gating (non-trap) question requires a decision category.
+DATASET_SCHEMA_VERSION = 2
 SLICE_HAND_AUTHORED = "hand_authored"
 SLICE_SYNTHETIC = "synthetic"
 SLICE_TRAP = "trap"
 SLICES = (SLICE_HAND_AUTHORED, SLICE_SYNTHETIC, SLICE_TRAP)
+
+CATEGORY_COMPLIANCE_UNIVERSAL = "compliance_universal"
+CATEGORY_RETRIEVAL_LOCAL = "retrieval_local"
+QUESTION_CATEGORIES = (CATEGORY_COMPLIANCE_UNIVERSAL, CATEGORY_RETRIEVAL_LOCAL)
 
 
 class DatasetManifestError(ValueError):
@@ -50,6 +55,7 @@ class BenchmarkQuestion:
     drawing_ref: Path
     ground_truth: GroundTruth
     size_bucket: str | None = None
+    category: str | None = None
     trap_rubric: TrapRubric | None = None
 
 
@@ -186,6 +192,19 @@ def _load_question(
             "expected a non-empty string when present."
         )
 
+    raw_category = raw_question.get("category")
+    if slice_name == SLICE_TRAP:
+        if raw_category is not None:
+            raise DatasetManifestError(
+                f"Dataset entry {question_id!r} with slice 'trap' cannot declare a "
+                "category: trap scores never gate the decision rule."
+            )
+    elif raw_category not in QUESTION_CATEGORIES:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has invalid category {raw_category!r}; "
+            f"every gating question requires one of {list(QUESTION_CATEGORIES)!r}."
+        )
+
     trap_rubric = _optional_trap_rubric(
         raw_question=raw_question,
         question_id=question_id,
@@ -217,6 +236,7 @@ def _load_question(
         drawing_ref=drawing_ref,
         ground_truth=GroundTruth(verdict=verdict, witness_ids=witness_ids),
         size_bucket=raw_size_bucket,
+        category=raw_category,
         trap_rubric=trap_rubric,
     )
 

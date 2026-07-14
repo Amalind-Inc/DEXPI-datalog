@@ -414,7 +414,7 @@ def test_run_benchmark_grades_incumbent_end_to_end(tmp_path: Path) -> None:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "questions": [
                     {
                         "id": "e06-trap",
@@ -432,6 +432,7 @@ def test_run_benchmark_grades_incumbent_end_to_end(tmp_path: Path) -> None:
                         "id": "e06-rule",
                         "question": "Is any object reachable in violation?",
                         "slice": "hand_authored",
+                        "category": "compliance_universal",
                         "drawing": str(E06_GRAPH_FACTS),
                         "ground_truth": {
                             "verdict": "violation_found",
