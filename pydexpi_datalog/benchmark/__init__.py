@@ -33,6 +33,17 @@ from pydexpi_datalog.benchmark.incumbent_arm import (
     IncumbentArm,
     create_incumbent_arm,
 )
+from pydexpi_datalog.benchmark.agentic_arm import (
+    AGENTIC_ARM_MODELS,
+    AgenticArm,
+    EpisodeBudgets,
+    EpisodeResult,
+    EpisodeRunner,
+    HarborKiraEpisodeRunner,
+    build_harbor_task,
+    create_agentic_arm,
+    load_episode_budgets,
+)
 from pydexpi_datalog.benchmark.dataset import (
     DATASET_SCHEMA_VERSION,
     SLICES,
@@ -55,7 +66,16 @@ from pydexpi_datalog.benchmark.runner import (
 )
 
 __all__ = [
+    "AGENTIC_ARM_MODELS",
+    "AgenticArm",
     "ArmAdapter",
+    "EpisodeBudgets",
+    "EpisodeResult",
+    "EpisodeRunner",
+    "HarborKiraEpisodeRunner",
+    "build_harbor_task",
+    "create_agentic_arm",
+    "load_episode_budgets",
     "BENCHMARK_REPORT_FILENAME",
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "BenchmarkDataset",
