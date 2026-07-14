@@ -27,6 +27,14 @@ class DatasetManifestError(ValueError):
 
 
 @dataclass(frozen=True)
+class FidelityNote:
+    """A manifest-declared fidelity limitation the report must cite."""
+
+    mode: str
+    limit: str
+
+
+@dataclass(frozen=True)
 class BenchmarkQuestion:
     """One pre-committed benchmark question loaded from data."""
 
@@ -35,6 +43,7 @@ class BenchmarkQuestion:
     slice: str
     drawing_ref: Path
     ground_truth: GroundTruth
+    size_bucket: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,7 @@ class BenchmarkDataset:
     """The validated, immutable question set loaded from one manifest."""
 
     questions: tuple[BenchmarkQuestion, ...]
+    fidelity: FidelityNote | None = None
 
 
 def load_question_manifest(path: Path) -> BenchmarkDataset:
@@ -86,7 +96,24 @@ def load_question_manifest(path: Path) -> BenchmarkDataset:
         seen_question_ids.add(question.question_id)
         questions.append(question)
 
-    return BenchmarkDataset(questions=tuple(questions))
+    return BenchmarkDataset(
+        questions=tuple(questions),
+        fidelity=_optional_fidelity(raw_manifest),
+    )
+
+
+def _optional_fidelity(raw_manifest: dict[str, object]) -> FidelityNote | None:
+    raw_fidelity = raw_manifest.get("fidelity")
+    if raw_fidelity is None:
+        return None
+    if not isinstance(raw_fidelity, dict):
+        raise DatasetManifestError(
+            "Dataset manifest has invalid fidelity: expected an object."
+        )
+    return FidelityNote(
+        mode=_required_string(raw_fidelity, "mode", "manifest fidelity"),
+        limit=_required_string(raw_fidelity, "limit", "manifest fidelity"),
+    )
 
 
 def _load_question(
@@ -145,12 +172,22 @@ def _load_question(
             f"{unknown_ids[0]!r} in ground_truth.witness_ids."
         )
 
+    raw_size_bucket = raw_question.get("size_bucket")
+    if raw_size_bucket is not None and (
+        not isinstance(raw_size_bucket, str) or not raw_size_bucket.strip()
+    ):
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has invalid size_bucket: "
+            "expected a non-empty string when present."
+        )
+
     return BenchmarkQuestion(
         question_id=question_id,
         question=question,
         slice=slice_name,
         drawing_ref=drawing_ref,
         ground_truth=GroundTruth(verdict=verdict, witness_ids=witness_ids),
+        size_bucket=raw_size_bucket,
     )
 
 

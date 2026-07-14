@@ -154,6 +154,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where the benchmark report artifact will be written.",
     )
 
+    synthetic_slice = subparsers.add_parser(
+        "synthetic-slice",
+        help=(
+            "Generate the synthetic truth-by-construction benchmark slice: "
+            "drawing bundles plus a loader-valid question manifest."
+        ),
+    )
+    synthetic_slice.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where drawing bundles and the manifest will be written.",
+    )
+
     return parser
 
 
@@ -224,6 +238,11 @@ def main(argv: list[str] | None = None) -> int:
             arm_id=args.arm_id,
             output_dir=args.output_dir,
         )
+    if args.command == "synthetic-slice":
+        from ..benchmark.synthetic import run_generate_synthetic_slice
+
+        return run_generate_synthetic_slice(output_dir=args.output_dir)
+
 
     parser.error(f"unsupported command: {args.command}")
     return 2

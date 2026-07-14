@@ -48,7 +48,33 @@ def build_drawing_bundle(
         output_dir=output_dir,
         source_path=bundle_source_path.name,
     )
-    networkx_graph = _networkx_graph_from_facts(graph_facts_artifact["facts"])
+    return write_bundle_derivatives(
+        bundle_dir=bundle_dir,
+        artifact=graph_facts_artifact,
+        source_reference=source_reference,
+    )
+
+
+def write_bundle_derivatives(
+    *,
+    bundle_dir: Path,
+    artifact: dict[str, object],
+    source_reference: str | None = None,
+    readme_extra: str | None = None,
+    drawing_description: str = "the original DEXPI source drawing.",
+    graph_facts_description: str = (
+        "the canonical base fact layer extracted from `drawing.xml`."
+    ),
+) -> dict[str, object]:
+    """Write the non-source bundle files derived from one graph facts artifact.
+
+    Shared by the pyDEXPI extraction path and the synthetic
+    truth-by-construction generator so every drawing bundle keeps one layout:
+    ``graph.json`` (NetworkX node-link) and ``README.md`` beside the already
+    persisted ``drawing.xml`` and ``graph_facts.json``.
+    """
+    fixture_id = artifact["fixture_id"]
+    networkx_graph = _networkx_graph_from_facts(artifact["facts"])
     networkx_path = bundle_dir / "graph.json"
     networkx_path.write_text(
         json.dumps(
@@ -59,28 +85,30 @@ def build_drawing_bundle(
         encoding="utf-8",
     )
 
-    readme_path = bundle_dir / "README.md"
-    readme_path.write_text(
-        render_bundle_readme(
-            fixture_id=fixture_id,
-            node_count=graph_facts_artifact["graph"]["node_count"],
-            edge_count=graph_facts_artifact["graph"]["edge_count"],
-            extractor=graph_facts_artifact["provenance"]["extractor"],
-            extractor_version=graph_facts_artifact["provenance"]["extractor_version"],
-            source_reference=source_reference,
-        ),
-        encoding="utf-8",
+    readme = render_bundle_readme(
+        fixture_id=fixture_id,
+        node_count=artifact["graph"]["node_count"],
+        edge_count=artifact["graph"]["edge_count"],
+        extractor=artifact["provenance"]["extractor"],
+        extractor_version=artifact["provenance"]["extractor_version"],
+        source_reference=source_reference,
+        drawing_description=drawing_description,
+        graph_facts_description=graph_facts_description,
     )
+    if readme_extra:
+        readme = readme + readme_extra.rstrip("\n") + "\n"
+    readme_path = bundle_dir / "README.md"
+    readme_path.write_text(readme, encoding="utf-8")
     return {
         "fixture_id": fixture_id,
         "bundle_dir": bundle_dir,
         "files": {
-            "drawing": bundle_source_path,
+            "drawing": bundle_dir / "drawing.xml",
             "graph_facts": bundle_dir / "graph_facts.json",
             "networkx": networkx_path,
             "readme": readme_path,
         },
-        "graph": graph_facts_artifact["graph"],
+        "graph": artifact["graph"],
     }
 
 
@@ -357,6 +385,10 @@ def render_bundle_readme(
     extractor: str,
     extractor_version: str,
     source_reference: str | None,
+    drawing_description: str = "the original DEXPI source drawing.",
+    graph_facts_description: str = (
+        "the canonical base fact layer extracted from `drawing.xml`."
+    ),
 ) -> str:
     return "\n".join(
         [
@@ -366,8 +398,8 @@ def render_bundle_readme(
             "",
             "## Files",
             "",
-            "- `drawing.xml`: the original DEXPI source drawing.",
-            "- `graph_facts.json`: the canonical base fact layer extracted from `drawing.xml`.",
+            f"- `drawing.xml`: {drawing_description}",
+            f"- `graph_facts.json`: {graph_facts_description}",
             "- `graph.json`: a NetworkX node-link JSON export of those same graph facts.",
             "- `README.md`: this orientation and witness-citation guide.",
             "",

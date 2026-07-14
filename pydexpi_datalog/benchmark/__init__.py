@@ -59,7 +59,15 @@ from pydexpi_datalog.benchmark.dataset import (
     BenchmarkDataset,
     BenchmarkQuestion,
     DatasetManifestError,
+    FidelityNote,
     load_question_manifest,
+)
+from pydexpi_datalog.benchmark.synthetic import (
+    SIZE_BUCKETS,
+    SYNTHETIC_FIDELITY_LIMIT,
+    SYNTHETIC_FIDELITY_MODE,
+    SYNTHETIC_MANIFEST_FILENAME,
+    generate_synthetic_slice,
 )
 from pydexpi_datalog.benchmark.runner import (
     BENCHMARK_REPORT_FILENAME,
@@ -104,6 +112,12 @@ __all__ = [
     "SLICE_HAND_AUTHORED",
     "SLICE_SYNTHETIC",
     "SLICE_TRAP",
+    "FidelityNote",
+    "SIZE_BUCKETS",
+    "SYNTHETIC_FIDELITY_LIMIT",
+    "SYNTHETIC_FIDELITY_MODE",
+    "SYNTHETIC_MANIFEST_FILENAME",
+    "generate_synthetic_slice",
     "ScriptedArm",
     "build_direct_prompt",
     "create_direct_arm",
