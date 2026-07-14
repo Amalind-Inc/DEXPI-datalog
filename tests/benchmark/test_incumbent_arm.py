@@ -22,6 +22,8 @@ from pydexpi_datalog.benchmark import (
     VERDICT_VIOLATION_FOUND,
     GroundTruth,
     run_benchmark,
+    ScriptedTrapJudge,
+    TrapJudgment,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.incumbent_arm import (
@@ -420,6 +422,11 @@ def test_run_benchmark_grades_incumbent_end_to_end(tmp_path: Path) -> None:
                         "slice": "trap",
                         "drawing": str(E06_GRAPH_FACTS),
                         "ground_truth": {"verdict": "unanswerable"},
+                        "trap_rubric": {
+                            "expected_posture": "source_data_unavailable",
+                            "refusal_basis": "Approval history is absent.",
+                            "redirect_target": "Offer source-grounded checks.",
+                        },
                     },
                     {
                         "id": "e06-rule",
@@ -442,7 +449,21 @@ def test_run_benchmark_grades_incumbent_end_to_end(tmp_path: Path) -> None:
         model_name="scripted",
     )
     report = run_benchmark(
-        manifest_path=manifest, arm=arm, output_dir=tmp_path / "out"
+        manifest_path=manifest,
+        arm=arm,
+        output_dir=tmp_path / "out",
+        trap_judge=ScriptedTrapJudge(
+            {
+                "e06-trap": TrapJudgment(
+                    grounded_refusal=True,
+                    graceful_redirect=True,
+                    rationale="Names the missing approval data and redirects.",
+                )
+            }
+        ),
     )
-    grades = {episode["question_id"]: episode["grade"]["passed"] for episode in report["episodes"]}
+    grades = {
+        episode["question_id"]: episode["grade"]["passed"]
+        for episode in report["episodes"]
+    }
     assert grades == {"e06-trap": True, "e06-rule": True}

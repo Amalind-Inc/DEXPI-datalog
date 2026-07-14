@@ -14,6 +14,7 @@ from pydexpi_datalog.benchmark import (
     StructuredAnswer,
     grade,
 )
+from pydexpi_datalog.benchmark.contract import TrapJudgment, TrapRubric
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = (
@@ -245,6 +246,87 @@ def test_graceful_refusal_passes_without_witnesses() -> None:
     assert result.passed is True
     assert result.witness_match is True
     assert result.posture_consistent is True
+
+
+def test_trap_credit_requires_expected_posture_and_both_rubric_axes() -> None:
+    graph_facts = make_graph_facts(["P-101"])
+    answer = StructuredAnswer(
+        verdict=VERDICT_UNANSWERABLE,
+        posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        answer_text=(
+            "Approval history is absent. I can check represented topology instead."
+        ),
+    )
+    ground_truth = GroundTruth(verdict=VERDICT_UNANSWERABLE)
+    rubric = TrapRubric(
+        expected_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        refusal_basis="The drawing has no approval-history field.",
+        redirect_target="Offer topology and equipment-attribute checks.",
+    )
+
+    missing_redirect = grade(
+        answer=answer,
+        ground_truth=ground_truth,
+        graph_facts=graph_facts,
+        trap_rubric=rubric,
+        trap_judgment=TrapJudgment(
+            grounded_refusal=True,
+            graceful_redirect=False,
+            rationale="Correct limitation, but no useful next step.",
+        ),
+    )
+    complete = grade(
+        answer=answer,
+        ground_truth=ground_truth,
+        graph_facts=graph_facts,
+        trap_rubric=rubric,
+        trap_judgment=TrapJudgment(
+            grounded_refusal=True,
+            graceful_redirect=True,
+            rationale="Names the missing field and offers drawing checks.",
+        ),
+    )
+    blank_answer = grade(
+        answer=StructuredAnswer(
+            verdict=VERDICT_UNANSWERABLE,
+            posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        ),
+        ground_truth=ground_truth,
+        graph_facts=graph_facts,
+        trap_rubric=rubric,
+        trap_judgment=TrapJudgment(
+            grounded_refusal=True,
+            graceful_redirect=True,
+            rationale="A scripted judgment cannot rescue missing candidate prose.",
+        ),
+    )
+    witnessed_answer = grade(
+        answer=StructuredAnswer(
+            verdict=VERDICT_UNANSWERABLE,
+            witness_ids=("P-101",),
+            posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+            answer_text=answer.answer_text,
+        ),
+        ground_truth=ground_truth,
+        graph_facts=graph_facts,
+        trap_rubric=rubric,
+        trap_judgment=TrapJudgment(
+            grounded_refusal=True,
+            graceful_redirect=True,
+            rationale="A judgment cannot rescue forbidden trap witnesses.",
+        ),
+    )
+
+    assert missing_redirect.passed is False
+    assert missing_redirect.trap_rubric_passed is False
+    assert complete.passed is True
+    assert complete.trap_rubric_passed is True
+    assert complete.grounded_refusal is True
+    assert complete.graceful_redirect is True
+    assert blank_answer.passed is False
+    assert blank_answer.trap_rubric_passed is False
+    assert witnessed_answer.passed is False
+    assert witnessed_answer.trap_rubric_passed is False
 
 
 def test_no_violation_with_witnesses_only_when_ground_truth_expects_them() -> None:

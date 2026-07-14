@@ -275,6 +275,10 @@ def test_unanswerable_submission_is_a_valid_verdict(tmp_path: Path) -> None:
                 "verdict": VERDICT_UNANSWERABLE,
                 "witness_ids": [],
                 "posture": "out_of_scope",
+                "answer_text": (
+                    "This request is outside P&ID review. I can check the loaded "
+                    "drawing's topology or equipment attributes."
+                ),
             }
         ),
     )

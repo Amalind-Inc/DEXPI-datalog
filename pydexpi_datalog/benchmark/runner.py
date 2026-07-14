@@ -15,14 +15,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Protocol, runtime_checkable
 
-from pydexpi_datalog.benchmark.contract import GroundTruth, StructuredAnswer
+from pydexpi_datalog.benchmark.contract import (
+    POSTURES,
+    TRAP_EXPECTED_POSTURES,
+    VERDICTS,
+    GroundTruth,
+    StructuredAnswer,
+)
 from pydexpi_datalog.benchmark.dataset import (
+    SLICE_TRAP,
     BenchmarkQuestion,
     load_question_manifest,
 )
 from pydexpi_datalog.benchmark.grader import Grade, grade
+from pydexpi_datalog.benchmark.trap_rubric import (
+    ScriptedTrapJudge,
+    TrapJudge,
+    load_scripted_trap_judgments,
+)
 
-BENCHMARK_REPORT_SCHEMA_VERSION = 1
+BENCHMARK_REPORT_SCHEMA_VERSION = 2
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -67,7 +79,11 @@ class ScriptedArm:
 
 
 def run_benchmark(
-    *, manifest_path: Path, arm: ArmAdapter, output_dir: Path
+    *,
+    manifest_path: Path,
+    arm: ArmAdapter,
+    output_dir: Path,
+    trap_judge: TrapJudge | None = None,
 ) -> dict[str, object]:
     """Run every manifest question through one arm and persist the report.
 
@@ -77,23 +93,49 @@ def run_benchmark(
     a failing arm never leaves a partial artifact behind.
     """
     dataset = load_question_manifest(manifest_path)
+    trap_questions = [
+        question for question in dataset.questions if question.slice == SLICE_TRAP
+    ]
+    if trap_questions and trap_judge is None:
+        raise ValueError(
+            "A trap_judge is required when the benchmark manifest contains "
+            "trap-slice questions."
+        )
 
     episodes: list[dict[str, object]] = []
-    passed = 0
     for question in dataset.questions:
-        episode = _run_episode(question=question, arm=arm)
-        if episode["grade"]["passed"]:  # type: ignore[index]
-            passed += 1
-        episodes.append(episode)
+        episodes.append(
+            _run_episode(
+                question=question,
+                arm=arm,
+                trap_judge=trap_judge,
+            )
+        )
+
+    gating_episodes = [episode for episode in episodes if episode["gating"]]
+    informational_episodes = [episode for episode in episodes if not episode["gating"]]
 
     report: dict[str, object] = {
         "schema_version": BENCHMARK_REPORT_SCHEMA_VERSION,
         "manifest_path": str(manifest_path.resolve()),
         "arm_id": arm.arm_id,
-        "totals": {
-            "questions": len(episodes),
-            "passed": passed,
-            "failed": len(episodes) - passed,
+        "trap_judge_id": trap_judge.judge_id if trap_judge is not None else None,
+        # The headline aggregate is deliberately gating-only. Trap scores
+        # cannot influence it even when every trap passes or fails.
+        "totals": _episode_totals(gating_episodes),
+        "informational_totals": _episode_totals(informational_episodes),
+        "human_spot_check": {
+            "instructions": (
+                "Review each flagged trap episode answer.answer_text against its "
+                "refusal basis and redirect target; use the transcript only for "
+                "audit, and record disagreements without changing the score."
+            ),
+            "question_ids": [
+                question.question_id
+                for question in trap_questions
+                if question.trap_rubric is not None
+                and question.trap_rubric.human_spot_check
+            ],
         },
         "episodes": episodes,
     }
@@ -108,8 +150,23 @@ def run_benchmark(
     return report
 
 
+def _episode_totals(episodes: list[dict[str, object]]) -> dict[str, int]:
+    passed = sum(
+        bool(episode["grade"]["passed"])  # type: ignore[index]
+        for episode in episodes
+    )
+    return {
+        "questions": len(episodes),
+        "passed": passed,
+        "failed": len(episodes) - passed,
+    }
+
+
 def _run_episode(
-    *, question: BenchmarkQuestion, arm: ArmAdapter
+    *,
+    question: BenchmarkQuestion,
+    arm: ArmAdapter,
+    trap_judge: TrapJudge | None,
 ) -> dict[str, object]:
     graph_facts = _load_graph_facts(question.drawing_ref)
 
@@ -117,22 +174,48 @@ def _run_episode(
     answer = arm.answer(question=question, drawing_ref=question.drawing_ref)
     wall_time_seconds = time.perf_counter() - started
 
+    trap_judgment = (
+        trap_judge.judge(
+            question=question,
+            answer=answer,
+            rubric=question.trap_rubric,
+        )
+        if question.trap_rubric is not None and trap_judge is not None
+        else None
+    )
+
     episode_grade = grade(
         answer=answer,
         ground_truth=question.ground_truth,
         graph_facts=graph_facts,
+        trap_rubric=question.trap_rubric,
+        trap_judgment=trap_judgment,
     )
     return {
         "question_id": question.question_id,
         "question": question.question,
         "slice": question.slice,
         "drawing_ref": str(question.drawing_ref),
+        "gating": question.slice != SLICE_TRAP,
+        "human_spot_check_required": bool(
+            question.trap_rubric and question.trap_rubric.human_spot_check
+        ),
         "answer": {
             "verdict": answer.verdict,
             "witness_ids": list(answer.witness_ids),
             "posture": answer.posture,
+            "answer_text": answer.answer_text,
         },
         "expected": _ground_truth_payload(question.ground_truth),
+        "trap_rubric": (
+            {
+                "expected_posture": question.trap_rubric.expected_posture,
+                "refusal_basis": question.trap_rubric.refusal_basis,
+                "redirect_target": question.trap_rubric.redirect_target,
+            }
+            if question.trap_rubric is not None
+            else None
+        ),
         "grade": _grade_payload(episode_grade),
         "wall_time_seconds": wall_time_seconds,
         "tokens": _tokens_payload(answer.usage),
@@ -169,6 +252,10 @@ def _grade_payload(episode_grade: Grade) -> dict[str, object]:
         "missing_witness_ids": list(episode_grade.missing_witness_ids),
         "extra_witness_ids": list(episode_grade.extra_witness_ids),
         "unknown_witness_ids": list(episode_grade.unknown_witness_ids),
+        "trap_rubric_passed": episode_grade.trap_rubric_passed,
+        "grounded_refusal": episode_grade.grounded_refusal,
+        "graceful_redirect": episode_grade.graceful_redirect,
+        "judge_rationale": episode_grade.judge_rationale,
     }
 
 
@@ -186,21 +273,70 @@ def load_scripted_answers(path: Path) -> dict[str, StructuredAnswer]:
         raise ValueError(f"Scripted answers at {path} must be a JSON object.")
     answers: dict[str, StructuredAnswer] = {}
     for question_id, raw_answer in raw.items():
-        if not isinstance(raw_answer, dict) or not isinstance(
-            raw_answer.get("verdict"), str
+        context = f"Scripted answer for {question_id!r}"
+        if not isinstance(question_id, str) or not question_id:
+            raise ValueError("Scripted answer question IDs must be non-empty strings.")
+        if not isinstance(raw_answer, dict):
+            raise ValueError(f"{context} must be a JSON object.")
+        verdict = raw_answer.get("verdict")
+        if verdict not in VERDICTS:
+            raise ValueError(f"{context} has invalid verdict {verdict!r}.")
+        witness_ids = raw_answer.get("witness_ids", [])
+        if not isinstance(witness_ids, list) or not all(
+            isinstance(witness_id, str) for witness_id in witness_ids
         ):
+            raise ValueError(f"{context}.witness_ids must be a list of strings.")
+        posture = raw_answer.get("posture", "unspecified")
+        if posture not in POSTURES:
+            raise ValueError(f"{context} has invalid posture {posture!r}.")
+        answer_text = raw_answer.get("answer_text", "")
+        if not isinstance(answer_text, str):
+            raise ValueError(f"{context}.answer_text must be a string.")
+        if posture in TRAP_EXPECTED_POSTURES and not answer_text.strip():
             raise ValueError(
-                f"Scripted answer for {question_id!r} must be an object with a "
-                "string verdict."
+                f"{context}.answer_text must be non-empty for posture {posture!r}."
             )
+        transcript = raw_answer.get("transcript", [])
+        if not isinstance(transcript, list) or not all(
+            isinstance(message, dict) for message in transcript
+        ):
+            raise ValueError(f"{context}.transcript must be a list of objects.")
+        usage = raw_answer.get("usage", {})
+        if not isinstance(usage, dict):
+            raise ValueError(f"{context}.usage must be an object.")
         answers[question_id] = StructuredAnswer(
-            verdict=raw_answer["verdict"],
-            witness_ids=tuple(raw_answer.get("witness_ids", ())),
-            posture=raw_answer.get("posture", "unspecified"),
-            transcript=tuple(raw_answer.get("transcript", ())),
-            usage=dict(raw_answer.get("usage", {})),
+            verdict=verdict,
+            witness_ids=tuple(witness_ids),
+            posture=posture,
+            answer_text=answer_text,
+            transcript=tuple(transcript),
+            usage=dict(usage),
         )
     return answers
+
+
+def _scripted_trap_judge(
+    *,
+    trap_question_ids: set[str],
+    judgments_path: Path | None,
+) -> TrapJudge | None:
+    if judgments_path is None:
+        if not trap_question_ids:
+            return None
+        raise ValueError(
+            "Trap questions require --scripted-trap-judgments before any "
+            "benchmark episodes can run."
+        )
+    judgments = load_scripted_trap_judgments(judgments_path)
+    if not trap_question_ids:
+        return None
+    missing = sorted(trap_question_ids - judgments.keys())
+    if missing:
+        raise ValueError(
+            "Scripted trap judgments are missing question IDs: "
+            + ", ".join(missing)
+        )
+    return ScriptedTrapJudge(judgments)
 
 
 def run_scripted_benchmark(
@@ -209,14 +345,31 @@ def run_scripted_benchmark(
     scripted_answers_path: Path,
     arm_id: str,
     output_dir: Path,
+    scripted_trap_judgments_path: Path | None = None,
 ) -> int:
-    """CLI entry: one command from manifest + scripted answers to report."""
-    arm = ScriptedArm(
-        arm_id=arm_id,
-        answers=load_scripted_answers(scripted_answers_path),
+    """CLI entry: validate all scripted inputs, then run one report."""
+    dataset = load_question_manifest(manifest_path)
+    answers = load_scripted_answers(scripted_answers_path)
+    question_ids = {question.question_id for question in dataset.questions}
+    missing_answers = sorted(question_ids - answers.keys())
+    if missing_answers:
+        raise ValueError(
+            "Scripted answers are missing question IDs: " + ", ".join(missing_answers)
+        )
+    trap_judge = _scripted_trap_judge(
+        trap_question_ids={
+            question.question_id
+            for question in dataset.questions
+            if question.slice == SLICE_TRAP
+        },
+        judgments_path=scripted_trap_judgments_path,
     )
+    arm = ScriptedArm(arm_id=arm_id, answers=answers)
     report = run_benchmark(
-        manifest_path=manifest_path, arm=arm, output_dir=output_dir
+        manifest_path=manifest_path,
+        arm=arm,
+        output_dir=output_dir,
+        trap_judge=trap_judge,
     )
     totals = report["totals"]
     print(f"Benchmark report: {output_dir / BENCHMARK_REPORT_FILENAME}")

@@ -133,6 +133,7 @@ def test_system_prompt_includes_grounding_disclosure_policy() -> None:
         "source_grounded",
         "general_knowledge",
         "source_data_unavailable",
+        "needs_clarification",
         "out_of_scope",
     ):
         assert posture in prompt
@@ -157,6 +158,6 @@ def test_out_of_scope_policy_permits_acknowledgment_before_redirect() -> None:
     assert "brief" in out_of_scope_clause
     assert "redirect" in out_of_scope_clause.lower()
     # Acknowledge *then* redirect: the redirect follows the acknowledgment.
-    assert out_of_scope_clause.index("acknowledgment") < out_of_scope_clause.lower().index(
-        "then redirect"
-    )
+    assert out_of_scope_clause.index(
+        "acknowledgment"
+    ) < out_of_scope_clause.lower().index("then redirect")

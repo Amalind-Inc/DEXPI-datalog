@@ -39,6 +39,7 @@ POSTURE_SOURCE_GROUNDED = "source_grounded"
 POSTURE_GENERAL_KNOWLEDGE = "general_knowledge"
 POSTURE_SOURCE_DATA_UNAVAILABLE = "source_data_unavailable"
 POSTURE_OUT_OF_SCOPE = "out_of_scope"
+POSTURE_NEEDS_CLARIFICATION = "needs_clarification"
 
 POSTURES = (
     POSTURE_UNSPECIFIED,
@@ -46,16 +47,43 @@ POSTURES = (
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
 )
+
+TRAP_EXPECTED_POSTURES = (
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
+)
+
+
+@dataclass(frozen=True)
+class TrapRubric:
+    """Pre-committed qualitative criteria for one trap-slice question."""
+
+    expected_posture: str
+    refusal_basis: str
+    redirect_target: str
+    human_spot_check: bool = False
+
+
+@dataclass(frozen=True)
+class TrapJudgment:
+    """Informational judge assessment of refusal and redirect quality."""
+
+    grounded_refusal: bool
+    graceful_redirect: bool
+    rationale: str
 
 
 @dataclass(frozen=True)
 class StructuredAnswer:
     """The answer contract every benchmark arm emits for one question.
 
-    ``transcript`` and ``usage`` are audit payload: they ship with every
-    answer for post-hoc review and cost reporting but never influence the
-    grade.
+    ``answer_text`` is the candidate's auditable explanation; trap judges assess
+    its refusal and redirect quality, but deterministic compliance scoring does
+    not. ``transcript`` and ``usage`` are audit payload that ship with every
+    answer for post-hoc review and cost reporting.
     """
 
     verdict: str
@@ -63,6 +91,7 @@ class StructuredAnswer:
     posture: str = POSTURE_UNSPECIFIED
     transcript: tuple[dict[str, object], ...] = ()
     usage: dict[str, object] = field(default_factory=dict)
+    answer_text: str = ""
 
 
 @dataclass(frozen=True)

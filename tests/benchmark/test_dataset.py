@@ -110,7 +110,14 @@ def test_manifest_supports_all_slices_and_grounded_witnesses(tmp_path: Path) -> 
                 question_id="trap",
                 slice_name="trap",
                 ground_truth={"verdict": "unanswerable"},
-            ),
+            )
+            | {
+                "trap_rubric": {
+                    "expected_posture": "source_data_unavailable",
+                    "refusal_basis": "Required source data is absent.",
+                    "redirect_target": "Offer a source-grounded check.",
+                }
+            },
         ],
     )
 
@@ -122,6 +129,133 @@ def test_manifest_supports_all_slices_and_grounded_witnesses(tmp_path: Path) -> 
         "trap",
     ]
     assert dataset.questions[2].ground_truth.witness_ids == ()
+
+
+def test_trap_manifest_loads_explicit_expected_posture_and_rubric(
+    tmp_path: Path,
+) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    trap = question_data(
+        question_id="missing-approval-history",
+        slice_name="trap",
+        ground_truth={"verdict": "unanswerable"},
+    )
+    trap["trap_rubric"] = {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The source contains no approval-history field.",
+        "redirect_target": "Offer checks over topology or equipment attributes.",
+        "human_spot_check": True,
+    }
+
+    question = load_question_manifest(write_manifest(tmp_path, [trap])).questions[0]
+
+    assert question.trap_rubric is not None
+    assert question.trap_rubric.expected_posture == "source_data_unavailable"
+    assert question.trap_rubric.refusal_basis.startswith("The source")
+    assert question.trap_rubric.redirect_target.startswith("Offer checks")
+    assert question.trap_rubric.human_spot_check is True
+
+
+def test_trap_manifest_rejects_a_missing_rubric(tmp_path: Path) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'trap-without-rubric'.+requires trap_rubric",
+    ):
+        load_question_manifest(
+            write_manifest(
+                tmp_path,
+                [
+                    question_data(
+                        question_id="trap-without-rubric",
+                        slice_name="trap",
+                        ground_truth={"verdict": "unanswerable"},
+                    )
+                ],
+            )
+        )
+
+
+def test_trap_manifest_rejects_source_conclusion_ground_truth(tmp_path: Path) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    trap = question_data(
+        question_id="not-a-trap",
+        slice_name="trap",
+        ground_truth={"verdict": "no_violation"},
+    )
+    trap["trap_rubric"] = {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The source lacks the required field.",
+        "redirect_target": "Offer a source-grounded check.",
+    }
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'not-a-trap'.+ground_truth.verdict 'unanswerable'",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [trap]))
+
+
+def test_trap_manifest_rejects_ground_truth_witnesses(tmp_path: Path) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    trap = question_data(
+        question_id="trap-with-witness",
+        slice_name="trap",
+        ground_truth={"verdict": "unanswerable", "witness_ids": ["P-101"]},
+    )
+    trap["trap_rubric"] = {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The source lacks the required field.",
+        "redirect_target": "Offer a source-grounded check.",
+    }
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'trap-with-witness'.+empty ground_truth.witness_ids",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [trap]))
+
+
+def test_non_trap_manifest_rejects_a_trap_rubric(tmp_path: Path) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    question = question_data(
+        question_id="ordinary-question",
+        slice_name="hand_authored",
+    )
+    question["trap_rubric"] = {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "Not relevant.",
+        "redirect_target": "Offer a drawing check.",
+    }
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"entry 'ordinary-question'.+only valid for slice 'trap'",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [question]))
+
+
+def test_trap_manifest_rejects_degraded_or_educational_expected_posture(
+    tmp_path: Path,
+) -> None:
+    write_graph_facts(tmp_path, ["P-101"])
+    trap = question_data(
+        question_id="weak-posture",
+        slice_name="trap",
+        ground_truth={"verdict": "unanswerable"},
+    )
+    trap["trap_rubric"] = {
+        "expected_posture": "unspecified",
+        "refusal_basis": "The request is ambiguous.",
+        "redirect_target": "Ask for the missing criterion.",
+    }
+
+    with pytest.raises(
+        DatasetManifestError,
+        match=r"trap_rubric.expected_posture 'unspecified'",
+    ):
+        load_question_manifest(write_manifest(tmp_path, [trap]))
 
 
 def test_manifest_rejects_unknown_witness_with_entry_and_id_diagnostic(

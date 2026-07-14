@@ -75,6 +75,7 @@ class DirectArmPromptTests(unittest.TestCase):
                         "verdict": "violation_found",
                         "witness_ids": ["node-1"],
                         "posture": "source_grounded",
+                        "answer_text": "The represented path lacks a check valve.",
                     }
                 )
             )
@@ -94,6 +95,7 @@ class DirectArmPromptTests(unittest.TestCase):
                 "unanswerable",
                 "source_grounded",
                 "witness_ids",
+                "answer_text",
             ):
                 self.assertIn(term, request + instructions)
 
@@ -107,6 +109,7 @@ class DirectArmPromptTests(unittest.TestCase):
                         "verdict": "violation_found",
                         "witness_ids": ["node-1", "node-2"],
                         "posture": "source_grounded",
+                        "answer_text": "The represented path lacks a check valve.",
                     }
                 )
             )
@@ -117,6 +120,9 @@ class DirectArmPromptTests(unittest.TestCase):
             self.assertEqual(answer.verdict, VERDICT_VIOLATION_FOUND)
             self.assertEqual(answer.witness_ids, ("node-1", "node-2"))
             self.assertEqual(answer.posture, POSTURE_SOURCE_GROUNDED)
+            self.assertEqual(
+                answer.answer_text, "The represented path lacks a check valve."
+            )
             roles = [m.get("role") for m in answer.transcript]
             self.assertIn("assistant", roles)
 
@@ -131,6 +137,9 @@ class DirectArmPromptTests(unittest.TestCase):
                         "verdict": "unanswerable",
                         "witness_ids": [],
                         "posture": "source_data_unavailable",
+                        "answer_text": (
+                            "The source lacks approval data. I can check topology."
+                        ),
                     }
                 )
                 + "\n```\nHope that helps."

@@ -5,7 +5,7 @@ Boundary: run_grounded_qa_turn() public function + TopologyTools.execute()
 These tests do not inspect message lists, tool call counts, or internal state.
 They assert what a caller observes: answer text, evidence references, witnesses.
 """
-import json
+
 import pytest
 
 from pydexpi_datalog.qa.topology_tools import TopologyTools
@@ -13,6 +13,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     DEFAULT_MAX_ROUNDS,
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
@@ -48,9 +49,24 @@ MINIMAL_TOPOLOGY: dict = {
         {"id": VALVE_ID, "label": "Valve", "tag_name": "V-102"},
     ],
     "edges": [
-        {"id": EDGE_PUMP_NOZZLE, "source_id": PUMP_ID, "target_id": NOZZLE_ID, "relationship": "has_nozzle"},
-        {"id": EDGE_NOZZLE_SEGMENT, "source_id": NOZZLE_ID, "target_id": SEGMENT_ID, "relationship": "connected_to"},
-        {"id": EDGE_SEGMENT_VALVE, "source_id": SEGMENT_ID, "target_id": VALVE_ID, "relationship": "connected_to"},
+        {
+            "id": EDGE_PUMP_NOZZLE,
+            "source_id": PUMP_ID,
+            "target_id": NOZZLE_ID,
+            "relationship": "has_nozzle",
+        },
+        {
+            "id": EDGE_NOZZLE_SEGMENT,
+            "source_id": NOZZLE_ID,
+            "target_id": SEGMENT_ID,
+            "relationship": "connected_to",
+        },
+        {
+            "id": EDGE_SEGMENT_VALVE,
+            "source_id": SEGMENT_ID,
+            "target_id": VALVE_ID,
+            "relationship": "connected_to",
+        },
     ],
     "evidence_map": {
         PUMP_ID: {"id": PUMP_ID},
@@ -180,7 +196,7 @@ class SampledPathThenDatalogProvider:
                 tool_input={
                     "request": "Check whether every pump has a reachable valve.",
                     "generated_datalog": (
-                        '.decl answer(x:symbol)\n.output answer\n'
+                        ".decl answer(x:symbol)\n.output answer\n"
                         f'answer(x) :- reachable("{PUMP_ID}", x).'
                     ),
                     "formal_restatement": "Return objects reachable from pump P-101.",
@@ -198,7 +214,9 @@ class ImmediateConversationProvider:
 
 class UnexpectedProviderCall:
     def complete_with_tools(self, *, messages, tools):
-        raise AssertionError("source mutation requests should be denied before model use")
+        raise AssertionError(
+            "source mutation requests should be denied before model use"
+        )
 
 
 def test_topology_relationship_answer_requires_structural_witness_before_acceptance():
@@ -251,7 +269,7 @@ class AnswerAfterProposalProvider:
                 tool_input={
                     "request": "Must every segment reach a valve?",
                     "generated_datalog": (
-                        '.decl answer(x:symbol)\n.output answer\n'
+                        ".decl answer(x:symbol)\n.output answer\n"
                         f'answer(x) :- reachable("{SEGMENT_ID}", x).'
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
@@ -302,7 +320,7 @@ class RetryAfterRejectionProvider:
                 tool_input={
                     "request": "Must every segment reach a valve?",
                     "generated_datalog": (
-                        '.decl answer(x:symbol)\n'
+                        ".decl answer(x:symbol)\n"
                         f'answer(x) :- reachable("{SEGMENT_ID}", x).'
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
@@ -320,7 +338,7 @@ class RetryAfterRejectionProvider:
                 tool_input={
                     "request": "Must every segment reach a valve?",
                     "generated_datalog": (
-                        '.decl answer(x:symbol)\n.output answer\n'
+                        ".decl answer(x:symbol)\n.output answer\n"
                         f'answer(x) :- reachable("{SEGMENT_ID}", x).'
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
@@ -351,7 +369,9 @@ def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
     assert len(proposal_traces) == 2
     assert proposal_traces[0]["tool_result"]["status"] == "rejected"
     assert proposal_traces[1]["tool_result"]["status"] == "confirmation_required"
-    assert proposal_traces[1]["tool_result"]["validation"]["status"] == "safe_to_confirm"
+    assert (
+        proposal_traces[1]["tool_result"]["validation"]["status"] == "safe_to_confirm"
+    )
     # The model saw the rejection diagnostics and the authoring contract.
     assert provider.rejection_feedback
     assert "answer(x:symbol)" in provider.rejection_feedback[0]
@@ -508,6 +528,27 @@ def test_unrelated_question_is_redirected_without_backend_classifier():
     assert result.grounding_posture == POSTURE_OUT_OF_SCOPE
     assert result.source_grounded is False
     assert result.disclosure is not None
+
+
+def test_ambiguous_question_can_request_clarification_without_source_claim():
+    result = run_grounded_qa_turn(
+        question="Is the line okay?",
+        topology_tools=make_tools(),
+        provider=SinglePostureProvider(
+            FinalAnswer(
+                answer_text=(
+                    "Which line and acceptance criterion should I check? "
+                    "I can inspect connectivity and represented attributes."
+                ),
+                grounding_posture=POSTURE_NEEDS_CLARIFICATION,
+            )
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_NEEDS_CLARIFICATION
+    assert result.source_grounded is False
+    assert result.disclosure is not None
+    assert "criterion" in result.disclosure.lower()
 
 
 def test_source_grounded_answer_with_validated_evidence_has_no_disclosure():
@@ -901,7 +942,9 @@ def test_harness_raises_on_unknown_tool_name_error():
         provider=UnknownToolThenAnswerProvider(),
     )
     assert result.answer_text == "done"
-    rejected = next(t for t in result.tool_call_trace if t["tool_name"] == "nonexistent_tool")
+    rejected = next(
+        t for t in result.tool_call_trace if t["tool_name"] == "nonexistent_tool"
+    )
     assert rejected["tool_result"]["status"] == "rejected"
     assert rejected["tool_result"]["code"] == "tool.unknown"
 
@@ -982,7 +1025,10 @@ def test_follow_up_reuses_prior_evidence_by_identity():
     assert PUMP_ID in result.evidence_references
     assert PUMP_ID in result.interpreted_object_ids
     # The pump reaches the valve through nozzle and segment.
-    assert VALVE_ID in result.evidence_references or NOZZLE_ID in result.evidence_references
+    assert (
+        VALVE_ID in result.evidence_references
+        or NOZZLE_ID in result.evidence_references
+    )
 
 
 def test_prior_prose_is_rejected_as_engineering_evidence():
@@ -1027,7 +1073,10 @@ def test_conversation_state_cannot_smuggle_prose_through_prior_evidence():
     class InspectingProvider:
         def complete_with_tools(self, *, messages, tools):
             for message in messages:
-                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                if (
+                    message.get("role") == "assistant"
+                    and "grounded_evidence_ids" in message
+                ):
                     seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
             return FinalAnswer(answer_text="ok", evidence_references=[])
 
@@ -1097,7 +1146,10 @@ def test_compaction_preserves_follow_up_evidence_reuse_across_threshold():
     class InspectingProvider:
         def complete_with_tools(self, *, messages, tools):
             for message in messages:
-                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                if (
+                    message.get("role") == "assistant"
+                    and "grounded_evidence_ids" in message
+                ):
                     seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
             return FinalAnswer(answer_text="ok", evidence_references=[])
 
@@ -1128,7 +1180,9 @@ def test_compaction_preserves_follow_up_evidence_reuse_across_threshold():
         max_conversation_turns=2,
     )
 
-    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    offered = {
+        evidence_id for grounded in seen_grounded_ids for evidence_id in grounded
+    }
     # The folded pump/nozzle identities remain offered to the model for reuse.
     assert PUMP_ID in offered
     assert NOZZLE_ID in offered
@@ -1144,7 +1198,10 @@ def test_compaction_drops_stale_evidence_but_keeps_valid_for_reuse():
     class InspectingProvider:
         def complete_with_tools(self, *, messages, tools):
             for message in messages:
-                if message.get("role") == "assistant" and "grounded_evidence_ids" in message:
+                if (
+                    message.get("role") == "assistant"
+                    and "grounded_evidence_ids" in message
+                ):
                     seen_grounded_ids.append(list(message["grounded_evidence_ids"]))
             return FinalAnswer(answer_text="ok", evidence_references=[])
 
@@ -1175,7 +1232,9 @@ def test_compaction_drops_stale_evidence_but_keeps_valid_for_reuse():
         max_conversation_turns=2,
     )
 
-    offered = {evidence_id for grounded in seen_grounded_ids for evidence_id in grounded}
+    offered = {
+        evidence_id for grounded in seen_grounded_ids for evidence_id in grounded
+    }
     # Valid identities survive compaction and remain reusable by identity.
     assert PUMP_ID in offered
     assert NOZZLE_ID in offered
@@ -1191,7 +1250,9 @@ def test_compaction_summary_prose_is_never_promoted_to_evidence():
         def complete_with_tools(self, *, messages, tools):
             summary_text = ""
             for message in messages:
-                if message.get("role") == "user" and "Earlier in this conversation" in str(
+                if message.get(
+                    "role"
+                ) == "user" and "Earlier in this conversation" in str(
                     message.get("content", "")
                 ):
                     summary_text = str(message["content"])

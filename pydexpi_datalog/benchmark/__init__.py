@@ -7,10 +7,12 @@ pre-committed GroundTruth, and the pure-function grader.
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
     POSTURES,
+    TRAP_EXPECTED_POSTURES,
     SOURCE_CONCLUSION_VERDICTS,
     VERDICT_NO_VIOLATION,
     VERDICT_UNANSWERABLE,
@@ -18,6 +20,8 @@ from pydexpi_datalog.benchmark.contract import (
     VERDICTS,
     GroundTruth,
     StructuredAnswer,
+    TrapJudgment,
+    TrapRubric,
 )
 from pydexpi_datalog.benchmark.grader import Grade, grade, known_node_ids
 from pydexpi_datalog.benchmark.direct_arm import (
@@ -78,6 +82,13 @@ from pydexpi_datalog.benchmark.runner import (
     run_benchmark,
     run_scripted_benchmark,
 )
+from pydexpi_datalog.benchmark.trap_rubric import (
+    ModelTrapJudge,
+    ScriptedTrapJudge,
+    TrapJudge,
+    load_scripted_trap_judgments,
+)
+
 
 __all__ = [
     "AGENTIC_ARM_MODELS",
@@ -123,12 +134,20 @@ __all__ = [
     "create_direct_arm",
     "POSTURE_GENERAL_KNOWLEDGE",
     "POSTURE_OUT_OF_SCOPE",
+    "POSTURE_NEEDS_CLARIFICATION",
     "POSTURE_SOURCE_DATA_UNAVAILABLE",
     "POSTURE_SOURCE_GROUNDED",
     "POSTURE_UNSPECIFIED",
     "POSTURES",
     "SOURCE_CONCLUSION_VERDICTS",
     "StructuredAnswer",
+    "ModelTrapJudge",
+    "ScriptedTrapJudge",
+    "TrapJudge",
+    "TrapJudgment",
+    "TrapRubric",
+    "TRAP_EXPECTED_POSTURES",
+    "load_scripted_trap_judgments",
     "VERDICT_NO_VIOLATION",
     "VERDICT_UNANSWERABLE",
     "VERDICT_VIOLATION_FOUND",

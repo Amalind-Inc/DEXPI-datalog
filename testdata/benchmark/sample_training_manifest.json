@@ -8,6 +8,12 @@
       "drawing": "../graph_contract/e06-pump-hex/graph_facts.json",
       "ground_truth": {
         "verdict": "unanswerable"
+      },
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The canonical base fact layer has no approval date.",
+        "redirect_target": "Offer topology or equipment-attribute checks.",
+        "human_spot_check": true
       }
     }
   ]

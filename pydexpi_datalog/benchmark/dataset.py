@@ -11,7 +11,13 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from pydexpi_datalog.benchmark.contract import GroundTruth, VERDICTS
+from pydexpi_datalog.benchmark.contract import (
+    GroundTruth,
+    TRAP_EXPECTED_POSTURES,
+    TrapRubric,
+    VERDICT_UNANSWERABLE,
+    VERDICTS,
+)
 from pydexpi_datalog.benchmark.grader import known_node_ids
 
 
@@ -44,6 +50,7 @@ class BenchmarkQuestion:
     drawing_ref: Path
     ground_truth: GroundTruth
     size_bucket: str | None = None
+    trap_rubric: TrapRubric | None = None
 
 
 @dataclass(frozen=True)
@@ -120,9 +127,7 @@ def _load_question(
     *, raw_question: object, manifest_path: Path, index: int
 ) -> BenchmarkQuestion:
     if not isinstance(raw_question, dict):
-        raise DatasetManifestError(
-            f"Dataset entry at index {index} must be an object."
-        )
+        raise DatasetManifestError(f"Dataset entry at index {index} must be an object.")
 
     question_id = _required_string(raw_question, "id", f"entry at index {index}")
     question = _required_string(raw_question, "question", f"entry {question_id!r}")
@@ -181,6 +186,30 @@ def _load_question(
             "expected a non-empty string when present."
         )
 
+    trap_rubric = _optional_trap_rubric(
+        raw_question=raw_question,
+        question_id=question_id,
+    )
+    if slice_name == SLICE_TRAP and trap_rubric is None:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} with slice 'trap' requires trap_rubric."
+        )
+    if slice_name == SLICE_TRAP and verdict != VERDICT_UNANSWERABLE:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} with slice 'trap' requires "
+            "ground_truth.verdict 'unanswerable'."
+        )
+    if slice_name == SLICE_TRAP and witness_ids:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} with slice 'trap' requires empty "
+            "ground_truth.witness_ids."
+        )
+    if slice_name != SLICE_TRAP and trap_rubric is not None:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has trap_rubric, which is only "
+            "valid for slice 'trap'."
+        )
+
     return BenchmarkQuestion(
         question_id=question_id,
         question=question,
@@ -188,6 +217,51 @@ def _load_question(
         drawing_ref=drawing_ref,
         ground_truth=GroundTruth(verdict=verdict, witness_ids=witness_ids),
         size_bucket=raw_size_bucket,
+        trap_rubric=trap_rubric,
+    )
+
+
+def _optional_trap_rubric(
+    *, raw_question: dict[str, object], question_id: str
+) -> TrapRubric | None:
+    raw_rubric = raw_question.get("trap_rubric")
+    if raw_rubric is None:
+        return None
+    if not isinstance(raw_rubric, dict):
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has invalid trap_rubric: "
+            "expected an object."
+        )
+    expected_posture = _required_string(
+        raw_rubric,
+        "expected_posture",
+        f"entry {question_id!r} trap_rubric",
+    )
+    if expected_posture not in TRAP_EXPECTED_POSTURES:
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has invalid "
+            f"trap_rubric.expected_posture {expected_posture!r}; expected one "
+            f"of {list(TRAP_EXPECTED_POSTURES)!r}."
+        )
+    human_spot_check = raw_rubric.get("human_spot_check", False)
+    if not isinstance(human_spot_check, bool):
+        raise DatasetManifestError(
+            f"Dataset entry {question_id!r} has invalid "
+            "trap_rubric.human_spot_check: expected a boolean."
+        )
+    return TrapRubric(
+        expected_posture=expected_posture,
+        refusal_basis=_required_string(
+            raw_rubric,
+            "refusal_basis",
+            f"entry {question_id!r} trap_rubric",
+        ),
+        redirect_target=_required_string(
+            raw_rubric,
+            "redirect_target",
+            f"entry {question_id!r} trap_rubric",
+        ),
+        human_spot_check=human_spot_check,
     )
 
 
@@ -255,7 +329,9 @@ def _read_json_object(path: Path, *, error_prefix: str) -> dict[str, object]:
     try:
         raw_text = path.read_text(encoding="utf-8")
     except OSError as error:
-        raise DatasetManifestError(f"{error_prefix} cannot be read at {path}: {error}") from error
+        raise DatasetManifestError(
+            f"{error_prefix} cannot be read at {path}: {error}"
+        ) from error
 
     try:
         raw = json.loads(raw_text)

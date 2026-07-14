@@ -23,6 +23,7 @@ POSTURE_SOURCE_GROUNDED = "source_grounded"
 POSTURE_GENERAL_KNOWLEDGE = "general_knowledge"
 POSTURE_SOURCE_DATA_UNAVAILABLE = "source_data_unavailable"
 POSTURE_OUT_OF_SCOPE = "out_of_scope"
+POSTURE_NEEDS_CLARIFICATION = "needs_clarification"
 # Backend-assigned only: the model declared a source-grounded conclusion but no
 # evidence reference survived validation, so the claim cannot be presented as grounded.
 POSTURE_UNSUPPORTED_SOURCE_CLAIM = "unsupported_source_claim"
@@ -41,6 +42,10 @@ _POSTURE_DISCLOSURES: dict[str, str] = {
     POSTURE_OUT_OF_SCOPE: (
         "That is outside grounded P&ID source review. I can answer questions about "
         "your loaded source."
+    ),
+    POSTURE_NEEDS_CLARIFICATION: (
+        "The request needs a specific object, scope, or acceptance criterion "
+        "before it can be checked against the loaded source."
     ),
     POSTURE_UNSUPPORTED_SOURCE_CLAIM: (
         "This answer is not backed by validated evidence from your loaded source and "

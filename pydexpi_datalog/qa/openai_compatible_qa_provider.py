@@ -7,6 +7,7 @@ import httpx
 from .grounded_qa_harness import (
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
@@ -20,6 +21,7 @@ _VALID_POSTURES = frozenset(
         POSTURE_GENERAL_KNOWLEDGE,
         POSTURE_SOURCE_DATA_UNAVAILABLE,
         POSTURE_OUT_OF_SCOPE,
+        POSTURE_NEEDS_CLARIFICATION,
     }
 )
 
@@ -66,12 +68,13 @@ _PROVIDE_ANSWER_TOOL: dict[str, object] = {
                         POSTURE_GENERAL_KNOWLEDGE,
                         POSTURE_SOURCE_DATA_UNAVAILABLE,
                         POSTURE_OUT_OF_SCOPE,
+                        POSTURE_NEEDS_CLARIFICATION,
                     ],
                     "description": (
                         "How this answer relates to the loaded source. Use "
-                        "source_grounded only with cited evidence; use "
-                        "general_knowledge, source_data_unavailable, or out_of_scope "
-                        "for answers not derived from the loaded source."
+                        "source_grounded only with cited evidence; otherwise use "
+                        "general_knowledge, source_data_unavailable, "
+                        "needs_clarification, or out_of_scope as appropriate."
                     ),
                 },
             },

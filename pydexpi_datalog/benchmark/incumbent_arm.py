@@ -34,6 +34,7 @@ from typing import Callable, Mapping
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
@@ -55,6 +56,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
 from pydexpi_datalog.qa.grounded_qa_harness import (
     POSTURE_GENERAL_KNOWLEDGE as HARNESS_GENERAL_KNOWLEDGE,
     POSTURE_OUT_OF_SCOPE as HARNESS_OUT_OF_SCOPE,
+    POSTURE_NEEDS_CLARIFICATION as HARNESS_NEEDS_CLARIFICATION,
     POSTURE_SOURCE_DATA_UNAVAILABLE as HARNESS_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED as HARNESS_SOURCE_GROUNDED,
 )
@@ -71,6 +73,7 @@ _HARNESS_TO_CONTRACT_POSTURE = {
     HARNESS_SOURCE_GROUNDED: POSTURE_SOURCE_GROUNDED,
     HARNESS_SOURCE_DATA_UNAVAILABLE: POSTURE_SOURCE_DATA_UNAVAILABLE,
     HARNESS_OUT_OF_SCOPE: POSTURE_OUT_OF_SCOPE,
+    HARNESS_NEEDS_CLARIFICATION: POSTURE_NEEDS_CLARIFICATION,
     HARNESS_GENERAL_KNOWLEDGE: POSTURE_GENERAL_KNOWLEDGE,
 }
 
@@ -189,6 +192,7 @@ class IncumbentArm:
             verdict=verdict,
             witness_ids=witnesses,
             posture=posture,
+            answer_text=answer_text,
             transcript=self._transcript(question.question, trace, answer_text),
         )
 

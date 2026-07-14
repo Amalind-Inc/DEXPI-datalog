@@ -49,6 +49,14 @@ def build_system_prompt(context: dict[str, object]) -> str:
         return str(context.get("system_prompt", ""))
     if context.get("task") == "grounded_logic_answer":
         return _grounded_answer_system_prompt(context)
+    if context.get("task") == "benchmark_trap_judge":
+        return (
+            "You are an informational benchmark judge. Evaluate whether the "
+            "candidate gives a grounded refusal that names the relevant source "
+            "limitation or ambiguity, and a graceful redirect toward checks the "
+            "loaded engineering source can support. Follow the requested JSON "
+            "schema exactly; do not solve the original question."
+        )
     return _datalog_generation_system_prompt(context)
 
 

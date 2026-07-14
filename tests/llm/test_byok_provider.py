@@ -64,7 +64,10 @@ _SCOPED_CONTEXT: dict[str, object] = {
 _GROUNDED_CONTEXT: dict[str, object] = {
     "task": "grounded_logic_answer",
     "instructions": "Answer the user's topology question directly using only the provided deterministic evidence.",
-    "generated_logic": {"kind": "generated_datalog", "content": ".decl answer(x:symbol)\nanswer(\"node-abc\")."},
+    "generated_logic": {
+        "kind": "generated_datalog",
+        "content": '.decl answer(x:symbol)\nanswer("node-abc").',
+    },
     "evidence_items": [
         {"id": "node-abc", "kind": "node", "label": "P-4713"},
     ],
@@ -97,6 +100,13 @@ class SystemPromptTests(unittest.TestCase):
         self.assertIn('"node-abc"', prompt)
         self.assertIn("P-4713", prompt)
 
+    def test_trap_judge_gets_dedicated_non_datalog_system_prompt(self) -> None:
+        prompt = build_system_prompt({"task": "benchmark_trap_judge"})
+
+        self.assertIn("grounded refusal", prompt.lower())
+        self.assertIn("graceful redirect", prompt.lower())
+        self.assertNotIn("datalog", prompt.lower())
+
     def test_grounded_answer_prompt_includes_evidence_labels_and_ids(self) -> None:
         prompt = build_system_prompt(_GROUNDED_CONTEXT)
         self.assertIn("P-4713", prompt)
@@ -118,7 +128,9 @@ _FAKE_DATALOG_RESPONSE = json.dumps(
         "formal_restatement": "Return node-abc.",
     }
 )
-_FAKE_ANSWER_RESPONSE = json.dumps({"answer_text": "The pump P-4713 is connected downstream."})
+_FAKE_ANSWER_RESPONSE = json.dumps(
+    {"answer_text": "The pump P-4713 is connected downstream."}
+)
 
 
 class OpenAICompatibleProviderTests(unittest.TestCase):
@@ -129,8 +141,12 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_openai_posts_to_correct_endpoint(self) -> None:
         provider = self._make_provider("openai")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
-            result = provider.complete(request="What is connected?", context=_DATALOG_CONTEXT)
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
+            result = provider.complete(
+                request="What is connected?", context=_DATALOG_CONTEXT
+            )
 
         url = mock_post.call_args[0][0]
         self.assertIn("api.openai.com", url)
@@ -139,7 +155,9 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_openrouter_posts_to_openrouter_endpoint(self) -> None:
         provider = self._make_provider("openrouter")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="What is connected?", context=_DATALOG_CONTEXT)
 
         url = mock_post.call_args[0][0]
@@ -147,7 +165,9 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_bearer_auth_header_uses_credential(self) -> None:
         provider = self._make_provider("openai")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         headers = mock_post.call_args[1]["headers"]
@@ -155,7 +175,9 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_model_is_passed_in_request_body(self) -> None:
         provider = self._make_provider("openai")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         body = mock_post.call_args[1]["json"]
@@ -163,7 +185,9 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_system_and_user_messages_are_sent(self) -> None:
         provider = self._make_provider("openai")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="What is downstream?", context=_DATALOG_CONTEXT)
 
         messages = mock_post.call_args[1]["json"]["messages"]
@@ -174,7 +198,9 @@ class OpenAICompatibleProviderTests(unittest.TestCase):
 
     def test_grounded_answer_context_produces_grounded_system_prompt(self) -> None:
         provider = self._make_provider("openai")
-        with patch("httpx.post", return_value=_openai_response(_FAKE_ANSWER_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_openai_response(_FAKE_ANSWER_RESPONSE)
+        ) as mock_post:
             provider.complete(request="Who is downstream?", context=_GROUNDED_CONTEXT)
 
         system_content = next(
@@ -226,7 +252,9 @@ class AnthropicProviderTests(unittest.TestCase):
 
     def test_posts_to_anthropic_messages_endpoint(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             result = provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         url = mock_post.call_args[0][0]
@@ -236,7 +264,9 @@ class AnthropicProviderTests(unittest.TestCase):
 
     def test_uses_x_api_key_header(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         headers = mock_post.call_args[1]["headers"]
@@ -245,7 +275,9 @@ class AnthropicProviderTests(unittest.TestCase):
 
     def test_system_prompt_sent_as_top_level_field(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_anthropic_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         body = mock_post.call_args[1]["json"]
@@ -261,7 +293,9 @@ class GeminiProviderTests(unittest.TestCase):
 
     def test_posts_to_gemini_generatecontent_endpoint(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             result = provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         url = mock_post.call_args[0][0]
@@ -272,7 +306,9 @@ class GeminiProviderTests(unittest.TestCase):
 
     def test_api_key_sent_as_query_param(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         params = mock_post.call_args[1]["params"]
@@ -280,7 +316,9 @@ class GeminiProviderTests(unittest.TestCase):
 
     def test_system_instruction_sent_in_body(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)) as mock_post:
+        with patch(
+            "httpx.post", return_value=_gemini_response(_FAKE_DATALOG_RESPONSE)
+        ) as mock_post:
             provider.complete(request="test", context=_DATALOG_CONTEXT)
 
         body = mock_post.call_args[1]["json"]
@@ -295,17 +333,23 @@ class CreateByokProviderTests(unittest.TestCase):
         self.assertEqual(p.model, "gpt-4.1")
 
     def test_openrouter_provider_has_correct_attributes(self) -> None:
-        p = create_byok_provider(provider="openrouter", model="anthropic/claude-sonnet-4", credential="key")
+        p = create_byok_provider(
+            provider="openrouter", model="anthropic/claude-sonnet-4", credential="key"
+        )
         self.assertEqual(p.provider, "openrouter")
         self.assertEqual(p.model, "anthropic/claude-sonnet-4")
 
     def test_anthropic_provider_has_correct_attributes(self) -> None:
-        p = create_byok_provider(provider="anthropic", model="claude-sonnet-4", credential="key")
+        p = create_byok_provider(
+            provider="anthropic", model="claude-sonnet-4", credential="key"
+        )
         self.assertEqual(p.provider, "anthropic")
         self.assertEqual(p.model, "claude-sonnet-4")
 
     def test_gemini_provider_has_correct_attributes(self) -> None:
-        p = create_byok_provider(provider="gemini", model="gemini-2.5-pro", credential="key")
+        p = create_byok_provider(
+            provider="gemini", model="gemini-2.5-pro", credential="key"
+        )
         self.assertEqual(p.provider, "gemini")
         self.assertEqual(p.model, "gemini-2.5-pro")
 

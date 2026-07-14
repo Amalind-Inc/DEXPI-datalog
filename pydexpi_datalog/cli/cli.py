@@ -99,7 +99,9 @@ def build_parser() -> argparse.ArgumentParser:
         "draft-logic-request",
         help="Draft a BYOK logic request artifact without making the LLM the answer source.",
     )
-    draft_logic_request.add_argument("logic_request", help="Natural-language logic request.")
+    draft_logic_request.add_argument(
+        "logic_request", help="Natural-language logic request."
+    )
     draft_logic_request.add_argument(
         "--derived-graph-semantics",
         type=Path,
@@ -141,6 +143,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="JSON file mapping question IDs to scripted StructuredAnswer payloads.",
+    )
+    run_benchmark.add_argument(
+        "--scripted-trap-judgments",
+        type=Path,
+        help=(
+            "JSON file mapping trap question IDs to scripted rubric judgments. "
+            "Required when the manifest contains trap questions."
+        ),
     )
     run_benchmark.add_argument(
         "--arm-id",
@@ -232,17 +242,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run-benchmark":
         from ..benchmark.runner import run_scripted_benchmark
 
-        return run_scripted_benchmark(
-            manifest_path=args.manifest,
-            scripted_answers_path=args.scripted_answers,
-            arm_id=args.arm_id,
-            output_dir=args.output_dir,
-        )
+        try:
+            return run_scripted_benchmark(
+                manifest_path=args.manifest,
+                scripted_answers_path=args.scripted_answers,
+                arm_id=args.arm_id,
+                output_dir=args.output_dir,
+                scripted_trap_judgments_path=args.scripted_trap_judgments,
+            )
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
     if args.command == "synthetic-slice":
         from ..benchmark.synthetic import run_generate_synthetic_slice
 
         return run_generate_synthetic_slice(output_dir=args.output_dir)
-
 
     parser.error(f"unsupported command: {args.command}")
     return 2

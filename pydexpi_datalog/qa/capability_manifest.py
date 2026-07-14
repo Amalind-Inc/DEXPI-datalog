@@ -104,6 +104,9 @@ GROUNDING_DISCLOSURE_POLICY = "\n".join(
         "that it is not derived from the loaded source.",
         "- source_data_unavailable: a source-specific calculation whose operating "
         "inputs are absent. Say what data is missing; never invent values.",
+        "- needs_clarification: the request omits the object, scope, or acceptance "
+        "criterion needed for a source-grounded check. Ask for that detail and "
+        "offer concrete checks the loaded source can support.",
         "- out_of_scope: a question unrelated to P&ID source review. You may "
         "first give a brief, honest acknowledgment of the question (one or two "
         "sentences -- e.g. name the model you are, or answer a trivial general "

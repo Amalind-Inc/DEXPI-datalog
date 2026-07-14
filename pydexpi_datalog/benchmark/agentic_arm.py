@@ -261,16 +261,19 @@ Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object:
   "verdict": one of {verdicts},
   "witness_ids": a list of object IDs from the drawing that are the evidence
     for your verdict (empty if none apply),
-  "posture": one of {postures}
+  "posture": one of {postures},
+  "answer_text": a concise explanation of the result
 }}
 ```
 
 - "violation_found" / "no_violation" assert a conclusion from the drawing
   and require posture "source_grounded".
-- If the question cannot be answered from the drawing (missing data,
-  ambiguous, off-domain), use verdict "unanswerable" with the posture that
-  explains why ("source_data_unavailable" or "out_of_scope"), and do not
-  invent witness IDs.
+- If the drawing lacks required data, use "unanswerable" with posture
+  "source_data_unavailable". For an ambiguous request that needs a criterion
+  or object, use "needs_clarification". For an off-domain request, use
+  "out_of_scope". Do not invent witness IDs.
+- For an unanswerable, ambiguous, or off-domain request, answer_text must name
+  the source limitation or ambiguity and offer a concrete source-grounded next step.
 - Every witness ID must be copied exactly from `/input/graph_facts.json`
   (`facts.nodes[*].node_id`, or edge `source_id`/`target_id`/`edge_key`);
   never invent IDs.
@@ -519,6 +522,7 @@ class AgenticArm:
             verdict=parsed.verdict,
             witness_ids=parsed.witness_ids,
             posture=parsed.posture,
+            answer_text=parsed.answer_text,
             transcript=transcript,
             usage=usage,
         )

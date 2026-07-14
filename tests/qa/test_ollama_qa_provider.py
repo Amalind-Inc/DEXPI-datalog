@@ -3,6 +3,7 @@
 Boundary: OllamaQATurnProvider.complete_with_tools() via a fake HTTP transport.
 Tests assert the ToolCall/FinalAnswer protocol only — no internal message inspection.
 """
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,9 @@ from pydexpi_datalog.qa.ollama_qa_provider import OllamaQATurnProvider
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
 
 
-def _tool_call_response(name: str, arguments: dict[str, object], call_id: str = "call-1") -> MagicMock:
+def _tool_call_response(
+    name: str, arguments: dict[str, object], call_id: str = "call-1"
+) -> MagicMock:
     mock = MagicMock()
     mock.raise_for_status = MagicMock()
     mock.json.return_value = {
@@ -85,7 +88,12 @@ class OllamaQATurnProviderTests(unittest.TestCase):
 
     def test_native_tool_call_is_returned_as_toolcall(self) -> None:
         provider = self._make_provider()
-        with patch("httpx.post", return_value=_tool_call_response("find_equipment", {"pattern": "pump"}, "call-9")):
+        with patch(
+            "httpx.post",
+            return_value=_tool_call_response(
+                "find_equipment", {"pattern": "pump"}, "call-9"
+            ),
+        ):
             result = provider.complete_with_tools(
                 messages=[{"role": "user", "content": "find the pump"}],
                 tools=SAMPLE_TOOLS,
@@ -237,11 +245,14 @@ class OllamaQATurnProviderTests(unittest.TestCase):
                 "general_knowledge",
                 "source_data_unavailable",
                 "out_of_scope",
+                "needs_clarification",
             },
         )
 
     def test_custom_base_url(self) -> None:
-        provider = OllamaQATurnProvider(model="ornith:35b", base_url="http://remote-host:11434")
+        provider = OllamaQATurnProvider(
+            model="ornith:35b", base_url="http://remote-host:11434"
+        )
         with patch("httpx.post", return_value=_text_response("ok")) as mock_post:
             provider.complete_with_tools(messages=[], tools=[])
 

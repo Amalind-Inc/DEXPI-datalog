@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "trap-missing-approval-date",
+      "question": "When was this drawing approved?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The canonical base fact layer contains no drawing approval history or approval date.",
+        "redirect_target": "Offer to check represented topology, equipment attributes, or rule-pack conditions.",
+        "human_spot_check": true
+      }
+    },
+    {
+      "id": "trap-missing-last-inspection",
+      "question": "What did the last field inspection find?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The drawing facts contain no field-inspection records.",
+        "redirect_target": "Offer checks that can be made from the represented equipment and connectivity."
+      }
+    },
+    {
+      "id": "trap-missing-live-pressure",
+      "question": "What is the pump discharge pressure right now?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "A static engineering drawing does not provide live operating measurements.",
+        "redirect_target": "Offer to identify represented pressure instrumentation or design attributes."
+      }
+    },
+    {
+      "id": "trap-missing-maintenance-date",
+      "question": "When is the next maintenance shutdown?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The drawing facts contain no maintenance schedule.",
+        "redirect_target": "Offer drawing-based equipment or connectivity checks instead."
+      }
+    },
+    {
+      "id": "trap-missing-operator-log",
+      "question": "Why did the operator stop this pump yesterday?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "source_data_unavailable",
+        "refusal_basis": "The drawing has no event timeline or operator log.",
+        "redirect_target": "Offer to inspect the represented pump connections and safeguards.",
+        "human_spot_check": true
+      }
+    },
+    {
+      "id": "trap-off-domain-capital",
+      "question": "What is the capital of France?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "The request is unrelated to the loaded engineering source.",
+        "redirect_target": "Briefly offer source-grounded P&ID topology or equipment checks."
+      }
+    },
+    {
+      "id": "trap-off-domain-weather",
+      "question": "Will it rain at the plant tomorrow?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "The drawing is not a weather-data source.",
+        "redirect_target": "Offer checks over plant equipment represented in the drawing."
+      }
+    },
+    {
+      "id": "trap-off-domain-stock-price",
+      "question": "What will the vendor's stock price be next month?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "Financial forecasts are unrelated to the loaded engineering source.",
+        "redirect_target": "Offer to identify vendor or equipment attributes only if represented."
+      }
+    },
+    {
+      "id": "trap-off-domain-payroll",
+      "question": "How much should the pump operator be paid?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "Compensation decisions are outside drawing-grounded analysis.",
+        "redirect_target": "Offer equipment, connectivity, or represented-rule checks.",
+        "human_spot_check": true
+      }
+    },
+    {
+      "id": "trap-off-domain-translation",
+      "question": "Translate this sentence into Japanese: the meeting starts at noon.",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "out_of_scope",
+        "refusal_basis": "The request does not concern the loaded engineering source.",
+        "redirect_target": "Offer a concise menu of source-grounded drawing checks."
+      }
+    },
+    {
+      "id": "trap-ambiguous-safe",
+      "question": "Is this safe?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "needs_clarification",
+        "refusal_basis": "The requested safety criterion and scope are not specified.",
+        "redirect_target": "Ask for a criterion and offer specific topology or rule-pack checks."
+      }
+    },
+    {
+      "id": "trap-ambiguous-which-one",
+      "question": "Which one is wrong?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "needs_clarification",
+        "refusal_basis": "Neither the candidate objects nor the violated condition are identified.",
+        "redirect_target": "Ask which objects or rule to compare and offer available drawing checks."
+      }
+    },
+    {
+      "id": "trap-ambiguous-line-okay",
+      "question": "Is the line okay?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "needs_clarification",
+        "refusal_basis": "No line identity or acceptance criterion is supplied.",
+        "redirect_target": "Ask for the line and criterion, then offer connectivity or attribute checks.",
+        "human_spot_check": true
+      }
+    },
+    {
+      "id": "trap-ambiguous-approved",
+      "question": "Can this be approved?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "needs_clarification",
+        "refusal_basis": "Approval authority and criteria are not defined by the drawing.",
+        "redirect_target": "Clarify that approval needs an authority and offer evidence checks from the source."
+      }
+    },
+    {
+      "id": "trap-ambiguous-next-action",
+      "question": "What should I do next?",
+      "slice": "trap",
+      "drawing": "trap_bundle/e06-trap-drawing",
+      "ground_truth": {"verdict": "unanswerable", "witness_ids": []},
+      "trap_rubric": {
+        "expected_posture": "needs_clarification",
+        "refusal_basis": "The desired engineering task and decision context are unspecified.",
+        "redirect_target": "Ask what needs evaluation and offer concrete source-grounded checks."
+      }
+    }
+  ]
+}

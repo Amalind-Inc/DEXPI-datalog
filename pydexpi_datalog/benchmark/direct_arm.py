@@ -18,6 +18,7 @@ from pathlib import Path
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_UNSPECIFIED,
     POSTURES,
+    TRAP_EXPECTED_POSTURES,
     StructuredAnswer,
     VERDICTS,
 )
@@ -49,16 +50,19 @@ Return ONLY a JSON object with exactly these fields:
   "verdict": one of {json.dumps(list(VERDICTS))},
   "witness_ids": a list of DEXPI object IDs from the drawing that are the
     evidence for your verdict (empty if none apply),
-  "posture": one of {json.dumps(list(POSTURES))}
+  "posture": one of {json.dumps(list(POSTURES))},
+  "answer_text": a concise explanation of the result
 }}
 
 Rules:
 - "violation_found" / "no_violation" assert a conclusion from the drawing
   and require posture "source_grounded".
-- If the question cannot be answered from the drawing (missing data,
-  ambiguous, off-domain), use verdict "unanswerable" with the posture that
-  explains why ("source_data_unavailable" or "out_of_scope"), and do not
-  invent witness IDs.
+- If the drawing lacks required data, use "unanswerable" with posture
+  "source_data_unavailable". For an ambiguous request that needs a criterion
+  or object, use "needs_clarification". For an off-domain request, use
+  "out_of_scope". Do not invent witness IDs.
+- For an unanswerable, ambiguous, or off-domain request, answer_text must name
+  the source limitation or ambiguity and offer a concrete source-grounded next step.
 - Every witness ID must be copied exactly from the XML; never invent IDs.
 """
 
@@ -103,6 +107,7 @@ class DirectArm:
             verdict=parsed.verdict,
             witness_ids=parsed.witness_ids,
             posture=parsed.posture,
+            answer_text=parsed.answer_text,
             transcript=(
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -143,10 +148,17 @@ def parse_structured_answer(raw_text: object) -> StructuredAnswer:
     if posture not in POSTURES:
         return _degraded()
 
+    answer_text = payload.get("answer_text", "")
+    if not isinstance(answer_text, str):
+        return _degraded()
+    if posture in TRAP_EXPECTED_POSTURES and not answer_text.strip():
+        return _degraded()
+
     return StructuredAnswer(
         verdict=str(verdict),
         witness_ids=tuple(witness_raw),
         posture=str(posture),
+        answer_text=answer_text,
     )
 
 
