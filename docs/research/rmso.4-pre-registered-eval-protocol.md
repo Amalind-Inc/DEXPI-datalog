@@ -5,15 +5,15 @@
 **Model:** `deepseek/deepseek-v4-flash`  
 **Purpose:** a small feasibility proof, not a statistically powered benchmark
 
-This protocol decides between two production-shaped methods:
+This protocol compares two benchmark-shaped methods:
 
 - **Arm A — general-purpose agent:** a minimal read-only agent over raw DEXPI XML.
 - **Arm B — logic-capable agent:** an agent over the canonical EDB/predicate contract
   that may author and execute Soufflé/Datalog.
 
-The experiment asks whether logic capabilities make a cheap model shippably correct and
-grounded. It does not require either arm to reproduce an oracle's proof text or deduction
-order.
+The experiment asks whether logic capabilities make a cheap model qualify for further
+product investment on correctness, grounding, audit safety, and cost. It does not require
+either arm to reproduce an oracle's proof text or deduction order.
 
 The final verdict and exhaustive result witnesses are the primary product outcome. A
 correct outcome is nevertheless not shippable when its observable derivation contains a
@@ -37,6 +37,13 @@ the live configuration matches this document.
 
 A cheap but ungrounded answer is unshippable. Correctness and grounding qualify a method
 before cost is allowed to choose between methods.
+
+This is an evaluation/proof spine, not a production-loop design. A winning arm identifies
+the capability shape worth carrying forward; it does not directly authorize autonomous
+production execution, remove the Python backend's ownership of orchestration, or resolve
+the repository's generated-Datalog confirmation trust boundary. The autonomous read-only
+episodes are benchmark-harness exceptions. Any production adoption must reconcile ADR
+0003 and ADR 0008 explicitly rather than treating this result as an implicit override.
 
 ## Locked arms
 
@@ -90,6 +97,8 @@ precomputed witness IDs, or submit an answer not produced by its executed final 
   the one episode.
 - Hard wall-clock ceiling: **five minutes per episode**, measured from the first model
   call through final submission. Timeout earns zero credit; incurred cost still counts.
+- Per-call combined reasoning/visible-output ceiling: **8,192 tokens**. A provider that
+  cannot enforce and report this bounded output is ineligible for the run.
 - The time ceiling, rather than a revision-count limit, is the binding loop boundary.
   Turn/command limits must be set high enough not to bind first and must be recorded.
 
@@ -145,6 +154,18 @@ The score is path-independent. Result witnesses name the exhaustive violating or
 objects, not an ordered proof trace. Distinct sound programs and derivations receive the
 same outcome score.
 
+The values above are benchmark wire vocabulary, not new production outcome terminology:
+
+- `violation_found` maps to production outcome `violated`;
+- `no_violation` maps to `satisfied` only when exhaustive scope-completeness evidence is
+  mechanically present; otherwise the production interpretation is `indeterminate`;
+- `unanswerable` maps to `indeterminate` with the recorded missing-capability, permission,
+  or defeasibility reason.
+
+In particular, an empty result alone never proves `satisfied`. A qualifying negative
+answer must preserve the frozen input scope, executed exhaustive query, and replay showing
+that the complete scoped EDB was evaluated.
+
 ## Proof support and engine faithfulness
 
 Full outcome credit requires the exact result/rule witness set. Proof support is more
@@ -181,11 +202,12 @@ calls, commands, scripts, files, source references, execution results, revisions
 dependency links the arm submits for its final claims.
 
 Every final verdict claim and result witness must link to at least one replayable support
-path. Each submitted support step must declare one of:
+path. Each relied-upon submitted support step must reduce to one of:
 
 - a grounded source premise with an exact XML or EDB reference;
 - an observed tool/execution result with its artifact reference; or
-- a derived claim with explicit dependencies and the operation/rule that derives it.
+- a formally derived claim with explicit dependencies and an executable or otherwise
+  decidable operation/rule that derives it.
 
 Mechanical trace checks are architecture-neutral:
 
@@ -193,8 +215,8 @@ Mechanical trace checks are architecture-neutral:
 2. **Grounding:** every cited source premise exists exactly in the allowed source.
 3. **Replayability:** every script, query, or program used by a support path reproduces
    its cited intermediate and final results in the frozen sandbox.
-4. **Dependency validity:** every derived claim follows from its declared grounded or
-   replayed dependencies under the submitted operation/rule.
+4. **Dependency validity:** every formally derived claim follows from its declared
+   grounded or replayed dependencies under the submitted decidable operation/rule.
 5. **Consistency:** no support step contradicts the frozen source, another required step,
    the final structured answer, or the permission/defeasible abstention boundary.
 6. **Policy compliance:** no support path uses a prohibited source, tool, network call,
@@ -204,8 +226,16 @@ Mechanical trace checks are architecture-neutral:
    history into a post-hoc clean story.
 
 A correct final answer is **trace-unsafe and does not qualify** if any required claim lacks
-support or if any relied-upon support path contains an invented premise, invalid
-dependency, contradiction, prohibited source, or unreplayable computation.
+support or if any relied-upon support path contains an invented premise, invalid formal
+dependency, contradiction, prohibited source, or unreplayable computation. Free-form
+natural-language reasoning cannot serve as the sole mechanically credited support for a
+high-consequence claim; it must terminate in grounded references and replayable operations.
+
+The benchmark does **not** claim to decide the logical validity of arbitrary natural-
+language CoT. Exposed CoT is preserved and reviewed for attribution, contradictions, and
+process-engineer trust, but semantic judgments that cannot be reduced to the deterministic
+evidence boundary remain explicitly human/diagnostic rather than being laundered through
+an LLM judge.
 
 Trace presentation quality is reported separately and cannot rescue an incorrect or
 trace-unsafe answer. Report at least: support coverage, grounded-premise rate, replay
@@ -217,7 +247,9 @@ relevant cleanliness signal.
 After mechanical grading, the SME may review anonymized Arm A/Arm B traces side by side
 for process-engineer usability. Preference alone cannot change the benchmark verdict. A
 concrete SME allegation of an unsafe step must be recorded, reproduced against the frozen
-artifacts, and only changes qualification if the mechanical audit confirms it.
+artifacts, and changes mechanical qualification only if the deterministic audit confirms
+it. An unresolved but credible human trace-safety concern blocks a production deployment
+recommendation even when it does not alter the benchmark's architecture result.
 
 ## Cost accounting and spend safety
 
@@ -243,15 +275,26 @@ north_star(a)   = total_paid_USD(a) / total_credit(a)
 
 If total credit is zero, the north-star is positive infinity.
 
-The full scored run has a hard **$10 cumulative paid-call ceiling**. Do not start another
-paid call after recorded cumulative spend reaches the cap. An already-running call may
-produce only its bounded in-flight overage. If the cap prevents all 18 episodes from
-finishing, preserve the artifacts and report `INCOMPLETE`; do not compute a GO verdict
-from a selected subset. Raising the cap requires explicit product-owner approval.
+The full scored run has a hard **$10 cumulative paid-call ceiling**. Before every call,
+reserve its worst-case charge from the known input-token count, the 8,192-token combined
+output ceiling, and the maximum allowed provider input/output rates frozen in the run
+configuration. OpenRouter `max_price` (or an equivalent hard provider constraint) must
+prevent routing above those rates. Start the call only when:
+
+```text
+actual_spend + active_reservations + call_worst_case_charge <= $10
+```
+
+Replace the reservation with actual reported cost after the call. This preflight rule
+permits no unbounded in-flight overage. If a provider cannot enforce the token/price bounds
+or report cost, do not call it. If the cap prevents all 18 episodes from finishing,
+preserve the artifacts and report `INCOMPLETE`; do not compute a GO verdict from a selected
+subset. Raising the cap requires explicit product-owner approval.
 
 ## Qualification and decision rule
 
-An arm qualifies only if every one of its nine episodes earns credit `1.0`. Therefore:
+An arm qualifies under this benchmark only if every one of its nine episodes earns credit
+`1.0`. Therefore:
 
 - every verdict is correct;
 - every result-witness set is exact;
@@ -265,7 +308,7 @@ Partial precision/recall/F1 remains diagnostic but cannot make an arm shippable.
 
 | Arm A qualifies | Arm B qualifies | Pre-registered result |
 | --- | --- | --- |
-| No | No | `NO-GO / rethink`: neither method is shippable |
+| No | No | `NO-GO / rethink`: neither method qualifies for further product investment |
 | Yes | No | General-purpose agent wins; do not justify the logic engine |
 | No | Yes | `GO`: logic capabilities are required on this slice |
 | Yes | Yes | Lower USD per grounded-answer credit wins |
@@ -276,6 +319,17 @@ qualification. If both qualifying arms have exactly equal reported cost, the
 general-purpose agent wins on parsimony: the logic substrate added no measured outcome,
 audit-safety, or cost advantage.
 
+### Size-control interpretation override
+
+The small/large pairing separates a reasoning advantage from raw-XML long-context loss.
+If Arm B qualifies and every Arm A failure occurs only on a `large` entry while Arm A has
+full credit on the shallow control and every corresponding `small` entry, do **not** report
+that as proof that executable logic is required. Report
+`LONG_CONTEXT_GROUNDING_ADVANTAGE / ARCHITECTURE_UNRESOLVED`: structured grounding helped
+at scale, but this run did not distinguish execution from context representation as the
+cause. A logic-specific `GO` requires Arm A to fail at least one corresponding small core
+entry while Arm B qualifies, in addition to the ordinary decision table.
+
 ## Required run artifacts
 
 The run is auditable only if it preserves:
@@ -283,6 +337,7 @@ The run is auditable only if it preserves:
 - frozen question order and manifest/source hashes;
 - exact prompts, tool policy, model/provider settings, and environment identifiers;
 - per-call tokens, costs, resolved provider, timestamps, and errors;
+- per-call worst-case cost reservation and the frozen provider/token price bounds;
 - per-episode transcripts, command/tool history, wall time, and final structured answer;
 - submitted claim-to-support dependency links and the mechanically reduced final support
   subgraph;
@@ -301,13 +356,16 @@ The run is auditable only if it preserves:
    record the resolved provider per call.
 3. Make the five-minute timeout bind both agentic arms and ensure timeout degrades to a
    scored zero-credit episode rather than crashing or retrying.
-4. Enforce the cumulative $10 guard before each paid call.
+4. Enforce the 8,192-token combined output ceiling, provider `max_price`, worst-case
+   pre-call reservation, and cumulative $10 guard before each paid call.
 5. Materialize the exact nine-entry selection without duplicating mutable ground truth;
    fail if a source manifest changes or `rmso.7` lacks SME certification.
 6. Add precision/recall/F1/credit fields without replacing the existing exact-set grade.
 7. Implement and freeze the mechanical cross-size and counterfactual faithfulness probes.
-8. Extend the answer artifact with claim-to-support dependency links and implement the
-   architecture-neutral trace checks without using an LLM judge.
+8. Extend the answer artifact with claim-to-support dependency links and implement hard
+   trace checks only for grounded references and replayable/decidable operations. Preserve
+   free-form CoT for human diagnostics without claiming a general semantic verifier or
+   using an LLM judge.
 9. Dry-run the complete path with scripted providers and local Soufflé; one non-scored live
    infrastructure smoke may validate connectivity/billing, but it may not reuse a scored
    entry or create a replacement attempt.
