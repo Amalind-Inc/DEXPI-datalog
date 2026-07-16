@@ -15,6 +15,12 @@ The experiment asks whether logic capabilities make a cheap model shippably corr
 grounded. It does not require either arm to reproduce an oracle's proof text or deduction
 order.
 
+The final verdict and exhaustive result witnesses are the primary product outcome. A
+correct outcome is nevertheless not shippable when its observable derivation contains a
+fabricated premise, invalid inference, contradiction, prohibited source, or an
+unreplayable evidence gap. High-consequence adoption requires both answer correctness and
+an inspectable safe derivation.
+
 No scored call may run until the product owner has certified the harder-question ground
 truth in `rmso.7`, the counterfactual probes below are checked in and oracle-verified, and
 the live configuration matches this document.
@@ -26,6 +32,8 @@ the live configuration matches this document.
 - **H2 — product value:** the logic-capable agent qualifies when the general-purpose
   agent does not, or both qualify and the logic-capable agent has lower cost per correct,
   grounded answer.
+- **H3 — audit safety:** every qualifying answer has complete, grounded, replayable
+  observable support, independent of which arm produced it.
 
 A cheap but ungrounded answer is unshippable. Correctness and grounding qualify a method
 before cost is allowed to choose between methods.
@@ -165,6 +173,52 @@ outcome grounding still gates qualification.
 
 No LLM judge, canonical program, or canonical proof sequence decides faithfulness.
 
+## Verified audit trace
+
+The benchmark does not claim access to a model's complete latent reasoning. It preserves
+and grades the **observable audit trace**: model messages exposed by the provider, tool
+calls, commands, scripts, files, source references, execution results, revisions, and the
+dependency links the arm submits for its final claims.
+
+Every final verdict claim and result witness must link to at least one replayable support
+path. Each submitted support step must declare one of:
+
+- a grounded source premise with an exact XML or EDB reference;
+- an observed tool/execution result with its artifact reference; or
+- a derived claim with explicit dependencies and the operation/rule that derives it.
+
+Mechanical trace checks are architecture-neutral:
+
+1. **Coverage:** every final verdict claim and witness has a support path.
+2. **Grounding:** every cited source premise exists exactly in the allowed source.
+3. **Replayability:** every script, query, or program used by a support path reproduces
+   its cited intermediate and final results in the frozen sandbox.
+4. **Dependency validity:** every derived claim follows from its declared grounded or
+   replayed dependencies under the submitted operation/rule.
+5. **Consistency:** no support step contradicts the frozen source, another required step,
+   the final structured answer, or the permission/defeasible abstention boundary.
+6. **Policy compliance:** no support path uses a prohibited source, tool, network call,
+   hidden oracle artifact, or another episode.
+7. **History integrity:** failed and superseded attempts remain in the transcript; the
+   submitted support path must identify the final relied-upon artifacts without rewriting
+   history into a post-hoc clean story.
+
+A correct final answer is **trace-unsafe and does not qualify** if any required claim lacks
+support or if any relied-upon support path contains an invented premise, invalid
+dependency, contradiction, prohibited source, or unreplayable computation.
+
+Trace presentation quality is reported separately and cannot rescue an incorrect or
+trace-unsafe answer. Report at least: support coverage, grounded-premise rate, replay
+success, invalid/unsupported relied-upon steps, total observable steps, superseded steps,
+tool calls, trace tokens, and the size of the final relied-upon support subgraph. A shorter
+trace is not automatically better; a smaller fully verified support subgraph is the
+relevant cleanliness signal.
+
+After mechanical grading, the SME may review anonymized Arm A/Arm B traces side by side
+for process-engineer usability. Preference alone cannot change the benchmark verdict. A
+concrete SME allegation of an unsafe step must be recorded, reproduced against the frozen
+artifacts, and only changes qualification if the mechanical audit confirms it.
+
 ## Cost accounting and spend safety
 
 Every paid inference call attributable to an episode counts, including initial calls,
@@ -203,6 +257,8 @@ An arm qualifies only if every one of its nine episodes earns credit `1.0`. Ther
 - every result-witness set is exact;
 - both permission/defeasible entries abstain correctly;
 - there are no invented or extra result witnesses;
+- every final claim and witness has a complete grounded, replayable, mechanically valid
+  observable support path with no relied-upon unsafe step;
 - for Arm B, every applicable core program also passes the mechanical faithfulness gate.
 
 Partial precision/recall/F1 remains diagnostic but cannot make an arm shippable.
@@ -216,7 +272,9 @@ Partial precision/recall/F1 remains diagnostic but cannot make an arm shippable.
 
 When both qualify, each has total credit `9`, so the north-star comparison is equivalent
 to comparing total paid USD. Cost is never allowed to rescue a method that failed
-qualification.
+qualification. If both qualifying arms have exactly equal reported cost, the
+general-purpose agent wins on parsimony: the logic substrate added no measured outcome,
+audit-safety, or cost advantage.
 
 ## Required run artifacts
 
@@ -226,9 +284,13 @@ The run is auditable only if it preserves:
 - exact prompts, tool policy, model/provider settings, and environment identifiers;
 - per-call tokens, costs, resolved provider, timestamps, and errors;
 - per-episode transcripts, command/tool history, wall time, and final structured answer;
+- submitted claim-to-support dependency links and the mechanically reduced final support
+  subgraph;
 - Arm B's final executed program, all observed diagnostics, execution outputs, unchanged
   cross-size replay, and counterfactual-probe results;
 - per-episode verdict match, precision, recall, F1, credit, and qualification reason;
+- per-episode trace coverage, grounding, replay, dependency-validity, consistency, policy,
+  history-integrity, and cleanliness diagnostics;
 - aggregate cost, credit, north-star, spend-cap status, and mechanically generated verdict.
 
 ## Implementation prerequisites — no live run before these are green
@@ -244,7 +306,8 @@ The run is auditable only if it preserves:
    fail if a source manifest changes or `rmso.7` lacks SME certification.
 6. Add precision/recall/F1/credit fields without replacing the existing exact-set grade.
 7. Implement and freeze the mechanical cross-size and counterfactual faithfulness probes.
-8. Dry-run the complete path with scripted providers and local Soufflé; one non-scored live
+8. Extend the answer artifact with claim-to-support dependency links and implement the
+   architecture-neutral trace checks without using an LLM judge.
+9. Dry-run the complete path with scripted providers and local Soufflé; one non-scored live
    infrastructure smoke may validate connectivity/billing, but it may not reuse a scored
    entry or create a replacement attempt.
-
