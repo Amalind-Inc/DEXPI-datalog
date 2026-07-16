@@ -1,0 +1,367 @@
+{
+ "questions": [
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01",
+   "ground_truth": {
+    "verdict": "violation_found",
+    "witness_ids": [
+     "7fdefa2f-5751-48eb-8c7c-34dd07cc16d3",
+     "8b1fc943-32e4-417d-9358-703251ff1fa5",
+     "e27d8412-bb29-4dc4-9b45-b2939867bdbd",
+     "f3156923-be75-4fc1-8f08-7a7d022facff"
+    ]
+   },
+   "id": "hq-nozzle-piping-attachment-small",
+   "oracle": {
+    "edges": [
+     {
+      "attr_name": "sourceItem",
+      "label": "reference"
+     },
+     {
+      "attr_name": "targetItem",
+      "label": "reference"
+     },
+     {
+      "attr_name": "sourceNode",
+      "label": "reference"
+     },
+     {
+      "attr_name": "targetNode",
+      "label": "reference"
+     }
+    ],
+    "node": {
+     "label": "Nozzle"
+    },
+    "operation": "no_incoming_edge_of_any"
+   },
+   "question": "Piping attachment integrity: find every Nozzle on this drawing that is not attached to the piping network, i.e. it never appears as the target of a reference edge whose attr_name is sourceItem, targetItem, sourceNode, or targetNode. Check every nozzle exhaustively against every reference edge. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "small",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+   "ground_truth": {
+    "verdict": "violation_found",
+    "witness_ids": [
+     "7233d735-0534-4e5a-a779-d45445f05584",
+     "7861ed8e-3472-4f9c-b280-579ea9c61cc8",
+     "a2413f38-7edc-4658-bd01-7d42b7c5f775"
+    ]
+   },
+   "id": "hq-nozzle-piping-attachment-large",
+   "oracle": {
+    "edges": [
+     {
+      "attr_name": "sourceItem",
+      "label": "reference"
+     },
+     {
+      "attr_name": "targetItem",
+      "label": "reference"
+     },
+     {
+      "attr_name": "sourceNode",
+      "label": "reference"
+     },
+     {
+      "attr_name": "targetNode",
+      "label": "reference"
+     }
+    ],
+    "node": {
+     "label": "Nozzle"
+    },
+    "operation": "no_incoming_edge_of_any"
+   },
+   "question": "Piping attachment integrity: find every Nozzle on this drawing that is not attached to the piping network, i.e. it never appears as the target of a reference edge whose attr_name is sourceItem, targetItem, sourceNode, or targetNode. Check every nozzle exhaustively against every reference edge. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "large",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/i05-two-flow-indications-and-flow-ratio-control-in-ccr-i05v01-ver-ex01",
+   "ground_truth": {
+    "verdict": "no_violation",
+    "witness_ids": []
+   },
+   "id": "hq-valve-monitoring-reachability-small",
+   "oracle": {
+    "node": {
+     "label": [
+      "BallValve",
+      "ButterflyValve",
+      "GlobeValve",
+      "OperatedValve",
+      "SwingCheckValve",
+      "SpringLoadedGlobeSafetyValve"
+     ]
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": "ProcessInstrumentationFunction"
+    }
+   },
+   "question": "Monitoring coverage: find every valve on this drawing (any of BallValve, ButterflyValve, GlobeValve, OperatedValve, SwingCheckValve, or SpringLoadedGlobeSafetyValve) that is NOT reachable from any ProcessInstrumentationFunction by following the drawing's directed edges source-to-target; paths may be any number of hops through any intermediate objects. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "small",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+   "ground_truth": {
+    "verdict": "violation_found",
+    "witness_ids": [
+     "2ef2ea95-6a8d-429c-8ecd-a31229d12685",
+     "36232125-bfd9-4541-89bd-dbd0b2f12dab",
+     "5488854d-0a35-4f8b-bb08-4f6da3a3320c",
+     "65e9e51f-286e-461d-8014-402a2395cc45",
+     "936a072a-b100-4a64-955c-e9ab938bd50f",
+     "94ec410d-ab07-4c63-b100-8b4fd35fefcf",
+     "9e047159-6b57-4c98-b2e7-f69b2145ae70",
+     "c8eb2505-c5f2-4d4d-9f89-aa89ff145b65"
+    ]
+   },
+   "id": "hq-valve-monitoring-reachability-large",
+   "oracle": {
+    "node": {
+     "label": [
+      "BallValve",
+      "ButterflyValve",
+      "GlobeValve",
+      "OperatedValve",
+      "SwingCheckValve",
+      "SpringLoadedGlobeSafetyValve"
+     ]
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": "ProcessInstrumentationFunction"
+    }
+   },
+   "question": "Monitoring coverage: find every valve on this drawing (any of BallValve, ButterflyValve, GlobeValve, OperatedValve, SwingCheckValve, or SpringLoadedGlobeSafetyValve) that is NOT reachable from any ProcessInstrumentationFunction by following the drawing's directed edges source-to-target; paths may be any number of hops through any intermediate objects. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "large",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01",
+   "ground_truth": {
+    "verdict": "no_violation",
+    "witness_ids": []
+   },
+   "id": "hq-equipment-pump-connectivity-small",
+   "oracle": {
+    "direction": "undirected",
+    "edges": [
+     {
+      "attr_name": "sourceItem"
+     },
+     {
+      "attr_name": "targetItem"
+     },
+     {
+      "attr_name": "sourceNode"
+     },
+     {
+      "attr_name": "targetNode"
+     },
+     {
+      "attr_name": "nodes"
+     },
+     {
+      "attr_name": "segments"
+     },
+     {
+      "attr_name": "connections"
+     },
+     {
+      "attr_name": "items"
+     },
+     {
+      "attr_name": "pipingNetworkSystems"
+     },
+     {
+      "attr_name": "nozzles"
+     }
+    ],
+    "node": {
+     "label": [
+      "PlateHeatExchanger",
+      "TubularHeatExchanger",
+      "Tank",
+      "ProcessColumn"
+     ]
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": [
+      "CentrifugalPump",
+      "ReciprocatingPump"
+     ]
+    }
+   },
+   "question": "Process connectivity: find every major process equipment item on this drawing (any of PlateHeatExchanger, TubularHeatExchanger, Tank, or ProcessColumn) that has NO piping path to any pump (CentrifugalPump or ReciprocatingPump). A piping path traverses, in either direction, only edges whose attr_name is one of sourceItem, targetItem, sourceNode, targetNode, nodes, segments, connections, items, pipingNetworkSystems, or nozzles; paths may be any number of hops. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "small",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+   "ground_truth": {
+    "verdict": "no_violation",
+    "witness_ids": []
+   },
+   "id": "hq-equipment-pump-connectivity-large",
+   "oracle": {
+    "direction": "undirected",
+    "edges": [
+     {
+      "attr_name": "sourceItem"
+     },
+     {
+      "attr_name": "targetItem"
+     },
+     {
+      "attr_name": "sourceNode"
+     },
+     {
+      "attr_name": "targetNode"
+     },
+     {
+      "attr_name": "nodes"
+     },
+     {
+      "attr_name": "segments"
+     },
+     {
+      "attr_name": "connections"
+     },
+     {
+      "attr_name": "items"
+     },
+     {
+      "attr_name": "pipingNetworkSystems"
+     },
+     {
+      "attr_name": "nozzles"
+     }
+    ],
+    "node": {
+     "label": [
+      "PlateHeatExchanger",
+      "TubularHeatExchanger",
+      "Tank",
+      "ProcessColumn"
+     ]
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": [
+      "CentrifugalPump",
+      "ReciprocatingPump"
+     ]
+    }
+   },
+   "question": "Process connectivity: find every major process equipment item on this drawing (any of PlateHeatExchanger, TubularHeatExchanger, Tank, or ProcessColumn) that has NO piping path to any pump (CentrifugalPump or ReciprocatingPump). A piping path traverses, in either direction, only edges whose attr_name is one of sourceItem, targetItem, sourceNode, targetNode, nodes, segments, connections, items, pipingNetworkSystems, or nozzles; paths may be any number of hops. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "large",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/i05-two-flow-indications-and-flow-ratio-control-in-ccr-i05v01-ver-ex01",
+   "ground_truth": {
+    "verdict": "no_violation",
+    "witness_ids": []
+   },
+   "id": "hq-instrumentation-actuation-closure-small",
+   "oracle": {
+    "direction": "reverse",
+    "node": {
+     "label": "ProcessInstrumentationFunction"
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": [
+      "BallValve",
+      "ButterflyValve",
+      "GlobeValve",
+      "OperatedValve",
+      "SwingCheckValve",
+      "SpringLoadedGlobeSafetyValve"
+     ]
+    }
+   },
+   "question": "Actuation closure: find every ProcessInstrumentationFunction on this drawing that cannot act on the process, i.e. following the drawing's directed edges source-to-target it reaches NO valve (none of BallValve, ButterflyValve, GlobeValve, OperatedValve, SwingCheckValve, or SpringLoadedGlobeSafetyValve); paths may be any number of hops. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "small",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/c02-process-column-basf-c02v03-ver-ex02",
+   "ground_truth": {
+    "verdict": "violation_found",
+    "witness_ids": [
+     "25451d9c-395f-4799-805c-f2b888930479",
+     "af84a074-3996-4896-a1a2-32359755a156",
+     "c4caf52f-a41d-4ba8-ae2c-61d790cabc57"
+    ]
+   },
+   "id": "hq-instrumentation-actuation-closure-large",
+   "oracle": {
+    "direction": "reverse",
+    "node": {
+     "label": "ProcessInstrumentationFunction"
+    },
+    "operation": "not_reachable_from",
+    "source_node": {
+     "label": [
+      "BallValve",
+      "ButterflyValve",
+      "GlobeValve",
+      "OperatedValve",
+      "SwingCheckValve",
+      "SpringLoadedGlobeSafetyValve"
+     ]
+    }
+   },
+   "question": "Actuation closure: find every ProcessInstrumentationFunction on this drawing that cannot act on the process, i.e. following the drawing's directed edges source-to-target it reaches NO valve (none of BallValve, ButterflyValve, GlobeValve, OperatedValve, SwingCheckValve, or SpringLoadedGlobeSafetyValve); paths may be any number of hops. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.",
+   "size_bucket": "large",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01",
+   "ground_truth": {
+    "verdict": "unanswerable",
+    "witness_ids": []
+   },
+   "id": "hq-permission-defeasible-control-small",
+   "oracle": {
+    "operation": "abstention_expected"
+   },
+   "question": "Company practice permits starting centrifugal pump P-4713 against a blocked discharge only when an authorized minimum-flow bypass is in service. Based on this drawing, is it permitted to start pump P-4713 against a blocked discharge? If the drawing's facts alone cannot soundly settle whether this is permitted (for example, the governing authorization or exemption is not represented in the drawing), answer unanswerable with no witnesses rather than guessing a verdict.",
+   "size_bucket": "small",
+   "slice": "hand_authored"
+  },
+  {
+   "category": "compliance_universal",
+   "drawing": "../graph_contract/corpus/c01-dexpi-reference-p-id-c01v04-ver-ex01",
+   "ground_truth": {
+    "verdict": "unanswerable",
+    "witness_ids": []
+   },
+   "id": "hq-permission-defeasible-control-large",
+   "oracle": {
+    "operation": "abstention_expected"
+   },
+   "question": "Site policy permits operating tank T4750 without an independent overpressure protection device only when a documented exemption establishes an alternative relief path. Based on this drawing, is it permitted to operate tank T4750 without an independent overpressure protection device? If the drawing's facts alone cannot soundly settle whether this is permitted (for example, the governing exemption is not represented in the drawing), answer unanswerable with no witnesses rather than guessing a verdict.",
+   "size_bucket": "large",
+   "slice": "hand_authored"
+  }
+ ],
+ "schema_version": 2
+}

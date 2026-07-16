@@ -14,6 +14,7 @@ from pathlib import Path
 from pydexpi_datalog.benchmark.contract import (
     GroundTruth,
     VERDICT_NO_VIOLATION,
+    VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
 )
 
@@ -22,12 +23,19 @@ _MATCH_NODES = "match_nodes"
 _OUTGOING_COUNT = "outgoing_edge_count_not_equal"
 _INCOMING_COUNT = "incoming_edge_count_not_equal"
 _OUTGOING_LESS_THAN = "outgoing_edge_count_less_than"
+_NOT_REACHABLE_FROM = "not_reachable_from"
+_NO_INCOMING_EDGE_OF_ANY = "no_incoming_edge_of_any"
+_ABSTENTION_EXPECTED = "abstention_expected"
 _OPERATIONS = {
     _MATCH_NODES,
     _OUTGOING_COUNT,
     _INCOMING_COUNT,
     _OUTGOING_LESS_THAN,
+    _NOT_REACHABLE_FROM,
+    _NO_INCOMING_EDGE_OF_ANY,
+    _ABSTENTION_EXPECTED,
 }
+_REACHABILITY_DIRECTIONS = ("forward", "reverse", "undirected")
 
 
 def verify_hand_authored_manifest(path: Path) -> int:
@@ -70,6 +78,11 @@ def derive_ground_truth(
     operation = oracle.get("operation")
     if operation not in _OPERATIONS:
         raise ValueError(f"Unsupported hand-authored oracle operation: {operation!r}")
+    if operation == _ABSTENTION_EXPECTED:
+        # Permission/defeasible negative control: the drawing's monotone facts
+        # cannot soundly settle the question, so the only correct answer is
+        # abstention with no witnesses.
+        return GroundTruth(verdict=VERDICT_UNANSWERABLE, witness_ids=())
 
     facts = graph_facts.get("facts")
     if not isinstance(facts, Mapping):
@@ -90,6 +103,27 @@ def derive_ground_truth(
 
     if operation == _MATCH_NODES:
         witnesses = _node_ids(candidates)
+    elif operation == _NOT_REACHABLE_FROM:
+        witnesses = _reachability_witnesses(
+            oracle=oracle,
+            raw_nodes=raw_nodes,
+            raw_edges=raw_edges,
+            candidates=candidates,
+        )
+    elif operation == _NO_INCOMING_EDGE_OF_ANY:
+        edge_matches = _required_match_list(oracle, "edges")
+        witnesses = tuple(
+            sorted(
+                str(node["node_id"])
+                for node in candidates
+                if not any(
+                    isinstance(edge, Mapping)
+                    and edge.get("target_id") == node["node_id"]
+                    and any(_attributes_match(edge, match) for match in edge_matches)
+                    for edge in raw_edges
+                )
+            )
+        )
     else:
         edge_match = _required_match(oracle, "edge")
         expected = oracle.get("expected")
@@ -131,13 +165,91 @@ def _required_match(oracle: Mapping[str, object], field: str) -> Mapping[str, ob
     return value
 
 
+def _required_match_list(
+    oracle: Mapping[str, object], field: str
+) -> list[Mapping[str, object]]:
+    value = oracle.get(field)
+    if not isinstance(value, list) or not value:
+        raise ValueError(
+            f"Hand-authored oracle {field} must be a non-empty list of matches."
+        )
+    return [_required_match({field: match}, field) for match in value]
+
+
+def _reachability_witnesses(
+    *,
+    oracle: Mapping[str, object],
+    raw_nodes: list[object],
+    raw_edges: list[object],
+    candidates: list[Mapping[str, object]],
+) -> tuple[str, ...]:
+    """IDs of candidates with no path from (or to) any matching source node."""
+    direction = oracle.get("direction", "forward")
+    if direction not in _REACHABILITY_DIRECTIONS:
+        raise ValueError(
+            f"Reachability oracle direction must be one of "
+            f"{list(_REACHABILITY_DIRECTIONS)!r}, got {direction!r}."
+        )
+    source_match = _required_match(oracle, "source_node")
+    raw_edge_matches = oracle.get("edges")
+    edge_matches = (
+        None if raw_edge_matches is None else _required_match_list(oracle, "edges")
+    )
+
+    adjacency: dict[str, list[str]] = {}
+    for edge in raw_edges:
+        if not isinstance(edge, Mapping):
+            continue
+        if edge_matches is not None and not any(
+            _attributes_match(edge, match) for match in edge_matches
+        ):
+            continue
+        source_id = edge.get("source_id")
+        target_id = edge.get("target_id")
+        if not isinstance(source_id, str) or not isinstance(target_id, str):
+            continue
+        if direction in ("forward", "undirected"):
+            adjacency.setdefault(source_id, []).append(target_id)
+        if direction in ("reverse", "undirected"):
+            adjacency.setdefault(target_id, []).append(source_id)
+
+    frontier = [
+        str(node["node_id"])
+        for node in raw_nodes
+        if isinstance(node, Mapping)
+        and isinstance(node.get("node_id"), str)
+        and _attributes_match(node, source_match)
+    ]
+    reached = set(frontier)
+    while frontier:
+        node_id = frontier.pop()
+        for neighbor in adjacency.get(node_id, []):
+            if neighbor not in reached:
+                reached.add(neighbor)
+                frontier.append(neighbor)
+
+    return tuple(
+        sorted(
+            str(node["node_id"])
+            for node in candidates
+            if node["node_id"] not in reached
+        )
+    )
+
+
 def _attributes_match(
     item: Mapping[str, object], expected: Mapping[str, object]
 ) -> bool:
     attributes = item.get("attributes")
-    return isinstance(attributes, Mapping) and all(
-        attributes.get(name) == value for name, value in expected.items()
-    )
+    if not isinstance(attributes, Mapping):
+        return False
+    for name, value in expected.items():
+        if isinstance(value, list):
+            if attributes.get(name) not in value:
+                return False
+        elif attributes.get(name) != value:
+            return False
+    return True
 
 
 def _count_fails(*, count: int, expected: int, operation: object) -> bool:
