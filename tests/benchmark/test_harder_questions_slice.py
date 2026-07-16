@@ -144,6 +144,18 @@ def test_no_incoming_edge_of_any_flags_unattached_nodes() -> None:
     assert truth.witness_ids == ("tank-2",)
 
 
+def test_reachability_with_no_matching_sources_is_rejected_as_vacuous() -> None:
+    with pytest.raises(ValueError, match="matches no nodes"):
+        derive_ground_truth(
+            CHAIN_GRAPH,
+            {
+                "operation": "not_reachable_from",
+                "node": {"label": "Tank"},
+                "source_node": {"label": "Compressor"},
+            },
+        )
+
+
 def test_abstention_expected_derives_unanswerable_with_no_witnesses() -> None:
     truth = derive_ground_truth(CHAIN_GRAPH, {"operation": "abstention_expected"})
 

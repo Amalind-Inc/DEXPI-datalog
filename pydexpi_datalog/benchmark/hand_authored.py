@@ -220,6 +220,11 @@ def _reachability_witnesses(
         and isinstance(node.get("node_id"), str)
         and _attributes_match(node, source_match)
     ]
+    if not frontier:
+        raise ValueError(
+            "Reachability oracle source_node matches no nodes in this drawing; "
+            "the question would be vacuously true for every candidate."
+        )
     reached = set(frontier)
     while frontier:
         node_id = frontier.pop()
