@@ -215,7 +215,7 @@ def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
             turns_path,
             json={
                 "request_id": "review-request",
-                "question": "What is downstream of the piping?",
+                "question": "What is downstream of the segment?",
             },
         ).json()
         assert paused["status"] == "paused"
@@ -239,7 +239,7 @@ def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
             turns_path,
             json={
                 "request_id": "cancel-request",
-                "question": "What is upstream of the piping?",
+                "question": "What is upstream of the segment?",
             },
         ).json()
         canceled = client.post(
