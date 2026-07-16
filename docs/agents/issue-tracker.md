@@ -9,6 +9,23 @@ prefixed `pydexpi-datalog-1-`.
 **External PRs are not a triage surface** — beads is internal, so `/triage` has no PR queue
 here.
 
+## CLI authority: `bd` → `br` migration (why `br`, not `bd`)
+
+This repo is mid-migration from `bd` (Go beads, Homebrew) to **`br` (beads_rust)**. `br` is
+prescribed because it is *verified* as the source of truth — this is a migration state, not a
+contradiction of project rules:
+
+- `br` owns the live store (`.beads/beads.db`, prefix `pydexpi-datalog-1`) holding the full
+  backlog.
+- The legacy `bd` CLI is **blind to that store** — `bd ready` returns none of the current
+  beads — so `bd`-based instructions no longer function here.
+- The user has explicitly chosen `br` (project memory `use-br-not-bd`: "`br` is the source of
+  truth the user works against").
+
+The root `AGENTS.md` still references legacy `bd` commands (`bd ready`, `bd sync`, …) and is
+**stale**; convert it with the `bd-to-br-migration` skill (`bd sync` → `br sync --flush-only`,
+etc.). Until that migration lands, `br` wins any `bd`/`br` conflict.
+
 ## Conventions
 
 - **Create**: `br create "<title>" -t <type> -p <P0-P4> -d "<body>"`; `--parent <id>` for a
