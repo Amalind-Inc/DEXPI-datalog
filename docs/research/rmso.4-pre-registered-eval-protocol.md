@@ -8,8 +8,8 @@
 This protocol compares two benchmark-shaped methods:
 
 - **Arm A — general-purpose agent:** a minimal read-only agent over raw DEXPI XML.
-- **Arm B — logic-capable agent:** an agent over the canonical EDB/predicate contract
-  that may author and execute Soufflé/Datalog.
+- **Arm B — logic-capable agent:** an agent over the graph-mirrored fact vocabulary and
+  allowed derived-predicate contract that may author and execute Soufflé/Datalog.
 
 The experiment asks whether logic capabilities make a cheap model qualify for further
 product investment on correctness, grounding, audit safety, and cost. It does not require
@@ -28,7 +28,7 @@ the live configuration matches this document.
 ## Hypotheses
 
 - **H1 — logic authoring feasibility:** V4 Flash can author a faithful executable program
-  over the canonical EDB.
+  over the graph-mirrored fact vocabulary derived from the canonical base fact layer.
 - **H2 — product value:** the logic-capable agent qualifies when the general-purpose
   agent does not, or both qualify and the logic-capable agent has lower cost per correct,
   grounded answer.
@@ -67,8 +67,9 @@ Forbidden:
 
 ### Arm B — logic-capable agent
 
-Arm B receives the question, canonical grounded EDB facts, and the allowed predicate
-contract. It receives the same minimal shell/scratch capability plus Soufflé.
+Arm B receives the question, the graph-mirrored EDB facts exported from the canonical base
+fact layer, and the allowed derived-predicate contract. It receives the same minimal
+shell/scratch capability plus Soufflé.
 
 It may:
 
@@ -164,7 +165,7 @@ The values above are benchmark wire vocabulary, not new production outcome termi
 
 In particular, an empty result alone never proves `satisfied`. A qualifying negative
 answer must preserve the frozen input scope, executed exhaustive query, and replay showing
-that the complete scoped EDB was evaluated.
+that the complete scoped graph-mirrored fact export was evaluated.
 
 ## Proof support and engine faithfulness
 
@@ -178,7 +179,8 @@ the support rather than a small ordered list of positive premises.
 
 An Arm B core program must also pass all applicable mechanical faithfulness checks:
 
-1. Compile and execute over only the approved EDB/predicate contract and authored IDB.
+1. Compile and execute over only the approved graph-mirrored EDB, derived-predicate
+   contract, and authored IDB.
 2. Contain no hidden drawing UUID or precomputed witness literal that was not stated in
    the question.
 3. Produce the exact oracle result on its episode drawing.
@@ -236,6 +238,13 @@ language CoT. Exposed CoT is preserved and reviewed for attribution, contradicti
 process-engineer trust, but semantic judgments that cannot be reduced to the deterministic
 evidence boundary remain explicitly human/diagnostic rather than being laundered through
 an LLM judge.
+
+This is a manifest-specific tracer, not a general proof framework. The mechanically
+credited support vocabulary is deliberately limited to exact source/fact references,
+captured shell-command or script artifacts with replayed output, and executed Soufflé
+derivations. Do not introduce an extensible proof language, arbitrary theorem prover, or
+general CoT semantic classifier for this nine-entry spike. A relied-upon step outside this
+decidable vocabulary is uncredited and routed to the human diagnostic review.
 
 Trace presentation quality is reported separately and cannot rescue an incorrect or
 trace-unsafe answer. Report at least: support coverage, grounded-premise rate, replay
