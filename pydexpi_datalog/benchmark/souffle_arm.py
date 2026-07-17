@@ -44,6 +44,9 @@ from pydexpi_datalog.benchmark.agentic_arm import (
 )
 from pydexpi_datalog.benchmark.contract import POSTURES, VERDICTS
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
+from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
+    LockedOpenRouterGateway,
+)
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     build_graph_facts_datalog,
     load_graph_topology_idb,
@@ -201,6 +204,7 @@ def create_souffle_arm(
     kira_dir: Path,
     budgets: EpisodeBudgets,
     environ: Mapping[str, str] | None = None,
+    request_gateway: LockedOpenRouterGateway | None = None,
 ) -> AgenticArm:
     """Build the live Arm C adapter for one friendly model key."""
     env = dict(os.environ if environ is None else environ)
@@ -217,6 +221,7 @@ def create_souffle_arm(
         kira_dir=kira_dir,
         model=SOUFFLE_ARM_MODELS[model_key],
         environ=env,
+        request_gateway=request_gateway,
     )
     return AgenticArm(
         runner=runner,

@@ -544,6 +544,48 @@ def test_live_runner_timeout_returns_a_rejected_episode_without_retry(
     assert result.usage["timed_out"] is True
 
 
+def test_live_runner_routes_episode_through_configured_request_gateway(
+    tmp_path: Path, monkeypatch
+) -> None:
+    commands = []
+
+    class ScriptedGateway:
+        base_url = "http://127.0.0.1:43123/v1"
+        entered = False
+        exited = False
+
+        def __enter__(self):
+            self.entered = True
+            return self
+
+        def __exit__(self, *exc_info):
+            self.exited = True
+
+    gateway = ScriptedGateway()
+
+    def complete(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", complete)
+    runner = HarborKiraEpisodeRunner(
+        kira_dir=Path("/tmp/terminus-kira"),
+        model="openrouter/deepseek/deepseek-v4-flash",
+        request_gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    runner.run(
+        task_dir=tmp_path / "tasks" / "benchmark-agentic-q1",
+        jobs_dir=tmp_path / "jobs",
+        budgets=EpisodeBudgets(agent_timeout_sec=300.0),
+    )
+
+    assert gateway.entered is True
+    assert gateway.exited is True
+    assert len(commands) == 1
+    assert "api_base=http://127.0.0.1:43123/v1" in commands[0]
+
+
 def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
     jobs_dir = tmp_path / "jobs"
     trial_dir = jobs_dir / "run" / "trial-0"
@@ -653,6 +695,20 @@ def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model() -> None
     )
 
     assert arm.runner.model == "openrouter/deepseek/deepseek-v4-flash"
+
+
+def test_live_arm_constructor_accepts_locked_request_gateway() -> None:
+    gateway = object()
+
+    arm = create_agentic_arm(
+        "deepseek",
+        kira_dir=Path("/tmp/terminus-kira"),
+        budgets=BUDGETS,
+        environ={"OPENROUTER_API_KEY": "x"},
+        request_gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    assert arm.runner.request_gateway is gateway
 
 
 # --------------------------------------------------------------------------

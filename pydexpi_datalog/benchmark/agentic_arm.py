@@ -31,7 +31,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Mapping, Sequence, Protocol, runtime_checkable
 
@@ -44,6 +44,9 @@ from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.direct_arm import (
     DEGRADED_VERDICT,
     parse_structured_answer,
+)
+from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
+    LockedOpenRouterGateway,
 )
 
 # Friendly model keys -> LiteLLM model strings routed through OpenRouter,
@@ -620,6 +623,7 @@ class HarborKiraEpisodeRunner:
     kira_dir: Path
     model: str
     api_base: str | None = None
+    request_gateway: LockedOpenRouterGateway | None = None
     agent_import_path: str = "terminus_kira.terminus_kira:TerminusKira"
     environ: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
 
@@ -661,9 +665,34 @@ class HarborKiraEpisodeRunner:
     def run(
         self, *, task_dir: Path, jobs_dir: Path, budgets: EpisodeBudgets
     ) -> EpisodeResult:
+        if self.request_gateway is not None:
+            with self.request_gateway as gateway:
+                command = replace(
+                    self,
+                    api_base=gateway.base_url,
+                    request_gateway=None,
+                ).build_command(
+                    task_dir=task_dir,
+                    jobs_dir=jobs_dir,
+                    budgets=budgets,
+                )
+                return self._run_command(
+                    command=command,
+                    jobs_dir=jobs_dir,
+                    budgets=budgets,
+                )
         command = self.build_command(
             task_dir=task_dir, jobs_dir=jobs_dir, budgets=budgets
         )
+        return self._run_command(command=command, jobs_dir=jobs_dir, budgets=budgets)
+
+    def _run_command(
+        self,
+        *,
+        command: tuple[str, ...],
+        jobs_dir: Path,
+        budgets: EpisodeBudgets,
+    ) -> EpisodeResult:
         try:
             subprocess.run(
                 command,
@@ -810,6 +839,7 @@ def create_agentic_arm(
     kira_dir: Path,
     budgets: EpisodeBudgets,
     environ: Mapping[str, str] | None = None,
+    request_gateway: LockedOpenRouterGateway | None = None,
 ) -> AgenticArm:
     """Build the live Arm A agentic adapter for one friendly model key."""
     env = dict(os.environ if environ is None else environ)
@@ -824,5 +854,6 @@ def create_agentic_arm(
         kira_dir=kira_dir,
         model=AGENTIC_ARM_MODELS[model_key],
         environ=env,
+        request_gateway=request_gateway,
     )
     return AgenticArm(runner=runner, budgets=budgets, model_name=model_key)

@@ -367,6 +367,20 @@ def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(
     assert arm.runner.model == "openrouter/deepseek/deepseek-v4-flash"
 
 
+def test_live_arm_constructor_accepts_locked_request_gateway(tmp_path: Path) -> None:
+    gateway = object()
+
+    arm = create_souffle_arm(
+        "deepseek",
+        kira_dir=tmp_path,
+        budgets=BUDGETS,
+        environ={"OPENROUTER_API_KEY": "x"},
+        request_gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    assert arm.runner.request_gateway is gateway
+
+
 @dataclass
 class ScriptedEpisodeRunner:
     """Deterministic EpisodeRunner returning one canned result."""
