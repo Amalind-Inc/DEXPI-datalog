@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 from typing import Mapping
 
 from pydexpi_datalog.benchmark.agentic_arm import (
@@ -58,6 +59,57 @@ from pydexpi_datalog.verification.souffle_rule_pack import RULE_PACKS_DIR
 SOUFFLE_ARM_MODELS = dict(AGENTIC_ARM_MODELS)
 
 ARM_LABEL = "c-souffle"
+
+
+class FaithfulnessProgramError(ValueError):
+    """An Arm B program cannot be replayed safely across frozen EDBs."""
+
+
+def validate_faithfulness_program(program: str) -> None:
+    """Validate the portable query-module contract used by faithfulness probes."""
+    required_patterns = {
+        "graph-facts include": (
+            r'^\s*\.include\s+"/input/graph_facts\.dl"\s*$'
+        ),
+        "topology-semantics include": (
+            r'^\s*\.include\s+"/input/graph_topology_semantics\.dl"\s*$'
+        ),
+        "result_witness declaration": (
+            r"^\s*\.decl\s+result_witness\s*\(\s*id\s*:\s*symbol\s*\)\s*$"
+        ),
+        "result_witness output": r"^\s*\.output\s+result_witness\s*$",
+    }
+    for label, pattern in required_patterns.items():
+        if re.search(pattern, program, flags=re.MULTILINE) is None:
+            raise FaithfulnessProgramError(
+                f"Portable faithfulness program is missing {label}."
+            )
+
+    edb_predicates = "node|node_attribute|graph_edge|graph_edge_attribute"
+    if re.search(
+        rf"^\s*\.decl\s+(?:{edb_predicates})\s*\(",
+        program,
+        flags=re.MULTILINE,
+    ):
+        raise FaithfulnessProgramError(
+            "Portable faithfulness program contains an embedded EDB declaration."
+        )
+    if re.search(
+        rf'^\s*(?:{edb_predicates})\s*\(\s*"[^\n]*\)\s*\.\s*$',
+        program,
+        flags=re.MULTILINE,
+    ):
+        raise FaithfulnessProgramError(
+            "Portable faithfulness program contains an embedded EDB fact."
+        )
+    if re.search(
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+        r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b",
+        program,
+    ):
+        raise FaithfulnessProgramError(
+            "Portable faithfulness program contains a hidden drawing UUID."
+        )
 
 # Extra Dockerfile setup: souffle installed from the souffle-lang apt
 # repository.  CI never builds this image (scripted episodes only); the
@@ -152,9 +204,21 @@ Reviewed prior art you are encouraged to compose from:
 
 ## Method: generate, execute, observe, revise
 
-1. Author a Datalog program for the question: concatenate
-   `/input/graph_facts.dl`, `/input/graph_topology_semantics.dl`, and your
-   own rules with `.output` directives (e.g. into `/workspace/analysis.dl`).
+1. Author a portable Datalog query module at `/workspace/analysis.dl` that
+   begins with these exact includes, then adds only your own IDB rules:
+
+   ```souffle
+   .include "/input/graph_facts.dl"
+   .include "/input/graph_topology_semantics.dl"
+   .decl result_witness(id:symbol)
+   .output result_witness
+   ```
+
+   `result_witness` must contain exactly the exhaustive witness IDs for the
+   question. Do not copy EDB declarations or facts into your program and do
+   not hard-code drawing UUIDs or precomputed witness IDs. This portable
+   query module will be replayed unchanged against the paired drawing and
+   frozen counterfactual EDB probes.
 2. Execute it for real: `souffle /workspace/analysis.dl -D /workspace/out`.
 3. Observe the actual engine output and diagnostics.  If the program fails
    or the output does not answer the question, revise the program and run
@@ -230,4 +294,5 @@ def create_souffle_arm(
         arm_label=ARM_LABEL,
         task_builder=build_souffle_harbor_task,
         require_executed_program=True,
+        program_validator=validate_faithfulness_program,
     )

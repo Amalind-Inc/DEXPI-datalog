@@ -36,10 +36,12 @@ from pydexpi_datalog.benchmark.agentic_arm import (
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.souffle_arm import (
+    FaithfulnessProgramError,
     PROGRAM_FILENAME,
     SOUFFLE_ARM_MODELS,
     build_souffle_harbor_task,
     create_souffle_arm,
+    validate_faithfulness_program,
 )
 from pydexpi_datalog.semantics.souffle_runner import (
     SouffleExecutionError,
@@ -189,6 +191,39 @@ def test_instruction_frames_generate_revise_loop(tmp_path: Path) -> None:
     assert "violation_found" in instruction
 
 
+def test_instruction_requires_a_portable_standard_witness_program(tmp_path: Path) -> None:
+    instruction = (build_task(tmp_path) / "instruction.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert '.include "/input/graph_facts.dl"' in instruction
+    assert '.include "/input/graph_topology_semantics.dl"' in instruction
+    assert ".decl result_witness(id:symbol)" in instruction
+    assert ".output result_witness" in instruction
+    assert "Do not copy EDB declarations or facts" in instruction
+
+
+def test_portable_program_contract_rejects_embedded_edb_and_hidden_uuids() -> None:
+    portable = """\
+.include "/input/graph_facts.dl"
+.include "/input/graph_topology_semantics.dl"
+.decl result_witness(id:symbol)
+.output result_witness
+result_witness(X) :- node(X), node_attribute(X, "label", "Nozzle").
+"""
+    validate_faithfulness_program(portable)
+
+    with pytest.raises(FaithfulnessProgramError, match="EDB declaration"):
+        validate_faithfulness_program(
+            portable + "\n.decl node(id:symbol)\nnode(\"invented\").\n"
+        )
+    with pytest.raises(FaithfulnessProgramError, match="UUID"):
+        validate_faithfulness_program(
+            portable
+            + '\nresult_witness("7fdefa2f-5751-48eb-8c7c-34dd07cc16d3").\n'
+        )
+
+
 # --------------------------------------------------------------------------
 # Executed program ships with the answer for post-hoc audit
 # --------------------------------------------------------------------------
@@ -320,6 +355,34 @@ def test_arm_degrades_when_executed_program_missing_or_empty(
     assert answer.usage["degraded_reason"] == "missing_executed_program"
 
 
+def test_arm_degrades_when_program_is_not_portable_for_faithfulness_replay(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    runner = ScriptedEpisodeRunner(
+        EpisodeResult(
+            structured_answer_text=valid_answer(),
+            reward=1.0,
+            executed_program='.decl answer(x:symbol)\n.output answer\nanswer("x").\n',
+        )
+    )
+    arm = AgenticArm(
+        runner=runner,
+        budgets=BUDGETS,
+        model_name="scripted",
+        arm_label="c-souffle",
+        task_builder=build_souffle_harbor_task,
+        require_executed_program=True,
+        program_validator=validate_faithfulness_program,
+    )
+
+    answer = arm.answer(question=make_question(bundle), drawing_ref=bundle)
+
+    assert answer.verdict == DEGRADED_VERDICT
+    assert answer.usage["degraded_reason"] == "invalid_executed_program"
+    assert "missing" in str(answer.usage["program_validation_error"])
+
+
 # --------------------------------------------------------------------------
 # Budgets and model matrix identical to Arm A agentic
 # --------------------------------------------------------------------------
@@ -352,6 +415,7 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.budgets == BUDGETS
     assert arm.require_executed_program is True
     assert arm.task_builder is build_souffle_harbor_task
+    assert arm.program_validator is validate_faithfulness_program
 
 
 def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(

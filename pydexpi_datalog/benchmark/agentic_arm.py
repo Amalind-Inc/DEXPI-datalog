@@ -469,6 +469,7 @@ class AgenticArm:
     arm_label: str = "a-agentic"
     task_builder: Callable[..., Path] = build_harbor_task
     require_executed_program: bool = False
+    program_validator: Callable[[str], None] | None = None
     artifact_root: Path | None = None
 
     @property
@@ -515,6 +516,15 @@ class AgenticArm:
             return self._degraded(
                 "missing_executed_program", transcript=transcript, usage=usage
             )
+        if self.program_validator is not None and result.executed_program is not None:
+            try:
+                self.program_validator(result.executed_program)
+            except ValueError as error:
+                return self._degraded(
+                    "invalid_executed_program",
+                    transcript=transcript,
+                    usage={**usage, "program_validation_error": str(error)},
+                )
         if result.structured_answer_text is None:
             return self._degraded(
                 "missing_submission", transcript=transcript, usage=usage
