@@ -383,6 +383,45 @@ def test_arm_degrades_when_program_is_not_portable_for_faithfulness_replay(
     assert "missing" in str(answer.usage["program_validation_error"])
 
 
+def test_arm_degrades_when_cross_size_or_counterfactual_gate_fails(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    portable = """\
+.include "/input/graph_facts.dl"
+.include "/input/graph_topology_semantics.dl"
+.decl result_witness(id:symbol)
+.output result_witness
+result_witness(X) :- node(X), X != X.
+"""
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(
+            EpisodeResult(
+                structured_answer_text=valid_answer(),
+                reward=1.0,
+                executed_program=portable,
+            )
+        ),
+        budgets=BUDGETS,
+        task_builder=build_souffle_harbor_task,
+        require_executed_program=True,
+        program_validator=validate_faithfulness_program,
+        program_faithfulness_gate=lambda _program, _question: {
+            "family_id": "test-family",
+            "passed": False,
+            "cases": [{"case_id": "counterfactual", "passed": False}],
+        },
+    )
+
+    answer = arm.answer(question=make_question(bundle), drawing_ref=bundle)
+
+    assert answer.verdict == DEGRADED_VERDICT
+    assert answer.usage["degraded_reason"] == "faithfulness_gate_failed"
+    assert answer.usage["faithfulness_gate"]["cases"] == [
+        {"case_id": "counterfactual", "passed": False}
+    ]
+
+
 # --------------------------------------------------------------------------
 # Budgets and model matrix identical to Arm A agentic
 # --------------------------------------------------------------------------
@@ -416,6 +455,7 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.require_executed_program is True
     assert arm.task_builder is build_souffle_harbor_task
     assert arm.program_validator is validate_faithfulness_program
+    assert arm.program_faithfulness_gate is not None
 
 
 def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(

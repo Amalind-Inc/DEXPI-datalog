@@ -111,6 +111,18 @@ def validate_faithfulness_program(program: str) -> None:
             "Portable faithfulness program contains a hidden drawing UUID."
         )
 
+
+def _run_preregistered_faithfulness_gate(
+    program: str, question: BenchmarkQuestion
+) -> dict[str, object] | None:
+    # Lazy import avoids coupling the generic task builder to the RMSO suite
+    # while keeping the scored Arm B constructor fail-closed on core entries.
+    from pydexpi_datalog.benchmark.rmso_faithfulness import (
+        run_preregistered_faithfulness_gate,
+    )
+
+    return run_preregistered_faithfulness_gate(program, question.question_id)
+
 # Extra Dockerfile setup: souffle installed from the souffle-lang apt
 # repository.  CI never builds this image (scripted episodes only); the
 # live-matrix bead (3q1.14) validates the build before any measured run.
@@ -295,4 +307,5 @@ def create_souffle_arm(
         task_builder=build_souffle_harbor_task,
         require_executed_program=True,
         program_validator=validate_faithfulness_program,
+        program_faithfulness_gate=_run_preregistered_faithfulness_gate,
     )

@@ -470,6 +470,9 @@ class AgenticArm:
     task_builder: Callable[..., Path] = build_harbor_task
     require_executed_program: bool = False
     program_validator: Callable[[str], None] | None = None
+    program_faithfulness_gate: (
+        Callable[[str, BenchmarkQuestion], Mapping[str, object] | None] | None
+    ) = None
     artifact_root: Path | None = None
 
     @property
@@ -525,6 +528,28 @@ class AgenticArm:
                     transcript=transcript,
                     usage={**usage, "program_validation_error": str(error)},
                 )
+        if (
+            self.program_faithfulness_gate is not None
+            and result.executed_program is not None
+        ):
+            try:
+                gate = self.program_faithfulness_gate(
+                    result.executed_program, question
+                )
+            except ValueError as error:
+                return self._degraded(
+                    "faithfulness_gate_error",
+                    transcript=transcript,
+                    usage={**usage, "faithfulness_gate_error": str(error)},
+                )
+            if gate is not None:
+                usage = {**usage, "faithfulness_gate": dict(gate)}
+                if gate.get("passed") is not True:
+                    return self._degraded(
+                        "faithfulness_gate_failed",
+                        transcript=transcript,
+                        usage=usage,
+                    )
         if result.structured_answer_text is None:
             return self._degraded(
                 "missing_submission", transcript=transcript, usage=usage
