@@ -20,6 +20,7 @@ import pytest
 from pydexpi_datalog.benchmark import (
     ARM_FAMILY_A,
     ARM_FAMILY_B,
+    BENCHMARK_REPORT_SCHEMA_VERSION,
     DECISION_BUILD,
     DECISION_STAND_DOWN,
     RESULTS_REPORT_FILENAME,
@@ -50,6 +51,8 @@ def episode(
     wall_time_seconds: float = 1.0,
     trap_rubric_passed: bool | None = None,
 ) -> dict[str, object]:
+    resolved_verdict_match = passed if verdict_match is None else verdict_match
+    resolved_witness_match = passed if witness_match is None else witness_match
     return {
         "question_id": question_id,
         "question": "Does this fixture satisfy the stated condition?",
@@ -60,9 +63,15 @@ def episode(
         "human_spot_check_required": False,
         "grade": {
             "passed": passed,
-            "verdict_match": passed if verdict_match is None else verdict_match,
-            "witness_match": passed if witness_match is None else witness_match,
+            "verdict_match": resolved_verdict_match,
+            "witness_match": resolved_witness_match,
             "posture_consistent": True,
+            "witness_precision": 1.0 if resolved_witness_match else 0.0,
+            "witness_recall": 1.0 if resolved_witness_match else 0.0,
+            "witness_f1": 1.0 if resolved_witness_match else 0.0,
+            "grounded_answer_credit": (
+                1.0 if resolved_verdict_match and resolved_witness_match else 0.0
+            ),
             "trap_rubric_passed": trap_rubric_passed,
             "grounded_refusal": trap_rubric_passed,
             "graceful_redirect": trap_rubric_passed,
@@ -129,7 +138,7 @@ def make_run(
     # arm ids sharing one model-independent configuration id.
     arm_id = arm if arm is not None else f"{configuration}:{model}"
     report = {
-        "schema_version": 3,
+        "schema_version": BENCHMARK_REPORT_SCHEMA_VERSION,
         "arm_id": arm_id,
         "manifest_path": str(tmp_path / "manifest.json"),
         "trap_judge_id": "scripted-trap-judge",

@@ -62,6 +62,10 @@ def test_exact_verdict_and_witness_match_passes() -> None:
     assert result.missing_witness_ids == ()
     assert result.extra_witness_ids == ()
     assert result.unknown_witness_ids == ()
+    assert result.witness_precision == 1.0
+    assert result.witness_recall == 1.0
+    assert result.witness_f1 == 1.0
+    assert result.grounded_answer_credit == 1.0
 
 
 def test_wrong_verdict_fails_even_with_correct_witnesses() -> None:
@@ -85,6 +89,8 @@ def test_wrong_verdict_fails_even_with_correct_witnesses() -> None:
     assert result.passed is False
     assert result.verdict_match is False
     assert result.witness_match is True
+    assert result.witness_f1 == 1.0
+    assert result.grounded_answer_credit == 0.0
 
 
 def test_missing_witness_fails_and_is_reported() -> None:
@@ -111,6 +117,57 @@ def test_missing_witness_fails_and_is_reported() -> None:
     assert result.missing_witness_ids == ("CV-201",)
     assert result.extra_witness_ids == ()
     assert result.unknown_witness_ids == ()
+
+
+def test_partial_witness_result_reports_set_metrics_and_grounded_credit() -> None:
+    """Partial result quality is diagnostic even though exact-set grading fails."""
+    graph_facts = make_graph_facts(["P-101", "CV-201", "T-301"])
+    answer = StructuredAnswer(
+        verdict=VERDICT_VIOLATION_FOUND,
+        witness_ids=("P-101", "T-301", "GHOST-999"),
+        posture=POSTURE_SOURCE_GROUNDED,
+    )
+    ground_truth = GroundTruth(
+        verdict=VERDICT_VIOLATION_FOUND,
+        witness_ids=("P-101", "CV-201"),
+    )
+
+    result = grade(answer=answer, ground_truth=ground_truth, graph_facts=graph_facts)
+
+    assert result.passed is False
+    assert result.witness_precision == 1 / 3
+    assert result.witness_recall == 1 / 2
+    assert result.witness_f1 == 0.4
+    assert result.grounded_answer_credit == 0.4
+
+
+def test_one_sided_empty_witness_sets_have_zero_f1() -> None:
+    graph_facts = make_graph_facts(["P-101"])
+
+    missing_all = grade(
+        answer=StructuredAnswer(
+            verdict=VERDICT_VIOLATION_FOUND,
+            posture=POSTURE_SOURCE_GROUNDED,
+        ),
+        ground_truth=GroundTruth(
+            verdict=VERDICT_VIOLATION_FOUND, witness_ids=("P-101",)
+        ),
+        graph_facts=graph_facts,
+    )
+    invented_all = grade(
+        answer=StructuredAnswer(
+            verdict=VERDICT_NO_VIOLATION,
+            witness_ids=("P-101",),
+            posture=POSTURE_SOURCE_GROUNDED,
+        ),
+        ground_truth=GroundTruth(verdict=VERDICT_NO_VIOLATION),
+        graph_facts=graph_facts,
+    )
+
+    assert missing_all.witness_f1 == 0.0
+    assert missing_all.grounded_answer_credit == 0.0
+    assert invented_all.witness_f1 == 0.0
+    assert invented_all.grounded_answer_credit == 0.0
 
 
 def test_extra_known_witness_fails_and_is_reported() -> None:
@@ -183,6 +240,9 @@ def test_duplicate_witness_ids_grade_as_a_set() -> None:
 
     assert result.passed is True
     assert result.witness_match is True
+    assert result.witness_precision == 1.0
+    assert result.witness_recall == 1.0
+    assert result.witness_f1 == 1.0
 
 
 def test_source_conclusion_without_grounded_posture_fails() -> None:
@@ -246,6 +306,10 @@ def test_graceful_refusal_passes_without_witnesses() -> None:
     assert result.passed is True
     assert result.witness_match is True
     assert result.posture_consistent is True
+    assert result.witness_precision == 1.0
+    assert result.witness_recall == 1.0
+    assert result.witness_f1 == 1.0
+    assert result.grounded_answer_credit == 1.0
 
 
 def test_trap_credit_requires_expected_posture_and_both_rubric_axes() -> None:

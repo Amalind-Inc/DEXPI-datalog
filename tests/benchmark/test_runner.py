@@ -161,6 +161,10 @@ class RunBenchmarkTests(unittest.TestCase):
             self.assertFalse(trap["gating"])
             self.assertTrue(trap["human_spot_check_required"])
             self.assertTrue(trap["grade"]["trap_rubric_passed"])
+            self.assertEqual(trap["grade"]["witness_precision"], 1.0)
+            self.assertEqual(trap["grade"]["witness_recall"], 1.0)
+            self.assertEqual(trap["grade"]["witness_f1"], 1.0)
+            self.assertEqual(trap["grade"]["grounded_answer_credit"], 1.0)
             violation = episodes["e06-violation"]
             self.assertEqual(violation["category"], "compliance_universal")
             self.assertEqual(violation["size_bucket"], "small")
@@ -189,6 +193,12 @@ class RunBenchmarkTests(unittest.TestCase):
             )
             self.assertIsNone(violation["cost_usd"])
             self.assertFalse(violation["grade"]["witness_match"])
+            self.assertEqual(violation["grade"]["witness_precision"], 0.0)
+            self.assertEqual(violation["grade"]["witness_recall"], 0.0)
+            self.assertEqual(violation["grade"]["witness_f1"], 0.0)
+            self.assertEqual(
+                violation["grade"]["grounded_answer_credit"], 0.0
+            )
             self.assertEqual(violation["grade"]["unknown_witness_ids"], ["bogus-node"])
             self.assertEqual(violation["grade"]["missing_witness_ids"], [node_id])
             self.assertEqual(violation["answer"]["verdict"], VERDICT_VIOLATION_FOUND)

@@ -24,13 +24,21 @@ class Grade:
     """The graded outcome for one answer against one ground truth.
 
     ``passed`` is the single creditable bit; the remaining fields are the
-    per-axis diagnostics that explain it in the benchmark report.
+    per-axis diagnostics that explain it in the benchmark report.  Witness
+    metrics are set-based and include unknown predicted IDs in the precision
+    denominator. ``grounded_answer_credit`` is the preregistered outcome
+    formula (verdict match times witness F1), not a substitute for posture,
+    trace-safety, or exact-set qualification.
     """
 
     passed: bool
     verdict_match: bool
     witness_match: bool
     posture_consistent: bool
+    witness_precision: float
+    witness_recall: float
+    witness_f1: float
+    grounded_answer_credit: float
     missing_witness_ids: tuple[str, ...] = ()
     extra_witness_ids: tuple[str, ...] = ()
     unknown_witness_ids: tuple[str, ...] = ()
@@ -83,6 +91,23 @@ def grade(
 
     verdict_match = answer.verdict == ground_truth.verdict
     witness_match = not unknown and not missing and not extra
+    intersection_size = len(answer_witnesses & expected_witnesses)
+    if not answer_witnesses and not expected_witnesses:
+        witness_precision = witness_recall = witness_f1 = 1.0
+    else:
+        witness_precision = (
+            intersection_size / len(answer_witnesses) if answer_witnesses else 0.0
+        )
+        witness_recall = (
+            intersection_size / len(expected_witnesses)
+            if expected_witnesses
+            else 0.0
+        )
+        witness_f1 = (
+            2 * intersection_size
+            / (len(answer_witnesses) + len(expected_witnesses))
+        )
+    grounded_answer_credit = float(verdict_match) * witness_f1
 
     if trap_rubric is not None:
         posture_consistent = answer.posture == trap_rubric.expected_posture
@@ -122,6 +147,10 @@ def grade(
         verdict_match=verdict_match,
         witness_match=witness_match,
         posture_consistent=posture_consistent,
+        witness_precision=witness_precision,
+        witness_recall=witness_recall,
+        witness_f1=witness_f1,
+        grounded_answer_credit=grounded_answer_credit,
         missing_witness_ids=tuple(sorted(missing)),
         extra_witness_ids=tuple(sorted(extra)),
         unknown_witness_ids=tuple(sorted(unknown)),

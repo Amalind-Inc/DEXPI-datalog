@@ -35,8 +35,8 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     load_scripted_trap_judgments,
 )
 
-# Version 3: episodes carry the decision category and size bucket.
-BENCHMARK_REPORT_SCHEMA_VERSION = 3
+# Version 4: grades carry witness precision/recall/F1 and grounded credit.
+BENCHMARK_REPORT_SCHEMA_VERSION = 4
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -257,6 +257,10 @@ def _grade_payload(episode_grade: Grade) -> dict[str, object]:
         "verdict_match": episode_grade.verdict_match,
         "witness_match": episode_grade.witness_match,
         "posture_consistent": episode_grade.posture_consistent,
+        "witness_precision": episode_grade.witness_precision,
+        "witness_recall": episode_grade.witness_recall,
+        "witness_f1": episode_grade.witness_f1,
+        "grounded_answer_credit": episode_grade.grounded_answer_credit,
         "missing_witness_ids": list(episode_grade.missing_witness_ids),
         "extra_witness_ids": list(episode_grade.extra_witness_ids),
         "unknown_witness_ids": list(episode_grade.unknown_witness_ids),
