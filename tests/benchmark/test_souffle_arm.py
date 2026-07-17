@@ -354,6 +354,19 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.task_builder is build_souffle_harbor_task
 
 
+def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(
+    tmp_path: Path,
+) -> None:
+    arm = create_souffle_arm(
+        "deepseek",
+        kira_dir=tmp_path,
+        budgets=BUDGETS,
+        environ={"OPENROUTER_API_KEY": "x"},
+    )
+
+    assert arm.runner.model == "openrouter/deepseek/deepseek-v4-flash"
+
+
 @dataclass
 class ScriptedEpisodeRunner:
     """Deterministic EpisodeRunner returning one canned result."""

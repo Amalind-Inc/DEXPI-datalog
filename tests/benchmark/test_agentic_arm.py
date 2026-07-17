@@ -517,6 +517,33 @@ def test_live_runner_command_forwards_api_base_when_set() -> None:
     assert command[api_base_flag - 1] == "--agent-kwarg"
 
 
+def test_live_runner_timeout_returns_a_rejected_episode_without_retry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls = []
+
+    def time_out(command, **kwargs):
+        calls.append((command, kwargs))
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", time_out)
+    runner = HarborKiraEpisodeRunner(
+        kira_dir=Path("/tmp/terminus-kira"),
+        model="openrouter/deepseek/deepseek-v4-flash",
+    )
+
+    result = runner.run(
+        task_dir=tmp_path / "tasks" / "benchmark-agentic-q1",
+        jobs_dir=tmp_path / "jobs",
+        budgets=EpisodeBudgets(agent_timeout_sec=300.0),
+    )
+
+    assert len(calls) == 1
+    assert calls[0][1]["timeout"] == 300.0
+    assert result.reward == 0.0
+    assert result.usage["timed_out"] is True
+
+
 def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
     jobs_dir = tmp_path / "jobs"
     trial_dir = jobs_dir / "run" / "trial-0"
@@ -615,6 +642,17 @@ def test_create_agentic_arm_requires_credential_and_known_model() -> None:
     assert arm.arm_id == "a-agentic:sonnet"
     assert arm.runner.model == AGENTIC_ARM_MODELS["sonnet"]
     assert arm.budgets == BUDGETS
+
+
+def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model() -> None:
+    arm = create_agentic_arm(
+        "deepseek",
+        kira_dir=Path("/tmp/terminus-kira"),
+        budgets=BUDGETS,
+        environ={"OPENROUTER_API_KEY": "x"},
+    )
+
+    assert arm.runner.model == "openrouter/deepseek/deepseek-v4-flash"
 
 
 # --------------------------------------------------------------------------

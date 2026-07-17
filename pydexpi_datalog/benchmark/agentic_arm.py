@@ -51,7 +51,7 @@ from pydexpi_datalog.benchmark.direct_arm import (
 AGENTIC_ARM_MODELS = {
     "sonnet": "openrouter/anthropic/claude-sonnet-4",
     "gpt": "openrouter/openai/gpt-5.4",
-    "deepseek": "openrouter/deepseek/deepseek-v4-pro",
+    "deepseek": "openrouter/deepseek/deepseek-v4-flash",
 }
 
 # The 3q1.4 bundle layout the task environment mounts read-only.
@@ -664,7 +664,27 @@ class HarborKiraEpisodeRunner:
         command = self.build_command(
             task_dir=task_dir, jobs_dir=jobs_dir, budgets=budgets
         )
-        subprocess.run(command, check=False, env=dict(self.environ))
+        try:
+            subprocess.run(
+                command,
+                check=False,
+                env=dict(self.environ),
+                timeout=budgets.agent_timeout_sec,
+            )
+        except subprocess.TimeoutExpired:
+            partial = parse_harbor_artifacts(jobs_dir)
+            return EpisodeResult(
+                structured_answer_text=partial.structured_answer_text,
+                reward=0.0,
+                command_batches=partial.command_batches,
+                model_calls=partial.model_calls,
+                usage={
+                    **partial.usage,
+                    "timed_out": True,
+                    "timeout_sec": budgets.agent_timeout_sec,
+                },
+                executed_program=partial.executed_program,
+            )
         return parse_harbor_artifacts(jobs_dir)
 
 
