@@ -125,6 +125,7 @@ class DirectArm:
             witness_ids=parsed.witness_ids,
             posture=parsed.posture,
             answer_text=parsed.answer_text,
+            support=parsed.support,
             transcript=(
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -170,12 +171,16 @@ def parse_structured_answer(raw_text: object) -> StructuredAnswer:
         return _degraded()
     if posture in TRAP_EXPECTED_POSTURES and not answer_text.strip():
         return _degraded()
+    support = payload.get("support", {})
+    if not isinstance(support, dict):
+        return _degraded()
 
     return StructuredAnswer(
         verdict=str(verdict),
         witness_ids=tuple(witness_raw),
         posture=str(posture),
         answer_text=answer_text,
+        support=dict(support),
     )
 
 

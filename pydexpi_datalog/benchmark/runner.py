@@ -35,8 +35,8 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     load_scripted_trap_judgments,
 )
 
-# Version 4: grades carry witness precision/recall/F1 and grounded credit.
-BENCHMARK_REPORT_SCHEMA_VERSION = 4
+# Version 5: answers carry their submitted claim-to-support graph.
+BENCHMARK_REPORT_SCHEMA_VERSION = 5
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -213,6 +213,7 @@ def _run_episode(
             "witness_ids": list(answer.witness_ids),
             "posture": answer.posture,
             "answer_text": answer.answer_text,
+            "support": answer.support,
         },
         "expected": _ground_truth_payload(question.ground_truth),
         "trap_rubric": (
@@ -316,6 +317,9 @@ def load_scripted_answers(path: Path) -> dict[str, StructuredAnswer]:
         usage = raw_answer.get("usage", {})
         if not isinstance(usage, dict):
             raise ValueError(f"{context}.usage must be an object.")
+        support = raw_answer.get("support", {})
+        if not isinstance(support, dict):
+            raise ValueError(f"{context}.support must be an object.")
         answers[question_id] = StructuredAnswer(
             verdict=verdict,
             witness_ids=tuple(witness_ids),
@@ -323,6 +327,7 @@ def load_scripted_answers(path: Path) -> dict[str, StructuredAnswer]:
             answer_text=answer_text,
             transcript=tuple(transcript),
             usage=dict(usage),
+            support=dict(support),
         )
     return answers
 

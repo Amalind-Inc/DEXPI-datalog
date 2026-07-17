@@ -92,6 +92,7 @@ class StructuredAnswer:
     transcript: tuple[dict[str, object], ...] = ()
     usage: dict[str, object] = field(default_factory=dict)
     answer_text: str = ""
+    support: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

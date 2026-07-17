@@ -201,6 +201,9 @@ def test_instruction_requires_a_portable_standard_witness_program(tmp_path: Path
     assert ".decl result_witness(id:symbol)" in instruction
     assert ".output result_witness" in instruction
     assert "Do not copy EDB declarations or facts" in instruction
+    assert '"kind": "graph_scope"' in instruction
+    assert '"kind": "souffle_execution"' in instruction
+    assert '"claim": "verdict"' in instruction
 
 
 def test_portable_program_contract_rejects_embedded_edb_and_hidden_uuids() -> None:
@@ -456,6 +459,7 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.task_builder is build_souffle_harbor_task
     assert arm.program_validator is validate_faithfulness_program
     assert arm.program_faithfulness_gate is not None
+    assert arm.answer_trace_gate is not None
 
 
 def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(

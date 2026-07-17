@@ -178,32 +178,10 @@ def evaluate_faithfulness_program(
     program: str, family: FaithfulnessFamily
 ) -> FaithfulnessReport:
     """Replay one unchanged portable program across every family case."""
-    validate_faithfulness_program(program)
-    query_module = re.sub(
-        r'^\s*\.include\s+"/input/(?:graph_facts|graph_topology_semantics)\.dl"\s*$',
-        "",
-        program,
-        flags=re.MULTILINE,
-    )
     results: list[FaithfulnessCaseResult] = []
     for case in family.cases:
-        complete_program = (
-            build_graph_facts_datalog(case.graph_facts)
-            + "\n"
-            + load_graph_topology_idb()
-            + "\n"
-            + query_module
-        )
         try:
-            relations = run_souffle_program(complete_program)
-            if "result_witness" not in relations:
-                raise FaithfulnessSuiteError(
-                    "Program emitted no result_witness relation."
-                )
-            rows = relations["result_witness"]
-            if any(len(row) != 1 for row in rows):
-                raise FaithfulnessSuiteError("result_witness must have arity one.")
-            actual = tuple(sorted({row[0] for row in rows}))
+            actual = replay_result_witness(program, case.graph_facts)
             expected = tuple(sorted(case.expected.witness_ids))
             inferred_verdict = (
                 VERDICT_VIOLATION_FOUND if actual else VERDICT_NO_VIOLATION
@@ -230,6 +208,33 @@ def evaluate_faithfulness_program(
     return FaithfulnessReport(
         family.family_id, all(result.passed for result in results), tuple(results)
     )
+
+
+def replay_result_witness(
+    program: str, graph_facts: Mapping[str, object]
+) -> tuple[str, ...]:
+    """Replay a portable query module against one frozen graph EDB."""
+    validate_faithfulness_program(program)
+    query_module = re.sub(
+        r'^\s*\.include\s+"/input/(?:graph_facts|graph_topology_semantics)\.dl"\s*$',
+        "",
+        program,
+        flags=re.MULTILINE,
+    )
+    complete_program = (
+        build_graph_facts_datalog(dict(graph_facts))
+        + "\n"
+        + load_graph_topology_idb()
+        + "\n"
+        + query_module
+    )
+    relations = run_souffle_program(complete_program)
+    if "result_witness" not in relations:
+        raise FaithfulnessSuiteError("Program emitted no result_witness relation.")
+    rows = relations["result_witness"]
+    if any(len(row) != 1 for row in rows):
+        raise FaithfulnessSuiteError("result_witness must have arity one.")
+    return tuple(sorted({row[0] for row in rows}))
 
 
 def run_preregistered_faithfulness_gate(

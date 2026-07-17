@@ -473,6 +473,9 @@ class AgenticArm:
     program_faithfulness_gate: (
         Callable[[str, BenchmarkQuestion], Mapping[str, object] | None] | None
     ) = None
+    answer_trace_gate: (
+        Callable[[StructuredAnswer, Path, str], Mapping[str, object]] | None
+    ) = None
     artifact_root: Path | None = None
 
     @property
@@ -559,11 +562,28 @@ class AgenticArm:
             return self._degraded(
                 "malformed_submission", transcript=transcript, usage=usage
             )
+        if self.answer_trace_gate is not None and result.executed_program is not None:
+            try:
+                trace_report = self.answer_trace_gate(
+                    parsed, drawing_ref, result.executed_program
+                )
+            except ValueError as error:
+                return self._degraded(
+                    "audit_trace_error",
+                    transcript=transcript,
+                    usage={**usage, "audit_trace_error": str(error)},
+                )
+            usage = {**usage, "audit_trace": dict(trace_report)}
+            if trace_report.get("trace_safe") is not True:
+                return self._degraded(
+                    "audit_trace_unsafe", transcript=transcript, usage=usage
+                )
         return StructuredAnswer(
             verdict=parsed.verdict,
             witness_ids=parsed.witness_ids,
             posture=parsed.posture,
             answer_text=parsed.answer_text,
+            support=parsed.support,
             transcript=transcript,
             usage=usage,
         )

@@ -66,6 +66,12 @@ from pydexpi_datalog.benchmark.rmso_faithfulness import (
     evaluate_faithfulness_program,
     load_faithfulness_suite,
     run_preregistered_faithfulness_gate,
+    replay_result_witness,
+)
+from pydexpi_datalog.benchmark.audit_trace import (
+    AuditTraceReport,
+    verify_audit_trace,
+    verify_souffle_audit_trace,
 )
 from pydexpi_datalog.benchmark.dataset import (
     CATEGORY_COMPLIANCE_UNIVERSAL,
@@ -134,6 +140,7 @@ from pydexpi_datalog.benchmark.trap_rubric import (
 __all__ = [
     "AGENTIC_ARM_MODELS",
     "AgenticArm",
+    "AuditTraceReport",
     "ArmAdapter",
     "ARM_FAMILIES",
     "ARM_FAMILY_A",
@@ -233,6 +240,9 @@ __all__ = [
     "load_scripted_answers",
     "run_benchmark",
     "run_preregistered_faithfulness_gate",
+    "replay_result_witness",
     "run_scripted_benchmark",
     "parse_structured_answer",
+    "verify_audit_trace",
+    "verify_souffle_audit_trace",
 ]

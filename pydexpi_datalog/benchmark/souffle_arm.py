@@ -43,7 +43,7 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     build_task,
     validate_bundle,
 )
-from pydexpi_datalog.benchmark.contract import POSTURES, VERDICTS
+from pydexpi_datalog.benchmark.contract import POSTURES, VERDICTS, StructuredAnswer
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
     LockedOpenRouterGateway,
@@ -122,6 +122,26 @@ def _run_preregistered_faithfulness_gate(
     )
 
     return run_preregistered_faithfulness_gate(program, question.question_id)
+
+
+def _verify_souffle_answer_trace(
+    answer: StructuredAnswer, drawing_ref: Path, program: str
+) -> dict[str, object]:
+    from dataclasses import asdict
+
+    from pydexpi_datalog.benchmark.audit_trace import verify_souffle_audit_trace
+
+    graph_path = (
+        drawing_ref / "graph_facts.json" if drawing_ref.is_dir() else drawing_ref
+    )
+    graph_facts = json.loads(graph_path.read_text(encoding="utf-8"))
+    return asdict(
+        verify_souffle_audit_trace(
+            answer=answer,
+            graph_facts=graph_facts,
+            executed_program=program,
+        )
+    )
 
 # Extra Dockerfile setup: souffle installed from the souffle-lang apt
 # repository.  CI never builds this image (scripted episodes only); the
@@ -250,7 +270,31 @@ Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object:
   "witness_ids": a list of object IDs from the drawing that are the evidence
     for your verdict (empty if none apply),
   "posture": one of {postures},
-  "answer_text": a concise explanation of the result
+  "answer_text": a concise explanation of the result,
+  "support": {{
+    "steps": [
+      {{
+        "id": "scope",
+        "kind": "graph_scope",
+        "node_count": exact facts.nodes count,
+        "edge_count": exact facts.edges count,
+        "dependencies": []
+      }},
+      {{
+        "id": "execution",
+        "kind": "souffle_execution",
+        "artifact": "analysis.dl",
+        "relation": "result_witness",
+        "witness_ids": the exact IDs emitted by result_witness,
+        "dependencies": ["scope"]
+      }}
+    ],
+    "claims": [
+      {{"claim": "verdict", "step_ids": ["execution"]}},
+      one {{"claim": "witness:<exact ID>", "step_ids": ["execution"]}}
+        for every submitted witness
+    ]
+  }}
 }}
 ```
 
@@ -265,6 +309,10 @@ Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object:
 - Every witness ID must be copied exactly from `/input/graph_facts.json`
   (`facts.nodes[*].node_id`, or edge `source_id`/`target_id`/`edge_key`);
   never invent IDs.
+- The support graph is mandatory for a source conclusion. Keep failed and
+  superseded work in the observable command history, but link final claims
+  only to the final `execution` step. Free-form reasoning is preserved for
+  human review but is not a mechanically creditable support step.
 
 Also leave `/workspace/{PROGRAM_FILENAME}` containing the exact Datalog
 program you executed for your final answer - it ships with your answer for
@@ -308,4 +356,5 @@ def create_souffle_arm(
         require_executed_program=True,
         program_validator=validate_faithfulness_program,
         program_faithfulness_gate=_run_preregistered_faithfulness_gate,
+        answer_trace_gate=_verify_souffle_answer_trace,
     )
