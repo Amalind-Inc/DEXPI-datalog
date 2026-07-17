@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "protocol": {
+    "bead": "pydexpi-datalog-1-rmso.4",
+    "document": "../../docs/research/rmso.4-pre-registered-eval-protocol.md",
+    "sha256": "8e874198ab9cd7047d98b89a47febd9220e021a53a952fc555ae2fa12e1f5694"
+  },
+  "certification": {
+    "bead": "pydexpi-datalog-1-rmso.7",
+    "status": "product_owner_sme_approved",
+    "approved_on": "2026-07-17"
+  },
+  "episode_budgets": {
+    "max_turns": 64,
+    "max_commands": 128,
+    "max_output_tokens": 8192,
+    "agent_timeout_sec": 300.0,
+    "verifier_timeout_sec": 60.0
+  },
+  "sources": [
+    {
+      "key": "hand_authored",
+      "path": "hand_authored_manifest.json",
+      "sha256": "f2120cfe538925a53d07df192d047ef92a1dd00d40469734fc66a205e6cfd9d9"
+    },
+    {
+      "key": "harder_questions",
+      "path": "harder_questions_manifest.json",
+      "sha256": "c2d1b016924c7ae08d912823ad4dae2dacac19dce11c1d26639a1bcaaf8ce28b"
+    }
+  ],
+  "entries": [
+    {
+      "id": "ha-e03-pump-p4713-retrieval",
+      "source": "hand_authored"
+    },
+    {
+      "id": "hq-nozzle-piping-attachment-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-nozzle-piping-attachment-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-valve-monitoring-reachability-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-valve-monitoring-reachability-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-equipment-pump-connectivity-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-equipment-pump-connectivity-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-permission-defeasible-control-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-permission-defeasible-control-large",
+      "source": "harder_questions"
+    }
+  ]
+}

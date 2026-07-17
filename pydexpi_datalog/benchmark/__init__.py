@@ -104,6 +104,12 @@ from pydexpi_datalog.benchmark.runner import (
     run_benchmark,
     run_scripted_benchmark,
 )
+from pydexpi_datalog.benchmark.rmso_eval import (
+    RMSO_EVAL_ENTRIES,
+    RMSO_EVAL_LOCK_SCHEMA_VERSION,
+    RMSOEvalLockError,
+    materialize_preregistered_rmso_manifest,
+)
 from pydexpi_datalog.benchmark.trap_rubric import (
     ModelTrapJudge,
     ScriptedTrapJudge,
@@ -130,6 +136,9 @@ __all__ = [
     "QUESTION_CATEGORIES",
     "RESULTS_REPORT_FILENAME",
     "RESULTS_REPORT_SCHEMA_VERSION",
+    "RMSO_EVAL_ENTRIES",
+    "RMSO_EVAL_LOCK_SCHEMA_VERSION",
+    "RMSOEvalLockError",
     "RUN_INDEX_SCHEMA_VERSION",
     "ResultsReportError",
     "VERDICT_TIER_MODELS",
@@ -197,6 +206,7 @@ __all__ = [
     "grade",
     "known_node_ids",
     "load_question_manifest",
+    "materialize_preregistered_rmso_manifest",
     "load_scripted_answers",
     "run_benchmark",
     "run_scripted_benchmark",
