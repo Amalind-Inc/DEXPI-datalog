@@ -12,6 +12,10 @@ MAX_OUTPUT_TOKENS = 8192
 CUMULATIVE_SPEND_CAP_USD = 10.0
 
 
+class OpenRouterSpendCapError(ValueError):
+    """The next paid call cannot fit under the frozen cumulative cap."""
+
+
 @dataclass(frozen=True)
 class OpenRouterRequestPolicy:
     """Frozen paid-call constraints applied below the external agent."""
@@ -82,5 +86,7 @@ class OpenRouterRequestPolicy:
             actual_spend + active_reservations + reservation
             > CUMULATIVE_SPEND_CAP_USD
         ):
-            raise ValueError("RMSO cumulative paid-call spend cap would be exceeded.")
+            raise OpenRouterSpendCapError(
+                "RMSO cumulative paid-call spend cap would be exceeded."
+            )
         return reservation

@@ -24,6 +24,9 @@ from pydexpi_datalog.benchmark.runner import ScriptedArm, run_benchmark
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock.json"
+REDESIGNED_LOCK_PATH = (
+    REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock_v2.json"
+)
 EXPECTED_IDS = [
     "ha-e03-pump-p4713-retrieval",
     "hq-nozzle-piping-attachment-small",
@@ -89,6 +92,28 @@ def test_materializes_exact_certified_nine_entry_slice_without_copying_truth(
         agent_timeout_sec=300.0,
         verifier_timeout_sec=60.0,
     )
+
+
+def test_materializes_locked_redesigned_protocol_with_accounting_contract(
+    tmp_path: Path,
+) -> None:
+    manifest_path = materialize_preregistered_rmso_manifest(
+        REDESIGNED_LOCK_PATH, tmp_path / "rmso_manifest.json"
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["rmso_lock"]["schema_version"] == 2
+    assert (
+        manifest["rmso_lock"]["design_revision"]
+        == "graph-direct-vs-souffle-v2"
+    )
+    assert manifest["rmso_lock"]["protocol_bead"] == "pydexpi-datalog-1-rmso.1"
+    assert manifest["rmso_lock"]["accounting_contract"] == {
+        "provider_ledger": "required",
+        "unknown_cost": "run_incomplete",
+        "policy_violation": "run_incomplete",
+    }
+    assert [question["id"] for question in manifest["questions"]] == EXPECTED_IDS
 
 
 def test_rejects_changed_source_manifest_before_materializing(tmp_path: Path) -> None:

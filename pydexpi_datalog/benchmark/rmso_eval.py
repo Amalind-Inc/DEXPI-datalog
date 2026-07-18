@@ -11,7 +11,10 @@ from pydexpi_datalog.benchmark.dataset import DATASET_SCHEMA_VERSION
 
 
 RMSO_EVAL_LOCK_SCHEMA_VERSION = 1
+RMSO_REDESIGNED_LOCK_SCHEMA_VERSION = 2
 RMSO_PROTOCOL_BEAD = "pydexpi-datalog-1-rmso.4"
+RMSO_REDESIGNED_PROTOCOL_BEAD = "pydexpi-datalog-1-rmso.1"
+RMSO_REDESIGNED_REVISION = "graph-direct-vs-souffle-v2"
 RMSO_CERTIFICATION_BEAD = "pydexpi-datalog-1-rmso.7"
 RMSO_CERTIFICATION_STATUS = "product_owner_sme_approved"
 _RMSO_EVAL_BUDGETS = {
@@ -20,6 +23,11 @@ _RMSO_EVAL_BUDGETS = {
     "max_output_tokens": 8192,
     "agent_timeout_sec": 300.0,
     "verifier_timeout_sec": 60.0,
+}
+_RMSO_REDESIGNED_ACCOUNTING = {
+    "provider_ledger": "required",
+    "unknown_cost": "run_incomplete",
+    "policy_violation": "run_incomplete",
 }
 
 RMSO_EVAL_ENTRIES = (
@@ -115,17 +123,27 @@ def materialize_preregistered_rmso_manifest(
     frozen_protocol["document"] = str(
         (lock_path.parent / frozen_protocol["document"]).resolve()
     )
+    lock_schema_version = int(lock["schema_version"])
+    lock_metadata: dict[str, object] = {
+        "schema_version": lock_schema_version,
+        "path": str(lock_path),
+        "sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
+        "protocol_bead": frozen_protocol["bead"],
+        "protocol": frozen_protocol,
+        "certification": lock["certification"],
+        "sources": frozen_sources,
+    }
+    if lock_schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION:
+        lock_metadata.update(
+            {
+                "design_revision": lock["design_revision"],
+                "protocol_approval": lock["protocol_approval"],
+                "accounting_contract": lock["accounting_contract"],
+            }
+        )
     manifest = {
         "schema_version": DATASET_SCHEMA_VERSION,
-        "rmso_lock": {
-            "schema_version": RMSO_EVAL_LOCK_SCHEMA_VERSION,
-            "path": str(lock_path),
-            "sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
-            "protocol_bead": RMSO_PROTOCOL_BEAD,
-            "protocol": frozen_protocol,
-            "certification": lock["certification"],
-            "sources": frozen_sources,
-        },
+        "rmso_lock": lock_metadata,
         "episode_budgets": lock["episode_budgets"],
         "questions": selected,
     }
@@ -139,10 +157,19 @@ def materialize_preregistered_rmso_manifest(
 
 
 def _validate_lock_header(lock: dict[str, Any], lock_path: Path) -> None:
-    if lock.get("schema_version") != RMSO_EVAL_LOCK_SCHEMA_VERSION:
+    schema_version = lock.get("schema_version")
+    if schema_version not in (
+        RMSO_EVAL_LOCK_SCHEMA_VERSION,
+        RMSO_REDESIGNED_LOCK_SCHEMA_VERSION,
+    ):
         raise RMSOEvalLockError("RMSO evaluation lock has an invalid schema_version.")
     protocol = lock.get("protocol")
-    if not isinstance(protocol, dict) or protocol.get("bead") != RMSO_PROTOCOL_BEAD:
+    expected_protocol_bead = (
+        RMSO_REDESIGNED_PROTOCOL_BEAD
+        if schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION
+        else RMSO_PROTOCOL_BEAD
+    )
+    if not isinstance(protocol, dict) or protocol.get("bead") != expected_protocol_bead:
         raise RMSOEvalLockError("RMSO evaluation lock has an invalid protocol bead.")
     protocol_document = protocol.get("document")
     protocol_hash = protocol.get("sha256")
@@ -160,6 +187,25 @@ def _validate_lock_header(lock: dict[str, Any], lock_path: Path) -> None:
             f"RMSO protocol document failed SHA-256 validation: expected "
             f"{protocol_hash}, got {actual_protocol_hash}."
         )
+    if schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION:
+        if lock.get("design_revision") != RMSO_REDESIGNED_REVISION:
+            raise RMSOEvalLockError(
+                "Redesigned RMSO lock has an invalid design revision."
+            )
+        approval = lock.get("protocol_approval")
+        if (
+            not isinstance(approval, dict)
+            or approval.get("status") != "product_owner_approved"
+            or not isinstance(approval.get("approved_on"), str)
+            or not approval["approved_on"]
+        ):
+            raise RMSOEvalLockError(
+                "Redesigned RMSO lock lacks product-owner protocol approval."
+            )
+        if lock.get("accounting_contract") != _RMSO_REDESIGNED_ACCOUNTING:
+            raise RMSOEvalLockError(
+                "Redesigned RMSO lock has an invalid accounting contract."
+            )
     certification = lock.get("certification")
     if (
         not isinstance(certification, dict)

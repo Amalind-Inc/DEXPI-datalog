@@ -48,7 +48,7 @@ from pydexpi_datalog.benchmark.souffle_arm import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock.json"
+LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock_v2.json"
 
 INCLUDES = """\
 .include "/input/graph_facts.dl"

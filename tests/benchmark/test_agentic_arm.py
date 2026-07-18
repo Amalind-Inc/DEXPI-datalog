@@ -13,6 +13,7 @@ calls and no Docker in CI.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import hashlib
 import os
@@ -762,6 +763,12 @@ def test_live_runner_routes_episode_through_configured_request_gateway(
         base_url = "http://127.0.0.1:43123/v1"
         entered = False
         exited = False
+        attributions = []
+
+        @contextmanager
+        def attribute_calls(self, *, arm_id, question_id):
+            self.attributions.append((arm_id, question_id))
+            yield
 
         def __enter__(self):
             self.entered = True
@@ -781,6 +788,7 @@ def test_live_runner_routes_episode_through_configured_request_gateway(
         kira_dir=Path("/tmp/terminus-kira"),
         model="openrouter/deepseek/deepseek-v4-flash",
         request_gateway=gateway,  # type: ignore[arg-type]
+        accounting_arm_id="a-agentic:deepseek",
     )
 
     runner.run(
@@ -791,6 +799,7 @@ def test_live_runner_routes_episode_through_configured_request_gateway(
 
     assert gateway.entered is True
     assert gateway.exited is True
+    assert gateway.attributions == [("a-agentic:deepseek", "agentic-q1")]
     assert len(commands) == 1
     assert "api_base=http://127.0.0.1:43123/v1" in commands[0]
 

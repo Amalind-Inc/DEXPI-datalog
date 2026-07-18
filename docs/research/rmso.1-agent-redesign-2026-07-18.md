@@ -78,3 +78,10 @@ through answer-specific rules or examples.
 A future result may answer the architecture question only if the new design is frozen
 before calls and the cost/output-limit accounting gaps from the incomplete run are also
 closed. Until then, the earlier 0/9 versus 5/9 is diagnostic only.
+
+## Readiness update
+
+The design and fail-closed accounting contract are now frozen in
+`rmso.1-redesigned-rerun-protocol-2026-07-18.md` and
+`testdata/benchmark/rmso_eval_lock_v2.json`. The earlier result remains diagnostic, and a
+paid replacement still requires explicit authorization and a fresh output directory.

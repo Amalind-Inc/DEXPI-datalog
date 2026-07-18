@@ -1135,6 +1135,7 @@ class HarborKiraEpisodeRunner:
     model: str
     api_base: str | None = None
     request_gateway: LockedOpenRouterGateway | None = None
+    accounting_arm_id: str | None = None
     agent_import_path: str = "terminus_kira.terminus_kira:TerminusKira"
     environ: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
 
@@ -1180,21 +1181,29 @@ class HarborKiraEpisodeRunner:
         self, *, task_dir: Path, jobs_dir: Path, budgets: EpisodeBudgets
     ) -> EpisodeResult:
         if self.request_gateway is not None:
-            with self.request_gateway as gateway:
-                command = replace(
-                    self,
-                    api_base=gateway.base_url,
-                    request_gateway=None,
-                ).build_command(
-                    task_dir=task_dir,
-                    jobs_dir=jobs_dir,
-                    budgets=budgets,
-                )
-                return self._run_command(
-                    command=command,
-                    jobs_dir=jobs_dir,
-                    budgets=budgets,
-                )
+            if self.accounting_arm_id is None:
+                raise RuntimeError("Gateway-backed episodes require an accounting arm ID.")
+            prefix = "benchmark-"
+            question_id = task_dir.name.removeprefix(prefix)
+            with self.request_gateway.attribute_calls(
+                arm_id=self.accounting_arm_id,
+                question_id=question_id,
+            ):
+                with self.request_gateway as gateway:
+                    command = replace(
+                        self,
+                        api_base=gateway.base_url,
+                        request_gateway=None,
+                    ).build_command(
+                        task_dir=task_dir,
+                        jobs_dir=jobs_dir,
+                        budgets=budgets,
+                    )
+                    return self._run_command(
+                        command=command,
+                        jobs_dir=jobs_dir,
+                        budgets=budgets,
+                    )
         command = self.build_command(
             task_dir=task_dir, jobs_dir=jobs_dir, budgets=budgets
         )

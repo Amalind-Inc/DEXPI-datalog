@@ -101,3 +101,14 @@ cost evidence.
 
 The separate post-run harness redesign and its interpretation boundary are recorded in
 `rmso.1-agent-redesign-2026-07-18.md`.
+
+## Follow-up implementation status
+
+The accounting and arm-design defects above were addressed after this diagnostic record
+was frozen. The gateway now settles reported billed cost before eligibility rejection,
+marks response-less and unpriced server failures as unknown cost, releases reservations,
+attributes every provider call to an arm and episode, populates report costs from that
+ledger, and makes unknown cost, missing attribution, spend-cap exhaustion, unsettled
+reservations, or provider-policy violations invalidate the whole run. The replacement
+design is separately locked by `rmso_eval_lock_v2.json` and
+`rmso.1-redesigned-rerun-protocol-2026-07-18.md`; the original run remains incomplete.
