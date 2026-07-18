@@ -1291,6 +1291,35 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
             if isinstance(current, (int, float)) and not isinstance(current, bool):
                 usage[key] = current + value
 
+    exception_types: list[str] = []
+    for result_path in sorted(jobs_dir.rglob("result.json")):
+        try:
+            result_payload = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(result_payload, dict):
+            continue
+        exception_info = result_payload.get("exception_info")
+        if not isinstance(exception_info, dict):
+            continue
+        exception_type = exception_info.get("exception_type")
+        if isinstance(exception_type, str) and exception_type:
+            exception_types.append(exception_type)
+
+    # Harbor may run the verifier and persist reward.txt before subsequently
+    # declaring the agent execution failed.  An episode-level exception takes
+    # precedence over that partial verifier result: failed episodes score zero.
+    if exception_types:
+        exception_type = (
+            "AgentTimeoutError"
+            if "AgentTimeoutError" in exception_types
+            else exception_types[0]
+        )
+        reward = 0.0
+        usage["harbor_exception_type"] = exception_type
+        if exception_type == "AgentTimeoutError":
+            usage["timed_out"] = True
+
     return EpisodeResult(
         structured_answer_text=structured_answer_text,
         reward=reward,

@@ -872,6 +872,34 @@ def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
     ]
 
 
+def test_harbor_agent_timeout_overrides_persisted_verifier_reward(
+    tmp_path: Path,
+) -> None:
+    jobs_dir = tmp_path / "jobs"
+    trial_dir = jobs_dir / "run" / "trial-0"
+    verifier_dir = trial_dir / "verifier"
+    verifier_dir.mkdir(parents=True)
+    (verifier_dir / "reward.txt").write_text("1\n", encoding="utf-8")
+    (trial_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "verifier_result": {"rewards": {"reward": 1.0}},
+                "exception_info": {
+                    "exception_type": "AgentTimeoutError",
+                    "exception_message": "Agent execution timed out after 300 seconds",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = parse_harbor_artifacts(jobs_dir)
+
+    assert result.reward == 0.0
+    assert result.usage["timed_out"] is True
+    assert result.usage["harbor_exception_type"] == "AgentTimeoutError"
+
+
 def test_missing_harbor_artifacts_parse_as_rejected_episode(
     tmp_path: Path,
 ) -> None:
