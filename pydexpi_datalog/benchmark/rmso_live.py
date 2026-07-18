@@ -15,7 +15,7 @@ import httpx
 from pydexpi_datalog.benchmark.agentic_arm import (
     AgenticArm,
     EpisodeBudgets,
-    create_agentic_arm,
+    create_rmso_graph_direct_arm,
     load_episode_budgets,
 )
 from pydexpi_datalog.benchmark.rmso_eval import (
@@ -47,7 +47,7 @@ def create_rmso_live_arms(
     request_gateway: LockedOpenRouterGateway,
 ) -> tuple[AgenticArm, AgenticArm]:
     """Construct exactly the two locked DeepSeek arms for this spike."""
-    arm_a = create_agentic_arm(
+    arm_a = create_rmso_graph_direct_arm(
         "deepseek",
         kira_dir=kira_dir,
         budgets=budgets,

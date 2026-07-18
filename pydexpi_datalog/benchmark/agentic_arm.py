@@ -1,11 +1,12 @@
 """Arm A agentic: Harbor/Terminus-KIRA sandbox episodes.
 
-The agent works in a sandboxed Terminus episode with the drawing bundle and a
-terminal — python/NetworkX allowed, NO Souffle, NO rule packs, NO bespoke
-confirmation machinery.  It executes its own read-only analysis, observes
-real output, revises, and submits ``/workspace/structured_answer.json``
-through Harbor's independent verification gate.  This module maps that
-episode outcome to the benchmark's :class:`StructuredAnswer`.
+The agent works in a sandboxed Terminus episode with a drawing representation
+and a terminal — Python allowed, NO Souffle, NO rule packs. The generic arm
+receives raw XML; the RMSO comparison arm receives canonical graph facts. It
+executes its own read-only analysis, observes real output, revises, and submits
+``/workspace/structured_answer.json`` through Harbor's independent verification
+gate. This module maps that episode outcome to the benchmark's
+:class:`StructuredAnswer`.
 
 Seams (per the 3q1.1 spike findings):
 
@@ -45,6 +46,7 @@ from pydexpi_datalog.benchmark.direct_arm import (
     DEGRADED_VERDICT,
     parse_structured_answer,
 )
+from pydexpi_datalog.benchmark.graph_inspection import build_graph_inspection_index
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
     LockedOpenRouterGateway,
 )
@@ -60,6 +62,8 @@ AGENTIC_ARM_MODELS = {
 # The 3q1.4 bundle layout the task environment mounts read-only.
 BUNDLE_FILES = ("drawing.xml", "graph_facts.json", "graph.json", "README.md")
 RAW_XML_INPUT_FILES = ("drawing.xml",)
+GRAPH_FACTS_INPUT_FILES = ("graph_facts.json",)
+GRAPH_INSPECTION_FILENAME = "graph_inspection.json"
 
 ANSWER_FILENAME = "structured_answer.json"
 
@@ -67,6 +71,7 @@ ANSWER_FILENAME = "structured_answer.json"
 PROGRAM_FILENAME = "analysis.dl"
 ANALYSIS_SCRIPT_FILENAME = "analysis.py"
 ANALYSIS_REPLAY_FILENAME = "analysis_replay.json"
+ANALYSIS_RUNNER_FILENAME = "run_analysis.py"
 PERMISSION_CONTROL_IDS = frozenset(
     {
         "hq-permission-defeasible-control-small",
@@ -74,9 +79,118 @@ PERMISSION_CONTROL_IDS = frozenset(
     }
 )
 
+RMSO_RUN_ANALYSIS_HELPER = '''\
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+
+def replace_json(path: Path, value: object) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\\n", encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: run_analysis.py PROGRAM", file=sys.stderr)
+        return 2
+    program = Path(sys.argv[1]).resolve()
+    if program.name != "analysis.py":
+        print("PROGRAM must be named analysis.py", file=sys.stderr)
+        return 2
+    input_dir = Path(__file__).resolve().parent
+    completed = subprocess.run(
+        [sys.executable, str(program), str(input_dir / "graph_facts.json")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if completed.returncode != 0:
+        print((completed.stderr or completed.stdout)[-4000:], file=sys.stderr)
+        return completed.returncode
+    try:
+        replay = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        print(f"analysis did not emit one JSON object: {error}", file=sys.stderr)
+        return 1
+    if not isinstance(replay, dict) or set(replay) != {"verdict", "witness_ids"}:
+        print("analysis output must contain only verdict and witness_ids", file=sys.stderr)
+        return 1
+    verdict = replay["verdict"]
+    witnesses = replay["witness_ids"]
+    if verdict not in {"violation_found", "no_violation", "unanswerable"}:
+        print(f"unsupported analysis verdict: {verdict!r}", file=sys.stderr)
+        return 1
+    if not isinstance(witnesses, list) or not all(
+        isinstance(witness, str) for witness in witnesses
+    ):
+        print("witness_ids must be a list of strings", file=sys.stderr)
+        return 1
+    inspection = json.loads(
+        (input_dir / "graph_inspection.json").read_text(encoding="utf-8")
+    )
+    known_ids = {node["id"] for node in inspection["nodes"]}
+    unknown_ids = sorted(set(witnesses) - known_ids)
+    if unknown_ids:
+        print(f"analysis emitted IDs outside the graph: {unknown_ids}", file=sys.stderr)
+        return 1
+    answer = {
+        **replay,
+        "posture": (
+            "source_grounded"
+            if verdict in {"violation_found", "no_violation"}
+            else "source_data_unavailable"
+        ),
+        "answer_text": "Result produced by the latest executed Python analysis.",
+        "support": {
+            "steps": [
+                {
+                    "id": "scope",
+                    "kind": "graph_scope",
+                    "node_count": inspection["node_count"],
+                    "edge_count": inspection["edge_count"],
+                    "dependencies": [],
+                },
+                {
+                    "id": "execution",
+                    "kind": "python_execution",
+                    "artifact": "analysis.py",
+                    "input": "graph_facts.json",
+                    "output": "analysis_replay.json",
+                    "verdict": verdict,
+                    "witness_ids": witnesses,
+                    "dependencies": ["scope"],
+                },
+            ],
+            "claims": [
+                {"claim": "verdict", "step_ids": ["execution"]},
+                *(
+                    {"claim": f"witness:{witness}", "step_ids": ["execution"]}
+                    for witness in witnesses
+                ),
+            ],
+        },
+    }
+    replace_json(program.parent / "analysis_replay.json", replay)
+    replace_json(program.parent / "structured_answer.json", answer)
+    print(json.dumps(replay, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
 
 def requires_analysis_replay(question: BenchmarkQuestion) -> bool:
-    """Return whether Arm A must replay a raw-XML analysis for this entry."""
+    """Return whether Arm A must replay an executable analysis for this entry."""
     return question.question_id not in PERMISSION_CONTROL_IDS
 
 
@@ -179,6 +293,37 @@ def build_harbor_task(
     )
 
 
+def build_rmso_graph_direct_harbor_task(
+    *,
+    question: BenchmarkQuestion,
+    drawing_ref: Path,
+    output_dir: Path,
+    budgets: EpisodeBudgets,
+) -> Path:
+    """Generate the fair RMSO direct arm over graph-mirrored facts."""
+    replay_required = requires_analysis_replay(question)
+    bundle_dir = validate_bundle(drawing_ref, required_files=GRAPH_FACTS_INPUT_FILES)
+    artifact = json.loads(
+        (bundle_dir / "graph_facts.json").read_text(encoding="utf-8")
+    )
+    return build_task(
+        question=question,
+        drawing_ref=drawing_ref,
+        output_dir=output_dir,
+        budgets=budgets,
+        instruction=_render_graph_direct_instruction(question),
+        tags=("arm-a-rmso-graph-direct", "pydexpi-datalog-1-rmso.1"),
+        input_bundle_files=GRAPH_FACTS_INPUT_FILES,
+        extra_input_files={
+            GRAPH_INSPECTION_FILENAME: build_graph_inspection_index(artifact),
+            ANALYSIS_RUNNER_FILENAME: RMSO_RUN_ANALYSIS_HELPER,
+        },
+        extra_workspace_files=(ANALYSIS_SCRIPT_FILENAME,) if replay_required else (),
+        replay_python_analysis=replay_required,
+        python_analysis_input="graph_facts.json",
+    )
+
+
 def _resolve_raw_xml(drawing_ref: Path) -> Path:
     """Resolve the original XML without exposing graph provenance to Arm A."""
     direct = drawing_ref / "drawing.xml"
@@ -235,6 +380,7 @@ def build_task(
     input_bundle_files: Sequence[str] = BUNDLE_FILES,
     input_bundle_sources: Mapping[str, Path] | None = None,
     replay_python_analysis: bool = False,
+    python_analysis_input: str = "drawing.xml",
     base_image: str = "python:3.12-slim",
     base_packages: Sequence[str] = ("tmux",),
 ) -> Path:
@@ -297,6 +443,7 @@ def build_task(
             digests,
             required_nonempty=tuple(extra_workspace_files),
             replay_python_analysis=replay_python_analysis,
+            python_analysis_input=python_analysis_input,
         ),
         encoding="utf-8",
     )
@@ -387,11 +534,72 @@ Verify both submitted files exist before marking the task complete.
 """
 
 
-def _render_agentic_permission_instruction(question: BenchmarkQuestion) -> str:
+def _render_graph_direct_instruction(question: BenchmarkQuestion) -> str:
+    if not requires_analysis_replay(question):
+        return _render_agentic_permission_instruction(question, graph_direct=True)
+    verdicts = json.dumps(list(VERDICTS))
+    postures = json.dumps(list(POSTURES))
+    return f"""\
+# P&ID review question (graph-direct)
+
+Answer one question from the graph-mirrored drawing facts mounted read-only under
+`/input`:
+
+- `/input/graph_facts.json`: the complete canonical graph-mirrored fact layer.
+- `/input/graph_inspection.json`: a compact answer-neutral index of every node and edge,
+  including graph UUID, source Proteus ID, label, tag, edge label, and `attr_name`.
+
+## Question
+
+{question.question}
+
+## Method
+
+- Use bounded inspection (`grep`, `head`, `sed`) and standard-library Python. Avoid
+  printing an entire large input when a targeted query will answer the question.
+- Write `/workspace/{ANALYSIS_SCRIPT_FILENAME}` early. It must accept
+  `/input/graph_facts.json` as its sole argument and print exactly one JSON object with
+  only `verdict` and `witness_ids`.
+- Execute it with
+  `python3 /input/{ANALYSIS_RUNNER_FILENAME} /workspace/{ANALYSIS_SCRIPT_FILENAME}`.
+  The helper bounds diagnostics and atomically writes both the replay and a valid
+  provisional structured answer. Each successful rerun replaces that checkpoint.
+  Base the final answer on its observed output. No logic engine or rule-pack prior art
+  is available in this direct arm.
+
+## Submission
+
+Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object with:
+
+- `verdict`: one of {verdicts};
+- `witness_ids`: exhaustive graph UUIDs from `facts.nodes[*].node_id`;
+- `posture`: one of {postures};
+- `answer_text`: a concise explanation;
+- `support.steps`: one exact `graph_scope` step followed by one `python_execution` step
+  whose artifact is `analysis.py`, input is `graph_facts.json`, output is
+  `analysis_replay.json`, and verdict/witnesses match the executed script;
+- `support.claims`: the verdict claim and one `witness:<UUID>` claim per witness, all
+  linked to the execution step.
+
+The `graph_scope` node and edge counts are already present in
+`/input/graph_inspection.json`. The input is read-only. Verify both submission files exist
+before finishing.
+"""
+
+
+def _render_agentic_permission_instruction(
+    question: BenchmarkQuestion, *, graph_direct: bool = False
+) -> str:
+    source_description = (
+        "The complete graph-mirrored drawing facts are mounted read-only at "
+        "`/input/graph_facts.json`."
+        if graph_direct
+        else "The complete raw DEXPI XML is mounted read-only at `/input/drawing.xml`."
+    )
     return f"""\
 # P&ID review question (policy-boundary control)
 
-The complete raw DEXPI XML is mounted read-only at `/input/drawing.xml`.
+{source_description}
 
 ## Question
 
@@ -514,6 +722,7 @@ def _render_verifier(
     *,
     required_nonempty: Sequence[str] = (),
     replay_python_analysis: bool = False,
+    python_analysis_input: str = "drawing.xml",
 ) -> str:
     """The independent verifier: input integrity + submission shape only.
 
@@ -538,6 +747,7 @@ WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
 EXPECTED_SHA256 = {json.dumps(dict(digests), indent=4, sort_keys=True)}
 REQUIRED_NONEMPTY = {json.dumps(list(required_nonempty))}
 REPLAY_PYTHON_ANALYSIS = {replay_python_analysis!r}
+PYTHON_ANALYSIS_INPUT = {python_analysis_input!r}
 
 
 def main() -> int:
@@ -561,7 +771,7 @@ def main() -> int:
     if REPLAY_PYTHON_ANALYSIS:
         script_path = WORKSPACE_DIR / {json.dumps(ANALYSIS_SCRIPT_FILENAME)}
         replay = subprocess.run(
-            [sys.executable, str(script_path), str(INPUT_DIR / "drawing.xml")],
+            [sys.executable, str(script_path), str(INPUT_DIR / PYTHON_ANALYSIS_INPUT)],
             cwd=WORKSPACE_DIR,
             capture_output=True,
             text=True,
@@ -1197,6 +1407,53 @@ def verify_agentic_answer_trace(
     )
 
 
+def verify_graph_direct_answer_trace(
+    answer: StructuredAnswer,
+    drawing_ref: Path,
+    analysis_script: str | None,
+    analysis_replay_text: str | None,
+    question: BenchmarkQuestion,
+) -> dict[str, object]:
+    """Verify RMSO Arm A replay against graph facts and graph UUIDs."""
+    from dataclasses import asdict
+
+    from pydexpi_datalog.benchmark.audit_trace import verify_audit_trace
+
+    graph_path = (
+        drawing_ref / "graph_facts.json" if drawing_ref.is_dir() else drawing_ref
+    )
+    graph_facts = json.loads(graph_path.read_text(encoding="utf-8"))
+    if not requires_analysis_replay(question):
+        if (analysis_script or "").strip() or (analysis_replay_text or "").strip():
+            raise ValueError(
+                "permission/defeasible controls must abstain without a verdict script"
+            )
+        return asdict(
+            verify_audit_trace(
+                answer=answer,
+                graph_facts=graph_facts,
+                allow_policy_abstention=True,
+            )
+        )
+    if not (analysis_script or "").strip() or not (
+        analysis_replay_text or ""
+    ).strip():
+        raise ValueError("graph-direct conclusions require captured analysis replay")
+    try:
+        replayed = json.loads(analysis_replay_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"captured analysis replay is not JSON: {error}") from error
+    if not isinstance(replayed, dict):
+        raise ValueError("captured analysis replay must be a JSON object")
+    return asdict(
+        verify_audit_trace(
+            answer=answer,
+            graph_facts=graph_facts,
+            replay_python=lambda artifact, output: replayed,
+        )
+    )
+
+
 def create_agentic_arm(
     model_key: str,
     *,
@@ -1226,4 +1483,26 @@ def create_agentic_arm(
         model_name=model_key,
         require_analysis_replay=requires_analysis_replay,
         analysis_trace_gate=verify_agentic_answer_trace,
+    )
+
+
+def create_rmso_graph_direct_arm(
+    model_key: str,
+    *,
+    kira_dir: Path,
+    budgets: EpisodeBudgets,
+    environ: Mapping[str, str] | None = None,
+    request_gateway: LockedOpenRouterGateway | None = None,
+) -> AgenticArm:
+    """Build RMSO Arm A over the same graph representation as Arm C."""
+    return replace(
+        create_agentic_arm(
+            model_key,
+            kira_dir=kira_dir,
+            budgets=budgets,
+            environ=environ,
+            request_gateway=request_gateway,
+        ),
+        task_builder=build_rmso_graph_direct_harbor_task,
+        analysis_trace_gate=verify_graph_direct_answer_trace,
     )

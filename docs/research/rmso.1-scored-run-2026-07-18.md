@@ -98,3 +98,6 @@ cost evidence.
    output ceiling or complete cost accounting is unavailable.
 5. Revalidate provider enforcement before requesting product-owner approval for any new
    scored replacement. Do not reuse any existing output directory.
+
+The separate post-run harness redesign and its interpretation boundary are recorded in
+`rmso.1-agent-redesign-2026-07-18.md`.

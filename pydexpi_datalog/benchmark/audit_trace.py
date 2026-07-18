@@ -141,6 +141,7 @@ def verify_audit_trace(
     known_nodes, known_edges = _known_graph_items(graph_facts)
     expected_node_count = len(known_nodes)
     expected_edge_count = len(known_edges)
+    python_analysis_input = "graph_facts.json" if graph_facts else "drawing.xml"
 
     for step_id in reachable:
         step = steps[step_id]
@@ -188,7 +189,7 @@ def verify_audit_trace(
             declared_ids = step.get("witness_ids")
             if (
                 artifact != "analysis.py"
-                or step.get("input") != "drawing.xml"
+                or step.get("input") != python_analysis_input
                 or output != "analysis_replay.json"
                 or not isinstance(declared_ids, list)
                 or not all(isinstance(item, str) for item in declared_ids)

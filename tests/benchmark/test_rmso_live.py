@@ -1,15 +1,31 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
-from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+from pydexpi_datalog.benchmark import GroundTruth
+from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets, EpisodeResult
+from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.rmso_live import (
     create_rmso_live_arms,
     run_rmso_live,
 )
 from pydexpi_datalog.benchmark.souffle_arm import build_rmso_souffle_harbor_task
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+E06_BUNDLE = (
+    REPO_ROOT
+    / "testdata"
+    / "graph_contract"
+    / "corpus"
+    / "e06-pump-heatexchanger-nozzles-connected-with-pns-e06v01-ver-ex01"
+)
 
 
 def test_creates_exact_two_locked_deepseek_arms_with_one_gateway(
@@ -34,6 +50,217 @@ def test_creates_exact_two_locked_deepseek_arms_with_one_gateway(
         tmp_path / "run" / "arm-b" / "harbor",
     ]
     assert arms[1].task_builder is build_rmso_souffle_harbor_task
+
+
+def test_rmso_arm_a_receives_graph_facts_and_compact_index_not_raw_xml(
+    tmp_path: Path,
+) -> None:
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    question = BenchmarkQuestion(
+        question_id="graph-direct-q1",
+        question="Find every unattached nozzle.",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(verdict="violation_found", witness_ids=()),
+    )
+
+    task_dir = arm_a.task_builder(
+        question=question,
+        drawing_ref=E06_BUNDLE,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(),
+    )
+
+    environment = task_dir / "environment"
+    assert (environment / "graph_facts.json").is_file()
+    assert (environment / "graph_inspection.json").is_file()
+    assert (environment / "run_analysis.py").is_file()
+    assert not (environment / "drawing.xml").exists()
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    assert "/input/graph_facts.json" in instruction
+    assert "/input/graph_inspection.json" in instruction
+    assert "standard-library Python" in instruction
+    assert "python3 /input/run_analysis.py /workspace/analysis.py" in instruction
+    assert "souffle" not in instruction.lower()
+
+
+def test_rmso_arm_a_helper_replays_analysis_and_writes_provisional_answer(
+    tmp_path: Path,
+) -> None:
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    question = BenchmarkQuestion(
+        question_id="graph-direct-helper-q1",
+        question="Find one graph node.",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(verdict="violation_found", witness_ids=()),
+    )
+    task_dir = arm_a.task_builder(
+        question=question,
+        drawing_ref=E06_BUNDLE,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(),
+    )
+    environment = task_dir / "environment"
+    witness = json.loads(
+        (environment / "graph_inspection.json").read_text(encoding="utf-8")
+    )["nodes"][0]["id"]
+    analysis = tmp_path / "analysis.py"
+    analysis.write_text(
+        "import json, sys\n"
+        f"print(json.dumps({{'verdict': 'violation_found', 'witness_ids': [{witness!r}]}}))\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(environment / "run_analysis.py"), str(analysis)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["witness_ids"] == [witness]
+    assert json.loads((tmp_path / "analysis_replay.json").read_text()) == {
+        "verdict": "violation_found",
+        "witness_ids": [witness],
+    }
+    checkpoint = json.loads((tmp_path / "structured_answer.json").read_text())
+    assert checkpoint["verdict"] == "violation_found"
+    assert checkpoint["witness_ids"] == [witness]
+    assert checkpoint["support"]["steps"][1]["kind"] == "python_execution"
+
+    analysis.write_text("raise RuntimeError('later revision failed')\n", encoding="utf-8")
+    failed = subprocess.run(
+        [sys.executable, str(environment / "run_analysis.py"), str(analysis)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert json.loads((tmp_path / "structured_answer.json").read_text()) == checkpoint
+
+
+def test_rmso_arm_a_replays_graph_analysis_and_credits_graph_trace(
+    tmp_path: Path,
+) -> None:
+    graph = json.loads((E06_BUNDLE / "graph_facts.json").read_text())
+    witness = graph["facts"]["nodes"][0]["node_id"]
+    replay = {"verdict": "violation_found", "witness_ids": [witness]}
+    answer = {
+        **replay,
+        "posture": "source_grounded",
+        "support": {
+            "steps": [
+                {
+                    "id": "scope",
+                    "kind": "graph_scope",
+                    "node_count": len(graph["facts"]["nodes"]),
+                    "edge_count": len(graph["facts"]["edges"]),
+                    "dependencies": [],
+                },
+                {
+                    "id": "execution",
+                    "kind": "python_execution",
+                    "artifact": "analysis.py",
+                    "input": "graph_facts.json",
+                    "output": "analysis_replay.json",
+                    **replay,
+                    "dependencies": ["scope"],
+                },
+            ],
+            "claims": [
+                {"claim": "verdict", "step_ids": ["execution"]},
+                {"claim": f"witness:{witness}", "step_ids": ["execution"]},
+            ],
+        },
+    }
+
+    class ScriptedRunner:
+        def run(self, *, task_dir, jobs_dir, budgets):
+            return EpisodeResult(
+                structured_answer_text=json.dumps(answer),
+                reward=1.0,
+                analysis_script="import json; print(json.dumps({}))",
+                analysis_replay_text=json.dumps(replay),
+            )
+
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    arm_a = replace(arm_a, runner=ScriptedRunner())
+    question = BenchmarkQuestion(
+        question_id="graph-direct-q1",
+        question="Find the first graph node.",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(
+            verdict="violation_found", witness_ids=(str(witness),)
+        ),
+    )
+
+    result = arm_a.answer(question=question, drawing_ref=E06_BUNDLE)
+
+    assert result.verdict == "violation_found"
+    assert result.witness_ids == (witness,)
+    assert result.usage["audit_trace"]["trace_safe"] is True
+
+
+def test_rmso_arms_receive_identical_answer_neutral_graph_index(
+    tmp_path: Path,
+) -> None:
+    arm_a, arm_c = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    question = BenchmarkQuestion(
+        question_id="graph-index-q1",
+        question="Inspect the graph.",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(verdict="no_violation", witness_ids=()),
+    )
+    tasks = [
+        arm.task_builder(
+            question=question,
+            drawing_ref=E06_BUNDLE,
+            output_dir=tmp_path / f"tasks-{index}",
+            budgets=EpisodeBudgets(),
+        )
+        for index, arm in enumerate((arm_a, arm_c))
+    ]
+
+    indexes = [
+        (task / "environment" / "graph_inspection.json").read_bytes()
+        for task in tasks
+    ]
+    assert indexes[0] == indexes[1]
+    index = json.loads(indexes[0])
+    graph = json.loads((E06_BUNDLE / "graph_facts.json").read_text())
+    assert index["node_count"] == len(graph["facts"]["nodes"])
+    assert index["edge_count"] == len(graph["facts"]["edges"])
+    assert {node["id"] for node in index["nodes"]} == {
+        node["node_id"] for node in graph["facts"]["nodes"]
+    }
 
 
 def test_refuses_to_replace_any_existing_live_run_artifact(tmp_path: Path) -> None:

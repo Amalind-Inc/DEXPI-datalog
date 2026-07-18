@@ -173,9 +173,12 @@ def test_rmso_task_exposes_only_approved_edb_and_idb_inputs(tmp_path: Path) -> N
         for path in environment.iterdir()
         if path.name != "Dockerfile"
     } == {
+        "analysis_template.dl",
         "graph_facts.json",
         "graph_facts.dl",
+        "graph_inspection.json",
         "graph_topology_semantics.dl",
+        "run_query.py",
     }
     instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
     for forbidden in (
@@ -188,6 +191,93 @@ def test_rmso_task_exposes_only_approved_edb_and_idb_inputs(tmp_path: Path) -> N
     dockerfile = (environment / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith("FROM --platform=linux/amd64 ubuntu:22.04\n")
     assert "python3" in dockerfile
+
+
+def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_souffle_harbor_task(
+        question=make_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "rmso-tasks",
+        budgets=BUDGETS,
+    )
+    environment = task_dir / "environment"
+    template = (environment / "analysis_template.dl").read_text(encoding="utf-8")
+    assert template.startswith('.include "/input/graph_facts.dl"\n')
+    assert ".decl result_witness(id:symbol)" in template
+    helper = environment / "run_query.py"
+    witness = json.loads(
+        (environment / "graph_inspection.json").read_text(encoding="utf-8")
+    )["nodes"][0]["id"]
+    smoke_program = tmp_path / "analysis.dl"
+    smoke_program.write_text(
+        '.decl result_witness(id:symbol)\n'
+        f'result_witness("{witness}").\n'
+        ".output result_witness\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(helper), str(smoke_program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "ok": True,
+        "witness_ids": [witness],
+    }
+    checkpoint = json.loads(
+        (tmp_path / "structured_answer.json").read_text(encoding="utf-8")
+    )
+    assert checkpoint["verdict"] == "violation_found"
+    assert checkpoint["witness_ids"] == [witness]
+    assert checkpoint["support"]["steps"][1] == {
+        "id": "execution",
+        "kind": "souffle_execution",
+        "artifact": "analysis.dl",
+        "relation": "result_witness",
+        "witness_ids": [witness],
+        "dependencies": ["scope"],
+    }
+
+    smoke_program.write_text(
+        '.decl result_witness(id:symbol)\n.output result_witness\n',
+        encoding="utf-8",
+    )
+    empty = subprocess.run(
+        [sys.executable, str(helper), str(smoke_program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert empty.returncode == 0, empty.stderr
+    empty_checkpoint = json.loads(
+        (tmp_path / "structured_answer.json").read_text(encoding="utf-8")
+    )
+    assert empty_checkpoint["verdict"] == "no_violation"
+    assert empty_checkpoint["witness_ids"] == []
+
+    smoke_program.write_text("this is not Souffle\n", encoding="utf-8")
+    failed = subprocess.run(
+        [sys.executable, str(helper), str(smoke_program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert json.loads(
+        (tmp_path / "structured_answer.json").read_text(encoding="utf-8")
+    ) == empty_checkpoint
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    assert "python3 /input/run_query.py /workspace/analysis.dl" in instruction
+    assert "writes a valid provisional structured answer" in instruction
+    assert "grep" in instruction
+    assert "Avoid printing an entire large input" in instruction
 
 
 def test_dockerfile_installs_souffle_and_mounts_layers_read_only(

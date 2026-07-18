@@ -46,6 +46,7 @@ from pydexpi_datalog.benchmark.agentic_arm import (
 )
 from pydexpi_datalog.benchmark.contract import POSTURES, VERDICTS, StructuredAnswer
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
+from pydexpi_datalog.benchmark.graph_inspection import build_graph_inspection_index
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
     LockedOpenRouterGateway,
 )
@@ -186,6 +187,117 @@ RUN apt-get update \\
     && rm -rf /var/lib/apt/lists/*
 """
 
+RMSO_ANALYSIS_TEMPLATE = """\
+.include "/input/graph_facts.dl"
+.include "/input/graph_topology_semantics.dl"
+.decl result_witness(id:symbol)
+.output result_witness
+
+// Add only portable IDB rules below. Never hard-code drawing UUIDs.
+"""
+
+RMSO_RUN_QUERY_HELPER = '''\
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+
+def write_checkpoint(program: Path, witnesses: list[str]) -> None:
+    inspection = json.loads(
+        (Path(__file__).resolve().parent / "graph_inspection.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    known_ids = {node["id"] for node in inspection["nodes"]}
+    unknown_ids = sorted(set(witnesses) - known_ids)
+    if unknown_ids:
+        raise ValueError(f"query emitted IDs outside the graph: {unknown_ids}")
+    verdict = "violation_found" if witnesses else "no_violation"
+    answer = {
+        "verdict": verdict,
+        "witness_ids": witnesses,
+        "posture": "source_grounded",
+        "answer_text": "Result produced by the latest executed Souffle query.",
+        "support": {
+            "steps": [
+                {
+                    "id": "scope",
+                    "kind": "graph_scope",
+                    "node_count": inspection["node_count"],
+                    "edge_count": inspection["edge_count"],
+                    "dependencies": [],
+                },
+                {
+                    "id": "execution",
+                    "kind": "souffle_execution",
+                    "artifact": "analysis.dl",
+                    "relation": "result_witness",
+                    "witness_ids": witnesses,
+                    "dependencies": ["scope"],
+                },
+            ],
+            "claims": [
+                {"claim": "verdict", "step_ids": ["execution"]},
+                *(
+                    {"claim": f"witness:{witness}", "step_ids": ["execution"]}
+                    for witness in witnesses
+                ),
+            ],
+        },
+    }
+    answer_path = program.parent / "structured_answer.json"
+    temporary = answer_path.with_name(f".{answer_path.name}.tmp")
+    temporary.write_text(
+        json.dumps(answer, indent=2, sort_keys=True) + "\\n",
+        encoding="utf-8",
+    )
+    temporary.replace(answer_path)
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: run_query.py PROGRAM", file=sys.stderr)
+        return 2
+    program = Path(sys.argv[1]).resolve()
+    if program.name != "analysis.dl":
+        print("PROGRAM must be named analysis.dl", file=sys.stderr)
+        return 2
+    output = program.parent / ".query-out"
+    shutil.rmtree(output, ignore_errors=True)
+    output.mkdir(parents=True)
+    completed = subprocess.run(
+        ["souffle", str(program), "-D", str(output)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if completed.returncode != 0:
+        diagnostics = (completed.stderr or completed.stdout)[-4000:]
+        print(diagnostics, file=sys.stderr)
+        return completed.returncode
+    result = output / "result_witness.csv"
+    if not result.is_file():
+        print("Souffle did not produce result_witness.csv", file=sys.stderr)
+        return 1
+    witnesses = []
+    with result.open(newline="", encoding="utf-8") as stream:
+        witnesses = [row[0] for row in csv.reader(stream, delimiter="\\t") if row]
+    witnesses = sorted(set(witnesses))
+    write_checkpoint(program, witnesses)
+    print(json.dumps({"ok": True, "witness_ids": witnesses}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
 
 def build_souffle_harbor_task(
     *,
@@ -217,7 +329,7 @@ def build_rmso_souffle_harbor_task(
     output_dir: Path,
     budgets: EpisodeBudgets,
 ) -> Path:
-    """Generate the locked Arm B task with only approved EDB/IDB inputs."""
+    """Generate the locked RMSO engine arm with only approved EDB/IDB inputs."""
     bundle_dir = validate_bundle(
         drawing_ref, required_files=("graph_facts.json",)
     )
@@ -264,8 +376,11 @@ def _rmso_souffle_input_files(bundle_dir: Path) -> dict[str, str]:
         (bundle_dir / "graph_facts.json").read_text(encoding="utf-8")
     )
     return {
+        "analysis_template.dl": RMSO_ANALYSIS_TEMPLATE,
         "graph_facts.dl": build_graph_facts_datalog(artifact),
         "graph_topology_semantics.dl": load_graph_topology_idb(),
+        "graph_inspection.json": build_graph_inspection_index(artifact),
+        "run_query.py": RMSO_RUN_QUERY_HELPER,
     }
 
 
@@ -279,6 +394,8 @@ def _render_souffle_instruction(
     if rmso_locked:
         input_lines = """\
 - `/input/graph_facts.json`: the canonical graph-mirrored base fact layer.
+- `/input/graph_inspection.json`: the same compact answer-neutral node/edge index given
+  to the direct arm.
 - `/input/graph_facts.dl`: those facts as the allowed Souffle EDB.
 - `/input/graph_topology_semantics.dl`: the allowed derived-predicate contract."""
         prior_art = (
@@ -317,8 +434,16 @@ Answer one question about the engineering drawing mounted read-only under
 
 ## Method: generate, execute, observe, revise
 
-1. Author a portable Datalog query module at `/workspace/analysis.dl` that
-   begins with these exact includes, then adds only your own IDB rules:
+Use bounded inspection (`grep`, `head`, `sed`, or standard-library Python).
+Avoid printing an entire large input when a targeted query will answer the question. The compact index
+already contains every graph UUID, source Proteus ID, label, tag, edge label, and
+`attr_name`.
+
+1. Start immediately from the supplied portable skeleton:
+
+   `cp /input/analysis_template.dl /workspace/analysis.dl`
+
+   It begins with these exact declarations; add only your own IDB rules:
 
    ```souffle
    .include "/input/graph_facts.dl"
@@ -332,7 +457,14 @@ Answer one question about the engineering drawing mounted read-only under
    not hard-code drawing UUIDs or precomputed witness IDs. This portable
    query module will be replayed unchanged against the paired drawing and
    frozen counterfactual EDB probes.
-2. Execute it for real: `souffle /workspace/analysis.dl -D /workspace/out`.
+2. Execute it for real with the bounded helper:
+
+   `python3 /input/run_query.py /workspace/analysis.dl`
+
+   The helper clears stale output, compiles and runs Souffle, bounds diagnostics,
+   prints the exact `result_witness` IDs as JSON, and writes a valid provisional structured answer.
+   Each successful rerun replaces that checkpoint, so an
+   executed answer remains available even if later analysis runs out of time.
 3. Observe the actual engine output and diagnostics.  If the program fails
    or the output does not answer the question, revise the program and run
    it again.  Do not answer from unexecuted reasoning.
