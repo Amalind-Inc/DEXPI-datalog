@@ -72,6 +72,8 @@ PROGRAM_FILENAME = "analysis.dl"
 ANALYSIS_SCRIPT_FILENAME = "analysis.py"
 ANALYSIS_REPLAY_FILENAME = "analysis_replay.json"
 ANALYSIS_RUNNER_FILENAME = "run_analysis.py"
+HARBOR_ENVIRONMENT_TIMEOUT_SEC = 600.0
+HARBOR_FINALIZATION_GRACE_SEC = 30.0
 PERMISSION_CONTROL_IDS = frozenset(
     {
         "hq-permission-defeasible-control-small",
@@ -1216,12 +1218,18 @@ class HarborKiraEpisodeRunner:
         jobs_dir: Path,
         budgets: EpisodeBudgets,
     ) -> EpisodeResult:
+        process_timeout_sec = (
+            HARBOR_ENVIRONMENT_TIMEOUT_SEC
+            + budgets.agent_timeout_sec
+            + budgets.verifier_timeout_sec
+            + HARBOR_FINALIZATION_GRACE_SEC
+        )
         try:
             subprocess.run(
                 command,
                 check=False,
                 env=dict(self.environ),
-                timeout=budgets.agent_timeout_sec,
+                timeout=process_timeout_sec,
             )
         except subprocess.TimeoutExpired:
             partial = parse_harbor_artifacts(jobs_dir)
@@ -1233,7 +1241,7 @@ class HarborKiraEpisodeRunner:
                 usage={
                     **partial.usage,
                     "timed_out": True,
-                    "timeout_sec": budgets.agent_timeout_sec,
+                    "timeout_sec": process_timeout_sec,
                 },
                 executed_program=partial.executed_program,
                 analysis_script=partial.analysis_script,

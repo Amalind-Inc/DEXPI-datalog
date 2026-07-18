@@ -727,7 +727,7 @@ def test_live_runner_command_forwards_api_base_when_set() -> None:
     assert command[api_base_flag - 1] == "--agent-kwarg"
 
 
-def test_live_runner_timeout_returns_a_rejected_episode_without_retry(
+def test_live_runner_gives_harbor_time_to_enforce_phase_timeouts_and_finalize(
     tmp_path: Path, monkeypatch
 ) -> None:
     calls = []
@@ -745,13 +745,20 @@ def test_live_runner_timeout_returns_a_rejected_episode_without_retry(
     result = runner.run(
         task_dir=tmp_path / "tasks" / "benchmark-agentic-q1",
         jobs_dir=tmp_path / "jobs",
-        budgets=EpisodeBudgets(agent_timeout_sec=300.0),
+        budgets=EpisodeBudgets(
+            agent_timeout_sec=300.0,
+            verifier_timeout_sec=60.0,
+        ),
     )
 
     assert len(calls) == 1
-    assert calls[0][1]["timeout"] == 300.0
+    # The task itself gives Harbor 600s for environment setup, 300s for the
+    # agent, and 60s for the verifier.  The outer process guard must not bind
+    # before Harbor's agent timer or before its result can be persisted.
+    assert calls[0][1]["timeout"] == 990.0
     assert result.reward == 0.0
     assert result.usage["timed_out"] is True
+    assert result.usage["timeout_sec"] == 990.0
 
 
 def test_live_runner_routes_episode_through_configured_request_gateway(
