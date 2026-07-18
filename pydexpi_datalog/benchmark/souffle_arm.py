@@ -233,6 +233,8 @@ def build_rmso_souffle_harbor_task(
         extra_input_files=_rmso_souffle_input_files(bundle_dir),
         engine_setup=SOUFFLE_ENGINE_SETUP,
         extra_workspace_files=(PROGRAM_FILENAME,) if program_required else (),
+        base_image="--platform=linux/amd64 ubuntu:22.04",
+        base_packages=("python3", "tmux"),
     )
 
 

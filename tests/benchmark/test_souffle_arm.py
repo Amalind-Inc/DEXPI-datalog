@@ -185,6 +185,9 @@ def test_rmso_task_exposes_only_approved_edb_and_idb_inputs(tmp_path: Path) -> N
         "/input/rule_pack_",
     ):
         assert forbidden not in instruction
+    dockerfile = (environment / "Dockerfile").read_text(encoding="utf-8")
+    assert dockerfile.startswith("FROM --platform=linux/amd64 ubuntu:22.04\n")
+    assert "python3" in dockerfile
 
 
 def test_dockerfile_installs_souffle_and_mounts_layers_read_only(

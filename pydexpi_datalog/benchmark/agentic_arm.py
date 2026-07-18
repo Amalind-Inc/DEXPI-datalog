@@ -235,6 +235,8 @@ def build_task(
     input_bundle_files: Sequence[str] = BUNDLE_FILES,
     input_bundle_sources: Mapping[str, Path] | None = None,
     replay_python_analysis: bool = False,
+    base_image: str = "python:3.12-slim",
+    base_packages: Sequence[str] = ("tmux",),
 ) -> Path:
     """Shared Harbor task generation every agentic arm composes from.
 
@@ -274,7 +276,12 @@ def build_task(
         encoding="utf-8",
     )
     (environment_dir / "Dockerfile").write_text(
-        _render_dockerfile(input_names, engine_setup=engine_setup),
+        _render_dockerfile(
+            input_names,
+            engine_setup=engine_setup,
+            base_image=base_image,
+            base_packages=base_packages,
+        ),
         encoding="utf-8",
     )
     preserved = (ANSWER_FILENAME, *extra_workspace_files)
@@ -443,17 +450,24 @@ build_timeout_sec = 600.0
 """
 
 
-def _render_dockerfile(input_names: Sequence[str], *, engine_setup: str = "") -> str:
+def _render_dockerfile(
+    input_names: Sequence[str],
+    *,
+    engine_setup: str = "",
+    base_image: str = "python:3.12-slim",
+    base_packages: Sequence[str] = ("tmux",),
+) -> str:
     copy_lines = "\n".join(f"COPY {name} /input/{name}" for name in input_names)
     chmod_lines = " \\\n    && ".join(
         f"chown root:root /input/{name} && chmod 0444 /input/{name}"
         for name in input_names
     )
+    packages = " ".join(base_packages)
     return f"""\
-FROM python:3.12-slim
+FROM {base_image}
 
 RUN apt-get update \\
-    && apt-get install -y --no-install-recommends tmux \\
+    && apt-get install -y --no-install-recommends {packages} \\
     && useradd --create-home --shell /bin/bash agent \\
     && mkdir /input /workspace \\
     && chown root:root /input \\
