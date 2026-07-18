@@ -459,8 +459,8 @@ class AgenticArm:
     """A sandbox-episode arm over any :class:`EpisodeRunner`.
 
     Arm A agentic by default; Arm C composes the same machinery with a
-    Souffle task builder, its own arm label, and a required executed
-    program (see :mod:`pydexpi_datalog.benchmark.souffle_arm`).
+    Souffle task builder, its own arm label, and a question-aware executed
+    program policy (see :mod:`pydexpi_datalog.benchmark.souffle_arm`).
     """
 
     runner: EpisodeRunner
@@ -468,13 +468,17 @@ class AgenticArm:
     model_name: str = "scripted"
     arm_label: str = "a-agentic"
     task_builder: Callable[..., Path] = build_harbor_task
-    require_executed_program: bool = False
+    require_executed_program: bool | Callable[[BenchmarkQuestion], bool] = False
     program_validator: Callable[[str], None] | None = None
     program_faithfulness_gate: (
         Callable[[str, BenchmarkQuestion], Mapping[str, object] | None] | None
     ) = None
     answer_trace_gate: (
-        Callable[[StructuredAnswer, Path, str], Mapping[str, object]] | None
+        Callable[
+            [StructuredAnswer, Path, str | None, BenchmarkQuestion],
+            Mapping[str, object],
+        ]
+        | None
     ) = None
     artifact_root: Path | None = None
 
@@ -515,10 +519,12 @@ class AgenticArm:
             return self._degraded(
                 "verification_gate_rejected", transcript=transcript, usage=usage
             )
-        if (
-            self.require_executed_program
-            and not (result.executed_program or "").strip()
-        ):
+        program_required = (
+            self.require_executed_program(question)
+            if callable(self.require_executed_program)
+            else self.require_executed_program
+        )
+        if program_required and not (result.executed_program or "").strip():
             return self._degraded(
                 "missing_executed_program", transcript=transcript, usage=usage
             )
@@ -562,10 +568,10 @@ class AgenticArm:
             return self._degraded(
                 "malformed_submission", transcript=transcript, usage=usage
             )
-        if self.answer_trace_gate is not None and result.executed_program is not None:
+        if self.answer_trace_gate is not None:
             try:
                 trace_report = self.answer_trace_gate(
-                    parsed, drawing_ref, result.executed_program
+                    parsed, drawing_ref, result.executed_program, question
                 )
             except ValueError as error:
                 return self._degraded(

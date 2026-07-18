@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from pydexpi_datalog.benchmark.contract import StructuredAnswer
+from pydexpi_datalog.benchmark.contract import (
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    StructuredAnswer,
+    VERDICT_UNANSWERABLE,
+)
+
+
+POLICY_ABSTENTION_OPERATION = (
+    "permission_or_defeasible_not_decidable_from_monotone_drawing"
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +39,7 @@ def verify_audit_trace(
     answer: StructuredAnswer,
     graph_facts: Mapping[str, object],
     replay_souffle: Callable[[str, str], tuple[str, ...]] | None = None,
+    allow_policy_abstention: bool = False,
 ) -> AuditTraceReport:
     """Verify only the spike's closed support vocabulary.
 
@@ -122,6 +132,8 @@ def verify_audit_trace(
     grounded_valid = 0
     replay_total = 0
     replay_valid = 0
+    policy_abstention_total = 0
+    policy_abstention_valid = 0
     consistency = True
     policy_compliance = True
     known_nodes, known_edges = _known_graph_items(graph_facts)
@@ -185,15 +197,39 @@ def verify_audit_trace(
             if step.get("operation") != "identity" or not dependencies:
                 invalid.add(step_id)
                 policy_compliance = False
+        elif kind == "policy_abstention":
+            policy_abstention_total += 1
+            if (
+                allow_policy_abstention
+                and step.get("operation") == POLICY_ABSTENTION_OPERATION
+                and not dependencies
+                and answer.verdict == VERDICT_UNANSWERABLE
+                and answer.posture == POSTURE_SOURCE_DATA_UNAVAILABLE
+                and not answer.witness_ids
+            ):
+                policy_abstention_valid += 1
+            else:
+                invalid.add(step_id)
+                consistency = False
+                policy_compliance = False
         else:
             invalid.add(step_id)
             policy_compliance = False
 
-    grounded_rate = grounded_valid / grounded_total if grounded_total else 0.0
-    replay_success = replay_valid / replay_total if replay_total else 0.0
+    policy_only = (
+        policy_abstention_total == 1
+        and policy_abstention_valid == 1
+        and len(reachable) == 1
+    )
+    grounded_rate = (
+        grounded_valid / grounded_total if grounded_total else float(policy_only)
+    )
+    replay_success = (
+        replay_valid / replay_total if replay_total else float(policy_only)
+    )
     # Every source conclusion needs at least one grounded terminal and one
     # replayed execution in its final relied-upon subgraph.
-    if grounded_valid == 0 or replay_valid == 0:
+    if not policy_only and (grounded_valid == 0 or replay_valid == 0):
         consistency = False
 
     superseded_count = sum(

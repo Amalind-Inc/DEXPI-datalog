@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pydexpi_datalog.benchmark.audit_trace import verify_audit_trace
 from pydexpi_datalog.benchmark.contract import (
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     StructuredAnswer,
+    VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
     VERDICT_NO_VIOLATION,
 )
@@ -62,6 +64,67 @@ def test_complete_grounded_replayed_support_graph_is_trace_safe() -> None:
     assert report.grounded_premise_rate == 1.0
     assert report.replay_success == 1.0
     assert report.final_support_steps == 2
+
+
+def test_permission_abstention_has_closed_mechanical_support_without_replay() -> None:
+    answer = StructuredAnswer(
+        verdict=VERDICT_UNANSWERABLE,
+        posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        support={
+            "steps": [
+                {
+                    "id": "policy",
+                    "kind": "policy_abstention",
+                    "operation": (
+                        "permission_or_defeasible_not_decidable_from_"
+                        "monotone_drawing"
+                    ),
+                    "dependencies": [],
+                }
+            ],
+            "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+        },
+    )
+
+    report = verify_audit_trace(
+        answer=answer,
+        graph_facts=graph_facts(),
+        allow_policy_abstention=True,
+    )
+
+    assert report.trace_safe is True
+    assert report.replay_success == 1.0
+    assert report.grounded_premise_rate == 1.0
+
+
+def test_policy_abstention_cannot_support_a_source_conclusion() -> None:
+    answer = StructuredAnswer(
+        verdict=VERDICT_NO_VIOLATION,
+        posture=POSTURE_SOURCE_GROUNDED,
+        support={
+            "steps": [
+                {
+                    "id": "policy",
+                    "kind": "policy_abstention",
+                    "operation": (
+                        "permission_or_defeasible_not_decidable_from_"
+                        "monotone_drawing"
+                    ),
+                    "dependencies": [],
+                }
+            ],
+            "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+        },
+    )
+
+    report = verify_audit_trace(
+        answer=answer,
+        graph_facts=graph_facts(),
+        allow_policy_abstention=True,
+    )
+
+    assert report.trace_safe is False
+    assert report.consistency is False
 
 
 def test_missing_witness_claim_and_invented_source_are_trace_unsafe() -> None:

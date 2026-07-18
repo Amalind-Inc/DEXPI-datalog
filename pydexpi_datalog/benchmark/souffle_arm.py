@@ -16,10 +16,10 @@ The delta over Arm A is deliberately small and declarative:
   the one shared Souffle engine.
 - **Prompt framing**: generate -> execute -> observe -> revise, with the
   rule-pack markdown offered as trusted prior art.
-- **Audit**: the submission must include ``/workspace/analysis.dl``, the
-  exact program whose executed output supports the answer; the generated
-  verifier rejects submissions without it, and the adapter ships it in the
-  transcript.
+- **Audit**: obligation submissions must include ``/workspace/analysis.dl``,
+  the exact program whose executed output supports the answer.  The two
+  preregistered permission/defeasible controls instead require a closed,
+  mechanically checked abstention and prohibit a verdict program.
 
 Budgets, episode interface, artifact parsing, and grading are byte-for-byte
 the shared :mod:`pydexpi_datalog.benchmark.agentic_arm` machinery.
@@ -59,6 +59,12 @@ from pydexpi_datalog.verification.souffle_rule_pack import RULE_PACKS_DIR
 SOUFFLE_ARM_MODELS = dict(AGENTIC_ARM_MODELS)
 
 ARM_LABEL = "c-souffle"
+PERMISSION_CONTROL_IDS = frozenset(
+    {
+        "hq-permission-defeasible-control-small",
+        "hq-permission-defeasible-control-large",
+    }
+)
 
 
 class FaithfulnessProgramError(ValueError):
@@ -124,17 +130,43 @@ def _run_preregistered_faithfulness_gate(
     return run_preregistered_faithfulness_gate(program, question.question_id)
 
 
-def _verify_souffle_answer_trace(
-    answer: StructuredAnswer, drawing_ref: Path, program: str
+def requires_executed_program(question: BenchmarkQuestion) -> bool:
+    """Return whether this preregistered question belongs on the verdict path."""
+    return question.question_id not in PERMISSION_CONTROL_IDS
+
+
+def verify_souffle_answer_trace(
+    answer: StructuredAnswer,
+    drawing_ref: Path,
+    program: str | None,
+    question: BenchmarkQuestion,
 ) -> dict[str, object]:
     from dataclasses import asdict
 
-    from pydexpi_datalog.benchmark.audit_trace import verify_souffle_audit_trace
+    from pydexpi_datalog.benchmark.audit_trace import (
+        verify_audit_trace,
+        verify_souffle_audit_trace,
+    )
 
     graph_path = (
         drawing_ref / "graph_facts.json" if drawing_ref.is_dir() else drawing_ref
     )
     graph_facts = json.loads(graph_path.read_text(encoding="utf-8"))
+    if not requires_executed_program(question):
+        if (program or "").strip():
+            raise ValueError(
+                "permission/defeasible controls must abstain without an executable "
+                "verdict program"
+            )
+        return asdict(
+            verify_audit_trace(
+                answer=answer,
+                graph_facts=graph_facts,
+                allow_policy_abstention=True,
+            )
+        )
+    if not (program or "").strip():
+        raise ValueError("source conclusions require an executed Datalog program")
     return asdict(
         verify_souffle_audit_trace(
             answer=answer,
@@ -169,6 +201,7 @@ def build_souffle_harbor_task(
 ) -> Path:
     """Generate the Arm C Harbor task for one benchmark question."""
     bundle_dir = validate_bundle(drawing_ref)
+    program_required = requires_executed_program(question)
     return build_task(
         question=question,
         drawing_ref=drawing_ref,
@@ -178,7 +211,7 @@ def build_souffle_harbor_task(
         tags=("arm-c-souffle", "pydexpi-datalog-1-3q1.9"),
         extra_input_files=_souffle_input_files(bundle_dir),
         engine_setup=SOUFFLE_ENGINE_SETUP,
-        extra_workspace_files=(PROGRAM_FILENAME,),
+        extra_workspace_files=(PROGRAM_FILENAME,) if program_required else (),
     )
 
 
@@ -204,6 +237,8 @@ def _souffle_input_files(bundle_dir: Path) -> dict[str, str]:
 
 
 def _render_souffle_instruction(question: BenchmarkQuestion) -> str:
+    if not requires_executed_program(question):
+        return _render_permission_abstention_instruction(question)
     verdicts = json.dumps(list(VERDICTS))
     postures = json.dumps(list(POSTURES))
     pack_lines = "\n".join(
@@ -322,6 +357,51 @@ Verify both files exist before marking the task complete.
 """
 
 
+def _render_permission_abstention_instruction(question: BenchmarkQuestion) -> str:
+    return f"""\
+# P&ID review question (policy-boundary control)
+
+Answer one question about the engineering drawing mounted read-only under
+`/input`.
+
+## Question
+
+{question.question}
+
+## Required policy behavior
+
+This is a permission/defeasible-exception control. The monotone drawing facts
+cannot soundly establish permission or resolve an exception. You must abstain;
+you must not author or execute a Datalog verdict program for this question.
+
+Write `/workspace/{ANSWER_FILENAME}` containing exactly this closed result
+shape (the explanation wording may be concise but must name the limitation):
+
+```json
+{{
+  "verdict": "unanswerable",
+  "witness_ids": [],
+  "posture": "source_data_unavailable",
+  "answer_text": "Permission is not soundly decidable from monotone drawing facts.",
+  "support": {{
+    "steps": [
+      {{
+        "id": "policy",
+        "kind": "policy_abstention",
+        "operation": "permission_or_defeasible_not_decidable_from_monotone_drawing",
+        "dependencies": []
+      }}
+    ],
+    "claims": [{{"claim": "verdict", "step_ids": ["policy"]}}]
+  }}
+}}
+```
+
+Do not create `/workspace/{PROGRAM_FILENAME}`. The abstention policy step is
+mechanically checked after submission; a source conclusion or witness fails.
+"""
+
+
 def create_souffle_arm(
     model_key: str,
     *,
@@ -353,8 +433,8 @@ def create_souffle_arm(
         model_name=model_key,
         arm_label=ARM_LABEL,
         task_builder=build_souffle_harbor_task,
-        require_executed_program=True,
+        require_executed_program=requires_executed_program,
         program_validator=validate_faithfulness_program,
         program_faithfulness_gate=_run_preregistered_faithfulness_gate,
-        answer_trace_gate=_verify_souffle_answer_trace,
+        answer_trace_gate=verify_souffle_answer_trace,
     )

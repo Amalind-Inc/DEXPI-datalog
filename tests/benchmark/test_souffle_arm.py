@@ -21,7 +21,9 @@ from pathlib import Path
 import pytest
 
 from pydexpi_datalog.benchmark import (
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
+    VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
     GroundTruth,
     run_benchmark,
@@ -41,7 +43,9 @@ from pydexpi_datalog.benchmark.souffle_arm import (
     SOUFFLE_ARM_MODELS,
     build_souffle_harbor_task,
     create_souffle_arm,
+    requires_executed_program,
     validate_faithfulness_program,
+    verify_souffle_answer_trace,
 )
 from pydexpi_datalog.semantics.souffle_runner import (
     SouffleExecutionError,
@@ -85,6 +89,16 @@ def make_question(bundle: Path) -> BenchmarkQuestion:
         ground_truth=GroundTruth(
             verdict=VERDICT_VIOLATION_FOUND, witness_ids=(witness_node_id(),)
         ),
+    )
+
+
+def make_permission_question(bundle: Path) -> BenchmarkQuestion:
+    return BenchmarkQuestion(
+        question_id="hq-permission-defeasible-control-small",
+        question="Is this arrangement permitted unless an exemption applies?",
+        slice="harder_questions",
+        drawing_ref=bundle,
+        ground_truth=GroundTruth(verdict=VERDICT_UNANSWERABLE, witness_ids=()),
     )
 
 
@@ -255,6 +269,106 @@ def valid_answer() -> str:
             "posture": POSTURE_SOURCE_GROUNDED,
         }
     )
+
+
+def valid_permission_abstention() -> str:
+    return json.dumps(
+        {
+            "verdict": VERDICT_UNANSWERABLE,
+            "witness_ids": [],
+            "posture": POSTURE_SOURCE_DATA_UNAVAILABLE,
+            "answer_text": "Permission is not soundly decidable from monotone drawing facts.",
+            "support": {
+                "steps": [
+                    {
+                        "id": "policy",
+                        "kind": "policy_abstention",
+                        "operation": (
+                            "permission_or_defeasible_not_decidable_from_"
+                            "monotone_drawing"
+                        ),
+                        "dependencies": [],
+                    }
+                ],
+                "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+            },
+        }
+    )
+
+
+def test_permission_task_requires_abstention_without_a_program(tmp_path: Path) -> None:
+    bundle = make_bundle(tmp_path)
+    task_dir = build_souffle_harbor_task(
+        question=make_permission_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=BUDGETS,
+    )
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    test_sh = (task_dir / "tests" / "test.sh").read_text(encoding="utf-8")
+    assert "must not author or execute" in instruction
+    assert PROGRAM_FILENAME not in test_sh
+
+    workspace = tmp_path / "permission-workspace"
+    workspace.mkdir()
+    (workspace / "structured_answer.json").write_text(
+        valid_permission_abstention(), encoding="utf-8"
+    )
+    accepted = run_generated_verifier(task_dir, workspace)
+    assert accepted.returncode == 0, accepted.stderr
+
+
+def test_permission_arm_checks_abstention_trace_without_a_program(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(
+            EpisodeResult(
+                structured_answer_text=valid_permission_abstention(),
+                reward=1.0,
+                executed_program=None,
+            )
+        ),
+        budgets=BUDGETS,
+        task_builder=build_souffle_harbor_task,
+        require_executed_program=requires_executed_program,
+        program_validator=validate_faithfulness_program,
+        answer_trace_gate=verify_souffle_answer_trace,
+    )
+
+    answer = arm.answer(
+        question=make_permission_question(bundle), drawing_ref=bundle
+    )
+
+    assert answer.verdict == VERDICT_UNANSWERABLE
+    assert answer.usage["audit_trace"]["trace_safe"] is True
+
+
+def test_permission_arm_rejects_source_conclusion_without_a_program(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(
+            EpisodeResult(
+                structured_answer_text=valid_answer(),
+                reward=1.0,
+                executed_program=None,
+            )
+        ),
+        budgets=BUDGETS,
+        task_builder=build_souffle_harbor_task,
+        require_executed_program=requires_executed_program,
+        answer_trace_gate=verify_souffle_answer_trace,
+    )
+
+    answer = arm.answer(
+        question=make_permission_question(bundle), drawing_ref=bundle
+    )
+
+    assert answer.verdict == DEGRADED_VERDICT
+    assert answer.usage["degraded_reason"] == "audit_trace_unsafe"
 
 
 def test_generated_verifier_requires_executed_program(tmp_path: Path) -> None:
@@ -455,7 +569,7 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     )
     assert arm.arm_id == "c-souffle:sonnet"
     assert arm.budgets == BUDGETS
-    assert arm.require_executed_program is True
+    assert arm.require_executed_program is requires_executed_program
     assert arm.task_builder is build_souffle_harbor_task
     assert arm.program_validator is validate_faithfulness_program
     assert arm.program_faithfulness_gate is not None
