@@ -41,6 +41,7 @@ from pydexpi_datalog.benchmark.souffle_arm import (
     FaithfulnessProgramError,
     PROGRAM_FILENAME,
     SOUFFLE_ARM_MODELS,
+    build_rmso_souffle_harbor_task,
     build_souffle_harbor_task,
     create_souffle_arm,
     requires_executed_program,
@@ -156,6 +157,34 @@ def test_task_environment_includes_datalog_layers_and_rule_packs(
     )
     assert "pack_id" in pack_text
     assert "```" in pack_text, "fenced Souffle programs must be included"
+
+
+def test_rmso_task_exposes_only_approved_edb_and_idb_inputs(tmp_path: Path) -> None:
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_souffle_harbor_task(
+        question=make_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "rmso-tasks",
+        budgets=BUDGETS,
+    )
+    environment = task_dir / "environment"
+    assert {
+        path.name
+        for path in environment.iterdir()
+        if path.name != "Dockerfile"
+    } == {
+        "graph_facts.json",
+        "graph_facts.dl",
+        "graph_topology_semantics.dl",
+    }
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    for forbidden in (
+        "/input/drawing.xml",
+        "/input/graph.json",
+        "/input/README.md",
+        "/input/rule_pack_",
+    ):
+        assert forbidden not in instruction
 
 
 def test_dockerfile_installs_souffle_and_mounts_layers_read_only(
@@ -570,7 +599,7 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.arm_id == "c-souffle:sonnet"
     assert arm.budgets == BUDGETS
     assert arm.require_executed_program is requires_executed_program
-    assert arm.task_builder is build_souffle_harbor_task
+    assert arm.task_builder is build_rmso_souffle_harbor_task
     assert arm.program_validator is validate_faithfulness_program
     assert arm.program_faithfulness_gate is not None
     assert arm.answer_trace_gate is not None

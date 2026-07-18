@@ -51,6 +51,7 @@ from pydexpi_datalog.benchmark.agentic_arm import (
 from pydexpi_datalog.benchmark.souffle_arm import (
     PROGRAM_FILENAME,
     SOUFFLE_ARM_MODELS,
+    build_rmso_souffle_harbor_task,
     build_souffle_harbor_task,
     create_souffle_arm,
 )
@@ -174,6 +175,7 @@ __all__ = [
     "load_episode_budgets",
     "PROGRAM_FILENAME",
     "SOUFFLE_ARM_MODELS",
+    "build_rmso_souffle_harbor_task",
     "build_souffle_harbor_task",
     "create_souffle_arm",
     "BENCHMARK_REPORT_FILENAME",

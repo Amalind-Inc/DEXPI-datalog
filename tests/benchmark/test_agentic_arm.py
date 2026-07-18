@@ -14,6 +14,7 @@ calls and no Docker in CI.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -30,6 +31,8 @@ from pydexpi_datalog.benchmark import (
 )
 from pydexpi_datalog.benchmark.agentic_arm import (
     AGENTIC_ARM_MODELS,
+    ANALYSIS_REPLAY_FILENAME,
+    ANALYSIS_SCRIPT_FILENAME,
     DEGRADED_VERDICT,
     AgenticArm,
     EpisodeBudgets,
@@ -39,6 +42,8 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     create_agentic_arm,
     load_episode_budgets,
     parse_harbor_artifacts,
+    requires_analysis_replay,
+    verify_agentic_answer_trace,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 
@@ -82,9 +87,63 @@ def make_question(
     )
 
 
+def make_permission_question(bundle: Path) -> BenchmarkQuestion:
+    return BenchmarkQuestion(
+        question_id="hq-permission-defeasible-control-small",
+        question="Is this arrangement permitted unless an exemption applies?",
+        slice="harder_questions",
+        drawing_ref=bundle,
+        ground_truth=GroundTruth(verdict=VERDICT_UNANSWERABLE, witness_ids=()),
+    )
+
+
 def witness_node_id() -> str:
     graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
     return str(graph_facts["facts"]["nodes"][0]["node_id"])
+
+
+def raw_xml_replay_result(bundle: Path) -> EpisodeResult:
+    witness = witness_node_id()
+    digest = hashlib.sha256((bundle / "drawing.xml").read_bytes()).hexdigest()
+    replay = {"verdict": VERDICT_VIOLATION_FOUND, "witness_ids": [witness]}
+    return EpisodeResult(
+        structured_answer_text=json.dumps(
+            {
+                **replay,
+                "posture": POSTURE_SOURCE_GROUNDED,
+                "support": {
+                    "steps": [
+                        {
+                            "id": "scope",
+                            "kind": "xml_scope",
+                            "artifact": "drawing.xml",
+                            "sha256": digest,
+                            "dependencies": [],
+                        },
+                        {
+                            "id": "execution",
+                            "kind": "python_execution",
+                            "artifact": ANALYSIS_SCRIPT_FILENAME,
+                            "input": "drawing.xml",
+                            "output": ANALYSIS_REPLAY_FILENAME,
+                            **replay,
+                            "dependencies": ["scope"],
+                        },
+                    ],
+                    "claims": [
+                        {"claim": "verdict", "step_ids": ["execution"]},
+                        {
+                            "claim": f"witness:{witness}",
+                            "step_ids": ["execution"],
+                        },
+                    ],
+                },
+            }
+        ),
+        reward=1.0,
+        analysis_script="import json\nprint(json.dumps({}))\n",
+        analysis_replay_text=json.dumps(replay),
+    )
 
 
 BUDGETS = EpisodeBudgets(
@@ -192,6 +251,85 @@ def test_usage_records_budgets_and_command_accounting(tmp_path: Path) -> None:
     assert answer.usage["commands"] == 3
     assert answer.usage["model_calls"] == 4
     assert answer.usage["input_tokens"] == 100
+
+
+def test_arm_a_qualifies_only_with_captured_raw_xml_replay(tmp_path: Path) -> None:
+    bundle = make_bundle(tmp_path)
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(raw_xml_replay_result(bundle)),
+        budgets=BUDGETS,
+        require_analysis_replay=requires_analysis_replay,
+        analysis_trace_gate=verify_agentic_answer_trace,
+    )
+
+    answer = arm.answer(question=make_question(bundle), drawing_ref=bundle)
+
+    assert answer.verdict == VERDICT_VIOLATION_FOUND
+    assert answer.usage["audit_trace"]["trace_safe"] is True
+    tool_names = {entry.get("tool_name") for entry in answer.transcript}
+    assert "executed_python_analysis" in tool_names
+    assert "captured_analysis_replay" in tool_names
+
+
+def test_arm_a_degrades_when_captured_replay_is_missing(tmp_path: Path) -> None:
+    bundle = make_bundle(tmp_path)
+    result = replace(raw_xml_replay_result(bundle), analysis_replay_text=None)
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(result),
+        budgets=BUDGETS,
+        require_analysis_replay=requires_analysis_replay,
+        analysis_trace_gate=verify_agentic_answer_trace,
+    )
+
+    answer = arm.answer(question=make_question(bundle), drawing_ref=bundle)
+
+    assert answer.verdict == DEGRADED_VERDICT
+    assert answer.usage["degraded_reason"] == "missing_analysis_replay"
+
+
+def test_arm_a_permission_control_abstains_without_a_script(tmp_path: Path) -> None:
+    bundle = make_bundle(tmp_path)
+    support = {
+        "steps": [
+            {
+                "id": "policy",
+                "kind": "policy_abstention",
+                "operation": (
+                    "permission_or_defeasible_not_decidable_from_monotone_drawing"
+                ),
+                "dependencies": [],
+            }
+        ],
+        "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+    }
+    result = EpisodeResult(
+        structured_answer_text=json.dumps(
+            {
+                "verdict": VERDICT_UNANSWERABLE,
+                "witness_ids": [],
+                "posture": "source_data_unavailable",
+                "answer_text": (
+                    "Permission is not soundly decidable from monotone drawing facts; "
+                    "provide the governing policy and exemptions."
+                ),
+                "support": support,
+            }
+        ),
+        reward=1.0,
+    )
+    arm = AgenticArm(
+        runner=ScriptedEpisodeRunner(result),
+        budgets=BUDGETS,
+        require_analysis_replay=requires_analysis_replay,
+        analysis_trace_gate=verify_agentic_answer_trace,
+    )
+
+    answer = arm.answer(
+        question=make_permission_question(bundle), drawing_ref=bundle
+    )
+
+    assert answer.verdict == VERDICT_UNANSWERABLE
+    assert answer.usage["audit_trace"]["trace_safe"] is True
 
 
 # --------------------------------------------------------------------------
@@ -337,7 +475,7 @@ def test_budgets_reject_unknown_or_invalid_fields(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_task_generation_copies_bundle_and_writes_harbor_layout(
+def test_task_generation_exposes_only_raw_xml_and_writes_harbor_layout(
     tmp_path: Path,
 ) -> None:
     bundle = make_bundle(tmp_path)
@@ -348,16 +486,20 @@ def test_task_generation_copies_bundle_and_writes_harbor_layout(
         budgets=BUDGETS,
     )
     assert task_dir.name == "benchmark-agentic-q1"
-    for name in ("drawing.xml", "graph_facts.json", "graph.json", "README.md"):
-        assert (task_dir / "environment" / name).read_bytes() == (
-            bundle / name
-        ).read_bytes()
+    environment = task_dir / "environment"
+    assert (environment / "drawing.xml").read_bytes() == (
+        bundle / "drawing.xml"
+    ).read_bytes()
+    for forbidden in ("graph_facts.json", "graph.json", "README.md"):
+        assert not (environment / forbidden).exists()
     instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
     assert "Is any pump missing a check valve?" in instruction
     assert "structured_answer.json" in instruction
     # No Souffle, no rule packs, no ground-truth leak into the episode.
     assert "souffle" not in instruction.lower()
     assert "rule pack" not in instruction.lower()
+    assert "graph_facts" not in instruction
+    assert "graph.json" not in instruction
     assert witness_node_id() not in instruction
     task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
     assert "timeout_sec = 600.0" in task_toml
@@ -365,13 +507,14 @@ def test_task_generation_copies_bundle_and_writes_harbor_layout(
     dockerfile = (task_dir / "environment" / "Dockerfile").read_text(encoding="utf-8")
     assert "chmod 0555 /input" in dockerfile
     assert "chmod 0444 /input/drawing.xml" in dockerfile
-    assert "networkx" in dockerfile
+    assert "networkx" not in dockerfile.lower()
     assert (task_dir / "tests" / "test.sh").exists()
 
 
-def test_task_generation_requires_complete_bundle(tmp_path: Path) -> None:
+def test_task_generation_requires_resolvable_raw_xml(tmp_path: Path) -> None:
     bundle = make_bundle(tmp_path)
-    (bundle / "graph.json").unlink()
+    (bundle / "drawing.xml").unlink()
+    (bundle / "graph_facts.json").unlink()
     try:
         build_harbor_task(
             question=make_question(bundle),
@@ -380,7 +523,7 @@ def test_task_generation_requires_complete_bundle(tmp_path: Path) -> None:
             budgets=BUDGETS,
         )
     except FileNotFoundError as error:
-        assert "graph.json" in str(error)
+        assert "neither drawing.xml nor graph provenance" in str(error)
     else:
         raise AssertionError("incomplete bundle must fail task generation")
 
@@ -418,10 +561,56 @@ def test_generated_verifier_accepts_intact_input_and_json_submission(
         ),
         encoding="utf-8",
     )
+    (workspace / ANALYSIS_SCRIPT_FILENAME).write_text(
+        "import json\nprint(json.dumps({'verdict': 'unanswerable', "
+        "'witness_ids': []}))\n",
+        encoding="utf-8",
+    )
     result = _run_generated_verifier(
         task_dir, input_dir=task_dir / "environment", workspace_dir=workspace
     )
     assert result.returncode == 0, result.stderr
+    replay = json.loads((workspace / ANALYSIS_REPLAY_FILENAME).read_text())
+    assert replay == {"verdict": "unanswerable", "witness_ids": []}
+
+
+def test_generated_verifier_rejects_missing_or_inconsistent_analysis_script(
+    tmp_path: Path,
+) -> None:
+    bundle = make_bundle(tmp_path)
+    task_dir = build_harbor_task(
+        question=make_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=BUDGETS,
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "structured_answer.json").write_text(
+        json.dumps(
+            {
+                "verdict": VERDICT_VIOLATION_FOUND,
+                "witness_ids": ["expected"],
+                "posture": POSTURE_SOURCE_GROUNDED,
+            }
+        ),
+        encoding="utf-8",
+    )
+    missing = _run_generated_verifier(
+        task_dir, input_dir=task_dir / "environment", workspace_dir=workspace
+    )
+    assert missing.returncode != 0
+
+    (workspace / ANALYSIS_SCRIPT_FILENAME).write_text(
+        "import json\nprint(json.dumps({'verdict': 'no_violation', "
+        "'witness_ids': []}))\n",
+        encoding="utf-8",
+    )
+    inconsistent = _run_generated_verifier(
+        task_dir, input_dir=task_dir / "environment", workspace_dir=workspace
+    )
+    assert inconsistent.returncode != 0
+    assert "does not match structured answer" in inconsistent.stderr
 
 
 def test_generated_verifier_rejects_mutated_input(tmp_path: Path) -> None:
@@ -435,7 +624,7 @@ def test_generated_verifier_rejects_mutated_input(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "structured_answer.json").write_text("{}", encoding="utf-8")
-    (task_dir / "environment" / "graph_facts.json").write_text("{}", encoding="utf-8")
+    (task_dir / "environment" / "drawing.xml").write_text("<changed/>", encoding="utf-8")
     result = _run_generated_verifier(
         task_dir, input_dir=task_dir / "environment", workspace_dir=workspace
     )
@@ -602,6 +791,13 @@ def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    (verifier_dir / ANALYSIS_SCRIPT_FILENAME).write_text(
+        "print('{}')\n", encoding="utf-8"
+    )
+    (verifier_dir / ANALYSIS_REPLAY_FILENAME).write_text(
+        json.dumps({"verdict": "violation_found", "witness_ids": ["node-1"]}),
+        encoding="utf-8",
+    )
     (trial_dir / "agent-trajectory.json").write_text(
         json.dumps(
             {
@@ -641,6 +837,10 @@ def test_harbor_artifacts_parse_into_episode_result(tmp_path: Path) -> None:
         "output_tokens": 35,
         "cost_usd": 0.012,
     }
+    assert result.analysis_script == "print('{}')\n"
+    assert json.loads(result.analysis_replay_text or "null")["witness_ids"] == [
+        "node-1"
+    ]
 
 
 def test_missing_harbor_artifacts_parse_as_rejected_episode(
@@ -684,6 +884,8 @@ def test_create_agentic_arm_requires_credential_and_known_model() -> None:
     assert arm.arm_id == "a-agentic:sonnet"
     assert arm.runner.model == AGENTIC_ARM_MODELS["sonnet"]
     assert arm.budgets == BUDGETS
+    assert arm.require_analysis_replay is requires_analysis_replay
+    assert arm.analysis_trace_gate is not None
 
 
 def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model() -> None:
@@ -792,13 +994,25 @@ class ScriptedModelEpisodeRunner:
         # The scripted "model" inspects the read-only input with real
         # commands, observes real output, then writes its submission.
         commands = [
-            "cat /input/README.md",
-            "python3 -c 'import json,sys'",
+            "head /input/drawing.xml",
+            "python3 /workspace/analysis.py /input/drawing.xml",
         ]
-        observed = (input_dir / "graph_facts.json").read_text(encoding="utf-8")
-        assert json.loads(observed)["facts"]["nodes"], "real observed output"
+        observed = (input_dir / "drawing.xml").read_text(encoding="utf-8")
+        assert "PlantModel" in observed, "real observed XML output"
         (workspace / "structured_answer.json").write_text(
             json.dumps(self.answer), encoding="utf-8"
+        )
+        replay = (
+            {
+                "verdict": self.answer.get("verdict"),
+                "witness_ids": self.answer.get("witness_ids"),
+            }
+            if isinstance(self.answer, dict)
+            else {}
+        )
+        (workspace / ANALYSIS_SCRIPT_FILENAME).write_text(
+            "import json\nprint(json.dumps(" + repr(replay) + "))\n",
+            encoding="utf-8",
         )
 
         # The generated independent verification gate decides the reward.
@@ -819,6 +1033,15 @@ class ScriptedModelEpisodeRunner:
             workspace / "structured_answer.json",
             verifier_dir / "structured_answer.json",
         )
+        shutil.copyfile(
+            workspace / ANALYSIS_SCRIPT_FILENAME,
+            verifier_dir / ANALYSIS_SCRIPT_FILENAME,
+        )
+        if (workspace / ANALYSIS_REPLAY_FILENAME).exists():
+            shutil.copyfile(
+                workspace / ANALYSIS_REPLAY_FILENAME,
+                verifier_dir / ANALYSIS_REPLAY_FILENAME,
+            )
         (jobs_dir / "trial-0" / "agent-trajectory.json").write_text(
             json.dumps(
                 {
@@ -869,10 +1092,10 @@ def test_scripted_model_episode_flows_through_task_verifier_and_artifacts(
     executed = [
         command
         for entry in answer.transcript
-        if entry.get("role") == "tool"
+        if entry.get("tool_name") == "execute_commands"
         for command in entry["commands"]  # type: ignore[union-attr]
     ]
-    assert "cat /input/README.md" in executed
+    assert "head /input/drawing.xml" in executed
 
 
 def test_agentic_arm_retains_live_task_and_harbor_artifacts(

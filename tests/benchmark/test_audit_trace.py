@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from pydexpi_datalog.benchmark.audit_trace import verify_audit_trace
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_SOURCE_DATA_UNAVAILABLE,
@@ -125,6 +127,55 @@ def test_policy_abstention_cannot_support_a_source_conclusion() -> None:
 
     assert report.trace_safe is False
     assert report.consistency is False
+
+
+def test_raw_xml_script_replay_support_is_trace_safe() -> None:
+    xml = b"<PlantModel id='drawing-1'/>"
+    digest = hashlib.sha256(xml).hexdigest()
+    answer = StructuredAnswer(
+        verdict=VERDICT_VIOLATION_FOUND,
+        witness_ids=("P-101",),
+        posture=POSTURE_SOURCE_GROUNDED,
+        support={
+            "steps": [
+                {
+                    "id": "scope",
+                    "kind": "xml_scope",
+                    "artifact": "drawing.xml",
+                    "sha256": digest,
+                    "dependencies": [],
+                },
+                {
+                    "id": "execution",
+                    "kind": "python_execution",
+                    "artifact": "analysis.py",
+                    "input": "drawing.xml",
+                    "output": "analysis_replay.json",
+                    "verdict": VERDICT_VIOLATION_FOUND,
+                    "witness_ids": ["P-101"],
+                    "dependencies": ["scope"],
+                },
+            ],
+            "claims": [
+                {"claim": "verdict", "step_ids": ["execution"]},
+                {"claim": "witness:P-101", "step_ids": ["execution"]},
+            ],
+        },
+    )
+
+    report = verify_audit_trace(
+        answer=answer,
+        graph_facts={},
+        xml_sha256=digest,
+        replay_python=lambda artifact, output: {
+            "verdict": VERDICT_VIOLATION_FOUND,
+            "witness_ids": ["P-101"],
+        },
+    )
+
+    assert report.trace_safe is True
+    assert report.grounded_premise_rate == 1.0
+    assert report.replay_success == 1.0
 
 
 def test_missing_witness_claim_and_invented_source_are_trace_unsafe() -> None:

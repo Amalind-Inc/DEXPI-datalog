@@ -40,6 +40,7 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     AgenticArm,
     EpisodeBudgets,
     HarborKiraEpisodeRunner,
+    PERMISSION_CONTROL_IDS,
     build_task,
     validate_bundle,
 )
@@ -59,12 +60,6 @@ from pydexpi_datalog.verification.souffle_rule_pack import RULE_PACKS_DIR
 SOUFFLE_ARM_MODELS = dict(AGENTIC_ARM_MODELS)
 
 ARM_LABEL = "c-souffle"
-PERMISSION_CONTROL_IDS = frozenset(
-    {
-        "hq-permission-defeasible-control-small",
-        "hq-permission-defeasible-control-large",
-    }
-)
 
 
 class FaithfulnessProgramError(ValueError):
@@ -215,6 +210,32 @@ def build_souffle_harbor_task(
     )
 
 
+def build_rmso_souffle_harbor_task(
+    *,
+    question: BenchmarkQuestion,
+    drawing_ref: Path,
+    output_dir: Path,
+    budgets: EpisodeBudgets,
+) -> Path:
+    """Generate the locked Arm B task with only approved EDB/IDB inputs."""
+    bundle_dir = validate_bundle(
+        drawing_ref, required_files=("graph_facts.json",)
+    )
+    program_required = requires_executed_program(question)
+    return build_task(
+        question=question,
+        drawing_ref=drawing_ref,
+        output_dir=output_dir,
+        budgets=budgets,
+        instruction=_render_souffle_instruction(question, rmso_locked=True),
+        tags=("arm-b-rmso-souffle", "pydexpi-datalog-1-rmso.1"),
+        input_bundle_files=("graph_facts.json",),
+        extra_input_files=_rmso_souffle_input_files(bundle_dir),
+        engine_setup=SOUFFLE_ENGINE_SETUP,
+        extra_workspace_files=(PROGRAM_FILENAME,) if program_required else (),
+    )
+
+
 def _souffle_input_files(bundle_dir: Path) -> dict[str, str]:
     """The Datalog layers and rule-pack prior art mounted beside the bundle.
 
@@ -236,22 +257,34 @@ def _souffle_input_files(bundle_dir: Path) -> dict[str, str]:
     return files
 
 
-def _render_souffle_instruction(question: BenchmarkQuestion) -> str:
+def _rmso_souffle_input_files(bundle_dir: Path) -> dict[str, str]:
+    artifact = json.loads(
+        (bundle_dir / "graph_facts.json").read_text(encoding="utf-8")
+    )
+    return {
+        "graph_facts.dl": build_graph_facts_datalog(artifact),
+        "graph_topology_semantics.dl": load_graph_topology_idb(),
+    }
+
+
+def _render_souffle_instruction(
+    question: BenchmarkQuestion, *, rmso_locked: bool = False
+) -> str:
     if not requires_executed_program(question):
         return _render_permission_abstention_instruction(question)
     verdicts = json.dumps(list(VERDICTS))
     postures = json.dumps(list(POSTURES))
-    pack_lines = "\n".join(
-        f"- `/input/rule_pack_{pack_path.stem}.md`: a reviewed rule pack"
-        " (restatement prose plus fenced Souffle programs) you may adapt."
-        for pack_path in sorted(RULE_PACKS_DIR.glob("*.md"))
-    )
-    return f"""\
-# P&ID review question (Datalog-first)
-
-Answer one question about the engineering drawing mounted read-only under
-`/input`, using the `souffle` Datalog engine installed on PATH:
-
+    if rmso_locked:
+        input_lines = """\
+- `/input/graph_facts.json`: the canonical graph-mirrored base fact layer.
+- `/input/graph_facts.dl`: those facts as the allowed Souffle EDB.
+- `/input/graph_topology_semantics.dl`: the allowed derived-predicate contract."""
+        prior_art = (
+            "No raw XML, graph export, README guidance, rule pack, oracle, or "
+            "project reasoning code is available in this locked arm."
+        )
+    else:
+        input_lines = """\
 - `/input/drawing.xml`: the original DEXPI source drawing.
 - `/input/graph_facts.json`: the canonical base fact layer extracted from it.
 - `/input/graph.json`: a NetworkX node-link JSON export of those same facts.
@@ -259,11 +292,22 @@ Answer one question about the engineering drawing mounted read-only under
   (`node`, `node_attribute`, `graph_edge`, `graph_edge_attribute`).
 - `/input/graph_topology_semantics.dl`: the shared IDB semantics layer
   (derived topology predicates over the EDB).
-- `/input/README.md`: orientation and witness-citation guide.
+- `/input/README.md`: orientation and witness-citation guide."""
+        pack_lines = "\n".join(
+            f"- `/input/rule_pack_{pack_path.stem}.md`: a reviewed rule pack"
+            " (restatement prose plus fenced Souffle programs) you may adapt."
+            for pack_path in sorted(RULE_PACKS_DIR.glob("*.md"))
+        )
+        prior_art = f"Reviewed prior art you are encouraged to compose from:\n\n{pack_lines}"
+    return f"""\
+# P&ID review question (Datalog-first)
 
-Reviewed prior art you are encouraged to compose from:
+Answer one question about the engineering drawing mounted read-only under
+`/input`, using the `souffle` Datalog engine installed on PATH:
 
-{pack_lines}
+{input_lines}
+
+{prior_art}
 
 ## Question
 
@@ -432,7 +476,7 @@ def create_souffle_arm(
         budgets=budgets,
         model_name=model_key,
         arm_label=ARM_LABEL,
-        task_builder=build_souffle_harbor_task,
+        task_builder=build_rmso_souffle_harbor_task,
         require_executed_program=requires_executed_program,
         program_validator=validate_faithfulness_program,
         program_faithfulness_gate=_run_preregistered_faithfulness_gate,

@@ -59,11 +59,25 @@ AGENTIC_ARM_MODELS = {
 
 # The 3q1.4 bundle layout the task environment mounts read-only.
 BUNDLE_FILES = ("drawing.xml", "graph_facts.json", "graph.json", "README.md")
+RAW_XML_INPUT_FILES = ("drawing.xml",)
 
 ANSWER_FILENAME = "structured_answer.json"
 
 # The executed Datalog program an engine-mediated arm ships for audit.
 PROGRAM_FILENAME = "analysis.dl"
+ANALYSIS_SCRIPT_FILENAME = "analysis.py"
+ANALYSIS_REPLAY_FILENAME = "analysis_replay.json"
+PERMISSION_CONTROL_IDS = frozenset(
+    {
+        "hq-permission-defeasible-control-small",
+        "hq-permission-defeasible-control-large",
+    }
+)
+
+
+def requires_analysis_replay(question: BenchmarkQuestion) -> bool:
+    """Return whether Arm A must replay a raw-XML analysis for this entry."""
+    return question.question_id not in PERMISSION_CONTROL_IDS
 
 
 # --------------------------------------------------------------------------
@@ -149,6 +163,8 @@ def build_harbor_task(
     The verifier never sees ground truth: correctness is graded by the
     benchmark grader, not inside the episode.
     """
+    replay_required = requires_analysis_replay(question)
+    raw_xml = _resolve_raw_xml(drawing_ref)
     return build_task(
         question=question,
         drawing_ref=drawing_ref,
@@ -156,17 +172,48 @@ def build_harbor_task(
         budgets=budgets,
         instruction=_render_instruction(question),
         tags=("arm-a-agentic", "pydexpi-datalog-1-3q1.8"),
+        input_bundle_files=RAW_XML_INPUT_FILES,
+        input_bundle_sources={"drawing.xml": raw_xml},
+        extra_workspace_files=(ANALYSIS_SCRIPT_FILENAME,) if replay_required else (),
+        replay_python_analysis=replay_required,
     )
 
 
-def validate_bundle(drawing_ref: Path) -> Path:
+def _resolve_raw_xml(drawing_ref: Path) -> Path:
+    """Resolve the original XML without exposing graph provenance to Arm A."""
+    direct = drawing_ref / "drawing.xml"
+    if direct.is_file():
+        return direct.resolve()
+    provenance_path = drawing_ref / "graph_facts.json"
+    if not provenance_path.is_file():
+        raise FileNotFoundError(
+            f"drawing bundle {drawing_ref} has neither drawing.xml nor graph provenance"
+        )
+    artifact = json.loads(provenance_path.read_text(encoding="utf-8"))
+    source_path = artifact.get("source_path")
+    if not isinstance(source_path, str) or not source_path or Path(source_path).is_absolute():
+        raise FileNotFoundError(
+            f"graph provenance has no repository-relative source_path: {provenance_path}"
+        )
+    for ancestor in drawing_ref.resolve().parents:
+        candidate = ancestor / source_path
+        if candidate.is_file():
+            return candidate.resolve()
+    raise FileNotFoundError(
+        f"raw DEXPI source from {provenance_path} does not exist: {source_path}"
+    )
+
+
+def validate_bundle(
+    drawing_ref: Path, *, required_files: Sequence[str] = BUNDLE_FILES
+) -> Path:
     """Resolve and validate one 3q1.4 drawing bundle directory."""
     bundle_dir = drawing_ref.resolve()
     if not bundle_dir.is_dir():
         raise FileNotFoundError(
             f"drawing bundle directory does not exist: {bundle_dir}"
         )
-    missing = [name for name in BUNDLE_FILES if not (bundle_dir / name).is_file()]
+    missing = [name for name in required_files if not (bundle_dir / name).is_file()]
     if missing:
         raise FileNotFoundError(
             f"drawing bundle {bundle_dir} is missing files: {missing}"
@@ -185,6 +232,9 @@ def build_task(
     extra_input_files: Mapping[str, str] | None = None,
     engine_setup: str = "",
     extra_workspace_files: Sequence[str] = (),
+    input_bundle_files: Sequence[str] = BUNDLE_FILES,
+    input_bundle_sources: Mapping[str, Path] | None = None,
+    replay_python_analysis: bool = False,
 ) -> Path:
     """Shared Harbor task generation every agentic arm composes from.
 
@@ -193,7 +243,11 @@ def build_task(
     engine), the arm's prompt framing, and extra required workspace
     submissions preserved for post-hoc audit.
     """
-    bundle_dir = validate_bundle(drawing_ref)
+    bundle_sources = dict(input_bundle_sources or {})
+    required_bundle_files = tuple(
+        name for name in input_bundle_files if name not in bundle_sources
+    )
+    bundle_dir = validate_bundle(drawing_ref, required_files=required_bundle_files)
 
     task_dir = output_dir / f"benchmark-{question.question_id}"
     environment_dir = task_dir / "environment"
@@ -203,15 +257,17 @@ def build_task(
 
     extra_files = dict(extra_input_files or {})
     digests: dict[str, str] = {}
-    for name in BUNDLE_FILES:
-        source = bundle_dir / name
+    for name in input_bundle_files:
+        source = bundle_sources.get(name, bundle_dir / name)
+        if not source.is_file():
+            raise FileNotFoundError(f"missing task input source for {name}: {source}")
         shutil.copyfile(source, environment_dir / name)
         digests[name] = hashlib.sha256(source.read_bytes()).hexdigest()
     for name, content in extra_files.items():
         (environment_dir / name).write_text(content, encoding="utf-8")
         digests[name] = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    input_names = tuple(BUNDLE_FILES) + tuple(extra_files)
+    input_names = tuple(input_bundle_files) + tuple(extra_files)
     (task_dir / "instruction.md").write_text(instruction, encoding="utf-8")
     (task_dir / "task.toml").write_text(
         _render_task_toml(question=question, budgets=budgets, tags=tags),
@@ -223,16 +279,26 @@ def build_task(
     )
     preserved = (ANSWER_FILENAME, *extra_workspace_files)
     test_sh_path = tests_dir / "test.sh"
-    test_sh_path.write_text(_render_test_sh(preserved), encoding="utf-8")
+    post_preserved = (ANALYSIS_REPLAY_FILENAME,) if replay_python_analysis else ()
+    test_sh_path.write_text(
+        _render_test_sh(preserved, post_preserved=post_preserved),
+        encoding="utf-8",
+    )
     test_sh_path.chmod(0o755)
     (tests_dir / "test_outputs.py").write_text(
-        _render_verifier(digests, required_nonempty=tuple(extra_workspace_files)),
+        _render_verifier(
+            digests,
+            required_nonempty=tuple(extra_workspace_files),
+            replay_python_analysis=replay_python_analysis,
+        ),
         encoding="utf-8",
     )
     return task_dir
 
 
 def _render_instruction(question: BenchmarkQuestion) -> str:
+    if not requires_analysis_replay(question):
+        return _render_agentic_permission_instruction(question)
     verdicts = json.dumps(list(VERDICTS))
     postures = json.dumps(list(POSTURES))
     return f"""\
@@ -242,9 +308,6 @@ Answer one question about the engineering drawing mounted read-only under
 `/input`:
 
 - `/input/drawing.xml`: the original DEXPI source drawing.
-- `/input/graph_facts.json`: the canonical base fact layer extracted from it.
-- `/input/graph.json`: a NetworkX node-link JSON export of those same facts.
-- `/input/README.md`: orientation and witness-citation guide.
 
 ## Question
 
@@ -252,8 +315,8 @@ Answer one question about the engineering drawing mounted read-only under
 
 ## Ground rules
 
-- Analyze with the terminal: read the files, run `python3` (NetworkX is
-  installed).  Verify your reasoning against real command output before
+- Analyze with the terminal: read the XML and run standard-library Python.
+  Verify your reasoning against real command output before
   submitting.
 - The input is read-only.  Do not attempt to modify it.
 - Base your answer only on the drawing data under `/input`.
@@ -268,7 +331,30 @@ Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object:
   "witness_ids": a list of object IDs from the drawing that are the evidence
     for your verdict (empty if none apply),
   "posture": one of {postures},
-  "answer_text": a concise explanation of the result
+  "answer_text": a concise explanation of the result,
+  "support": {{
+    "steps": [
+      {{
+        "id": "scope",
+        "kind": "xml_scope",
+        "artifact": "drawing.xml",
+        "sha256": the SHA-256 of the complete raw XML,
+        "dependencies": []
+      }},
+      {{
+        "id": "execution",
+        "kind": "python_execution",
+        "artifact": "analysis.py",
+        "input": "drawing.xml",
+        "output": "analysis_replay.json",
+        "verdict": the submitted verdict,
+        "witness_ids": the submitted witness IDs,
+        "dependencies": ["scope"]
+      }}
+    ],
+    "claims": one verdict claim plus one `witness:<ID>` claim per witness,
+    each linked to the execution step
+  }}
 }}
 ```
 
@@ -280,11 +366,51 @@ Write `/workspace/{ANSWER_FILENAME}` containing exactly one JSON object:
   "out_of_scope". Do not invent witness IDs.
 - For an unanswerable, ambiguous, or off-domain request, answer_text must name
   the source limitation or ambiguity and offer a concrete source-grounded next step.
-- Every witness ID must be copied exactly from `/input/graph_facts.json`
-  (`facts.nodes[*].node_id`, or edge `source_id`/`target_id`/`edge_key`);
-  never invent IDs.
+- Every witness ID must be copied exactly from `/input/drawing.xml`; never
+  invent IDs.
 
-Verify the file exists and is valid JSON before marking the task complete.
+Also write `/workspace/{ANALYSIS_SCRIPT_FILENAME}`. It must use only the
+Python standard library, accept the raw XML path as its sole argument, and
+write exactly one JSON object to stdout containing only `verdict` and
+`witness_ids`. The verifier reruns it in the frozen sandbox and requires that
+output to match the structured answer. It preserves the replay as
+`{ANALYSIS_REPLAY_FILENAME}` for post-hoc audit.
+
+Verify both submitted files exist before marking the task complete.
+"""
+
+
+def _render_agentic_permission_instruction(question: BenchmarkQuestion) -> str:
+    return f"""\
+# P&ID review question (policy-boundary control)
+
+The complete raw DEXPI XML is mounted read-only at `/input/drawing.xml`.
+
+## Question
+
+{question.question}
+
+This is a permission/defeasible-exception control. The monotone drawing source
+cannot soundly establish permission or resolve an exception. You must abstain
+and must not author or execute a verdict script.
+
+Write `/workspace/{ANSWER_FILENAME}` with verdict `unanswerable`, no witnesses,
+posture `source_data_unavailable`, a concise explanation of the limitation,
+and this exact closed support graph:
+
+```json
+{{
+  "steps": [{{
+    "id": "policy",
+    "kind": "policy_abstention",
+    "operation": "permission_or_defeasible_not_decidable_from_monotone_drawing",
+    "dependencies": []
+  }}],
+  "claims": [{{"claim": "verdict", "step_ids": ["policy"]}}]
+}}
+```
+
+Do not create `/workspace/{ANALYSIS_SCRIPT_FILENAME}`.
 """
 
 
@@ -333,8 +459,7 @@ RUN apt-get update \\
     && chown root:root /input \\
     && chmod 0555 /input \\
     && chown agent:agent /workspace \\
-    && rm -rf /var/lib/apt/lists/* \\
-    && pip install --no-cache-dir networkx
+    && rm -rf /var/lib/apt/lists/*
 {engine_setup}
 {copy_lines}
 RUN {chmod_lines}
@@ -344,10 +469,16 @@ USER agent
 """
 
 
-def _render_test_sh(preserved: Sequence[str]) -> str:
+def _render_test_sh(
+    preserved: Sequence[str], *, post_preserved: Sequence[str] = ()
+) -> str:
     copy_lines = "\n".join(
         f"cp /workspace/{name} /logs/verifier/{name} 2>/dev/null || true"
         for name in preserved
+    )
+    post_copy_lines = "\n".join(
+        f"cp /workspace/{name} /logs/verifier/{name} 2>/dev/null || true"
+        for name in post_preserved
     )
     return f"""\
 #!/bin/sh
@@ -356,6 +487,7 @@ set -eu
 mkdir -p /logs/verifier
 {copy_lines}
 if python3 /tests/test_outputs.py; then
+  {post_copy_lines}
   echo 1 > /logs/verifier/reward.txt
 else
   echo 0 > /logs/verifier/reward.txt
@@ -364,7 +496,10 @@ fi
 
 
 def _render_verifier(
-    digests: Mapping[str, str], *, required_nonempty: Sequence[str] = ()
+    digests: Mapping[str, str],
+    *,
+    required_nonempty: Sequence[str] = (),
+    replay_python_analysis: bool = False,
 ) -> str:
     """The independent verifier: input integrity + submission shape only.
 
@@ -381,11 +516,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 INPUT_DIR = Path(os.environ.get("INPUT_DIR", "/input"))
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
 EXPECTED_SHA256 = {json.dumps(dict(digests), indent=4, sort_keys=True)}
 REQUIRED_NONEMPTY = {json.dumps(list(required_nonempty))}
+REPLAY_PYTHON_ANALYSIS = {replay_python_analysis!r}
 
 
 def main() -> int:
@@ -406,6 +544,36 @@ def main() -> int:
             raise AssertionError(f"missing required submission: {{path}}")
         if not path.read_text(encoding="utf-8").strip():
             raise AssertionError(f"required submission is empty: {{path}}")
+    if REPLAY_PYTHON_ANALYSIS:
+        script_path = WORKSPACE_DIR / {json.dumps(ANALYSIS_SCRIPT_FILENAME)}
+        replay = subprocess.run(
+            [sys.executable, str(script_path), str(INPUT_DIR / "drawing.xml")],
+            cwd=WORKSPACE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if replay.returncode != 0:
+            raise AssertionError(
+                f"analysis replay failed ({{replay.returncode}}): {{replay.stderr}}"
+            )
+        try:
+            replayed = json.loads(replay.stdout)
+        except json.JSONDecodeError as error:
+            raise AssertionError(f"analysis replay did not emit JSON: {{error}}")
+        expected = {{
+            "verdict": answer.get("verdict"),
+            "witness_ids": answer.get("witness_ids"),
+        }}
+        if replayed != expected:
+            raise AssertionError(
+                f"analysis replay does not match structured answer: "
+                f"{{replayed!r}} != {{expected!r}}"
+            )
+        (WORKSPACE_DIR / {json.dumps(ANALYSIS_REPLAY_FILENAME)}).write_text(
+            json.dumps(replayed, sort_keys=True), encoding="utf-8"
+        )
     return 0
 
 
@@ -438,6 +606,8 @@ class EpisodeResult:
     model_calls: int = 0
     usage: dict[str, object] = field(default_factory=dict)
     executed_program: str | None = None
+    analysis_script: str | None = None
+    analysis_replay_text: str | None = None
 
 
 @runtime_checkable
@@ -476,6 +646,14 @@ class AgenticArm:
     answer_trace_gate: (
         Callable[
             [StructuredAnswer, Path, str | None, BenchmarkQuestion],
+            Mapping[str, object],
+        ]
+        | None
+    ) = None
+    require_analysis_replay: bool | Callable[[BenchmarkQuestion], bool] = False
+    analysis_trace_gate: (
+        Callable[
+            [StructuredAnswer, Path, str | None, str | None, BenchmarkQuestion],
             Mapping[str, object],
         ]
         | None
@@ -528,6 +706,18 @@ class AgenticArm:
             return self._degraded(
                 "missing_executed_program", transcript=transcript, usage=usage
             )
+        analysis_required = (
+            self.require_analysis_replay(question)
+            if callable(self.require_analysis_replay)
+            else self.require_analysis_replay
+        )
+        if analysis_required and (
+            not (result.analysis_script or "").strip()
+            or not (result.analysis_replay_text or "").strip()
+        ):
+            return self._degraded(
+                "missing_analysis_replay", transcript=transcript, usage=usage
+            )
         if self.program_validator is not None and result.executed_program is not None:
             try:
                 self.program_validator(result.executed_program)
@@ -572,6 +762,26 @@ class AgenticArm:
             try:
                 trace_report = self.answer_trace_gate(
                     parsed, drawing_ref, result.executed_program, question
+                )
+            except ValueError as error:
+                return self._degraded(
+                    "audit_trace_error",
+                    transcript=transcript,
+                    usage={**usage, "audit_trace_error": str(error)},
+                )
+            usage = {**usage, "audit_trace": dict(trace_report)}
+            if trace_report.get("trace_safe") is not True:
+                return self._degraded(
+                    "audit_trace_unsafe", transcript=transcript, usage=usage
+                )
+        if self.analysis_trace_gate is not None:
+            try:
+                trace_report = self.analysis_trace_gate(
+                    parsed,
+                    drawing_ref,
+                    result.analysis_script,
+                    result.analysis_replay_text,
+                    question,
                 )
             except ValueError as error:
                 return self._degraded(
@@ -633,6 +843,22 @@ class AgenticArm:
                     "role": "tool",
                     "tool_name": "executed_datalog_program",
                     "content": result.executed_program,
+                }
+            )
+        if result.analysis_script is not None:
+            entries.append(
+                {
+                    "role": "tool",
+                    "tool_name": "executed_python_analysis",
+                    "content": result.analysis_script,
+                }
+            )
+        if result.analysis_replay_text is not None:
+            entries.append(
+                {
+                    "role": "tool",
+                    "tool_name": "captured_analysis_replay",
+                    "content": result.analysis_replay_text,
                 }
             )
         entries.append(
@@ -774,6 +1000,8 @@ class HarborKiraEpisodeRunner:
                     "timeout_sec": budgets.agent_timeout_sec,
                 },
                 executed_program=partial.executed_program,
+                analysis_script=partial.analysis_script,
+                analysis_replay_text=partial.analysis_replay_text,
             )
         return parse_harbor_artifacts(jobs_dir)
 
@@ -804,6 +1032,16 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
     if program_files:
         executed_program = program_files[0].read_text(encoding="utf-8")
 
+    analysis_script: str | None = None
+    script_files = sorted(jobs_dir.rglob(ANALYSIS_SCRIPT_FILENAME))
+    if script_files:
+        analysis_script = script_files[0].read_text(encoding="utf-8")
+
+    analysis_replay_text: str | None = None
+    replay_files = sorted(jobs_dir.rglob(ANALYSIS_REPLAY_FILENAME))
+    if replay_files:
+        analysis_replay_text = replay_files[0].read_text(encoding="utf-8")
+
     command_batches: list[tuple[str, ...]] = []
     model_calls = 0
     usage: dict[str, object] = {}
@@ -824,6 +1062,8 @@ def parse_harbor_artifacts(jobs_dir: Path) -> EpisodeResult:
         model_calls=model_calls,
         usage=usage,
         executed_program=executed_program,
+        analysis_script=analysis_script,
+        analysis_replay_text=analysis_replay_text,
     )
 
 
@@ -894,6 +1134,52 @@ def _keystrokes(arguments: object) -> tuple[str, ...]:
 # --------------------------------------------------------------------------
 
 
+def verify_agentic_answer_trace(
+    answer: StructuredAnswer,
+    drawing_ref: Path,
+    analysis_script: str | None,
+    analysis_replay_text: str | None,
+    question: BenchmarkQuestion,
+) -> dict[str, object]:
+    """Verify captured Arm A replay artifacts without host-side execution."""
+    from dataclasses import asdict
+
+    from pydexpi_datalog.benchmark.audit_trace import verify_audit_trace
+
+    xml_path = _resolve_raw_xml(drawing_ref) if drawing_ref.is_dir() else drawing_ref
+    xml_digest = hashlib.sha256(xml_path.read_bytes()).hexdigest()
+    if not requires_analysis_replay(question):
+        if (analysis_script or "").strip() or (analysis_replay_text or "").strip():
+            raise ValueError(
+                "permission/defeasible controls must abstain without a verdict script"
+            )
+        return asdict(
+            verify_audit_trace(
+                answer=answer,
+                graph_facts={},
+                allow_policy_abstention=True,
+            )
+        )
+    if not (analysis_script or "").strip() or not (
+        analysis_replay_text or ""
+    ).strip():
+        raise ValueError("Arm A source conclusions require captured analysis replay")
+    try:
+        replayed = json.loads(analysis_replay_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"captured analysis replay is not JSON: {error}") from error
+    if not isinstance(replayed, dict):
+        raise ValueError("captured analysis replay must be a JSON object")
+    return asdict(
+        verify_audit_trace(
+            answer=answer,
+            graph_facts={},
+            xml_sha256=xml_digest,
+            replay_python=lambda artifact, output: replayed,
+        )
+    )
+
+
 def create_agentic_arm(
     model_key: str,
     *,
@@ -917,4 +1203,10 @@ def create_agentic_arm(
         environ=env,
         request_gateway=request_gateway,
     )
-    return AgenticArm(runner=runner, budgets=budgets, model_name=model_key)
+    return AgenticArm(
+        runner=runner,
+        budgets=budgets,
+        model_name=model_key,
+        require_analysis_replay=requires_analysis_replay,
+        analysis_trace_gate=verify_agentic_answer_trace,
+    )

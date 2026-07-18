@@ -63,9 +63,8 @@ def test_checked_in_trap_manifest_is_balanced_and_agentic_bundle_consumable(
         budgets=EpisodeBudgets(),
     )
     assert (task_dir / "environment" / "drawing.xml").is_file()
-    assert (task_dir / "environment" / "graph_facts.json").is_file()
-    assert (task_dir / "environment" / "graph.json").is_file()
-    assert (task_dir / "environment" / "README.md").is_file()
+    for forbidden in ("graph_facts.json", "graph.json", "README.md"):
+        assert not (task_dir / "environment" / forbidden).exists()
 
 
 def test_model_trap_judge_prompts_from_answer_and_parses_both_axes() -> None:

@@ -39,6 +39,8 @@ def verify_audit_trace(
     answer: StructuredAnswer,
     graph_facts: Mapping[str, object],
     replay_souffle: Callable[[str, str], tuple[str, ...]] | None = None,
+    xml_sha256: str | None = None,
+    replay_python: Callable[[str, str], Mapping[str, object]] | None = None,
     allow_policy_abstention: bool = False,
 ) -> AuditTraceReport:
     """Verify only the spike's closed support vocabulary.
@@ -168,6 +170,48 @@ def verify_audit_trace(
             if edge in known_edges:
                 grounded_valid += 1
             else:
+                invalid.add(step_id)
+        elif kind == "xml_scope":
+            grounded_total += 1
+            if (
+                step.get("artifact") == "drawing.xml"
+                and step.get("sha256") == xml_sha256
+                and not dependencies
+            ):
+                grounded_valid += 1
+            else:
+                invalid.add(step_id)
+        elif kind == "python_execution":
+            replay_total += 1
+            artifact = step.get("artifact")
+            output = step.get("output")
+            declared_ids = step.get("witness_ids")
+            if (
+                artifact != "analysis.py"
+                or step.get("input") != "drawing.xml"
+                or output != "analysis_replay.json"
+                or not isinstance(declared_ids, list)
+                or not all(isinstance(item, str) for item in declared_ids)
+                or not dependencies
+                or replay_python is None
+            ):
+                invalid.add(step_id)
+                continue
+            replayed = replay_python(artifact, output)
+            replayed_ids = replayed.get("witness_ids")
+            if (
+                replayed.get("verdict") == step.get("verdict")
+                and replayed_ids == declared_ids
+            ):
+                replay_valid += 1
+            else:
+                invalid.add(step_id)
+            if (
+                step.get("verdict") != answer.verdict
+                or tuple(sorted(set(declared_ids)))
+                != tuple(sorted(set(answer.witness_ids)))
+            ):
+                consistency = False
                 invalid.add(step_id)
         elif kind == "souffle_execution":
             replay_total += 1
