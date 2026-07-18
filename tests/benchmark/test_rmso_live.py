@@ -502,3 +502,63 @@ def test_paid_live_boundary_rejects_obsolete_raw_xml_protocol_lock(
     with pytest.raises(ValueError, match="graph-direct-vs-souffle-v2"):
         validate_redesigned_live_manifest(old_manifest)
     validate_redesigned_live_manifest(new_manifest)
+
+
+def test_interrupted_live_summary_retains_accounting_invalid_reasons(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            pass
+
+    class Gateway:
+        def __init__(self, **kwargs):
+            pass
+
+        def accounting_snapshot(self):
+            return {
+                "actual_spend_usd": 0.001,
+                "active_reservations_usd": 0.0,
+                "accounting_complete": True,
+                "attribution_complete": True,
+                "unattributed_attempts": 0,
+                "spend_cap_complete": True,
+                "spend_cap_blocked_attempts": 0,
+                "unknown_cost_calls": [],
+                "policy_violations": [
+                    {"call_number": 1, "reason": "provider metadata"}
+                ],
+            }
+
+    def interrupt(**kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("pydexpi_datalog.benchmark.rmso_live.httpx.Client", Client)
+    monkeypatch.setattr(
+        "pydexpi_datalog.benchmark.rmso_live.LockedOpenRouterGateway", Gateway
+    )
+    monkeypatch.setattr("pydexpi_datalog.benchmark.rmso_live.run_benchmark", interrupt)
+    kira_dir = tmp_path / "kira"
+    kira_dir.mkdir()
+    output_dir = tmp_path / "run"
+
+    with pytest.raises(KeyboardInterrupt):
+        run_rmso_live(
+            lock_path=REDESIGNED_LOCK_PATH,
+            output_dir=output_dir,
+            kira_dir=kira_dir,
+            environ={"OPENROUTER_API_KEY": "test-key"},
+        )
+
+    summary = json.loads((output_dir / "rmso_live_summary.json").read_text())
+    assert summary["formal_status"] == "INCOMPLETE"
+    assert summary["invalid_reasons"] == [
+        "provider_policy_violation",
+        "execution_failure",
+    ]

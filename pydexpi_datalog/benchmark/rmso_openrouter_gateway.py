@@ -321,12 +321,14 @@ class LockedOpenRouterGateway:
         if payload.get("model") != MODEL:
             raise ValueError("OpenRouter resolved a model other than pinned V4 Flash.")
         metadata = payload.get("openrouter_metadata")
-        if (
-            not isinstance(metadata, dict)
-            or not isinstance(metadata.get("selected_provider"), str)
-            or not metadata["selected_provider"]
-        ):
+        if not isinstance(metadata, dict):
             raise ValueError("OpenRouter response lacks resolved-provider metadata.")
+        provider = payload.get("provider", metadata.get("selected_provider"))
+        if not isinstance(provider, str) or not provider:
+            raise ValueError("OpenRouter response lacks resolved-provider metadata.")
+        legacy_provider = metadata.get("selected_provider")
+        if isinstance(legacy_provider, str) and legacy_provider != provider:
+            raise ValueError("OpenRouter response has conflicting provider metadata.")
         usage = payload.get("usage")
         if not isinstance(usage, dict):
             raise ValueError("OpenRouter response lacks usage accounting.")

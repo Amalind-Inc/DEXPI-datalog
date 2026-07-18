@@ -408,3 +408,57 @@ def test_gateway_settles_cost_then_rejects_missing_resolved_provider_identity(
             "reason": "OpenRouter response lacks resolved-provider metadata.",
         }
     ]
+
+
+def test_gateway_accepts_live_openrouter_top_level_provider_shape(
+    tmp_path: Path,
+) -> None:
+    def upstream(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "model": "deepseek/deepseek-v4-flash",
+                "provider": "DeepInfra",
+                "choices": [],
+                "usage": {"completion_tokens": 20, "cost": 0.004},
+                "openrouter_metadata": {
+                    "requested": "deepseek/deepseek-v4-flash",
+                    "endpoints": {
+                        "available": [
+                            {
+                                "model": "deepseek/deepseek-v4-flash-20260423",
+                                "provider": "DeepInfra",
+                                "selected": True,
+                            }
+                        ]
+                    },
+                },
+            },
+        )
+
+    policy = OpenRouterRequestPolicy(
+        prompt_price_per_million=0.098,
+        completion_price_per_million=0.196,
+    )
+    with httpx.Client(transport=httpx.MockTransport(upstream)) as upstream_client:
+        gateway = LockedOpenRouterGateway(
+            policy=policy,
+            credential="test-key",
+            artifact_dir=tmp_path / "artifacts",
+            reserved_input_tokens=1000,
+            upstream_url="https://openrouter.test/api/v1/chat/completions",
+            http_client=upstream_client,
+        )
+        with gateway.attribute_calls(arm_id="arm-a", question_id="question-1"):
+            with gateway:
+                response = httpx.post(
+                    f"{gateway.base_url}/chat/completions",
+                    json={
+                        "model": "deepseek/deepseek-v4-flash",
+                        "messages": [{"role": "user", "content": "inspect"}],
+                    },
+                )
+
+    assert response.status_code == 200
+    assert gateway.accounting_snapshot()["policy_violations"] == []
+    assert gateway.actual_spend == 0.004

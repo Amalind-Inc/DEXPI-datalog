@@ -250,15 +250,15 @@ def run_rmso_live(
             )
             finalize_rmso_accounting(summary, gateway)
         except BaseException as error:
-            accounting = gateway.accounting_snapshot()
+            finalize_rmso_accounting(summary, gateway)
+            invalid_reasons = list(summary["invalid_reasons"])
+            invalid_reasons.append("execution_failure")
             summary.update(
                 {
                     "status": "failed",
                     "formal_status": "INCOMPLETE",
                     "failed_at": datetime.now(timezone.utc).isoformat(),
-                    "actual_spend_usd": accounting["actual_spend_usd"],
-                    "provider_accounting": accounting,
-                    "invalid_reasons": ["execution_failure"],
+                    "invalid_reasons": invalid_reasons,
                     "error_type": type(error).__name__,
                     "error": str(error),
                 }
