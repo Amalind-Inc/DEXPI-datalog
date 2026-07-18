@@ -690,6 +690,26 @@ def test_live_runner_command_wires_budgets_and_released_agent() -> None:
     )
 
 
+def test_live_runner_command_absolutizes_paths_before_uv_changes_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = HarborKiraEpisodeRunner(
+        kira_dir=Path("kira"),
+        model="openrouter/deepseek/deepseek-v4-flash",
+    )
+
+    command = runner.build_command(
+        task_dir=Path("run/tasks/benchmark-agentic-q1"),
+        jobs_dir=Path("run/jobs"),
+        budgets=BUDGETS,
+    )
+
+    assert command[command.index("--directory") + 1] == str(tmp_path / "kira")
+    assert command[command.index("--path") + 1] == str(tmp_path / "run/tasks")
+    assert command[command.index("--jobs-dir") + 1] == str(tmp_path / "run/jobs")
+
+
 def test_live_runner_command_forwards_api_base_when_set() -> None:
     runner = HarborKiraEpisodeRunner(
         kira_dir=Path("/tmp/terminus-kira"),

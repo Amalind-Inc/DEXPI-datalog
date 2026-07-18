@@ -931,11 +931,14 @@ class HarborKiraEpisodeRunner:
     def build_command(
         self, *, task_dir: Path, jobs_dir: Path, budgets: EpisodeBudgets
     ) -> tuple[str, ...]:
+        kira_dir = self.kira_dir.absolute()
+        task_dir = task_dir.absolute()
+        jobs_dir = jobs_dir.absolute()
         command = [
             "uv",
             "run",
             "--directory",
-            str(self.kira_dir),
+            str(kira_dir),
             "harbor",
             "run",
             "--path",
