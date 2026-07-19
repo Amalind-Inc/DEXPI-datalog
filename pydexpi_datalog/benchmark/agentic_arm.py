@@ -379,6 +379,7 @@ def build_task(
     extra_input_files: Mapping[str, str] | None = None,
     engine_setup: str = "",
     extra_workspace_files: Sequence[str] = (),
+    workspace_seed_files: Mapping[str, str] | None = None,
     input_bundle_files: Sequence[str] = BUNDLE_FILES,
     input_bundle_sources: Mapping[str, Path] | None = None,
     replay_python_analysis: bool = False,
@@ -429,6 +430,7 @@ def build_task(
             engine_setup=engine_setup,
             base_image=base_image,
             base_packages=base_packages,
+            workspace_seed_files=workspace_seed_files,
         ),
         encoding="utf-8",
     )
@@ -666,6 +668,7 @@ def _render_dockerfile(
     engine_setup: str = "",
     base_image: str = "python:3.12-slim",
     base_packages: Sequence[str] = ("tmux",),
+    workspace_seed_files: Mapping[str, str] | None = None,
 ) -> str:
     copy_lines = "\n".join(f"COPY {name} /input/{name}" for name in input_names)
     chmod_lines = " \\\n    && ".join(
@@ -673,6 +676,18 @@ def _render_dockerfile(
         for name in input_names
     )
     packages = " ".join(base_packages)
+    workspace_seeds = dict(workspace_seed_files or {})
+    unknown_sources = sorted(set(workspace_seeds.values()) - set(input_names))
+    if unknown_sources:
+        raise ValueError(f"workspace seed sources are not task inputs: {unknown_sources}")
+    workspace_copy = "\n".join(
+        f"COPY {source} /workspace/{destination}"
+        for destination, source in workspace_seeds.items()
+    )
+    workspace_permissions = "\n".join(
+        f"RUN chown agent:agent /workspace/{destination}"
+        for destination in workspace_seeds
+    )
     return f"""\
 FROM {base_image}
 
@@ -687,6 +702,8 @@ RUN apt-get update \\
 {engine_setup}
 {copy_lines}
 RUN {chmod_lines}
+{workspace_copy}
+{workspace_permissions}
 
 WORKDIR /workspace
 USER agent
@@ -1139,6 +1156,7 @@ class HarborKiraEpisodeRunner:
     request_gateway: LockedOpenRouterGateway | None = None
     accounting_arm_id: str | None = None
     agent_import_path: str = "terminus_kira.terminus_kira:TerminusKira"
+    agent_kwargs: Mapping[str, object] = field(default_factory=dict)
     environ: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
 
     def build_command(
@@ -1177,6 +1195,10 @@ class HarborKiraEpisodeRunner:
         ]
         if self.api_base is not None:
             command[-4:-4] = ["--agent-kwarg", f"api_base={self.api_base}"]
+        for name, value in sorted(self.agent_kwargs.items()):
+            if not name.isidentifier():
+                raise ValueError(f"invalid agent kwarg name: {name!r}")
+            command[-4:-4] = ["--agent-kwarg", f"{name}={value}"]
         return tuple(command)
 
     def run(

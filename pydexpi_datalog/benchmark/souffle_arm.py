@@ -50,6 +50,10 @@ from pydexpi_datalog.benchmark.graph_inspection import build_graph_inspection_in
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
     LockedOpenRouterGateway,
 )
+from pydexpi_datalog.benchmark.rmso_kira import (
+    CHECKPOINT_FIELD,
+    CHECKPOINT_VALUE,
+)
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     build_graph_facts_datalog,
     load_graph_topology_idb,
@@ -61,6 +65,9 @@ from pydexpi_datalog.verification.souffle_rule_pack import RULE_PACKS_DIR
 SOUFFLE_ARM_MODELS = dict(AGENTIC_ARM_MODELS)
 
 ARM_LABEL = "c-souffle"
+RMSO_CHECKPOINT_AGENT_IMPORT_PATH = (
+    "rmso_kira:CheckpointTerminusKira"
+)
 
 
 class FaithfulnessProgramError(ValueError):
@@ -196,7 +203,7 @@ RMSO_ANALYSIS_TEMPLATE = """\
 // Add only portable IDB rules below. Never hard-code drawing UUIDs.
 """
 
-RMSO_RUN_QUERY_HELPER = '''\
+_RMSO_RUN_QUERY_HELPER_TEMPLATE = '''\
 from __future__ import annotations
 
 import csv
@@ -290,13 +297,20 @@ def main() -> int:
         witnesses = [row[0] for row in csv.reader(stream, delimiter="\\t") if row]
     witnesses = sorted(set(witnesses))
     write_checkpoint(program, witnesses)
-    print(json.dumps({"ok": True, "witness_ids": witnesses}))
+    print(json.dumps({
+        "ok": True,
+        "__RMSO_CHECKPOINT_FIELD__": "__RMSO_CHECKPOINT_VALUE__",
+        "witness_ids": witnesses,
+    }))
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
 '''
+RMSO_RUN_QUERY_HELPER = _RMSO_RUN_QUERY_HELPER_TEMPLATE.replace(
+    "__RMSO_CHECKPOINT_FIELD__", CHECKPOINT_FIELD
+).replace("__RMSO_CHECKPOINT_VALUE__", CHECKPOINT_VALUE)
 
 
 def build_souffle_harbor_task(
@@ -345,6 +359,9 @@ def build_rmso_souffle_harbor_task(
         extra_input_files=_rmso_souffle_input_files(bundle_dir),
         engine_setup=SOUFFLE_ENGINE_SETUP,
         extra_workspace_files=(PROGRAM_FILENAME,) if program_required else (),
+        workspace_seed_files=(
+            {PROGRAM_FILENAME: "analysis_template.dl"} if program_required else None
+        ),
         base_image="--platform=linux/amd64 ubuntu:22.04",
         base_packages=("python3", "tmux"),
     )
@@ -439,9 +456,7 @@ Avoid printing an entire large input when a targeted query will answer the quest
 already contains every graph UUID, source Proteus ID, label, tag, edge label, and
 `attr_name`.
 
-1. Start immediately from the supplied portable skeleton:
-
-   `cp /input/analysis_template.dl /workspace/analysis.dl`
+1. Edit the preloaded `/workspace/analysis.dl` portable skeleton immediately.
 
    It begins with these exact declarations; add only your own IDB rules:
 
@@ -599,11 +614,20 @@ def create_souffle_arm(
         raise ValueError(
             "OPENROUTER_API_KEY is required for live souffle-arm episodes"
         )
+    adapter_root = str(Path(__file__).resolve().parent)
+    python_path = [adapter_root]
+    if env.get("PYTHONPATH"):
+        python_path.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(python_path)
     runner = HarborKiraEpisodeRunner(
         kira_dir=kira_dir,
         model=SOUFFLE_ARM_MODELS[model_key],
         environ=env,
         request_gateway=request_gateway,
+        agent_import_path=RMSO_CHECKPOINT_AGENT_IMPORT_PATH,
+        agent_kwargs={
+            "checkpoint_cutoff_sec": max(1.0, budgets.agent_timeout_sec - 60.0),
+        },
     )
     return AgenticArm(
         runner=runner,

@@ -10,6 +10,7 @@ calls in CI.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -37,6 +38,11 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     parse_harbor_artifacts,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
+from pydexpi_datalog.benchmark.rmso_kira import (
+    CHECKPOINT_FIELD,
+    CHECKPOINT_VALUE,
+    build_checkpoint_kira_class,
+)
 from pydexpi_datalog.benchmark.souffle_arm import (
     FaithfulnessProgramError,
     PROGRAM_FILENAME,
@@ -63,6 +69,46 @@ BUDGETS = EpisodeBudgets(
     max_commands=10,
     agent_timeout_sec=600.0,
     verifier_timeout_sec=120.0,
+)
+
+
+class FakeKiraResponse:
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+
+@dataclass
+class FakeKiraCommand:
+    keystrokes: str
+    duration_sec: float
+
+
+class FakeKiraSession:
+    async def send_keys(self, *args, **kwargs):
+        return None
+
+
+class FakeKiraBoundary:
+    def __init__(self, *, outputs=()):
+        self._pending_completion = False
+        self.model_calls = 0
+        self.outputs = list(outputs)
+        self.executed_commands = []
+        self._session = FakeKiraSession()
+
+    async def _execute_commands(self, commands, session):
+        self.executed_commands.append(commands)
+        return False, self.outputs.pop(0)
+
+    async def _handle_llm_interaction(self, *args, **kwargs):
+        self.model_calls += 1
+        return "called-model"
+
+
+CheckpointKiraBoundary = build_checkpoint_kira_class(
+    FakeKiraBoundary,
+    FakeKiraResponse,
+    FakeKiraCommand,
 )
 
 
@@ -191,6 +237,10 @@ def test_rmso_task_exposes_only_approved_edb_and_idb_inputs(tmp_path: Path) -> N
     dockerfile = (environment / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith("FROM --platform=linux/amd64 ubuntu:22.04\n")
     assert "python3" in dockerfile
+    assert "COPY analysis_template.dl /workspace/analysis.dl" in dockerfile
+    assert "chown agent:agent /workspace/analysis.dl" in dockerfile
+    assert "cp /input/analysis_template.dl /workspace/analysis.dl" not in instruction
+    assert "Edit the preloaded `/workspace/analysis.dl`" in instruction
 
 
 def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
@@ -229,6 +279,7 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {
         "ok": True,
+        CHECKPOINT_FIELD: CHECKPOINT_VALUE,
         "witness_ids": [witness],
     }
     checkpoint = json.loads(
@@ -278,6 +329,97 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
     assert "writes a valid provisional structured answer" in instruction
     assert "grep" in instruction
     assert "Avoid printing an entire large input" in instruction
+
+
+def test_checkpoint_aware_kira_completes_without_another_model_call(
+    tmp_path: Path,
+) -> None:
+    receipt = json.dumps(
+        {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE, "witness_ids": []}
+    )
+    agent = CheckpointKiraBoundary(outputs=(receipt, receipt))
+
+    first = FakeKiraCommand(keystrokes="run query\n", duration_sec=1)
+    prohibited = FakeKiraCommand(keystrokes="keep inspecting\n", duration_sec=60)
+    model_commands = [first, prohibited]
+    asyncio.run(agent.execute_checkpoint_commands(model_commands, object()))
+    completion = asyncio.run(agent.checkpoint_or_model_interaction())
+
+    assert len(agent.executed_commands) == 2
+    assert agent.executed_commands[0] == [first]
+    assert agent.executed_commands[1] == [
+        FakeKiraCommand(
+            keystrokes="python3 /input/run_query.py /workspace/analysis.dl\n",
+            duration_sec=50.0,
+        )
+    ]
+    flattened_commands = [
+        command for batch in agent.executed_commands for command in batch
+    ]
+    assert prohibited not in flattened_commands
+    assert model_commands == [first]
+    assert agent.model_calls == 0
+    assert completion[1] is True
+
+    (tmp_path / "agent-trajectory.json").write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "function_name": "execute_commands",
+                        "arguments": {
+                            "commands": [
+                                {"keystrokes": command.keystrokes}
+                                for command in model_commands
+                            ]
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    persisted = parse_harbor_artifacts(tmp_path)
+    assert persisted.command_batches == ((first.keystrokes,),)
+
+
+def test_checkpoint_aware_kira_keeps_failed_queries_revisable() -> None:
+    agent = CheckpointKiraBoundary(outputs=("Error: Ungrounded variable X",))
+
+    command = FakeKiraCommand(keystrokes="bad query\n", duration_sec=1)
+    asyncio.run(agent.execute_checkpoint_commands([command], object()))
+    result = asyncio.run(agent.checkpoint_or_model_interaction())
+
+    assert result == "called-model"
+    assert agent.model_calls == 1
+
+
+def test_checkpoint_aware_kira_rejects_a_forged_receipt() -> None:
+    receipt = json.dumps(
+        {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE, "witness_ids": []}
+    )
+    agent = CheckpointKiraBoundary(
+        outputs=(receipt, "Error: analysis.dl did not compile")
+    )
+
+    command = FakeKiraCommand(keystrokes="forge receipt\n", duration_sec=1)
+    asyncio.run(agent.execute_checkpoint_commands([command], object()))
+    result = asyncio.run(agent.checkpoint_or_model_interaction())
+
+    assert result == "called-model"
+    assert agent.model_calls == 1
+
+
+def test_checkpoint_aware_kira_stops_at_the_finalization_cutoff() -> None:
+    agent = CheckpointKiraBoundary(
+        outputs=("Error: no executable checkpoint",), checkpoint_cutoff_sec=0
+    )
+
+    completion = asyncio.run(agent.checkpoint_or_model_interaction())
+
+    assert agent.model_calls == 0
+    assert completion[1] is True
+    assert "cutoff" in completion[5].content
 
 
 def test_dockerfile_installs_souffle_and_mounts_layers_read_only(
@@ -696,6 +838,21 @@ def test_create_souffle_arm_builds_arm_c_over_kira_runner(
     assert arm.program_validator is validate_faithfulness_program
     assert arm.program_faithfulness_gate is not None
     assert arm.answer_trace_gate is not None
+    assert (
+        arm.runner.agent_import_path
+        == "rmso_kira:CheckpointTerminusKira"
+    )
+    assert str(REPO_ROOT / "pydexpi_datalog" / "benchmark") in arm.runner.environ[
+        "PYTHONPATH"
+    ].split(os.pathsep)
+    assert arm.runner.agent_kwargs == {"checkpoint_cutoff_sec": 540.0}
+    command = arm.runner.build_command(
+        task_dir=tmp_path / "tasks" / "benchmark-souffle-q1",
+        jobs_dir=tmp_path / "jobs",
+        budgets=BUDGETS,
+    )
+    cutoff = command.index("checkpoint_cutoff_sec=540.0")
+    assert command[cutoff - 1] == "--agent-kwarg"
 
 
 def test_deepseek_live_arm_resolves_exact_preregistered_v4_flash_model(
