@@ -1,0 +1,47 @@
+{
+    "task": {
+        "path": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/.artifacts/rmso.10-scripted-arm-c/episodes/hq-nozzle-piping-attachment-small/tasks/benchmark-hq-nozzle-piping-attachment-small",
+        "git_url": null,
+        "git_commit_id": null,
+        "overwrite": false,
+        "download_dir": null,
+        "source": "tasks"
+    },
+    "trial_name": "benchmark-hq-nozzle-piping-attac__DhPcZo5",
+    "trials_dir": "/Users/vikramoddiraju/LogicProgramming/pydexpi-datalog-1/.artifacts/rmso.10-scripted-arm-c/episodes/hq-nozzle-piping-attachment-small/jobs/2026-07-19__00-35-26",
+    "timeout_multiplier": 1.0,
+    "agent": {
+        "name": null,
+        "import_path": "rmso_kira:CheckpointTerminusKira",
+        "model_name": "openai/scripted-arm-c",
+        "override_timeout_sec": null,
+        "override_setup_timeout_sec": null,
+        "max_timeout_sec": null,
+        "kwargs": {
+            "max_turns": 4,
+            "model_info": {
+                "max_output_tokens": 4096
+            },
+            "api_base": "http://127.0.0.1:64562/v1",
+            "checkpoint_cutoff_sec": 240.0
+        }
+    },
+    "environment": {
+        "type": "docker",
+        "import_path": null,
+        "force_build": false,
+        "delete": true,
+        "override_cpus": null,
+        "override_memory_mb": null,
+        "override_storage_mb": null,
+        "override_gpus": null,
+        "suppress_override_warnings": false,
+        "kwargs": {}
+    },
+    "verifier": {
+        "override_timeout_sec": null,
+        "max_timeout_sec": null,
+        "disable": false
+    },
+    "job_id": "5a6fc64c-c73d-41c2-ac74-81c3b32f6f94"
+}

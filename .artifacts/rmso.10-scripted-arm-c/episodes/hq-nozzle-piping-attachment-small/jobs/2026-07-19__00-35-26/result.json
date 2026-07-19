@@ -1,0 +1,27 @@
+{
+    "id": "5a6fc64c-c73d-41c2-ac74-81c3b32f6f94",
+    "started_at": "2026-07-19T00:35:26.233261",
+    "finished_at": "2026-07-19T00:36:01.897460",
+    "n_total_trials": 1,
+    "stats": {
+        "n_trials": 1,
+        "n_errors": 1,
+        "evals": {
+            "terminus-kira__scripted-arm-c__tasks": {
+                "n_trials": 0,
+                "n_errors": 1,
+                "metrics": [
+                    {
+                        "mean": 0.0
+                    }
+                ],
+                "reward_stats": {},
+                "exception_stats": {
+                    "InternalServerError": [
+                        "benchmark-hq-nozzle-piping-attac__DhPcZo5"
+                    ]
+                }
+            }
+        }
+    }
+}

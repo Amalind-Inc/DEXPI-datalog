@@ -1,0 +1,167 @@
+You are an AI assistant tasked with solving command-line tasks in a Linux environment. You will be given a task description and the output from previously executed commands. Your goal is to solve the task by providing batches of shell commands.
+
+Your plan MUST account that you as an AI agent must complete the entire task without any human intervention, and you should NOT expect any human interventions. Also, you do NOT have eyes or ears, so you MUST resort to various programmatic/AI tools to understand multimedia files.
+
+Before calling task_complete, verify minimal state changes: Re-read the task instructions carefully and identify the absolute minimum set of files that must be created or modified to satisfy the requirements. List these files explicitly. Beyond these required files, the system state must remain completely identical to its original state — do not leave behind any extra files, modified configurations, or side effects that were not explicitly requested. Perform a final review to confirm that only the necessary files have been changed and nothing else has been altered.
+
+Task Description:
+# P&ID review question (Datalog-first)
+
+Answer one question about the engineering drawing mounted read-only under
+`/input`, using the `souffle` Datalog engine installed on PATH:
+
+- `/input/graph_facts.json`: the canonical graph-mirrored base fact layer.
+- `/input/graph_inspection.json`: the same compact answer-neutral node/edge index given
+  to the direct arm.
+- `/input/graph_facts.dl`: those facts as the allowed Souffle EDB.
+- `/input/graph_topology_semantics.dl`: the allowed derived-predicate contract.
+
+No raw XML, graph export, README guidance, rule pack, oracle, or project reasoning code is available in this locked arm.
+
+## Question
+
+Piping attachment integrity: find every Nozzle on this drawing that is not attached to the piping network, i.e. it never appears as the target of a reference edge whose attr_name is sourceItem, targetItem, sourceNode, or targetNode. Check every nozzle exhaustively against every reference edge. If any such object exists, answer violation_found and list every one of them (and only them) as witnesses; if none exists, answer no_violation with no witnesses.
+
+## Method: generate, execute, observe, revise
+
+Use bounded inspection (`grep`, `head`, `sed`, or standard-library Python).
+Avoid printing an entire large input when a targeted query will answer the question. The compact index
+already contains every graph UUID, source Proteus ID, label, tag, edge label, and
+`attr_name`.
+
+1. Edit the preloaded `/workspace/analysis.dl` portable skeleton immediately.
+
+   It begins with these exact declarations; add only your own IDB rules:
+
+   ```souffle
+   .include "/input/graph_facts.dl"
+   .include "/input/graph_topology_semantics.dl"
+   .decl result_witness(id:symbol)
+   .output result_witness
+   ```
+
+   `result_witness` must contain exactly the exhaustive witness IDs for the
+   question. Do not copy EDB declarations or facts into your program and do
+   not hard-code drawing UUIDs or precomputed witness IDs. This portable
+   query module will be replayed unchanged against the paired drawing and
+   frozen counterfactual EDB probes.
+2. Execute it for real with the bounded helper:
+
+   `python3 /input/run_query.py /workspace/analysis.dl`
+
+   The helper clears stale output, compiles and runs Souffle, bounds diagnostics,
+   prints the exact `result_witness` IDs as JSON, and writes a valid provisional structured answer.
+   Each successful rerun replaces that checkpoint, so an
+   executed answer remains available even if later analysis runs out of time.
+3. Observe the actual engine output and diagnostics.  If the program fails
+   or the output does not answer the question, revise the program and run
+   it again.  Do not answer from unexecuted reasoning.
+4. Base your verdict and witnesses on the final executed output only.
+
+- The input is read-only.  Do not attempt to modify it.
+- Base your answer only on the drawing data under `/input`.
+
+## Submission
+
+Write `/workspace/structured_answer.json` containing exactly one JSON object:
+
+```json
+{
+  "verdict": one of ["violation_found", "no_violation", "unanswerable"],
+  "witness_ids": a list of object IDs from the drawing that are the evidence
+    for your verdict (empty if none apply),
+  "posture": one of ["unspecified", "source_grounded", "general_knowledge", "source_data_unavailable", "out_of_scope", "needs_clarification"],
+  "answer_text": a concise explanation of the result,
+  "support": {
+    "steps": [
+      {
+        "id": "scope",
+        "kind": "graph_scope",
+        "node_count": exact facts.nodes count,
+        "edge_count": exact facts.edges count,
+        "dependencies": []
+      },
+      {
+        "id": "execution",
+        "kind": "souffle_execution",
+        "artifact": "analysis.dl",
+        "relation": "result_witness",
+        "witness_ids": the exact IDs emitted by result_witness,
+        "dependencies": ["scope"]
+      }
+    ],
+    "claims": [
+      {"claim": "verdict", "step_ids": ["execution"]},
+      one {"claim": "witness:<exact ID>", "step_ids": ["execution"]}
+        for every submitted witness
+    ]
+  }
+}
+```
+
+- "violation_found" / "no_violation" assert a conclusion from the drawing
+  and require posture "source_grounded".
+- If the drawing lacks required data, use "unanswerable" with posture
+  "source_data_unavailable". For an ambiguous request that needs a criterion
+  or object, use "needs_clarification". For an off-domain request, use
+  "out_of_scope". Do not invent witness IDs.
+- For an unanswerable, ambiguous, or off-domain request, answer_text must name
+  the source limitation or ambiguity and offer a concrete source-grounded next step.
+- Every witness ID must be copied exactly from `/input/graph_facts.json`
+  (`facts.nodes[*].node_id`, or edge `source_id`/`target_id`/`edge_key`);
+  never invent IDs.
+- The support graph is mandatory for a source conclusion. Keep failed and
+  superseded work in the observable command history, but link final claims
+  only to the final `execution` step. Free-form reasoning is preserved for
+  human review but is not a mechanically creditable support step.
+
+Also leave `/workspace/analysis.dl` containing the exact Datalog
+program you executed for your final answer - it ships with your answer for
+post-hoc audit and the task is rejected without it.
+
+Verify both files exist before marking the task complete.
+
+
+Current terminal state:
+Current Terminal Screen:
+agent@e9da6ff305ab:/workspace$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

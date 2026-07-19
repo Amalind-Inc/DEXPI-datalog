@@ -1,0 +1,7 @@
+[?2004hagent@e9da6ff305ab:/workspace$ asciinema rec --stdin /logs/agent/recording.cast
+[?2004lbash: asciinema: command not found
+[?2004hagent@e9da6ff305ab:/workspace$ clear
+[?2004l[H[J[?2004hagent@e9da6ff305ab:/workspace$ python3 -c "import base64;p='/workspace/analysis.dl';open(p,'a').write(base64.b64decode('LmRlY2wgbm96emxlKHg6c3ltYm9sKQpub3p6bGUoWWCkgOi0gbm9kZV9sYWJlbChYLCAiTm96emxlIikuCi5kZWNsIGF0dGFjaGVkKHg6c3ltYm9sKQphdHRhY2hlZChYKSA6LSByZWZlcmVuY2VfZWRnZShfLCBYLCAic291cmNlSXRlbSIpLgphdHRhY2hlZChYKSA6LLSByZWZlcmVuY2VfZWRnZShfLCBYLCAidGFyZ2V0SXRlbSIpLgphdHRhY2hlZChYKSA6LSByZWZlcmVuY2VfZWRnZShfLCBYLCAic291cmNlTm9kZSIpLgphdHRhY2hlZChYKSA6LSByZWZlcmVuY2VfZWRnZShfLLCBYLCAidGFyZ2V0Tm9kZSIpLgpyZXN1bHRfd2l0bmVzcyhYKSA6LSBub3p6bGUoWCksICFhdHRhY2hlZChYKS4K').decode())" && python3 /input/run_query.py /workspace/analysis.dlecho ''__CMDEND__1__'
+[?2004lusage: run_query.py PROGRAM
+[?2004hagent@e9da6ff305ab:/workspace$ printf SHOULD_NOT_RUN > /workspace/prohibited_tailecho '__CMDEND__2__'
+[?2004l[?2004hagent@e9da6ff305ab:/workspace$ 
