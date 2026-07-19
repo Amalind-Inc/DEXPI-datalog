@@ -297,11 +297,15 @@ def main() -> int:
         witnesses = [row[0] for row in csv.reader(stream, delimiter="\\t") if row]
     witnesses = sorted(set(witnesses))
     write_checkpoint(program, witnesses)
-    print(json.dumps({
-        "ok": True,
-        "__RMSO_CHECKPOINT_FIELD__": "__RMSO_CHECKPOINT_VALUE__",
-        "witness_ids": witnesses,
-    }))
+    # The witness listing is descriptive output for the model; a fixed-width
+    # terminal may wrap it and that is harmless.
+    print(json.dumps({"witness_ids": witnesses}))
+    # The mechanical receipt must be independent of witness-list length so it
+    # can never wrap at ordinary terminal widths: short, compact, own line.
+    print(json.dumps(
+        {"ok": True, "__RMSO_CHECKPOINT_FIELD__": "__RMSO_CHECKPOINT_VALUE__"},
+        separators=(",", ":"),
+    ))
     return 0
 
 

@@ -1,0 +1,14 @@
+.include "/input/graph_facts.dl"
+.include "/input/graph_topology_semantics.dl"
+.decl result_witness(id:symbol)
+.output result_witness
+
+// Add only portable IDB rules below. Never hard-code drawing UUIDs.
+.decl nozzle(x:symbol)
+nozzle(X) :- node_label(X, "Nozzle").
+.decl attached(x:symbol)
+attached(X) :- reference_edge(_, X, "sourceItem").
+attached(X) :- reference_edge(_, X, "targetItem").
+attached(X) :- reference_edge(_, X, "sourceNode").
+attached(X) :- reference_edge(_, X, "targetNode").
+result_witness(X) :- nozzle(X), !attached(X).

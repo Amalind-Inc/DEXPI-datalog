@@ -277,11 +277,11 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout) == {
-        "ok": True,
-        CHECKPOINT_FIELD: CHECKPOINT_VALUE,
-        "witness_ids": [witness],
-    }
+    witness_line, receipt_line = completed.stdout.splitlines()
+    assert json.loads(witness_line) == {"witness_ids": [witness]}
+    assert json.loads(receipt_line) == {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE}
+    # The mechanical receipt must never wrap at ordinary terminal widths.
+    assert len(receipt_line) <= 60
     checkpoint = json.loads(
         (tmp_path / "structured_answer.json").read_text(encoding="utf-8")
     )
@@ -329,6 +329,76 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
     assert "writes a valid provisional structured answer" in instruction
     assert "grep" in instruction
     assert "Avoid printing an entire large input" in instruction
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_checkpoint_receipt_survives_fixed_width_terminal_wrapping(
+    tmp_path: Path,
+) -> None:
+    """A run with enough UUID witnesses to wrap the descriptive output must
+    still end the episode mechanically once folded by a fixed-width pane."""
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_souffle_harbor_task(
+        question=make_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "rmso-tasks",
+        budgets=BUDGETS,
+    )
+    environment = task_dir / "environment"
+    helper = environment / "run_query.py"
+    inspection = json.loads(
+        (environment / "graph_inspection.json").read_text(encoding="utf-8")
+    )
+    witnesses = [node["id"] for node in inspection["nodes"]]
+    assert sum(len(witness) + 4 for witness in witnesses) > 80, (
+        "fixture must supply enough witness IDs to force terminal wrapping"
+    )
+    program = tmp_path / "analysis.dl"
+    program.write_text(
+        ".decl result_witness(id:symbol)\n"
+        + "".join(f'result_witness("{witness}").\n' for witness in witnesses)
+        + ".output result_witness\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(helper), str(program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    # The scenario must genuinely force wrapping of the descriptive output.
+    pane_width = 80
+    stdout_lines = completed.stdout.splitlines()
+    assert any(len(line) > pane_width for line in stdout_lines)
+
+    # Hard-fold every physical line the way a fixed-width terminal pane does.
+    wrapped = "\n".join(
+        line[start : start + pane_width]
+        for line in stdout_lines
+        for start in range(0, max(len(line), 1), pane_width)
+    )
+
+    agent = CheckpointKiraBoundary(outputs=(wrapped, wrapped))
+    first = FakeKiraCommand(keystrokes="run query\n", duration_sec=1)
+    prohibited = FakeKiraCommand(
+        keystrokes="printf SHOULD_NOT_RUN > /workspace/prohibited_tail\n",
+        duration_sec=60,
+    )
+    model_commands = [first, prohibited]
+    asyncio.run(agent.execute_checkpoint_commands(model_commands, object()))
+    completion = asyncio.run(agent.checkpoint_or_model_interaction())
+
+    flattened_commands = [
+        command for batch in agent.executed_commands for command in batch
+    ]
+    assert prohibited not in flattened_commands
+    assert agent.model_calls == 0
+    assert completion[1] is True
 
 
 def test_checkpoint_aware_kira_completes_without_another_model_call(

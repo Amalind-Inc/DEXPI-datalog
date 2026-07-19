@@ -4,7 +4,8 @@ Date: 2026-07-19
 
 ## Outcome
 
-**FAIL — lifecycle integration defect.** The scripted Arm C reasoning and
+**PASS after P0 fix (rerun below); the original run FAILED with a lifecycle
+integration defect.** The scripted Arm C reasoning and
 Souffle query were correct, but the checkpoint-aware KIRA adapter did not
 recognize the successful helper receipt in the real wrapped terminal stream.
 It therefore executed a command after the accepted checkpoint and attempted a
@@ -110,3 +111,47 @@ ground-truth witnesses after all Arm C gates.
 - Replacement summary: `.artifacts/rmso.10-scripted-arm-c-replacement/summary.json`
 - Harbor trial result, trajectory, terminal pane, and job log are retained
   under the replacement episode's timestamped `jobs/` directory.
+
+## P0 fix and passing rerun (2026-07-19)
+
+The recommended fix was implemented in `pydexpi_datalog/benchmark/souffle_arm.py`:
+`run_query.py` now prints the witness listing as a descriptive line and then a
+short mechanical receipt on its own line, independent of witness-list length:
+
+```json
+{"witness_ids": ["..."]}
+{"ok":true,"rmso_checkpoint":"accepted"}
+```
+
+The adapter's line-oriented `_accepted_checkpoint()` is unchanged; the receipt
+frame (40 characters) can no longer wrap at ordinary terminal widths, and the
+fixed replay preflight emits the same short receipt. A regression test,
+`test_checkpoint_receipt_survives_fixed_width_terminal_wrapping`, runs the
+generated helper with enough real witness IDs to force wrapping, hard-folds
+every stdout line at 80 columns like the Terminus pane, and asserts the
+adapter completes mechanically without executing the forbidden command or
+calling the model again. The test reproduced the original failure before the
+fix and passes after it; `tests/benchmark/` passes in full (252 tests).
+
+The exact scripted episode was rerun through the same stack (fresh output
+directory, KIRA re-pinned at `652dacbf14d29ea93a83c496ee91e0e5ba286721`).
+All acceptance criteria passed:
+
+- Exactly 1 provider request (previously 16 including LiteLLM retries).
+- Exactly 1 executed model command in the trajectory; the forbidden
+  `SHOULD_NOT_RUN` tail is absent from the trajectory and terminal pane (it
+  appears only in the raw scripted `response.txt`, as proposed-but-discarded).
+- The terminal pane shows the wrapped witness line and, on its own unwrapped
+  physical line, `{"ok":true,"rmso_checkpoint":"accepted"}` — for both the
+  candidate run and the mechanical preflight.
+- Harbor reward 1 with the verifier executed.
+- Verdict `violation_found` with exactly the four preregistered ground-truth
+  witnesses after all Arm C gates, including the counterfactual faithfulness
+  probes.
+- Cost $0; wall time 35.718 seconds.
+
+`usage.model_calls` reports 2 because the mechanical completion turn is
+counted; the authoritative provider request count from the local endpoint is 1.
+
+- Passing rerun artifacts: `.artifacts/rmso.10-scripted-arm-c-fixed/`
+- Rerun summary: `.artifacts/rmso.10-scripted-arm-c-fixed/summary.json`

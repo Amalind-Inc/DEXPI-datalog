@@ -1,0 +1,29 @@
+{
+    "id": "01408b03-91c3-4b29-8612-840a7702d01b",
+    "started_at": "2026-07-19T01:29:13.021088",
+    "finished_at": "2026-07-19T01:29:34.490945",
+    "n_total_trials": 1,
+    "stats": {
+        "n_trials": 1,
+        "n_errors": 0,
+        "evals": {
+            "terminus-kira__scripted-arm-c__tasks": {
+                "n_trials": 1,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "benchmark-hq-nozzle-piping-attac__visAmds"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        }
+    }
+}

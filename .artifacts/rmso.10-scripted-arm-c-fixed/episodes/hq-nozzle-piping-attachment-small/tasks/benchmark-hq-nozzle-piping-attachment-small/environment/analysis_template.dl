@@ -1,0 +1,6 @@
+.include "/input/graph_facts.dl"
+.include "/input/graph_topology_semantics.dl"
+.decl result_witness(id:symbol)
+.output result_witness
+
+// Add only portable IDB rules below. Never hard-code drawing UUIDs.
