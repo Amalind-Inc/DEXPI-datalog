@@ -1,0 +1,98 @@
+{
+  "schema_version": 3,
+  "design_revision": "template-routed-vs-authored-v3",
+  "protocol": {
+    "bead": "pydexpi-datalog-1-3av5",
+    "document": "../../docs/research/rmso.11-arm-t-template-design-v3-2026-07-20.md",
+    "sha256": "1beaf899d46ef0d8f284f4c845003a5304b3661f9fa1bc829cd7ae3a3f981d24"
+  },
+  "protocol_approval": {
+    "status": "product_owner_approved",
+    "approved_on": "2026-07-20"
+  },
+  "certification": {
+    "bead": "pydexpi-datalog-1-rmso.7",
+    "status": "product_owner_sme_approved",
+    "approved_on": "2026-07-17"
+  },
+  "arms": {
+    "arm-a": "graph-direct Python (unchanged from v2)",
+    "arm-c": "free-form Souffle authoring + all lifecycle fixes (1dgs, 2r3d)",
+    "arm-t": "prebuilt template routing; fallback ladder template -> authoring -> abstention; fallback episodes tagged"
+  },
+  "arm_t_contract": {
+    "template_pack": [
+      "entity_lookup",
+      "attachment",
+      "reachability",
+      "guarded_reachability",
+      "class_count",
+      "policy_abstention"
+    ],
+    "parameter_validation_retries": 2,
+    "fallback": "free_form_authoring_then_abstention",
+    "fallback_reporting": "tagged; headline includes, coverage table excludes"
+  },
+  "accounting_contract": {
+    "provider_ledger": "required",
+    "unknown_cost": "run_incomplete",
+    "policy_violation": "run_incomplete"
+  },
+  "episode_budgets": {
+    "max_turns": 64,
+    "max_commands": 128,
+    "max_output_tokens": 8192,
+    "agent_timeout_sec": 300.0,
+    "verifier_timeout_sec": 60.0
+  },
+  "sources": [
+    {
+      "key": "hand_authored",
+      "path": "hand_authored_manifest.json",
+      "sha256": "f2120cfe538925a53d07df192d047ef92a1dd00d40469734fc66a205e6cfd9d9"
+    },
+    {
+      "key": "harder_questions",
+      "path": "harder_questions_manifest.json",
+      "sha256": "c2d1b016924c7ae08d912823ad4dae2dacac19dce11c1d26639a1bcaaf8ce28b"
+    }
+  ],
+  "entries": [
+    {
+      "id": "ha-e03-pump-p4713-retrieval",
+      "source": "hand_authored"
+    },
+    {
+      "id": "hq-nozzle-piping-attachment-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-nozzle-piping-attachment-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-valve-monitoring-reachability-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-valve-monitoring-reachability-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-equipment-pump-connectivity-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-equipment-pump-connectivity-large",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-permission-defeasible-control-small",
+      "source": "harder_questions"
+    },
+    {
+      "id": "hq-permission-defeasible-control-large",
+      "source": "harder_questions"
+    }
+  ]
+}

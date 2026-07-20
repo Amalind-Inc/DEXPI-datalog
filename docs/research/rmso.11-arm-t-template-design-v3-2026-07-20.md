@@ -2,7 +2,7 @@
 
 Date: 2026-07-20
 Bead: `pydexpi-datalog-1-3av5` (design) → `lx6p` (implementation) → `3g4i` (matrix rerun)
-Status: DRAFT — pending user sign-off before lock v3 is cut.
+Status: APPROVED (product owner, 2026-07-20) — decisions resolved below.
 
 ## Motivation
 
@@ -95,10 +95,17 @@ failures on the table. Product-level claims still require the fresh
 SME-certified holdout slice regardless of outcome (third pass over the same
 nine questions is diagnostic only).
 
-## Open decisions (need sign-off before lock v3)
+## Resolved decisions (product owner, 2026-07-20)
 
-1. Template pack v1 membership — the six above, or trim/extend?
-2. Fallback policy — is free-form authoring allowed in cell 2, or does Arm T
-   abstain when no template fits (purer measurement, harsher score)?
-3. Cell 3 (v4 pro) — pre-authorize or decide after cell 1?
-4. Retry budget for parameter validation (default: 2).
+1. **Template pack v1**: the six templates as specified.
+2. **Fallback policy**: free-form authoring IS the production fallback, so
+   the eval measures the production ladder (template → authoring →
+   abstention). Fallback episodes are tagged and reported separately: the
+   headline includes them; the router-coverage table excludes them so pack
+   coverage stays readable.
+3. **Cell 3 (v4 pro)**: decided after cell 1 results.
+4. **Parameter-validation retry budget**: 2.
+
+Status: APPROVED — lock v3 cut as `testdata/benchmark/rmso_eval_lock_v3.json`
+(same nine entries, budgets, and accounting contract as v2; design revision
+`template-routed-vs-authored-v3`; Arm T added alongside A and C-classic).
