@@ -25,10 +25,14 @@ episodes are distinguishable mechanically: a template-path episode leaves a
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from typing import Mapping
 
 from pydexpi_datalog.benchmark.agentic_arm import (
     PROGRAM_FILENAME,
+    AgenticArm,
+    HarborKiraEpisodeRunner,
     build_task,
     validate_bundle,
 )
@@ -38,11 +42,19 @@ from pydexpi_datalog.benchmark.rmso_kira import (
     CHECKPOINT_FIELD,
     CHECKPOINT_VALUE,
 )
+from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
+    LockedOpenRouterGateway,
+)
 from pydexpi_datalog.benchmark.souffle_arm import (
     RMSO_ANALYSIS_TEMPLATE,
+    RMSO_CHECKPOINT_AGENT_IMPORT_PATH,
     RMSO_RUN_QUERY_HELPER,
+    SOUFFLE_ARM_MODELS,
     SOUFFLE_ENGINE_SETUP,
+    _run_preregistered_faithfulness_gate,
     requires_executed_program,
+    validate_faithfulness_program,
+    verify_souffle_answer_trace,
 )
 from pydexpi_datalog.benchmark import template_arm as _template_arm
 from pydexpi_datalog.benchmark.template_arm import TEMPLATE_PACK
@@ -52,6 +64,10 @@ from pydexpi_datalog.semantics.derive_graph_semantics import (
 )
 
 ARM_LABEL = "t-template"
+
+# Same friendly model matrix as Arms A and C: the arms differ only in what
+# the sandbox offers, never in provider routing.
+TEMPLATE_ARM_MODELS = dict(SOUFFLE_ARM_MODELS)
 ROUTING_FILENAME = "routing.json"
 ROUTE_TRACE_FILENAME = "route_trace.json"
 VALIDATION_RETRY_BUDGET = 2
@@ -393,3 +409,56 @@ receipt. Do not author or execute any Datalog program for this question, and
 do not hand-author the structured answer; the abstention policy step is
 mechanically checked after submission - a source conclusion or witness fails.
 """
+
+
+def create_template_arm(
+    model_key: str,
+    *,
+    kira_dir: Path,
+    budgets,
+    environ: Mapping[str, str] | None = None,
+    request_gateway: LockedOpenRouterGateway | None = None,
+) -> AgenticArm:
+    """Build the live Arm T adapter for one friendly model key.
+
+    Identical episode plumbing to Arm C - checkpoint-aware Terminus-KIRA
+    adapter, same cutoff derivation, same faithfulness replay and answer
+    trace gates over the executed ``analysis.dl`` - so the matrix isolates
+    exactly one variable: template routing versus free-form authoring.
+    """
+    env = dict(os.environ if environ is None else environ)
+    if model_key not in TEMPLATE_ARM_MODELS:
+        raise ValueError(
+            f"unknown template arm model {model_key!r}; "
+            f"expected one of {sorted(TEMPLATE_ARM_MODELS)}"
+        )
+    if not env.get("OPENROUTER_API_KEY"):
+        raise ValueError(
+            "OPENROUTER_API_KEY is required for live template-arm episodes"
+        )
+    adapter_root = str(Path(__file__).resolve().parent)
+    python_path = [adapter_root]
+    if env.get("PYTHONPATH"):
+        python_path.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(python_path)
+    runner = HarborKiraEpisodeRunner(
+        kira_dir=kira_dir,
+        model=TEMPLATE_ARM_MODELS[model_key],
+        environ=env,
+        request_gateway=request_gateway,
+        agent_import_path=RMSO_CHECKPOINT_AGENT_IMPORT_PATH,
+        agent_kwargs={
+            "checkpoint_cutoff_sec": max(1.0, budgets.agent_timeout_sec - 60.0),
+        },
+    )
+    return AgenticArm(
+        runner=runner,
+        budgets=budgets,
+        model_name=model_key,
+        arm_label=ARM_LABEL,
+        task_builder=build_rmso_template_harbor_task,
+        require_executed_program=requires_executed_program,
+        program_validator=validate_faithfulness_program,
+        program_faithfulness_gate=_run_preregistered_faithfulness_gate,
+        answer_trace_gate=verify_souffle_answer_trace,
+    )

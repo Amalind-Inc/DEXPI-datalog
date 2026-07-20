@@ -450,3 +450,106 @@ def test_template_permission_instruction_routes_mechanical_abstention(
     assert "must abstain" in instruction
     # The model never hand-authors the answer or a verdict program.
     assert "Do not author or execute" in instruction
+
+
+# --------------------------------------------------------------------------
+# Slice 3: create_template_arm factory + faithfulness of rendered programs
+# --------------------------------------------------------------------------
+
+
+def test_rendered_template_programs_pass_the_faithfulness_validator() -> None:
+    """Rendered programs must replay unchanged across frozen EDB probes."""
+    from pydexpi_datalog.benchmark.souffle_arm import validate_faithfulness_program
+
+    routings = [
+        {"category": "entity_lookup", "parameters": {"tags": ["P-4713"]}},
+        {
+            "category": "attachment",
+            "parameters": {"entity_labels": ["BallValve"], "mode": "unattached"},
+        },
+        {
+            "category": "guarded_reachability",
+            "parameters": {
+                "source_labels": ["ProcessInstrumentationFunction"],
+                "target_labels": ["BallValve"],
+            },
+        },
+        {
+            "category": "class_count",
+            "parameters": {
+                "labels": ["BallValve"],
+                "comparator": "at_least",
+                "threshold": 2,
+            },
+        },
+    ]
+    for routing in routings:
+        validate_faithfulness_program(render_program(routing))
+
+
+def test_create_template_arm_rejects_unknown_model(tmp_path: Path) -> None:
+    from pydexpi_datalog.benchmark.template_arm_task import create_template_arm
+
+    with pytest.raises(ValueError, match="bogus"):
+        create_template_arm(
+            "bogus",
+            kira_dir=tmp_path,
+            budgets=_budgets(),
+            environ={"OPENROUTER_API_KEY": "test-key"},
+        )
+
+
+def test_create_template_arm_requires_api_key(tmp_path: Path) -> None:
+    from pydexpi_datalog.benchmark.template_arm_task import create_template_arm
+
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        create_template_arm(
+            "deepseek",
+            kira_dir=tmp_path,
+            budgets=_budgets(),
+            environ={},
+        )
+
+
+def _budgets():
+    from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+
+    return EpisodeBudgets(
+        max_turns=8,
+        max_commands=10,
+        agent_timeout_sec=600.0,
+        verifier_timeout_sec=120.0,
+    )
+
+
+def test_create_template_arm_wires_checkpoint_adapter_and_gates(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    from pydexpi_datalog.benchmark.souffle_arm import (
+        validate_faithfulness_program,
+        verify_souffle_answer_trace,
+    )
+    from pydexpi_datalog.benchmark.template_arm_task import create_template_arm
+
+    arm = create_template_arm(
+        "deepseek",
+        kira_dir=tmp_path,
+        budgets=_budgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+    )
+
+    assert arm.arm_label == "t-template"
+    assert arm.task_builder is build_rmso_template_harbor_task
+    assert arm.require_executed_program is not None
+    assert arm.program_validator is validate_faithfulness_program
+    assert arm.program_faithfulness_gate is not None
+    assert arm.answer_trace_gate is verify_souffle_answer_trace
+    # Same checkpoint-aware KIRA adapter as Arm C, same cutoff derivation.
+    assert arm.runner.agent_import_path == "rmso_kira:CheckpointTerminusKira"
+    assert arm.runner.agent_kwargs == {"checkpoint_cutoff_sec": 540.0}
+    benchmark_dir = str(
+        Path(template_arm_module.__file__).resolve().parent
+    )
+    assert benchmark_dir in arm.runner.environ["PYTHONPATH"].split(os.pathsep)

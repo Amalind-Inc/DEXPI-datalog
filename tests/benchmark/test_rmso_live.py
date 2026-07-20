@@ -15,6 +15,7 @@ from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.rmso_live import (
     apply_episode_cost_accounting,
     create_rmso_live_arms,
+    create_rmso_template_live_arms,
     finalize_rmso_accounting,
     run_rmso_live,
     validate_redesigned_live_manifest,
@@ -41,6 +42,9 @@ E06_BUNDLE = (
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock.json"
 REDESIGNED_LOCK_PATH = (
     REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock_v2.json"
+)
+TEMPLATE_LOCK_PATH = (
+    REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock_v3.json"
 )
 
 
@@ -774,3 +778,143 @@ def test_interrupted_live_summary_retains_accounting_invalid_reasons(
         "provider_policy_violation",
         "execution_failure",
     ]
+
+
+# --------------------------------------------------------------------------
+# Design-lock v3: template-routed matrix (bead lx6p, slice 3)
+# --------------------------------------------------------------------------
+
+
+def test_template_lock_v3_materializes_and_passes_live_boundary(
+    tmp_path: Path,
+) -> None:
+    manifest = materialize_preregistered_rmso_manifest(
+        TEMPLATE_LOCK_PATH, tmp_path / "v3-manifest.json"
+    )
+    revision = validate_redesigned_live_manifest(manifest)
+    assert revision == "template-routed-vs-authored-v3"
+    lock = json.loads(manifest.read_text(encoding="utf-8"))["rmso_lock"]
+    assert lock["design_revision"] == "template-routed-vs-authored-v3"
+    assert lock["accounting_contract"] == {
+        "provider_ledger": "required",
+        "unknown_cost": "run_incomplete",
+        "policy_violation": "run_incomplete",
+    }
+    # The v2 boundary keeps returning its own revision unchanged.
+    v2_manifest = materialize_preregistered_rmso_manifest(
+        REDESIGNED_LOCK_PATH, tmp_path / "v2-manifest.json"
+    )
+    assert (
+        validate_redesigned_live_manifest(v2_manifest)
+        == "graph-direct-vs-souffle-v2"
+    )
+
+
+def test_create_rmso_template_live_arms_builds_arm_c_and_arm_t(
+    tmp_path: Path,
+) -> None:
+    from pydexpi_datalog.benchmark.template_arm_task import (
+        build_rmso_template_harbor_task,
+    )
+
+    gateway = object()
+    arms = create_rmso_template_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    assert [arm.arm_id for arm in arms] == [
+        "c-souffle:deepseek",
+        "t-template:deepseek",
+    ]
+    assert all(arm.runner.request_gateway is gateway for arm in arms)
+    assert [arm.runner.accounting_arm_id for arm in arms] == [
+        "c-souffle:deepseek",
+        "t-template:deepseek",
+    ]
+    assert [arm.artifact_root for arm in arms] == [
+        tmp_path / "run" / "arm-c" / "harbor",
+        tmp_path / "run" / "arm-t" / "harbor",
+    ]
+    assert arms[1].task_builder is build_rmso_template_harbor_task
+
+
+def test_live_executor_runs_template_matrix_for_v3_lock(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            pass
+
+    class Gateway:
+        def __init__(self, **kwargs):
+            pass
+
+        def episode_accounting(self, *, arm_id, question_id):
+            return {
+                "accounting_complete": True,
+                "call_numbers": [1],
+                "cost_usd": 0.01,
+                "known_cost_usd": 0.01,
+                "policy_violation_call_numbers": [],
+            }
+
+        def accounting_snapshot(self):
+            return {
+                "actual_spend_usd": 0.02,
+                "active_reservations_usd": 0.0,
+                "accounting_complete": True,
+                "attribution_complete": True,
+                "unattributed_attempts": 0,
+                "unknown_cost_calls": [],
+                "policy_violations": [],
+            }
+
+    seen_arm_ids = []
+
+    def scripted_run(*, manifest_path, arm, output_dir, episode_workers):
+        seen_arm_ids.append(arm.arm_id)
+        return {
+            "arm_id": arm.arm_id,
+            "totals": {"questions": 1, "passed": 1, "failed": 0},
+            "episodes": [
+                {"question_id": "q1", "usage": {}, "cost_usd": None}
+            ],
+        }
+
+    monkeypatch.setattr("pydexpi_datalog.benchmark.rmso_live.httpx.Client", Client)
+    monkeypatch.setattr(
+        "pydexpi_datalog.benchmark.rmso_live.LockedOpenRouterGateway", Gateway
+    )
+    monkeypatch.setattr(
+        "pydexpi_datalog.benchmark.rmso_live.run_benchmark", scripted_run
+    )
+    kira_dir = tmp_path / "kira"
+    kira_dir.mkdir()
+    output_dir = tmp_path / "run"
+
+    summary = run_rmso_live(
+        lock_path=TEMPLATE_LOCK_PATH,
+        output_dir=output_dir,
+        kira_dir=kira_dir,
+        environ={"OPENROUTER_API_KEY": "test-key"},
+    )
+
+    assert summary["status"] == "complete"
+    assert summary["design_revision"] == "template-routed-vs-authored-v3"
+    assert seen_arm_ids == ["c-souffle:deepseek", "t-template:deepseek"]
+    assert [report["label"] for report in summary["reports"]] == [
+        "arm-c",
+        "arm-t",
+    ]
+    for label in ("arm-c", "arm-t"):
+        assert (output_dir / label / "benchmark_report.json").is_file()

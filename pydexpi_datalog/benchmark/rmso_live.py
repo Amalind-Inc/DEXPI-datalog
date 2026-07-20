@@ -19,6 +19,8 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     load_episode_budgets,
 )
 from pydexpi_datalog.benchmark.rmso_eval import (
+    RMSO_REDESIGNED_REVISION,
+    RMSO_TEMPLATE_REVISION,
     materialize_preregistered_rmso_manifest,
 )
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
@@ -29,6 +31,7 @@ from pydexpi_datalog.benchmark.rmso_openrouter_policy import (
 )
 from pydexpi_datalog.benchmark.runner import run_benchmark
 from pydexpi_datalog.benchmark.souffle_arm import create_souffle_arm
+from pydexpi_datalog.benchmark.template_arm_task import create_template_arm
 
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -108,15 +111,19 @@ def finalize_rmso_accounting(
     )
 
 
-def validate_redesigned_live_manifest(manifest_path: Path) -> None:
-    """Reject obsolete RMSO locks at the paid live-run boundary."""
+def validate_redesigned_live_manifest(manifest_path: Path) -> str:
+    """Reject obsolete RMSO locks at the paid live-run boundary.
+
+    Returns the locked design revision so the executor can select the
+    matching arm matrix.
+    """
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     lock = manifest.get("rmso_lock") if isinstance(manifest, dict) else None
-    if not isinstance(lock, dict) or lock.get("design_revision") != (
-        "graph-direct-vs-souffle-v2"
-    ):
+    revision = lock.get("design_revision") if isinstance(lock, dict) else None
+    if revision not in (RMSO_REDESIGNED_REVISION, RMSO_TEMPLATE_REVISION):
         raise ValueError(
-            "Paid RMSO runs require design revision graph-direct-vs-souffle-v2."
+            "Paid RMSO runs require design revision "
+            f"{RMSO_REDESIGNED_REVISION} or {RMSO_TEMPLATE_REVISION}."
         )
     if lock.get("accounting_contract") != {
         "provider_ledger": "required",
@@ -124,6 +131,7 @@ def validate_redesigned_live_manifest(manifest_path: Path) -> None:
         "policy_violation": "run_incomplete",
     }:
         raise ValueError("Paid RMSO runs require the fail-closed accounting contract.")
+    return revision
 
 
 def create_rmso_live_arms(
@@ -163,6 +171,43 @@ def create_rmso_live_arms(
     )
 
 
+def create_rmso_template_live_arms(
+    *,
+    kira_dir: Path,
+    output_dir: Path,
+    budgets: EpisodeBudgets,
+    environ: Mapping[str, str],
+    request_gateway: LockedOpenRouterGateway,
+) -> tuple[AgenticArm, AgenticArm]:
+    """Construct the locked v3 matrix arms: C-classic (fixed) and Arm T."""
+    arm_c = create_souffle_arm(
+        "deepseek",
+        kira_dir=kira_dir,
+        budgets=budgets,
+        environ=environ,
+        request_gateway=request_gateway,
+    )
+    arm_t = create_template_arm(
+        "deepseek",
+        kira_dir=kira_dir,
+        budgets=budgets,
+        environ=environ,
+        request_gateway=request_gateway,
+    )
+    arm_c = replace(
+        arm_c,
+        runner=replace(arm_c.runner, accounting_arm_id=arm_c.arm_id),
+    )
+    arm_t = replace(
+        arm_t,
+        runner=replace(arm_t.runner, accounting_arm_id=arm_t.arm_id),
+    )
+    return (
+        replace(arm_c, artifact_root=output_dir / "arm-c" / "harbor"),
+        replace(arm_t, artifact_root=output_dir / "arm-t" / "harbor"),
+    )
+
+
 def run_rmso_live(
     *,
     lock_path: Path,
@@ -185,7 +230,7 @@ def run_rmso_live(
     manifest = materialize_preregistered_rmso_manifest(
         lock_path, output_dir / "inputs" / "rmso_manifest.json"
     )
-    validate_redesigned_live_manifest(manifest)
+    revision = validate_redesigned_live_manifest(manifest)
     budgets = load_episode_budgets(manifest)
     policy = OpenRouterRequestPolicy(
         prompt_price_per_million=PROMPT_PRICE_PER_MILLION,
@@ -197,6 +242,7 @@ def run_rmso_live(
         "status": "running",
         "started_at": started_at,
         "manifest": str(manifest),
+        "design_revision": revision,
         "model": "deepseek/deepseek-v4-flash",
         "episode_budgets": asdict(budgets),
         "spend_cap_usd": 10.0,
@@ -213,16 +259,27 @@ def run_rmso_live(
             upstream_url=OPENROUTER_URL,
             http_client=client,
         )
-        arms = create_rmso_live_arms(
-            kira_dir=kira_dir,
-            output_dir=output_dir,
-            budgets=budgets,
-            environ=env,
-            request_gateway=gateway,
-        )
+        if revision == RMSO_TEMPLATE_REVISION:
+            labels = ("arm-c", "arm-t")
+            arms = create_rmso_template_live_arms(
+                kira_dir=kira_dir,
+                output_dir=output_dir,
+                budgets=budgets,
+                environ=env,
+                request_gateway=gateway,
+            )
+        else:
+            labels = ("arm-a", "arm-c")
+            arms = create_rmso_live_arms(
+                kira_dir=kira_dir,
+                output_dir=output_dir,
+                budgets=budgets,
+                environ=env,
+                request_gateway=gateway,
+            )
         try:
             reports = []
-            for label, arm in zip(("arm-a", "arm-c"), arms, strict=True):
+            for label, arm in zip(labels, arms, strict=True):
                 report_dir = output_dir / label
                 report = run_benchmark(
                     manifest_path=manifest,

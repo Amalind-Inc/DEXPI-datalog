@@ -15,6 +15,9 @@ RMSO_REDESIGNED_LOCK_SCHEMA_VERSION = 2
 RMSO_PROTOCOL_BEAD = "pydexpi-datalog-1-rmso.4"
 RMSO_REDESIGNED_PROTOCOL_BEAD = "pydexpi-datalog-1-rmso.1"
 RMSO_REDESIGNED_REVISION = "graph-direct-vs-souffle-v2"
+RMSO_TEMPLATE_LOCK_SCHEMA_VERSION = 3
+RMSO_TEMPLATE_PROTOCOL_BEAD = "pydexpi-datalog-1-3av5"
+RMSO_TEMPLATE_REVISION = "template-routed-vs-authored-v3"
 RMSO_CERTIFICATION_BEAD = "pydexpi-datalog-1-rmso.7"
 RMSO_CERTIFICATION_STATUS = "product_owner_sme_approved"
 _RMSO_EVAL_BUDGETS = {
@@ -133,7 +136,10 @@ def materialize_preregistered_rmso_manifest(
         "certification": lock["certification"],
         "sources": frozen_sources,
     }
-    if lock_schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION:
+    if lock_schema_version in (
+        RMSO_REDESIGNED_LOCK_SCHEMA_VERSION,
+        RMSO_TEMPLATE_LOCK_SCHEMA_VERSION,
+    ):
         lock_metadata.update(
             {
                 "design_revision": lock["design_revision"],
@@ -161,14 +167,15 @@ def _validate_lock_header(lock: dict[str, Any], lock_path: Path) -> None:
     if schema_version not in (
         RMSO_EVAL_LOCK_SCHEMA_VERSION,
         RMSO_REDESIGNED_LOCK_SCHEMA_VERSION,
+        RMSO_TEMPLATE_LOCK_SCHEMA_VERSION,
     ):
         raise RMSOEvalLockError("RMSO evaluation lock has an invalid schema_version.")
     protocol = lock.get("protocol")
-    expected_protocol_bead = (
-        RMSO_REDESIGNED_PROTOCOL_BEAD
-        if schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION
-        else RMSO_PROTOCOL_BEAD
-    )
+    expected_protocol_bead = {
+        RMSO_EVAL_LOCK_SCHEMA_VERSION: RMSO_PROTOCOL_BEAD,
+        RMSO_REDESIGNED_LOCK_SCHEMA_VERSION: RMSO_REDESIGNED_PROTOCOL_BEAD,
+        RMSO_TEMPLATE_LOCK_SCHEMA_VERSION: RMSO_TEMPLATE_PROTOCOL_BEAD,
+    }[schema_version]
     if not isinstance(protocol, dict) or protocol.get("bead") != expected_protocol_bead:
         raise RMSOEvalLockError("RMSO evaluation lock has an invalid protocol bead.")
     protocol_document = protocol.get("document")
@@ -187,8 +194,16 @@ def _validate_lock_header(lock: dict[str, Any], lock_path: Path) -> None:
             f"RMSO protocol document failed SHA-256 validation: expected "
             f"{protocol_hash}, got {actual_protocol_hash}."
         )
-    if schema_version == RMSO_REDESIGNED_LOCK_SCHEMA_VERSION:
-        if lock.get("design_revision") != RMSO_REDESIGNED_REVISION:
+    if schema_version in (
+        RMSO_REDESIGNED_LOCK_SCHEMA_VERSION,
+        RMSO_TEMPLATE_LOCK_SCHEMA_VERSION,
+    ):
+        expected_revision = (
+            RMSO_TEMPLATE_REVISION
+            if schema_version == RMSO_TEMPLATE_LOCK_SCHEMA_VERSION
+            else RMSO_REDESIGNED_REVISION
+        )
+        if lock.get("design_revision") != expected_revision:
             raise RMSOEvalLockError(
                 "Redesigned RMSO lock has an invalid design revision."
             )
