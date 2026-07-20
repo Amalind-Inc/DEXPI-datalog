@@ -553,3 +553,27 @@ def test_create_template_arm_wires_checkpoint_adapter_and_gates(
         Path(template_arm_module.__file__).resolve().parent
     )
     assert benchmark_dir in arm.runner.environ["PYTHONPATH"].split(os.pathsep)
+
+
+def test_template_task_preserves_route_trace_best_effort(tmp_path: Path) -> None:
+    """route_trace.json must be copied to the verifier dir when present,
+    without being required (fallback-authoring episodes never write it)."""
+    from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_template_harbor_task(
+        question=make_template_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(
+            max_turns=8,
+            max_commands=10,
+            agent_timeout_sec=600.0,
+            verifier_timeout_sec=120.0,
+        ),
+    )
+    test_sh = (task_dir / "tests" / "test.sh").read_text(encoding="utf-8")
+    assert f"cp /workspace/{ROUTE_TRACE_FILENAME}" in test_sh
+    verifier = (task_dir / "tests" / "test_outputs.py").read_text(encoding="utf-8")
+    # Best-effort only: never added to the required-nonempty submission set.
+    assert f'"{ROUTE_TRACE_FILENAME}"' not in verifier

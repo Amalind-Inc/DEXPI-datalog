@@ -467,6 +467,7 @@ def build_task(
     extra_input_files: Mapping[str, str] | None = None,
     engine_setup: str = "",
     extra_workspace_files: Sequence[str] = (),
+    extra_preserved_files: Sequence[str] = (),
     workspace_seed_files: Mapping[str, str] | None = None,
     input_bundle_files: Sequence[str] = BUNDLE_FILES,
     input_bundle_sources: Mapping[str, Path] | None = None,
@@ -522,7 +523,7 @@ def build_task(
         ),
         encoding="utf-8",
     )
-    preserved = (ANSWER_FILENAME, *extra_workspace_files)
+    preserved = (ANSWER_FILENAME, *extra_workspace_files, *extra_preserved_files)
     test_sh_path = tests_dir / "test.sh"
     post_preserved = (ANALYSIS_REPLAY_FILENAME,) if replay_python_analysis else ()
     test_sh_path.write_text(

@@ -262,6 +262,7 @@ def build_rmso_template_harbor_task(
             if program_required
             else (ROUTING_FILENAME,)
         ),
+        extra_preserved_files=(ROUTE_TRACE_FILENAME,),
         workspace_seed_files=workspace_seed_files,
         base_image="--platform=linux/amd64 ubuntu:22.04",
         base_packages=("python3", "tmux"),
