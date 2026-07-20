@@ -41,6 +41,7 @@ from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.rmso_kira import (
     CHECKPOINT_FIELD,
     CHECKPOINT_VALUE,
+    _accepted_checkpoint,
     build_checkpoint_kira_class,
 )
 from pydexpi_datalog.benchmark.souffle_arm import (
@@ -263,8 +264,10 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
     )["nodes"][0]["id"]
     smoke_program = tmp_path / "analysis.dl"
     smoke_program.write_text(
-        '.decl result_witness(id:symbol)\n'
-        f'result_witness("{witness}").\n'
+        ".decl aux(id:symbol)\n"
+        f'aux("{witness}").\n'
+        ".decl result_witness(id:symbol)\n"
+        "result_witness(X) :- aux(X).\n"
         ".output result_witness\n",
         encoding="utf-8",
     )
@@ -296,8 +299,33 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
         "dependencies": ["scope"],
     }
 
+    # A program with no authored result_witness rule (e.g. the bare starter
+    # shape) must be refused: executing it would manufacture a false
+    # no-violation checkpoint (run 05 premature-starter defect).
     smoke_program.write_text(
         '.decl result_witness(id:symbol)\n.output result_witness\n',
+        encoding="utf-8",
+    )
+    refused = subprocess.run(
+        [sys.executable, str(helper), str(smoke_program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert refused.returncode != 0
+    assert "result_witness" in refused.stderr
+    empty_checkpoint = json.loads(
+        (tmp_path / "structured_answer.json").read_text(encoding="utf-8")
+    )
+    assert empty_checkpoint["witness_ids"] == [witness]
+
+    # An authored rule that legitimately derives nothing still checkpoints
+    # a no-violation answer.
+    smoke_program.write_text(
+        ".decl aux(id:symbol)\n"
+        ".decl result_witness(id:symbol)\n"
+        ".output result_witness\n"
+        "result_witness(X) :- aux(X).\n",
         encoding="utf-8",
     )
     empty = subprocess.run(
@@ -334,6 +362,39 @@ def test_rmso_query_helper_executes_template_and_reports_bounded_witness_json(
 @pytest.mark.skipif(
     shutil.which("souffle") is None, reason="souffle engine not on PATH"
 )
+def test_rmso_query_helper_refuses_unmodified_starter_template(
+    tmp_path: Path,
+) -> None:
+    """The exact seeded starter must never earn a checkpoint receipt — the
+    cutoff preflight would otherwise manufacture a false no-violation answer."""
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_souffle_harbor_task(
+        question=make_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "rmso-tasks",
+        budgets=BUDGETS,
+    )
+    environment = task_dir / "environment"
+    starter = (environment / "analysis_template.dl").read_text(encoding="utf-8")
+    program = tmp_path / "analysis.dl"
+    program.write_text(starter, encoding="utf-8")
+
+    completed = subprocess.run(
+        [sys.executable, str(environment / "run_query.py"), str(program)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert "result_witness" in completed.stderr
+    assert not (tmp_path / "structured_answer.json").exists()
+    assert not _accepted_checkpoint(completed.stdout)
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
 def test_checkpoint_receipt_survives_fixed_width_terminal_wrapping(
     tmp_path: Path,
 ) -> None:
@@ -357,8 +418,10 @@ def test_checkpoint_receipt_survives_fixed_width_terminal_wrapping(
     )
     program = tmp_path / "analysis.dl"
     program.write_text(
-        ".decl result_witness(id:symbol)\n"
-        + "".join(f'result_witness("{witness}").\n' for witness in witnesses)
+        ".decl aux(id:symbol)\n"
+        + "".join(f'aux("{witness}").\n' for witness in witnesses)
+        + ".decl result_witness(id:symbol)\n"
+        + "result_witness(X) :- aux(X).\n"
         + ".output result_witness\n",
         encoding="utf-8",
     )

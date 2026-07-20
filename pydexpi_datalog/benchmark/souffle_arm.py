@@ -209,6 +209,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -274,6 +275,20 @@ def main() -> int:
     if program.name != "analysis.dl":
         print("PROGRAM must be named analysis.dl", file=sys.stderr)
         return 2
+    # Refuse the bare starter: without an authored result_witness rule the
+    # program trivially succeeds with zero witnesses, and executing it (for
+    # example from the mechanical cutoff preflight) would manufacture a false
+    # no-violation checkpoint.
+    uncommented = "\\n".join(
+        line.split("//")[0] for line in program.read_text(encoding="utf-8").splitlines()
+    )
+    if not re.search(r"result_witness\\s*\\([^)]*\\)\\s*:-", uncommented):
+        print(
+            "no authored result_witness rule found; extend the starter with "
+            "portable IDB rules before running the helper",
+            file=sys.stderr,
+        )
+        return 1
     output = program.parent / ".query-out"
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir(parents=True)

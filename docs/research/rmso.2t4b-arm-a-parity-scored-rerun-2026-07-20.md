@@ -67,12 +67,23 @@ Arm C ran unmodified; its regression from 8/9 to 4/9 decomposes as:
    executed commands, never wrote the answer file, and the checkpoint cutoff
    force-finalized cleanly. The identical control passed in 53s for Arm C
    in the same run (large variant).
-3. **hq-equipment-pump-connectivity-large — genuine failure to converge.**
-   18 executed commands, never reached an accepted checkpoint before cutoff.
-4. **Both valve-monitoring entries — genuine authoring failures, correctly
-   caught.** Opposite direction from run 04: the authored program
-   under-approximated (0 witnesses on probes expecting 8 and 1). The
-   faithfulness gate rejected both.
+3. **hq-equipment-pump-connectivity-large — authoring-pattern failure.**
+   The model appended a complete program (repeating both `.include` lines)
+   after the starter header, producing Soufflé redefinition errors it never
+   recovered from; the helper never succeeded (zero receipts), so no
+   checkpoint existed at cutoff.
+4. **Both valve-monitoring entries — CORRECTED (post-hoc forensics):
+   premature starter checkpoints, a lifecycle defect we introduced in
+   rmso.9 — NOT authoring failures.** The preserved `analysis.dl` in both
+   episodes is the unmodified starter with zero authored rules. The models
+   never landed valid rules in the file; at the cutoff, the mechanical
+   preflight executed the bare starter, which trivially succeeds
+   (`no_violation`, 0 witnesses) and emitted a valid receipt — manufacturing
+   a false accepted checkpoint that auto-completed both episodes. The
+   faithfulness probes then correctly rejected the empty program. Fix filed
+   as P0 bead `pydexpi-datalog-1-1dgs` (starter guard in `run_query.py`).
+   Arm A is not exposed: its seeded `analysis.py` is empty, so executing it
+   yields invalid output and no receipt.
 
 ## Interpretation
 
@@ -85,21 +96,23 @@ Three interpretation limits before treating that as an architecture verdict:
   itself says a product claim requires a fresh SME-certified holdout slice.
   Arm A's 9/9 in particular now needs confirmation on unseen questions.
 - **Arm C's cross-run variance (5/9 → 8/9 → 4/9 with zero code changes in the
-  last transition) is itself a finding.** The engine-mediated arm has more
-  failure surface: longer episodes, more commands, more tool-call parsing
-  exposure, and a program-authoring step whose faithfulness varies run to
-  run on a cheap model. Three of its five failures this run were upstream
-  KIRA parse defects, which its command-heavy style is disproportionately
-  exposed to.
+  last transition) is dominated by runtime defects, not reasoning.** With the
+  corrected forensics, four of five run-05 failures are infrastructure or
+  lifecycle (two upstream KIRA parse defects, two premature starter
+  checkpoints) and one is an authoring-pattern failure. The engine-mediated
+  arm has more failure surface — longer, command-heavier episodes with more
+  parser exposure — and its lifecycle needed one more guard.
 - **Cost now favors Arm A by ~11x per credit** (USD 0.0037 vs 0.0416), the
   reverse of run 04. With both arms mechanically sound, the shorter
   graph-direct episodes are structurally cheaper.
 
 What is genuinely settled: on this slice, with lifecycle mechanics equalized,
 a cheap model **can** reliably author correct stdlib-Python graph analyses
-under a five-minute replayable-audit contract — and could not reliably author
-faithful Soufflé for the hardest (valve-reachability) family in any of the
-three runs.
+under a five-minute replayable-audit contract. The Soufflé arm's authoring
+record on the valve family remains unproven rather than disproven: run 04's
+over-approximation is its only genuine valve authoring failure; run 05's
+valve losses were lifecycle defects. Arm C's corrected ceiling, once the
+starter guard, parser hardening, and mechanical abstention land, is untested.
 
 ## Recommended follow-ups
 
