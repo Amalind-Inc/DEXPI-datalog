@@ -205,6 +205,75 @@ RMSO_RUN_ANALYSIS_HELPER = _RMSO_RUN_ANALYSIS_HELPER_TEMPLATE.replace(
     "__RMSO_CHECKPOINT_FIELD__", CHECKPOINT_FIELD
 ).replace("__RMSO_CHECKPOINT_VALUE__", CHECKPOINT_VALUE)
 
+# Permission/defeasible controls abstain mechanically: the runner writes the
+# exact closed abstention answer so no model-authored JSON surface remains.
+_RMSO_ABSTENTION_HELPER_TEMPLATE = '''\
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import sys
+
+
+ABSTENTION_ANSWER = {
+    "verdict": "unanswerable",
+    "witness_ids": [],
+    "posture": "source_data_unavailable",
+    "answer_text": (
+        "Permission is not soundly decidable from monotone drawing facts."
+    ),
+    "support": {
+        "steps": [
+            {
+                "id": "policy",
+                "kind": "policy_abstention",
+                "operation": (
+                    "permission_or_defeasible_not_decidable_from_monotone_drawing"
+                ),
+                "dependencies": [],
+            }
+        ],
+        "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+    },
+}
+
+
+def replace_json(path: Path, value: object) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\\n", encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
+def main() -> int:
+    # The optional PROGRAM argument keeps command-line parity with the
+    # analysis helper (and its mechanical preflight); it is never read and
+    # must never exist for a policy-boundary control.
+    workspace = (
+        Path(sys.argv[1]).resolve().parent
+        if len(sys.argv) > 1
+        else Path("/workspace")
+    )
+    replace_json(workspace / "structured_answer.json", ABSTENTION_ANSWER)
+    print(json.dumps(
+        {"verdict": "unanswerable", "witness_ids": []}, sort_keys=True
+    ))
+    # The mechanical receipt: short, compact, own line, can never wrap.
+    print(json.dumps(
+        {"ok": True, "__RMSO_CHECKPOINT_FIELD__": "__RMSO_CHECKPOINT_VALUE__"},
+        separators=(",", ":"),
+    ))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+RMSO_ABSTENTION_HELPER = _RMSO_ABSTENTION_HELPER_TEMPLATE.replace(
+    "__RMSO_CHECKPOINT_FIELD__", CHECKPOINT_FIELD
+).replace("__RMSO_CHECKPOINT_VALUE__", CHECKPOINT_VALUE)
+
 
 def requires_analysis_replay(question: BenchmarkQuestion) -> bool:
     """Return whether Arm A must replay an executable analysis for this entry."""
@@ -333,7 +402,11 @@ def build_rmso_graph_direct_harbor_task(
         input_bundle_files=GRAPH_FACTS_INPUT_FILES,
         extra_input_files={
             GRAPH_INSPECTION_FILENAME: build_graph_inspection_index(artifact),
-            ANALYSIS_RUNNER_FILENAME: RMSO_RUN_ANALYSIS_HELPER,
+            ANALYSIS_RUNNER_FILENAME: (
+                RMSO_RUN_ANALYSIS_HELPER
+                if replay_required
+                else RMSO_ABSTENTION_HELPER
+            ),
         },
         extra_workspace_files=(ANALYSIS_SCRIPT_FILENAME,) if replay_required else (),
         replay_python_analysis=replay_required,
@@ -615,6 +688,31 @@ def _render_agentic_permission_instruction(
         if graph_direct
         else "The complete raw DEXPI XML is mounted read-only at `/input/drawing.xml`."
     )
+    if graph_direct:
+        return f"""\
+# P&ID review question (policy-boundary control)
+
+{source_description}
+
+## Question
+
+{question.question}
+
+This is a permission/defeasible-exception control. The monotone drawing source
+cannot soundly establish permission or resolve an exception. You must abstain
+and must not author or execute a verdict script.
+
+The abstention answer is packaged mechanically. Run exactly:
+
+```sh
+python3 /input/{ANALYSIS_RUNNER_FILENAME} /workspace/{ANALYSIS_SCRIPT_FILENAME}
+```
+
+The helper atomically writes the required closed abstention answer to
+`/workspace/{ANSWER_FILENAME}` and prints a receipt. Do not write
+`/workspace/{ANSWER_FILENAME}` or any other JSON by hand.
+Do not create `/workspace/{ANALYSIS_SCRIPT_FILENAME}`.
+"""
     return f"""\
 # P&ID review question (policy-boundary control)
 

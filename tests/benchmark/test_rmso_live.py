@@ -268,6 +268,117 @@ def test_rmso_arm_a_uses_checkpoint_adapter_with_analysis_preflight(
     }
 
 
+def _permission_question() -> BenchmarkQuestion:
+    return BenchmarkQuestion(
+        question_id="hq-permission-defeasible-control-small",
+        question="Is starting pump P-4713 against a blocked discharge permitted?",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(verdict="unanswerable", witness_ids=()),
+    )
+
+
+def test_rmso_arm_a_permission_helper_checkpoints_exact_abstention(
+    tmp_path: Path,
+) -> None:
+    """The permission control's answer is packaged mechanically by the
+    runner — no model-authored JSON surface remains."""
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    task_dir = arm_a.task_builder(
+        question=_permission_question(),
+        drawing_ref=E06_BUNDLE,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(),
+    )
+    environment = task_dir / "environment"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(environment / "run_analysis.py"),
+            str(workspace / "analysis.py"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    # No verdict script may exist or be required for the abstention.
+    assert not (workspace / "analysis.py").exists()
+    answer = json.loads((workspace / "structured_answer.json").read_text())
+    assert answer == {
+        "verdict": "unanswerable",
+        "witness_ids": [],
+        "posture": "source_data_unavailable",
+        "answer_text": (
+            "Permission is not soundly decidable from monotone drawing facts."
+        ),
+        "support": {
+            "steps": [
+                {
+                    "id": "policy",
+                    "kind": "policy_abstention",
+                    "operation": (
+                        "permission_or_defeasible_not_decidable_from_monotone_drawing"
+                    ),
+                    "dependencies": [],
+                }
+            ],
+            "claims": [{"claim": "verdict", "step_ids": ["policy"]}],
+        },
+    }
+    receipt_line = completed.stdout.splitlines()[-1]
+    assert json.loads(receipt_line) == {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE}
+    assert len(receipt_line) <= 60
+    assert _accepted_checkpoint(completed.stdout)
+
+    # Rerunning (the mechanical preflight) must be idempotent and re-receipt.
+    rerun = subprocess.run(
+        [
+            sys.executable,
+            str(environment / "run_analysis.py"),
+            str(workspace / "analysis.py"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert rerun.returncode == 0, rerun.stderr
+    assert _accepted_checkpoint(rerun.stdout)
+    assert json.loads((workspace / "structured_answer.json").read_text()) == answer
+
+
+def test_rmso_arm_a_permission_instruction_forbids_hand_authored_json(
+    tmp_path: Path,
+) -> None:
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    task_dir = arm_a.task_builder(
+        question=_permission_question(),
+        drawing_ref=E06_BUNDLE,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(),
+    )
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    assert "python3 /input/run_analysis.py /workspace/analysis.py" in instruction
+    assert "Do not write" in instruction
+    assert "Do not create `/workspace/analysis.py`" in instruction
+
+
 def test_rmso_arm_a_replays_graph_analysis_and_credits_graph_trace(
     tmp_path: Path,
 ) -> None:
