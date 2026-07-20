@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Any
 
@@ -35,6 +36,75 @@ def _accepted_checkpoint(output: str) -> bool:
         ):
             return True
     return False
+
+
+_PARSE_FAILURE_FEEDBACK = (
+    "WARNINGS: your execute_commands arguments could not be parsed. Emit "
+    'arguments as strict JSON with "commands" as a list of objects like '
+    '{"keystrokes": "...\\n", "duration": <seconds>}. Do not use bare '
+    "strings or markdown fences."
+)
+
+
+def _salvage_json(text: str) -> dict | None:
+    """Best-effort recovery of a JSON object from malformed argument text."""
+    candidates = [text]
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```[a-zA-Z]*\n?", "", stripped)
+        stripped = re.sub(r"\n?```$", "", stripped)
+        candidates.append(stripped)
+    start = text.find("{")
+    end = text.rfind("}")
+    if 0 <= start < end:
+        candidates.append(text[start : end + 1])
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _normalize_tool_calls(tool_calls: list) -> list:
+    """Repair the two model-emission shapes the upstream KIRA parser cannot
+    survive: bare-string commands (AttributeError crash) and malformed
+    argument JSON (silent parse starvation)."""
+    normalized = []
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            normalized.append(tool_call)
+            continue
+        function = tool_call.get("function") or {}
+        if function.get("name") != "execute_commands":
+            normalized.append(tool_call)
+            continue
+        arguments = function.get("arguments", {})
+        if isinstance(arguments, str):
+            salvaged = _salvage_json(arguments)
+            if salvaged is None:
+                normalized.append(tool_call)
+                continue
+            arguments = salvaged
+        if isinstance(arguments, dict):
+            commands = arguments.get("commands")
+            if isinstance(commands, list):
+                coerced = []
+                for command in commands:
+                    if isinstance(command, str):
+                        keystrokes = (
+                            command if command.endswith("\n") else command + "\n"
+                        )
+                        coerced.append({"keystrokes": keystrokes})
+                    else:
+                        coerced.append(command)
+                arguments = {**arguments, "commands": coerced}
+        normalized.append(
+            {**tool_call, "function": {**function, "arguments": arguments}}
+        )
+    return normalized
 
 
 def build_checkpoint_kira_class(
@@ -234,6 +304,29 @@ def build_checkpoint_kira_class(
         @staticmethod
         async def _rmso_interrupt(session: Any) -> None:
             await session.send_keys("C-c", block=False, min_timeout_sec=0.0)
+
+        def _parse_tool_calls(self, tool_calls: list) -> tuple:
+            normalized = _normalize_tool_calls(tool_calls)
+            parsed = super()._parse_tool_calls(normalized)
+            commands, is_task_complete, feedback, analysis, plan, image_read = (
+                parsed
+            )
+            if (
+                normalized
+                and not commands
+                and not is_task_complete
+                and image_read is None
+                and not feedback
+            ):
+                feedback = _PARSE_FAILURE_FEEDBACK
+            return (
+                commands,
+                is_task_complete,
+                feedback,
+                analysis,
+                plan,
+                image_read,
+            )
 
     return CheckpointTerminusKira
 

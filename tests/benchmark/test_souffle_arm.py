@@ -113,6 +113,103 @@ CheckpointKiraBoundary = build_checkpoint_kira_class(
 )
 
 
+class KiraParserBoundary(FakeKiraBoundary):
+    """Replicates the pinned upstream KIRA parse semantics exactly:
+    ``cmd.get(...)`` crashes on bare-string commands, and JSON decode
+    failures skip the tool call silently (parse starvation)."""
+
+    def _parse_tool_calls(self, tool_calls):
+        commands = []
+        for tool_call in tool_calls:
+            arguments = tool_call.get("function", {}).get("arguments", "{}")
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    continue
+            for cmd in arguments.get("commands", []):
+                commands.append(cmd.get("keystrokes", ""))
+        return commands, False, "", "", "", None
+
+
+ParserCheckpointBoundary = build_checkpoint_kira_class(
+    KiraParserBoundary,
+    FakeKiraResponse,
+    FakeKiraCommand,
+)
+
+
+def test_checkpoint_adapter_coerces_bare_string_tool_commands() -> None:
+    """Run 05 e03 crash: model emitted commands as strings; upstream KIRA
+    dies on ``'str'.get``. The adapter must coerce them to dicts (with a
+    trailing newline so the keystrokes actually execute)."""
+    agent = ParserCheckpointBoundary(outputs=())
+    tool_calls = [
+        {
+            "function": {
+                "name": "execute_commands",
+                "arguments": json.dumps(
+                    {"commands": ["echo hi", {"keystrokes": "pwd\n"}]}
+                ),
+            }
+        }
+    ]
+    commands, _, feedback, _, _, _ = agent._parse_tool_calls(tool_calls)
+    assert commands == ["echo hi\n", "pwd\n"]
+    assert feedback == ""
+
+
+def test_checkpoint_adapter_salvages_fenced_json_arguments() -> None:
+    agent = ParserCheckpointBoundary(outputs=())
+    tool_calls = [
+        {
+            "function": {
+                "name": "execute_commands",
+                "arguments": '```json\n{"commands": ["ls /workspace"]}\n```',
+            }
+        }
+    ]
+    commands, _, feedback, _, _, _ = agent._parse_tool_calls(tool_calls)
+    assert commands == ["ls /workspace\n"]
+    assert feedback == ""
+
+
+def test_checkpoint_adapter_reports_parse_starvation() -> None:
+    """Run 05 permission-small: every tool call failed to parse and the
+    model starved for dozens of turns with zero signal. Unsalvageable
+    arguments must surface corrective feedback instead of silence."""
+    agent = ParserCheckpointBoundary(outputs=())
+    tool_calls = [
+        {
+            "function": {
+                "name": "execute_commands",
+                "arguments": "not json at all",
+            }
+        }
+    ]
+    commands, is_complete, feedback, _, _, _ = agent._parse_tool_calls(
+        tool_calls
+    )
+    assert commands == []
+    assert is_complete is False
+    assert "could not be parsed" in feedback
+
+
+def test_checkpoint_adapter_leaves_wellformed_tool_calls_untouched() -> None:
+    agent = ParserCheckpointBoundary(outputs=())
+    tool_calls = [
+        {
+            "function": {
+                "name": "execute_commands",
+                "arguments": {"commands": [{"keystrokes": "cat x\n"}]},
+            }
+        }
+    ]
+    commands, _, feedback, _, _, _ = agent._parse_tool_calls(tool_calls)
+    assert commands == ["cat x\n"]
+    assert feedback == ""
+
+
 def make_bundle(tmp_dir: Path) -> Path:
     """A minimal drawing bundle directory in the 3q1.4 export layout."""
     bundle = tmp_dir / "e06-bundle"
