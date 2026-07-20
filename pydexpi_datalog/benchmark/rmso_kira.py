@@ -49,12 +49,20 @@ def build_checkpoint_kira_class(
             self,
             *args: Any,
             checkpoint_cutoff_sec: float = 240.0,
+            checkpoint_preflight_command: str = CHECKPOINT_PREFLIGHT_COMMAND,
             **kwargs: Any,
         ) -> None:
             super().__init__(*args, **kwargs)
             self._rmso_checkpoint_ready = False
             self._rmso_started_at: float | None = None
             self._rmso_checkpoint_cutoff_sec = checkpoint_cutoff_sec
+            # Normalize so callers may pass the command without a trailing
+            # newline (e.g. through Harbor's --agent-kwarg CLI plumbing).
+            self._rmso_preflight_command = (
+                checkpoint_preflight_command
+                if checkpoint_preflight_command.endswith("\n")
+                else checkpoint_preflight_command + "\n"
+            )
 
         async def run(self, *args: Any, **kwargs: Any) -> Any:
             # Start the reserve clock at the agent phase, not while Harbor is
@@ -210,7 +218,7 @@ def build_checkpoint_kira_class(
                     super()._execute_commands(
                         [
                             command_type(
-                                keystrokes=CHECKPOINT_PREFLIGHT_COMMAND,
+                                keystrokes=self._rmso_preflight_command,
                                 duration_sec=PREFLIGHT_MAX_SEC,
                             )
                         ],

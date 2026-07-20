@@ -401,6 +401,27 @@ def test_checkpoint_receipt_survives_fixed_width_terminal_wrapping(
     assert completion[1] is True
 
 
+def test_checkpoint_adapter_honors_configured_preflight_command() -> None:
+    """Arm A reuses the adapter with its own analysis preflight command."""
+    receipt = json.dumps({"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE})
+    agent = CheckpointKiraBoundary(
+        outputs=(receipt, receipt),
+        checkpoint_preflight_command=(
+            "python3 /input/run_analysis.py /workspace/analysis.py"
+        ),
+    )
+
+    first = FakeKiraCommand(keystrokes="run analysis\n", duration_sec=1)
+    asyncio.run(agent.execute_checkpoint_commands([first], object()))
+
+    assert agent.executed_commands[1] == [
+        FakeKiraCommand(
+            keystrokes="python3 /input/run_analysis.py /workspace/analysis.py\n",
+            duration_sec=50.0,
+        )
+    ]
+
+
 def test_checkpoint_aware_kira_completes_without_another_model_call(
     tmp_path: Path,
 ) -> None:

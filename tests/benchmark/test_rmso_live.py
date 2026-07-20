@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +18,11 @@ from pydexpi_datalog.benchmark.rmso_live import (
     finalize_rmso_accounting,
     run_rmso_live,
     validate_redesigned_live_manifest,
+)
+from pydexpi_datalog.benchmark.rmso_kira import (
+    CHECKPOINT_FIELD,
+    CHECKPOINT_VALUE,
+    _accepted_checkpoint,
 )
 from pydexpi_datalog.benchmark.rmso_eval import (
     materialize_preregistered_rmso_manifest,
@@ -146,7 +152,9 @@ def test_rmso_arm_a_helper_replays_analysis_and_writes_provisional_answer(
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout)["witness_ids"] == [witness]
+    replay_line, receipt_line = completed.stdout.splitlines()
+    assert json.loads(replay_line)["witness_ids"] == [witness]
+    assert json.loads(receipt_line) == {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE}
     assert json.loads((tmp_path / "analysis_replay.json").read_text()) == {
         "verdict": "violation_found",
         "witness_ids": [witness],
@@ -165,6 +173,99 @@ def test_rmso_arm_a_helper_replays_analysis_and_writes_provisional_answer(
     )
     assert failed.returncode != 0
     assert json.loads((tmp_path / "structured_answer.json").read_text()) == checkpoint
+
+
+def test_rmso_arm_a_helper_emits_wrap_proof_checkpoint_receipt(
+    tmp_path: Path,
+) -> None:
+    """The Arm A helper's mechanical receipt must survive a fixed-width pane
+    even when the witness listing wraps."""
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=EpisodeBudgets(),
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+    question = BenchmarkQuestion(
+        question_id="graph-direct-receipt-q1",
+        question="Find every graph node.",
+        slice="hand_authored",
+        drawing_ref=E06_BUNDLE,
+        ground_truth=GroundTruth(verdict="violation_found", witness_ids=()),
+    )
+    task_dir = arm_a.task_builder(
+        question=question,
+        drawing_ref=E06_BUNDLE,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(),
+    )
+    environment = task_dir / "environment"
+    witnesses = [
+        node["id"]
+        for node in json.loads(
+            (environment / "graph_inspection.json").read_text(encoding="utf-8")
+        )["nodes"]
+    ]
+    assert sum(len(witness) + 4 for witness in witnesses) > 80, (
+        "fixture must supply enough witness IDs to force terminal wrapping"
+    )
+    analysis = tmp_path / "analysis.py"
+    analysis.write_text(
+        "import json\n"
+        f"print(json.dumps({{'verdict': 'violation_found', 'witness_ids': {witnesses!r}}}))\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(environment / "run_analysis.py"), str(analysis)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    replay_line, receipt_line = completed.stdout.splitlines()
+    assert json.loads(replay_line)["witness_ids"] == witnesses
+    assert json.loads(receipt_line) == {"ok": True, CHECKPOINT_FIELD: CHECKPOINT_VALUE}
+    # The mechanical receipt must never wrap at ordinary terminal widths.
+    assert len(receipt_line) <= 60
+
+    # Hard-fold every physical line like a fixed-width terminal pane; the
+    # checkpoint parser must still find the receipt.
+    pane_width = 80
+    assert any(len(line) > pane_width for line in completed.stdout.splitlines())
+    wrapped = "\n".join(
+        line[start : start + pane_width]
+        for line in completed.stdout.splitlines()
+        for start in range(0, max(len(line), 1), pane_width)
+    )
+    assert _accepted_checkpoint(wrapped)
+
+
+def test_rmso_arm_a_uses_checkpoint_adapter_with_analysis_preflight(
+    tmp_path: Path,
+) -> None:
+    """Arm A must get the same checkpoint auto-completion lifecycle as Arm C."""
+    budgets = EpisodeBudgets(agent_timeout_sec=300.0)
+    arm_a, _ = create_rmso_live_arms(
+        kira_dir=tmp_path / "kira",
+        output_dir=tmp_path / "run",
+        budgets=budgets,
+        environ={"OPENROUTER_API_KEY": "test-key"},
+        request_gateway=object(),  # type: ignore[arg-type]
+    )
+
+    assert arm_a.runner.agent_import_path == "rmso_kira:CheckpointTerminusKira"
+    assert str(REPO_ROOT / "pydexpi_datalog" / "benchmark") in arm_a.runner.environ[
+        "PYTHONPATH"
+    ].split(os.pathsep)
+    assert arm_a.runner.agent_kwargs == {
+        "checkpoint_cutoff_sec": 240.0,
+        "checkpoint_preflight_command": (
+            "python3 /input/run_analysis.py /workspace/analysis.py"
+        ),
+    }
 
 
 def test_rmso_arm_a_replays_graph_analysis_and_credits_graph_trace(

@@ -47,6 +47,10 @@ from pydexpi_datalog.benchmark.direct_arm import (
     parse_structured_answer,
 )
 from pydexpi_datalog.benchmark.graph_inspection import build_graph_inspection_index
+from pydexpi_datalog.benchmark.rmso_kira import (
+    CHECKPOINT_FIELD,
+    CHECKPOINT_VALUE,
+)
 from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
     LockedOpenRouterGateway,
 )
@@ -81,7 +85,7 @@ PERMISSION_CONTROL_IDS = frozenset(
     }
 )
 
-RMSO_RUN_ANALYSIS_HELPER = '''\
+_RMSO_RUN_ANALYSIS_HELPER_TEMPLATE = '''\
 from __future__ import annotations
 
 import json
@@ -182,13 +186,24 @@ def main() -> int:
     }
     replace_json(program.parent / "analysis_replay.json", replay)
     replace_json(program.parent / "structured_answer.json", answer)
+    # The replay listing is descriptive output for the model; a fixed-width
+    # terminal may wrap it and that is harmless.
     print(json.dumps(replay, sort_keys=True))
+    # The mechanical receipt must be independent of witness-list length so it
+    # can never wrap at ordinary terminal widths: short, compact, own line.
+    print(json.dumps(
+        {"ok": True, "__RMSO_CHECKPOINT_FIELD__": "__RMSO_CHECKPOINT_VALUE__"},
+        separators=(",", ":"),
+    ))
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
 '''
+RMSO_RUN_ANALYSIS_HELPER = _RMSO_RUN_ANALYSIS_HELPER_TEMPLATE.replace(
+    "__RMSO_CHECKPOINT_FIELD__", CHECKPOINT_FIELD
+).replace("__RMSO_CHECKPOINT_VALUE__", CHECKPOINT_VALUE)
 
 
 def requires_analysis_replay(question: BenchmarkQuestion) -> bool:
@@ -1562,15 +1577,41 @@ def create_rmso_graph_direct_arm(
     environ: Mapping[str, str] | None = None,
     request_gateway: LockedOpenRouterGateway | None = None,
 ) -> AgenticArm:
-    """Build RMSO Arm A over the same graph representation as Arm C."""
+    """Build RMSO Arm A over the same graph representation as Arm C.
+
+    Arm A gets the same checkpoint auto-completion lifecycle as Arm C: after
+    a valid executed analysis checkpoint the adapter completes mechanically
+    instead of exploring until the Harbor timeout. The preflight replays the
+    Arm A analysis helper rather than the Souffle helper.
+    """
+    arm = create_agentic_arm(
+        model_key,
+        kira_dir=kira_dir,
+        budgets=budgets,
+        environ=environ,
+        request_gateway=request_gateway,
+    )
+    adapter_root = str(Path(__file__).resolve().parent)
+    env = dict(arm.runner.environ)
+    python_path = [adapter_root]
+    if env.get("PYTHONPATH"):
+        python_path.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(python_path)
+    runner = replace(
+        arm.runner,
+        environ=env,
+        agent_import_path="rmso_kira:CheckpointTerminusKira",
+        agent_kwargs={
+            "checkpoint_cutoff_sec": max(1.0, budgets.agent_timeout_sec - 60.0),
+            "checkpoint_preflight_command": (
+                f"python3 /input/{ANALYSIS_RUNNER_FILENAME} "
+                f"/workspace/{ANALYSIS_SCRIPT_FILENAME}"
+            ),
+        },
+    )
     return replace(
-        create_agentic_arm(
-            model_key,
-            kira_dir=kira_dir,
-            budgets=budgets,
-            environ=environ,
-            request_gateway=request_gateway,
-        ),
+        arm,
+        runner=runner,
         task_builder=build_rmso_graph_direct_harbor_task,
         analysis_trace_gate=verify_graph_direct_answer_trace,
     )
