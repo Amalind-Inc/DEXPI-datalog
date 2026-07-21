@@ -1,15 +1,15 @@
 """Behavior tests for the Arm T prebuilt Datalog template pack (lx6p).
 
 The model's only authored surface is a routing JSON; these tests pin the
-three mechanical guarantees the design lock (v3) promises:
-
-1. routing validation is closed-world over the drawing's vocabulary,
-2. rendered programs are frozen template bodies + validated bindings only,
-3. rendered programs execute end-to-end on the real engine.
+mechanical guarantees the design lock promises: routing bindings are validated
+against the drawing plus explicit question scope, rendered programs contain
+only frozen template bodies and validated bindings, and rendered programs
+execute end-to-end on the real engine.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import shutil
 import subprocess
@@ -101,9 +101,34 @@ def test_validate_accepts_wellformed_guarded_reachability() -> None:
     assert validate_routing(routing, vocabulary()) == []
 
 
+def test_validate_accepts_complete_explicit_scope_absent_from_drawing() -> None:
+    required = frozenset({"BallValve", "ButterflyValve", "GlobeValve"})
+    expanded_vocabulary = routing_vocabulary(
+        json.dumps(INSPECTION), additional_labels=required
+    )
+    routing = {
+        "category": "guarded_reachability",
+        "parameters": {
+            "source_labels": ["ProcessInstrumentationFunction"],
+            "target_labels": sorted(required),
+        },
+    }
+
+    assert validate_routing(
+        routing,
+        expanded_vocabulary,
+        required_labels=required,
+    ) == []
+
+
 def test_validate_policy_abstention_takes_no_parameters() -> None:
     assert validate_routing(
         {"category": "policy_abstention", "parameters": {}}, vocabulary()
+    ) == []
+    assert validate_routing(
+        {"category": "policy_abstention", "parameters": {}},
+        vocabulary(),
+        required_labels=frozenset({"BallValve", "GlobeValve"}),
     ) == []
     errors = validate_routing(
         {"category": "policy_abstention", "parameters": {"labels": ["BallValve"]}},
@@ -208,6 +233,10 @@ def make_helper_env(tmp_path: Path) -> tuple[Path, Path]:
         ),
         encoding="utf-8",
     )
+    (input_dir / "routing_requirements.json").write_text(
+        json.dumps({"schema_version": 1, "required_labels": []}),
+        encoding="utf-8",
+    )
     return input_dir, workspace
 
 
@@ -238,6 +267,45 @@ def test_route_query_rejects_unknown_category_with_feedback(
     assert completed.returncode == 1
     assert "clairvoyance" in completed.stderr
     assert "entity_lookup" in completed.stderr  # corrective vocabulary
+
+
+def test_route_query_rejects_incomplete_explicit_label_scope(
+    tmp_path: Path,
+) -> None:
+    input_dir, workspace = make_helper_env(tmp_path)
+    (input_dir / "routing_requirements.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "required_labels": [
+                    "BallValve",
+                    "ButterflyValve",
+                    "GlobeValve",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (workspace / ROUTING_FILENAME).write_text(
+        json.dumps(
+            {
+                "category": "guarded_reachability",
+                "parameters": {
+                    "source_labels": ["ProcessInstrumentationFunction"],
+                    "target_labels": ["BallValve"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = run_helper(input_dir, workspace)
+
+    assert completed.returncode == 1
+    assert "explicitly enumerated" in completed.stderr
+    assert "ButterflyValve" in completed.stderr
+    assert "GlobeValve" in completed.stderr
+    assert not (workspace / "analysis.dl").exists()
 
 
 def test_route_query_names_fallback_after_retry_budget_exhausted(
@@ -425,6 +493,52 @@ def test_template_task_mounts_helpers_and_routing_instruction(
     assert "fall back" in instruction.lower() or "fallback" in instruction.lower()
     task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
     assert "arm-t-template" in task_toml
+
+
+def test_template_task_requires_every_explicitly_enumerated_class(
+    tmp_path: Path,
+) -> None:
+    """A closed class list is an auditable routing requirement, including
+    classes absent from the current drawing."""
+    from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+
+    bundle = make_bundle(tmp_path)
+    question = replace(
+        make_template_question(bundle),
+        question=(
+            "Find every component (any of BallValve, ButterflyValve, or Tank) "
+            "that has no path to a pump "
+            "(CentrifugalPump or ReciprocatingPump)."
+        ),
+    )
+    task_dir = build_rmso_template_harbor_task(
+        question=question,
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(
+            max_turns=8,
+            max_commands=10,
+            agent_timeout_sec=600.0,
+            verifier_timeout_sec=120.0,
+        ),
+    )
+
+    requirements = json.loads(
+        (task_dir / "environment" / "routing_requirements.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert requirements["required_labels"] == [
+        "BallValve",
+        "ButterflyValve",
+        "CentrifugalPump",
+        "ReciprocatingPump",
+        "Tank",
+    ]
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    assert "include every" in instruction.lower()
+    for label in requirements["required_labels"]:
+        assert label in instruction
 
 
 def test_template_permission_instruction_routes_mechanical_abstention(

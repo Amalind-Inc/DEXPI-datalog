@@ -5,16 +5,17 @@ The model's only authored surface is a routing JSON::
     {"category": "<template id>", "parameters": {...}}
 
 Every template body below is frozen, internally reviewed code building on the
-shared ``graph_topology_semantics.dl`` IDB.  Parameters are validated
-closed-world against the drawing's inspection vocabulary before anything is
-rendered, and rendered programs flow through the unchanged ``run_query.py``
-checkpoint lifecycle.  SMEs review the plain-language ``description`` fields,
-never the Datalog.
+shared ``graph_topology_semantics.dl`` IDB. Parameters are validated against
+the drawing's inspection vocabulary plus any explicit closed class list in the
+question before anything is rendered, and rendered programs flow through the
+unchanged ``run_query.py`` checkpoint lifecycle. SMEs review the plain-language
+``description`` fields, never the Datalog.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
 DEFAULT_INCLUDE_DIR = "/input"
@@ -31,6 +32,11 @@ SCOPE_VALUES = ("piping", "any")
 DIRECTION_VALUES = ("directed", "undirected")
 
 _MAX_VOCABULARY_IN_ERROR = 40
+_CLOSED_CLASS_CUE = re.compile(
+    r"^\s*(?:any|one)\s+of\s+", re.IGNORECASE
+)
+_CLASS_LIST_SEPARATOR = re.compile(r",|\b(?:and|or)\b", re.IGNORECASE)
+_DEXPI_CLASS_IDENTIFIER = re.compile(r"\b[A-Z][A-Za-z0-9]*\b")
 
 
 @dataclass(frozen=True)
@@ -140,13 +146,47 @@ TEMPLATE_PACK: dict[str, Template] = {
 }
 
 
-def routing_vocabulary(inspection_json: str) -> dict[str, frozenset[str]]:
-    """Extract the closed validation vocabulary from graph_inspection.json."""
+def explicit_label_requirements(question: str) -> frozenset[str]:
+    """Return DEXPI-style class identifiers from explicit closed lists.
+
+    Detection is deliberately conservative: a parenthetical group must either
+    start with ``any of`` / ``one of`` or be entirely composed of two or more
+    class identifiers joined by commas or conjunctions. Ambiguous prose
+    remains a reasoning and faithfulness concern rather than being guessed.
+    """
+    required: set[str] = set()
+    for parenthetical in re.findall(r"\(([^()]*)\)", question):
+        cue = _CLOSED_CLASS_CUE.match(parenthetical)
+        body = parenthetical[cue.end():] if cue else parenthetical
+        if cue is None and _CLASS_LIST_SEPARATOR.search(body) is None:
+            continue
+        labels = _DEXPI_CLASS_IDENTIFIER.findall(body)
+        if len(labels) < (1 if cue else 2):
+            continue
+        residue = _DEXPI_CLASS_IDENTIFIER.sub("", body)
+        residue = _CLASS_LIST_SEPARATOR.sub("", residue)
+        residue = re.sub(r"[\s/]+", "", residue)
+        if residue:
+            continue
+        required.update(labels)
+    return frozenset(required)
+
+
+def routing_vocabulary(
+    inspection_json: str,
+    *,
+    additional_labels: frozenset[str] = frozenset(),
+) -> dict[str, frozenset[str]]:
+    """Extract the closed validation vocabulary from graph inspection.
+
+    Explicitly enumerated question labels are valid even when absent from the
+    current drawing: reusable rules must preserve that scope for replay.
+    """
     inspection = json.loads(inspection_json)
     nodes = inspection.get("nodes") or []
     labels = frozenset(
         str(node["label"]) for node in nodes if node.get("label")
-    )
+    ) | additional_labels
     tags = frozenset(
         str(node["tag_name"]) for node in nodes if node.get("tag_name")
     )
@@ -169,7 +209,10 @@ def _validate_string_list(name: str, value: object) -> list[str]:
 
 
 def validate_routing(
-    routing: object, vocabulary: dict[str, frozenset[str]]
+    routing: object,
+    vocabulary: dict[str, frozenset[str]],
+    *,
+    required_labels: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Return every validation error for a routing JSON (empty = valid)."""
     if not isinstance(routing, dict):
@@ -244,6 +287,28 @@ def validate_routing(
                 errors.append(
                     f"{name} must be one of: " + ", ".join(DIRECTION_VALUES)
                 )
+
+    supports_label_scope = any(
+        spec.kind == "label_set" for spec in template.slots.values()
+    )
+    selected_labels = {
+        label
+        for name, spec in template.slots.items()
+        if spec.kind == "label_set"
+        for label in (parameters.get(name) or [])
+        if isinstance(label, str)
+    }
+    missing_labels = (
+        required_labels - selected_labels
+        if supports_label_scope
+        else frozenset()
+    )
+    if missing_labels:
+        errors.append(
+            "routing omits explicitly enumerated labels: "
+            + ", ".join(sorted(missing_labels))
+            + "; include every required label even when absent from this drawing"
+        )
 
     if category == "entity_lookup" and not errors:
         if not parameters.get("labels") and not parameters.get("tags"):

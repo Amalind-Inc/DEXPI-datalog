@@ -77,6 +77,7 @@ ARM_LABEL = "t-template"
 TEMPLATE_ARM_MODELS = dict(SOUFFLE_ARM_MODELS)
 ROUTING_FILENAME = "routing.json"
 ROUTE_TRACE_FILENAME = "route_trace.json"
+ROUTING_REQUIREMENTS_FILENAME = "routing_requirements.json"
 VALIDATION_RETRY_BUDGET = 2
 
 ROUTING_TEMPLATE = (
@@ -177,10 +178,17 @@ def main() -> int:
         print(f"routing.json is not readable JSON: {error}", file=sys.stderr)
         _record_failure(workspace)
         return 1
-    vocabulary = template_arm.routing_vocabulary(
-        (INPUT_DIR / "graph_inspection.json").read_text(encoding="utf-8")
+    requirements = json.loads(
+        (INPUT_DIR / "routing_requirements.json").read_text(encoding="utf-8")
     )
-    errors = template_arm.validate_routing(routing, vocabulary)
+    required_labels = frozenset(requirements.get("required_labels") or ())
+    vocabulary = template_arm.routing_vocabulary(
+        (INPUT_DIR / "graph_inspection.json").read_text(encoding="utf-8"),
+        additional_labels=required_labels,
+    )
+    errors = template_arm.validate_routing(
+        routing, vocabulary, required_labels=required_labels
+    )
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
@@ -262,7 +270,7 @@ def build_rmso_template_harbor_task(
         instruction=_render_template_instruction(question),
         tags=("arm-t-template", "pydexpi-datalog-1-lx6p"),
         input_bundle_files=("graph_facts.json",),
-        extra_input_files=_template_input_files(bundle_dir),
+        extra_input_files=_template_input_files(bundle_dir, question),
         engine_setup=SOUFFLE_ENGINE_SETUP,
         extra_workspace_files=(
             (ROUTING_FILENAME, PROGRAM_FILENAME)
@@ -276,13 +284,24 @@ def build_rmso_template_harbor_task(
     )
 
 
-def _template_input_files(bundle_dir: Path) -> dict[str, str]:
+def _template_input_files(
+    bundle_dir: Path, question: BenchmarkQuestion
+) -> dict[str, str]:
     artifact = json.loads(
         (bundle_dir / "graph_facts.json").read_text(encoding="utf-8")
+    )
+    required_labels = sorted(
+        _template_arm.explicit_label_requirements(question.question)
     )
     return {
         "analysis_template.dl": RMSO_ANALYSIS_TEMPLATE,
         "routing_template.json": ROUTING_TEMPLATE,
+        ROUTING_REQUIREMENTS_FILENAME: json.dumps(
+            {"schema_version": 1, "required_labels": required_labels},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         "graph_facts.dl": build_graph_facts_datalog(artifact),
         "graph_topology_semantics.dl": load_graph_topology_idb(),
         "graph_inspection.json": build_graph_inspection_index(artifact),
@@ -322,6 +341,25 @@ def _render_category_lines() -> str:
         lines.append(f"- `{template.id}` - {template.description}")
         lines.append(f"  Parameters: {slot_parts}.")
     return "\n".join(lines)
+
+
+def _render_label_completeness_instruction(
+    question: BenchmarkQuestion,
+) -> str:
+    required = sorted(
+        _template_arm.explicit_label_requirements(question.question)
+    )
+    if not required:
+        return (
+            "If the question explicitly gives a closed class list, include "
+            "every listed class in the label-set parameters."
+        )
+    return (
+        "The question explicitly enumerates this closed class list: "
+        + ", ".join(required)
+        + ". Include every one in the label-set parameters, even when a class "
+        "is absent from this drawing; the helper rejects incomplete scope."
+    )
 
 
 def _render_template_instruction(question: BenchmarkQuestion) -> str:
@@ -368,8 +406,11 @@ that for you.
 
 {_render_category_lines()}
 
-   Label and tag parameters must copy values exactly from the inspection
-   index; validation is closed-world over this drawing's vocabulary.
+   Label and tag parameters normally copy values exactly from the inspection
+   index. Explicitly enumerated closed-list labels named below are also valid
+   when absent from this drawing so the routed rule preserves its full scope.
+
+   {_render_label_completeness_instruction(question)}
 3. Execute the routing:
 
    `python3 /input/route_query.py /workspace/{ROUTING_FILENAME}`
