@@ -27,6 +27,7 @@ ATTACHMENT_ROLES = (
 )
 ATTACHMENT_MODES = ("attached", "unattached")
 COUNT_COMPARATORS = {"at_least": ">=", "exactly": "=", "at_most": "<="}
+SCOPE_VALUES = ("piping", "any")
 
 _MAX_VOCABULARY_IN_ERROR = 40
 
@@ -76,12 +77,16 @@ TEMPLATE_PACK: dict[str, Template] = {
             id="reachability",
             description=(
                 "Find components of the target classes that can be reached "
-                "from any component of the source classes through the "
-                "drawing's connection topology."
+                "from any component of the source classes. scope=piping "
+                "(default) follows only piping-connection edges; scope=any "
+                "follows every directed edge (use when the question says any "
+                "directed edge / through any intermediate objects, e.g. "
+                "instrumentation-and-control monitoring paths)."
             ),
             slots={
                 "source_labels": SlotSpec("label_set"),
                 "target_labels": SlotSpec("label_set"),
+                "scope": SlotSpec("scope", required=False),
             },
         ),
         Template(
@@ -89,11 +94,16 @@ TEMPLATE_PACK: dict[str, Template] = {
             description=(
                 "Find components of the target classes that CANNOT be "
                 "reached from any component of the source classes - e.g. "
-                "valves not covered by any instrumentation function."
+                "valves not monitored by any instrumentation function. "
+                "scope=piping (default) follows only piping-connection edges; "
+                "scope=any follows every directed edge (use when the question "
+                "says any directed edge / through any intermediate objects, "
+                "e.g. instrumentation-and-control monitoring coverage)."
             ),
             slots={
                 "source_labels": SlotSpec("label_set"),
                 "target_labels": SlotSpec("label_set"),
+                "scope": SlotSpec("scope", required=False),
             },
         ),
         Template(
@@ -214,6 +224,11 @@ def validate_routing(
         elif spec.kind == "threshold":
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 errors.append(f"{name} must be a non-negative integer")
+        elif spec.kind == "scope":
+            if value not in SCOPE_VALUES:
+                errors.append(
+                    f"{name} must be one of: " + ", ".join(SCOPE_VALUES)
+                )
 
     if category == "entity_lookup" and not errors:
         if not parameters.get("labels") and not parameters.get("tags"):
@@ -286,7 +301,12 @@ def render_program(
         lines.append(".decl tgt(id:symbol)")
         lines.extend(_label_rules("tgt", parameters["target_labels"]))
         lines.append(".decl hit(id:symbol)")
-        lines.append("hit(N) :- tgt(N), src(S), reachable(S, N).")
+        reach_rel = (
+            "reachable_any"
+            if parameters.get("scope") == "any"
+            else "reachable"
+        )
+        lines.append(f"hit(N) :- tgt(N), src(S), {reach_rel}(S, N).")
         if category == "reachability":
             lines.append("result_witness(N) :- hit(N).")
         else:

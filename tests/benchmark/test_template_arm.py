@@ -577,3 +577,147 @@ def test_template_task_preserves_route_trace_best_effort(tmp_path: Path) -> None
     verifier = (task_dir / "tests" / "test_outputs.py").read_text(encoding="utf-8")
     # Best-effort only: never added to the required-nonempty submission set.
     assert f'"{ROUTE_TRACE_FILENAME}"' not in verifier
+
+
+# --------------------------------------------------------------------------
+# Tooling fix: instrumentation-and-control reachability (scope=any)
+# --------------------------------------------------------------------------
+
+
+def test_guarded_reachability_scope_any_traverses_non_piping_edges(
+    tmp_path: Path,
+) -> None:
+    """Valve-monitoring paths run through I&C edges (attr_name not in the
+    piping allowlist). scope=any must reach through them; the default
+    piping scope must not - that gap is the confirmed cross-arm bug."""
+    if shutil.which("souffle") is None:
+        pytest.skip("souffle engine not on PATH")
+    (tmp_path / "graph_facts.dl").write_text(
+        ".decl node(id:symbol)\n"
+        ".decl node_attribute(id:symbol, attr_name:symbol, attr_value:symbol)\n"
+        ".decl graph_edge(source:symbol, target:symbol, edge_key:symbol)\n"
+        ".decl graph_edge_attribute(source:symbol, target:symbol, edge_key:symbol,"
+        " attr_name:symbol, attr_value:symbol)\n"
+        'node("pif1").\nnode("v1").\nnode("v2").\n'
+        'node_attribute("pif1", "label", "ProcessInstrumentationFunction").\n'
+        'node_attribute("v1", "label", "BallValve").\n'
+        'node_attribute("v2", "label", "BallValve").\n'
+        # Only path pif1 -> v1 is an I&C reference edge ("valve"), NOT piping.
+        'graph_edge("pif1", "v1", "e1").\n'
+        'graph_edge_attribute("pif1", "v1", "e1", "attr_name", "valve").\n',
+        encoding="utf-8",
+    )
+    shutil.copy(SEMANTICS, tmp_path / "graph_topology_semantics.dl")
+
+    def witnesses(scope):
+        params = {
+            "source_labels": ["ProcessInstrumentationFunction"],
+            "target_labels": ["BallValve"],
+        }
+        if scope is not None:
+            params["scope"] = scope
+        program = render_program(
+            {"category": "guarded_reachability", "parameters": params},
+            include_dir=str(tmp_path),
+        )
+        (tmp_path / "analysis.dl").write_text(program, encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir(exist_ok=True)
+        completed = subprocess.run(
+            ["souffle", "-D", str(out), str(tmp_path / "analysis.dl")],
+            capture_output=True, text=True, check=False,
+        )
+        assert completed.returncode == 0, completed.stderr
+        return sorted(
+            (out / "result_witness.csv").read_text(encoding="utf-8").split()
+        )
+
+    # scope=any: v1 IS monitored through the I&C edge -> only v2 unmonitored.
+    assert witnesses("any") == ["v2"]
+    # default (piping) scope: the I&C edge is invisible -> both look unmonitored.
+    assert witnesses(None) == ["v1", "v2"]
+
+
+def test_scope_validation_rejects_unknown_scope() -> None:
+    from pydexpi_datalog.benchmark.template_arm import SCOPE_VALUES
+
+    assert set(SCOPE_VALUES) == {"piping", "any"}
+    routing = {
+        "category": "reachability",
+        "parameters": {
+            "source_labels": ["BallValve"],
+            "target_labels": ["BallValve"],
+            "scope": "telepathic",
+        },
+    }
+    errors = validate_routing(routing, vocabulary())
+    assert any("scope" in e and "telepathic" not in e.lower()[:0] for e in errors)
+    assert any("piping" in e and "any" in e for e in errors)
+
+
+def test_instruction_surfaces_enum_slot_values_and_scope_guidance(
+    tmp_path: Path,
+) -> None:
+    """The model must pick scope=any up front for monitoring questions - a
+    valid-but-wrong scope never triggers a validation retry - so the
+    instruction must name the scope values and when to use them."""
+    from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_template_harbor_task(
+        question=make_template_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(
+            max_turns=8, max_commands=10,
+            agent_timeout_sec=600.0, verifier_timeout_sec=120.0,
+        ),
+    )
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+    # scope enum values + the directed-edge cue are both present.
+    assert "piping" in instruction and "any" in instruction
+    assert "any directed edge" in instruction
+    # other enum slots surface their allowed values too (fewer wasted retries).
+    assert "attached" in instruction and "unattached" in instruction
+    assert "at_least" in instruction
+
+
+@pytest.mark.skipif(shutil.which("souffle") is None, reason="souffle engine not on PATH")
+def test_scope_any_monitoring_program_passes_the_faithfulness_gate() -> None:
+    """The frozen valve-monitoring gate (which marked both arms malformed
+    last run) passes for a guarded_reachability + scope=any program over the
+    full valve family - the tooling fix closes the failure end-to-end."""
+    from pydexpi_datalog.benchmark.rmso_faithfulness import (
+        run_preregistered_faithfulness_gate,
+    )
+
+    routing = {
+        "category": "guarded_reachability",
+        "parameters": {
+            "source_labels": ["ProcessInstrumentationFunction"],
+            "target_labels": [
+                "BallValve", "ButterflyValve", "GlobeValve",
+                "OperatedValveReference", "SwingCheckValve",
+                "SpringLoadedGlobeSafetyValve",
+            ],
+            "scope": "any",
+        },
+    }
+    program = render_program(routing)
+    for qid in (
+        "hq-valve-monitoring-reachability-small",
+        "hq-valve-monitoring-reachability-large",
+    ):
+        result = run_preregistered_faithfulness_gate(program, qid)
+        assert result is not None and result["passed"], (qid, result)
+
+
+def test_piping_scope_reachability_semantics_unchanged() -> None:
+    """The default (piping) scope must render byte-identically to the
+    pre-fix relation, so every currently-passing question is untouched."""
+    piping = render_program({
+        "category": "reachability",
+        "parameters": {"source_labels": ["Tank"], "target_labels": ["CentrifugalPump"]},
+    })
+    assert "reachable(S, N)" in piping
+    assert "reachable_any" not in piping

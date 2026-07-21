@@ -57,7 +57,13 @@ from pydexpi_datalog.benchmark.souffle_arm import (
     verify_souffle_answer_trace,
 )
 from pydexpi_datalog.benchmark import template_arm as _template_arm
-from pydexpi_datalog.benchmark.template_arm import TEMPLATE_PACK
+from pydexpi_datalog.benchmark.template_arm import (
+    ATTACHMENT_MODES,
+    ATTACHMENT_ROLES,
+    COUNT_COMPARATORS,
+    SCOPE_VALUES,
+    TEMPLATE_PACK,
+)
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     build_graph_facts_datalog,
     load_graph_topology_idb,
@@ -285,12 +291,28 @@ def _template_input_files(bundle_dir: Path) -> dict[str, str]:
     }
 
 
+def _slot_hint(name, spec) -> str:
+    kind_to_values = {
+        "mode": ATTACHMENT_MODES,
+        "comparator": tuple(COUNT_COMPARATORS),
+        "scope": SCOPE_VALUES,
+        "role_set": ATTACHMENT_ROLES,
+    }
+    hint = f"{name}: {spec.kind}"
+    values = kind_to_values.get(spec.kind)
+    if values:
+        hint += " (one of: " + ", ".join(values) + ")"
+    if not spec.required:
+        hint += " (optional)"
+    return hint
+
+
 def _render_category_lines() -> str:
     lines = []
     for template in TEMPLATE_PACK.values():
         if template.slots:
             slot_parts = ", ".join(
-                f"{name}: {spec.kind}" + ("" if spec.required else " (optional)")
+                _slot_hint(name, spec)
                 for name, spec in template.slots.items()
             )
         else:

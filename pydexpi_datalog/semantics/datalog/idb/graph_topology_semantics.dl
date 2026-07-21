@@ -10,6 +10,7 @@
 .decl downstream_reference(source:symbol, target:symbol)
 .decl direct_process_connection(source:symbol, target:symbol)
 .decl reachable(source:symbol, target:symbol)
+.decl reachable_any(source:symbol, target:symbol)
 .decl node_numeric_attribute(id:symbol, attr_name:symbol, value:number)
 
 topology_attr_name("connections").
@@ -56,3 +57,13 @@ direct_process_connection(source, target) :- reference_edge(source, target, "sou
 direct_process_connection(source, target) :- reference_edge(source, target, "targetItem").
 reachable(source, target) :- candidate_topology_edge(source, target, _).
 reachable(source, target) :- candidate_topology_edge(source, intermediate, _), reachable(intermediate, target).
+
+// Any-edge reachability: transitive closure over every directed edge,
+// regardless of attr_name. This is the connectivity notion for questions
+// phrased as "reachable by following the drawing's directed edges through
+// any intermediate objects" (e.g. instrumentation-and-control monitoring
+// paths), as opposed to `reachable`, which is restricted to the piping
+// topology allowlist. Additive: `reachable` and its inputs are unchanged.
+reachable_any(source, target) :- graph_edge(source, target, _).
+reachable_any(source, target) :-
+    graph_edge(source, intermediate, _), reachable_any(intermediate, target).
