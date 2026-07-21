@@ -712,15 +712,113 @@ def test_scope_any_monitoring_program_passes_the_faithfulness_gate() -> None:
         assert result is not None and result["passed"], (qid, result)
 
 
-def test_piping_scope_reachability_semantics_unchanged() -> None:
-    """The default (piping) scope must render byte-identically to the
-    pre-fix relation, so every currently-passing question is untouched."""
-    piping = render_program({
-        "category": "reachability",
-        "parameters": {"source_labels": ["Tank"], "target_labels": ["CentrifugalPump"]},
+def test_scope_direction_render_mapping() -> None:
+    """The 2x2 (scope, direction) grid maps to the four IDB relations;
+    piping scope uses the process-piping relations, not the topology
+    `reachable` (which stays a separate, unchanged IDB primitive)."""
+    def rel(scope=None, direction=None):
+        params = {"source_labels": ["Tank"], "target_labels": ["CentrifugalPump"]}
+        if scope is not None:
+            params["scope"] = scope
+        if direction is not None:
+            params["direction"] = direction
+        return render_program({"category": "reachability", "parameters": params})
+
+    assert "piping_reachable(S, N)" in rel()  # default piping+directed
+    assert "piping_connected(S, N)" in rel(direction="undirected")
+    assert "reachable_any(S, N)" in rel(scope="any")
+    assert "reachable_any_undirected(S, N)" in rel(scope="any", direction="undirected")
+
+
+def test_direction_validation_rejects_unknown_direction() -> None:
+    from pydexpi_datalog.benchmark.template_arm import DIRECTION_VALUES
+
+    assert set(DIRECTION_VALUES) == {"directed", "undirected"}
+    errors = validate_routing({
+        "category": "guarded_reachability",
+        "parameters": {
+            "source_labels": ["BallValve"], "target_labels": ["BallValve"],
+            "direction": "sideways",
+        },
+    }, vocabulary())
+    assert any("direction" in e and "directed" in e and "undirected" in e for e in errors)
+
+
+def test_undirected_piping_traverses_reverse_composition_edges(
+    tmp_path: Path,
+) -> None:
+    """Equipment-pump connectivity needs a piping path 'in either direction'
+    through nozzles: pump ->(nozzles) pump-nozzle ->(connections) equip-nozzle
+    <-(nozzles) equipment. The last hop reverses a composition edge, so only
+    the undirected process-piping closure connects the equipment."""
+    if shutil.which("souffle") is None:
+        pytest.skip("souffle engine not on PATH")
+    (tmp_path / "graph_facts.dl").write_text(
+        ".decl node(id:symbol)\n"
+        ".decl node_attribute(id:symbol, attr_name:symbol, attr_value:symbol)\n"
+        ".decl graph_edge(source:symbol, target:symbol, edge_key:symbol)\n"
+        ".decl graph_edge_attribute(source:symbol, target:symbol, edge_key:symbol,"
+        " attr_name:symbol, attr_value:symbol)\n"
+        'node("P").\nnode("H").\nnode("Np").\nnode("Nh").\n'
+        'node_attribute("P", "label", "CentrifugalPump").\n'
+        'node_attribute("H", "label", "PlateHeatExchanger").\n'
+        'node_attribute("Np", "label", "Nozzle").\n'
+        'node_attribute("Nh", "label", "Nozzle").\n'
+        'graph_edge("P", "Np", "e1").\n'
+        'graph_edge_attribute("P", "Np", "e1", "attr_name", "nozzles").\n'
+        'graph_edge("Np", "Nh", "e2").\n'
+        'graph_edge_attribute("Np", "Nh", "e2", "attr_name", "connections").\n'
+        'graph_edge("H", "Nh", "e3").\n'
+        'graph_edge_attribute("H", "Nh", "e3", "attr_name", "nozzles").\n',
+        encoding="utf-8",
+    )
+    shutil.copy(SEMANTICS, tmp_path / "graph_topology_semantics.dl")
+
+    def witnesses(direction):
+        program = render_program({
+            "category": "guarded_reachability",
+            "parameters": {
+                "source_labels": ["CentrifugalPump"],
+                "target_labels": ["PlateHeatExchanger"],
+                "scope": "piping", "direction": direction,
+            },
+        }, include_dir=str(tmp_path))
+        (tmp_path / "analysis.dl").write_text(program, encoding="utf-8")
+        out = tmp_path / "out"
+        out.mkdir(exist_ok=True)
+        completed = subprocess.run(
+            ["souffle", "-D", str(out), str(tmp_path / "analysis.dl")],
+            capture_output=True, text=True, check=False,
+        )
+        assert completed.returncode == 0, completed.stderr
+        return sorted((out / "result_witness.csv").read_text().split())
+
+    assert witnesses("directed") == ["H"]     # can't reverse the H->Nh nozzle edge
+    assert witnesses("undirected") == []       # either-direction path connects H
+
+
+@pytest.mark.skipif(shutil.which("souffle") is None, reason="souffle engine not on PATH")
+def test_undirected_piping_passes_equipment_connectivity_faithfulness_gate() -> None:
+    from pydexpi_datalog.benchmark.rmso_faithfulness import (
+        run_preregistered_faithfulness_gate,
+    )
+
+    program = render_program({
+        "category": "guarded_reachability",
+        "parameters": {
+            "source_labels": ["CentrifugalPump", "ReciprocatingPump"],
+            "target_labels": [
+                "PlateHeatExchanger", "TubularHeatExchanger", "Tank", "ProcessColumn",
+            ],
+            "scope": "piping", "direction": "undirected",
+        },
     })
-    assert "reachable(S, N)" in piping
-    assert "reachable_any" not in piping
+    for qid in (
+        "hq-equipment-pump-connectivity-small",
+        "hq-equipment-pump-connectivity-large",
+    ):
+        result = run_preregistered_faithfulness_gate(program, qid)
+        assert result is not None and result["passed"], (qid, result)
 
 
 def test_instruction_steers_toward_early_commitment(tmp_path: Path) -> None:

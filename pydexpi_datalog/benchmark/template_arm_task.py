@@ -61,6 +61,7 @@ from pydexpi_datalog.benchmark.template_arm import (
     ATTACHMENT_MODES,
     ATTACHMENT_ROLES,
     COUNT_COMPARATORS,
+    DIRECTION_VALUES,
     SCOPE_VALUES,
     TEMPLATE_PACK,
 )
@@ -296,6 +297,7 @@ def _slot_hint(name, spec) -> str:
         "mode": ATTACHMENT_MODES,
         "comparator": tuple(COUNT_COMPARATORS),
         "scope": SCOPE_VALUES,
+        "direction": DIRECTION_VALUES,
         "role_set": ATTACHMENT_ROLES,
     }
     hint = f"{name}: {spec.kind}"

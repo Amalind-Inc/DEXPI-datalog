@@ -28,6 +28,7 @@ ATTACHMENT_ROLES = (
 ATTACHMENT_MODES = ("attached", "unattached")
 COUNT_COMPARATORS = {"at_least": ">=", "exactly": "=", "at_most": "<="}
 SCOPE_VALUES = ("piping", "any")
+DIRECTION_VALUES = ("directed", "undirected")
 
 _MAX_VOCABULARY_IN_ERROR = 40
 
@@ -78,15 +79,19 @@ TEMPLATE_PACK: dict[str, Template] = {
             description=(
                 "Find components of the target classes that can be reached "
                 "from any component of the source classes. scope=piping "
-                "(default) follows only piping-connection edges; scope=any "
-                "follows every directed edge (use when the question says any "
-                "directed edge / through any intermediate objects, e.g. "
-                "instrumentation-and-control monitoring paths)."
+                "(default) follows only piping-connection edges (incl. "
+                "nozzles); scope=any follows every edge (use when the "
+                "question says any directed edge / through any intermediate "
+                "objects, e.g. instrumentation-and-control monitoring paths). "
+                "direction=directed (default) follows edges source-to-target; "
+                "direction=undirected follows a path in either direction (use "
+                "when the question says in either direction)."
             ),
             slots={
                 "source_labels": SlotSpec("label_set"),
                 "target_labels": SlotSpec("label_set"),
                 "scope": SlotSpec("scope", required=False),
+                "direction": SlotSpec("direction", required=False),
             },
         ),
         Template(
@@ -94,16 +99,21 @@ TEMPLATE_PACK: dict[str, Template] = {
             description=(
                 "Find components of the target classes that CANNOT be "
                 "reached from any component of the source classes - e.g. "
-                "valves not monitored by any instrumentation function. "
-                "scope=piping (default) follows only piping-connection edges; "
-                "scope=any follows every directed edge (use when the question "
-                "says any directed edge / through any intermediate objects, "
-                "e.g. instrumentation-and-control monitoring coverage)."
+                "valves not monitored by any instrumentation function, or "
+                "equipment with no piping path to any pump. scope=piping "
+                "(default) follows only piping-connection edges (incl. "
+                "nozzles); scope=any follows every edge (use for any "
+                "directed edge / through any intermediate objects, e.g. "
+                "I&C monitoring coverage). direction=directed (default) "
+                "follows edges source-to-target; direction=undirected follows "
+                "a path in either direction (use when the question says in "
+                "either direction, e.g. process piping connectivity)."
             ),
             slots={
                 "source_labels": SlotSpec("label_set"),
                 "target_labels": SlotSpec("label_set"),
                 "scope": SlotSpec("scope", required=False),
+                "direction": SlotSpec("direction", required=False),
             },
         ),
         Template(
@@ -229,6 +239,11 @@ def validate_routing(
                 errors.append(
                     f"{name} must be one of: " + ", ".join(SCOPE_VALUES)
                 )
+        elif spec.kind == "direction":
+            if value not in DIRECTION_VALUES:
+                errors.append(
+                    f"{name} must be one of: " + ", ".join(DIRECTION_VALUES)
+                )
 
     if category == "entity_lookup" and not errors:
         if not parameters.get("labels") and not parameters.get("tags"):
@@ -301,11 +316,14 @@ def render_program(
         lines.append(".decl tgt(id:symbol)")
         lines.extend(_label_rules("tgt", parameters["target_labels"]))
         lines.append(".decl hit(id:symbol)")
-        reach_rel = (
-            "reachable_any"
-            if parameters.get("scope") == "any"
-            else "reachable"
-        )
+        scope = parameters.get("scope") or "piping"
+        direction = parameters.get("direction") or "directed"
+        reach_rel = {
+            ("piping", "directed"): "piping_reachable",
+            ("piping", "undirected"): "piping_connected",
+            ("any", "directed"): "reachable_any",
+            ("any", "undirected"): "reachable_any_undirected",
+        }[(scope, direction)]
         lines.append(f"hit(N) :- tgt(N), src(S), {reach_rel}(S, N).")
         if category == "reachability":
             lines.append("result_witness(N) :- hit(N).")

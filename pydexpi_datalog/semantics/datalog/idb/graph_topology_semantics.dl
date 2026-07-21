@@ -11,6 +11,11 @@
 .decl direct_process_connection(source:symbol, target:symbol)
 .decl reachable(source:symbol, target:symbol)
 .decl reachable_any(source:symbol, target:symbol)
+.decl process_piping_attr_name(attr_name:symbol)
+.decl process_piping_edge(source:symbol, target:symbol)
+.decl piping_reachable(source:symbol, target:symbol)
+.decl piping_connected(source:symbol, target:symbol)
+.decl reachable_any_undirected(source:symbol, target:symbol)
 .decl node_numeric_attribute(id:symbol, attr_name:symbol, value:number)
 
 topology_attr_name("connections").
@@ -67,3 +72,41 @@ reachable(source, target) :- candidate_topology_edge(source, intermediate, _), r
 reachable_any(source, target) :- graph_edge(source, target, _).
 reachable_any(source, target) :-
     graph_edge(source, intermediate, _), reachable_any(intermediate, target).
+
+// Process-piping connectivity: the "piping path" edge set as defined by the
+// connectivity questions (attr_name one of the names below). This is a
+// distinct, additive notion from `topology_attr_name`/`reachable`, which are
+// left byte-unchanged; notably it includes `nozzles` and `items` (equipment
+// connects to the piping network through its nozzle sub-components).
+process_piping_attr_name("sourceItem").
+process_piping_attr_name("targetItem").
+process_piping_attr_name("sourceNode").
+process_piping_attr_name("targetNode").
+process_piping_attr_name("nodes").
+process_piping_attr_name("segments").
+process_piping_attr_name("connections").
+process_piping_attr_name("items").
+process_piping_attr_name("pipingNetworkSystems").
+process_piping_attr_name("nozzles").
+
+process_piping_edge(source, target) :-
+    graph_edge_attribute(source, target, edge_key, "attr_name", attr_name),
+    process_piping_attr_name(attr_name).
+
+// Directed piping reachability.
+piping_reachable(source, target) :- process_piping_edge(source, target).
+piping_reachable(source, target) :-
+    process_piping_edge(source, intermediate), piping_reachable(intermediate, target).
+
+// Undirected piping connectivity - a piping path "in either direction".
+piping_connected(source, target) :- process_piping_edge(source, target).
+piping_connected(source, target) :- process_piping_edge(target, source).
+piping_connected(source, target) :-
+    piping_connected(source, intermediate), piping_connected(intermediate, target).
+
+// Undirected any-edge reachability (orthogonal direction axis for scope=any).
+reachable_any_undirected(source, target) :- graph_edge(source, target, _).
+reachable_any_undirected(source, target) :- graph_edge(target, source, _).
+reachable_any_undirected(source, target) :-
+    reachable_any_undirected(source, intermediate),
+    reachable_any_undirected(intermediate, target).
