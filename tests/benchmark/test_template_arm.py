@@ -721,3 +721,31 @@ def test_piping_scope_reachability_semantics_unchanged() -> None:
     })
     assert "reachable(S, N)" in piping
     assert "reachable_any" not in piping
+
+
+def test_instruction_steers_toward_early_commitment(tmp_path: Path) -> None:
+    """The dominant remaining Arm T failure is over-exploration timing out
+    before any routing is written. The instruction must steer the model to
+    skip helper-source reading, cap inspection, and commit to a routing
+    early (refining after execution rather than exploring first)."""
+    from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets
+
+    bundle = make_bundle(tmp_path)
+    task_dir = build_rmso_template_harbor_task(
+        question=make_template_question(bundle),
+        drawing_ref=bundle,
+        output_dir=tmp_path / "tasks",
+        budgets=EpisodeBudgets(
+            max_turns=8, max_commands=10,
+            agent_timeout_sec=600.0, verifier_timeout_sec=120.0,
+        ),
+    )
+    instruction = (task_dir / "instruction.md").read_text(encoding="utf-8").lower()
+    # Don't read helper source.
+    assert "do not read" in instruction or "no need to read" in instruction
+    assert "route_query.py" in instruction
+    # Commit early / limited turns.
+    assert "commit" in instruction
+    assert "turn" in instruction  # budget awareness
+    # Cap inspection.
+    assert "one" in instruction and "grep" in instruction

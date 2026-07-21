@@ -337,18 +337,28 @@ path you author no Datalog and no answer JSON - only one routing JSON.
   containing every graph UUID, label, tag, edge label, and `attr_name`.
 - `/input/graph_facts.dl` and `/input/graph_topology_semantics.dl`: the
   frozen EDB/IDB layers the templates execute over.
-- `/input/route_query.py`: the routing helper (validate, render, execute).
-- `/input/run_query.py`: the bounded execution helper (fallback path only).
+- `/input/route_query.py`, `/input/run_query.py`, `/input/template_arm.py`:
+  internal helpers you invoke but never need to read - do not cat or open
+  their source; everything you need is in this instruction.
 
 ## Question
 
 {question.question}
 
+## Work efficiently - you have a limited turn budget
+
+You will run out of turns if you explore first and route last. The fastest
+and most reliable path is: inspect briefly, commit to a routing early, run
+it, then refine from the executed output. Do not read helper source, do not
+enumerate the whole graph, and do not hand-trace paths - the engine does
+that for you.
+
 ## Method: route, validate, execute, observe
 
-1. Read `/input/graph_inspection.json` with bounded inspection (`grep`,
-   `head`, standard-library Python) to learn the exact labels and tag names
-   present in this drawing.
+1. Learn the drawing's vocabulary with one or two bounded commands only -
+   e.g. `grep -o '"label": "[^"]*"' /input/graph_inspection.json | sort -u`
+   and the same for `"tag_name"`. Do not read the file in full or inspect
+   node-by-node.
 2. Edit the preloaded `/workspace/{ROUTING_FILENAME}` to exactly one routing
    object: `{{"category": "<template id>", "parameters": {{...}}}}`.
 
