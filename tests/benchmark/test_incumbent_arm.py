@@ -70,9 +70,9 @@ class ImmediateFinalAnswerProvider:
 
 
 class ProposeDatalogProvider:
-    """Proposes a temporary Datalog query once, then must never be consulted
-    again: after a confirmation_required result the harness ends the turn and
-    the adapter auto-confirms without re-authoring through the model."""
+    """Reports template no-fit, then proposes temporary Datalog once. After the
+    confirmation-required result the harness ends the turn and the adapter
+    auto-confirms without re-authoring through the model."""
 
     def __init__(
         self, *, generated_datalog: str, formal_restatement: str, request: str
@@ -84,11 +84,22 @@ class ProposeDatalogProvider:
 
     def complete_with_tools(self, *, messages, tools):
         self.calls += 1
-        assert self.calls == 1, "model consulted after the confirmation gate"
+        if self.calls == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={"reason": "No bundled template covers this rule."},
+                tool_call_id="scripted-no-fit",
+            )
+        assert self.calls == 2, "model consulted after the confirmation gate"
+        active_question = next(
+            str(message["content"])
+            for message in reversed(messages)
+            if message.get("role") == "user" and "content" in message
+        )
         return ToolCall(
             tool_name="propose_temporary_datalog",
             tool_input={
-                "request": self._request,
+                "request": active_question,
                 "generated_datalog": self._generated_datalog,
                 "formal_restatement": self._formal_restatement,
             },
@@ -144,6 +155,11 @@ def _anchor_with_reachables() -> tuple[str, list[str]]:
     tools, view = _tools_and_view()
     graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
     raw_ids = [str(node["node_id"]) for node in graph_facts["facts"]["nodes"]]
+    tools.begin_request("reachability probe")
+    tools.execute(
+        "report_template_no_fit",
+        {"reason": "No bundled template covers this reachability probe."},
+    )
     for raw_id in raw_ids:
         datalog = (
             ".decl answer(x:symbol)\n.output answer\n"
@@ -274,7 +290,7 @@ def test_confirmed_datalog_with_matches_maps_to_violation_found() -> None:
     known_raw = {str(node["node_id"]) for node in graph_facts["facts"]["nodes"]}
     assert set(answer.witness_ids) <= known_raw
     # The model proposed once and was never consulted again after the gate.
-    assert provider.calls == 1
+    assert provider.calls == 2
     # The confirmation gate's cost is on the transcript: the proposal and its
     # executed result both appear.
     tool_names = [
@@ -387,6 +403,7 @@ class TrapOrRuleProvider:
 
     def __init__(self, *, anchor: str) -> None:
         self._anchor = anchor
+        self._routed = False
         self._proposed = False
 
     def complete_with_tools(self, *, messages, tools):
@@ -399,6 +416,15 @@ class TrapOrRuleProvider:
             return FinalAnswer(
                 answer_text="No approval metadata is recorded.",
                 grounding_posture=HARNESS_SOURCE_DATA_UNAVAILABLE,
+            )
+        if not self._routed:
+            self._routed = True
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this benchmark rule."
+                },
+                tool_call_id="scripted-no-fit",
             )
         self._proposed = True
         return ToolCall(

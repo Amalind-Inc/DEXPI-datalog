@@ -77,11 +77,20 @@ def test_provider_tool_definitions_are_projected_from_manifest() -> None:
 def test_topology_tools_expose_manifest_projected_tools() -> None:
     tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
 
-    tool_names = {tool["function"]["name"] for tool in tools.tool_definitions()}
+    initial_tool_names = {tool["function"]["name"] for tool in tools.tool_definitions()}
 
-    assert "find_equipment" in tool_names
-    assert "get_reachable_equipment" in tool_names
-    assert "propose_temporary_datalog" in tool_names
+    assert "find_equipment" in initial_tool_names
+    assert "get_reachable_equipment" in initial_tool_names
+    assert "report_template_no_fit" in initial_tool_names
+    assert "propose_temporary_datalog" not in initial_tool_names
+
+    tools.begin_request("find pumps")
+    tools.execute(
+        "report_template_no_fit",
+        {"reason": "No bundled template covers this request."},
+    )
+    routed_tool_names = {tool["function"]["name"] for tool in tools.tool_definitions()}
+    assert "propose_temporary_datalog" in routed_tool_names
 
 
 def test_topology_tools_reject_unknown_tools_before_execution() -> None:
@@ -96,6 +105,11 @@ def test_topology_tools_reject_unknown_tools_before_execution() -> None:
 
 def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> None:
     tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
+    tools.begin_request("find pumps")
+    tools.execute(
+        "report_template_no_fit",
+        {"reason": "No bundled template covers this request."},
+    )
 
     # A valid proposal pauses for user confirmation without executing; an
     # invalid one is rejected back to the model (bead 3cq follow-up), so the

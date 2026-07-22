@@ -12,7 +12,17 @@ from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_DENIED,
     default_grounded_qa_manifest,
 )
-from pydexpi_datalog.qa.trusted_templates import execute_bundled_query_template
+from pydexpi_datalog.qa.route_receipts import (
+    ROUTE_DEONTIC_ABSTENTION,
+    ROUTE_TEMPLATE_NO_FIT,
+    RouteReceiptAuthority,
+    is_deontic_or_defeasible_request,
+    source_snapshot_identity,
+)
+from pydexpi_datalog.qa.trusted_templates import (
+    TRUSTED_TEMPLATE_CATALOG_VERSION,
+    execute_bundled_query_template,
+)
 
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
@@ -99,6 +109,8 @@ class TopologyTools:
         )  # type: ignore[arg-type]
         self._uses_topology_adapter = graph_facts is None
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
+        self._route_receipts = RouteReceiptAuthority()
+        self._active_question = ""
         self._loaded_rule_pack_ids = tuple(
             sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
         )
@@ -112,8 +124,26 @@ class TopologyTools:
             source_id=str(topology_view.get("source_id") or session_id),
         )
 
+    def begin_request(self, question: str) -> None:
+        self._active_question = question
+        self._route_receipts.begin_request(
+            intent=question,
+            source_snapshot_id=source_snapshot_identity(self._graph_facts),
+            template_catalog_version=TRUSTED_TEMPLATE_CATALOG_VERSION,
+        )
+
+    def record_backend_route_outcome(self, outcome: str) -> dict[str, object]:
+        return self._route_receipts.record_backend_outcome(outcome)
+
     def tool_definitions(self) -> list[dict[str, object]]:
-        return self._capability_manifest.provider_tool_definitions()
+        definitions = self._capability_manifest.provider_tool_definitions()
+        if self._route_receipts.active_receipt() is not None:
+            return definitions
+        return [
+            definition
+            for definition in definitions
+            if definition["function"]["name"] != "propose_temporary_datalog"
+        ]
 
     def system_prompt(self) -> str:
         """Model-facing system prompt derived from the capability manifest."""
@@ -137,7 +167,7 @@ class TopologyTools:
             )
         if capability.permission_class == PERMISSION_CONFIRMATION_REQUIRED:
             if tool_name == "propose_temporary_datalog":
-                return self._propose_temporary_datalog(tool_input)
+                return self._propose_temporary_datalog_with_route_receipt(tool_input)
             return {
                 "status": "confirmation_required",
                 "code": "tool.confirmation_required",
@@ -155,6 +185,8 @@ class TopologyTools:
                 code="tool.unsupported_permission",
                 message=f"unsupported permission class: {capability.permission_class}",
             )
+        if tool_name == "report_template_no_fit":
+            return self._report_template_no_fit(tool_input)
         budget_rejection = self._operation_budget_rejection()
         if budget_rejection is not None:
             return budget_rejection
@@ -184,6 +216,57 @@ class TopologyTools:
             code="tool.unimplemented",
             message=f"no adapter registered for tool: {tool_name}",
         )
+
+    def _report_template_no_fit(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        reason = str(tool_input.get("reason", "")).strip()
+        if not reason:
+            return self._tool_rejection(
+                tool_name="report_template_no_fit",
+                code="route.no_fit_reason_required",
+                message="Template no-fit reporting requires a reason.",
+            )
+        if is_deontic_or_defeasible_request(self._active_question):
+            result = self._route_receipts.record_backend_outcome(
+                ROUTE_DEONTIC_ABSTENTION
+            )
+            return {
+                **result,
+                "status": "policy_abstention",
+                "message": (
+                    "Permission and defeasible-exception questions require "
+                    "abstention or human review."
+                ),
+            }
+        return {
+            **self._route_receipts.record_backend_outcome(ROUTE_TEMPLATE_NO_FIT),
+            "reason": reason,
+        }
+
+    def _propose_temporary_datalog_with_route_receipt(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        route_receipt = self._route_receipts.active_receipt()
+        request = str(tool_input.get("request", ""))
+        if route_receipt is None or not self._route_receipts.matches_active_intent(
+            request
+        ):
+            return {
+                "status": "rejected",
+                "code": "route.valid_receipt_required",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "message": (
+                    "Generated Datalog requires a backend-issued route receipt "
+                    "for this exact request and environment."
+                ),
+                "matches": [],
+                "reachable": [],
+            }
+        result = self._propose_temporary_datalog(tool_input)
+        result["route_receipt"] = route_receipt
+        return result
 
     def _execute_bundled_query_template(
         self, tool_input: dict[str, object]

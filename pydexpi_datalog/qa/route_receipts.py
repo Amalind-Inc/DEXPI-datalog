@@ -1,0 +1,163 @@
+"""Backend-owned route outcomes and scoped receipts for grounded QA."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+import secrets
+import unicodedata
+from dataclasses import asdict, dataclass
+
+
+ROUTE_POLICY_VERSION = "grounded-qa-route-policy/1"
+
+ROUTE_TEMPLATE_SUCCESS = "template_success"
+ROUTE_TEMPLATE_NO_FIT = "template_no_fit"
+ROUTE_TEMPLATE_BINDING_REJECTED = "template_binding_rejected"
+ROUTE_TEMPLATE_FAITHFULNESS_FAILURE = "template_faithfulness_failure"
+ROUTE_TEMPLATE_EXECUTION_FAILURE = "template_execution_failure"
+ROUTE_DEONTIC_ABSTENTION = "deontic_abstention"
+ROUTE_CLARIFICATION = "clarification"
+ROUTE_REASONING_ENGINE_UNAVAILABLE = "reasoning_engine_unavailable"
+
+_RECEIPT_ELIGIBLE_OUTCOMES = frozenset(
+    {ROUTE_TEMPLATE_NO_FIT, ROUTE_TEMPLATE_FAITHFULNESS_FAILURE}
+)
+_DEONTIC_CUES = (
+    " allowed ",
+    " allowable ",
+    " permitted ",
+    " permission ",
+    " exemption ",
+    " exception applies ",
+    " waiver ",
+    " unless an exception ",
+    " unless exempted ",
+)
+
+
+@dataclass(frozen=True)
+class RouteContext:
+    normalized_intent: str
+    source_snapshot_id: str
+    template_catalog_version: str
+    policy_version: str
+
+
+@dataclass(frozen=True)
+class RouteReceipt:
+    receipt_id: str
+    route_outcome: str
+    intent_digest: str
+    source_snapshot_id: str
+    template_catalog_version: str
+    policy_version: str
+
+    def artifact(self) -> dict[str, str]:
+        return asdict(self)
+
+
+class RouteReceiptAuthority:
+    """Issue opaque receipts and validate them against the active request context."""
+
+    def __init__(self) -> None:
+        self._context: RouteContext | None = None
+        self._receipts: dict[str, tuple[RouteReceipt, RouteContext]] = {}
+        self._active_receipt_id: str | None = None
+
+    def begin_request(
+        self,
+        *,
+        intent: str,
+        source_snapshot_id: str,
+        template_catalog_version: str,
+        policy_version: str = ROUTE_POLICY_VERSION,
+    ) -> None:
+        context = RouteContext(
+            normalized_intent=normalize_semantic_intent(intent),
+            source_snapshot_id=source_snapshot_id,
+            template_catalog_version=template_catalog_version,
+            policy_version=policy_version,
+        )
+        if context != self._context:
+            self._active_receipt_id = None
+        self._context = context
+
+    def record_backend_outcome(self, outcome: str) -> dict[str, object]:
+        if self._context is None:
+            return {
+                "status": "route_context_missing",
+                "route_outcome": outcome,
+                "route_receipt": None,
+            }
+        if outcome not in _RECEIPT_ELIGIBLE_OUTCOMES:
+            self._active_receipt_id = None
+            return {
+                "status": "route_outcome_recorded",
+                "route_outcome": outcome,
+                "route_receipt": None,
+            }
+        receipt = RouteReceipt(
+            receipt_id=secrets.token_hex(16),
+            route_outcome=outcome,
+            intent_digest=_digest(self._context.normalized_intent),
+            source_snapshot_id=self._context.source_snapshot_id,
+            template_catalog_version=self._context.template_catalog_version,
+            policy_version=self._context.policy_version,
+        )
+        self._receipts[receipt.receipt_id] = (receipt, self._context)
+        self._active_receipt_id = receipt.receipt_id
+        return {
+            "status": "route_receipt_issued",
+            "route_outcome": outcome,
+            "route_receipt": receipt.artifact(),
+        }
+
+    def active_receipt(self) -> dict[str, str] | None:
+        if self._active_receipt_id is None or self._context is None:
+            return None
+        stored = self._receipts.get(self._active_receipt_id)
+        if stored is None:
+            return None
+        receipt, issued_context = stored
+        if issued_context != self._context:
+            self._active_receipt_id = None
+            return None
+        return receipt.artifact()
+
+    def validates(self, receipt_id: str) -> bool:
+        active = self.active_receipt()
+        return active is not None and active["receipt_id"] == receipt_id
+
+    def matches_active_intent(self, intent: str) -> bool:
+        return (
+            self._context is not None
+            and self._context.normalized_intent == normalize_semantic_intent(intent)
+        )
+
+
+def normalize_semantic_intent(intent: str) -> str:
+    normalized = unicodedata.normalize("NFKC", intent).casefold()
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized.rstrip(".?!")
+
+
+def is_deontic_or_defeasible_request(intent: str) -> bool:
+    padded = f" {normalize_semantic_intent(intent)} "
+    return any(cue in padded for cue in _DEONTIC_CUES)
+
+
+def source_snapshot_identity(graph_facts: object) -> str:
+    import json
+
+    canonical = json.dumps(
+        graph_facts,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _digest(canonical)
+
+
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

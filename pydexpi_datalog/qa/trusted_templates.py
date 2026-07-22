@@ -20,6 +20,7 @@ from pydexpi_datalog.semantics.souffle_runner import (
 )
 
 
+TRUSTED_TEMPLATE_CATALOG_VERSION = "1.0.0"
 EQUIPMENT_WITHOUT_PUMP_PATH_TEMPLATE_ID = "equipment_without_pump_path"
 EQUIPMENT_WITHOUT_PUMP_PATH_TEMPLATE_VERSION = "1.0.0"
 

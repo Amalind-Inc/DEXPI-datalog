@@ -192,9 +192,15 @@ class SampledPathThenDatalogProvider:
             )
         if step == 2:
             return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={"reason": "No template covers this universal rule."},
+                tool_call_id="sample-no-fit",
+            )
+        if step == 3:
+            return ToolCall(
                 tool_name="propose_temporary_datalog",
                 tool_input={
-                    "request": "Check whether every pump has a reachable valve.",
+                    "request": "Do all pumps have a reachable valve?",
                     "generated_datalog": (
                         ".decl answer(x:symbol)\n.output answer\n"
                         f'answer(x) :- reachable("{PUMP_ID}", x).'
@@ -259,9 +265,17 @@ class AnswerAfterProposalProvider:
 
     def __init__(self) -> None:
         self.calls_after_proposal = 0
+        self._routed = False
         self._proposed = False
 
     def complete_with_tools(self, *, messages, tools):
+        if not self._routed:
+            self._routed = True
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={"reason": "No template covers this segment rule."},
+                tool_call_id="proposal-no-fit",
+            )
         if not self._proposed:
             self._proposed = True
             return ToolCall(
@@ -316,6 +330,13 @@ class RetryAfterRejectionProvider:
         if self._step == 0:
             self._step += 1
             return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={"reason": "No template covers this segment rule."},
+                tool_call_id="retry-no-fit",
+            )
+        if self._step == 1:
+            self._step += 1
+            return ToolCall(
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Must every segment reach a valve?",
@@ -328,7 +349,7 @@ class RetryAfterRejectionProvider:
                 },
                 tool_call_id="proposal-invalid",
             )
-        if self._step == 1:
+        if self._step == 2:
             self._step += 1
             last = messages[-1]
             if last.get("role") == "tool":

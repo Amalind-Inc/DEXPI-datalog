@@ -5,6 +5,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Protocol, runtime_checkable
 
+from pydexpi_datalog.qa.route_receipts import (
+    ROUTE_DEONTIC_ABSTENTION,
+    is_deontic_or_defeasible_request,
+)
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
 
@@ -439,9 +443,22 @@ class ScriptedQATurnProvider:
                 tool_call_id="scripted-reachable",
             )
 
-        self._reachable_ids = self._read_reachable(messages)
         if self._mode == "rule_evaluation":
+            offered = {tool["function"]["name"] for tool in tools}
+            if "propose_temporary_datalog" not in offered:
+                self._reachable_ids = self._read_reachable(messages)
+                return ToolCall(
+                    tool_name="report_template_no_fit",
+                    tool_input={
+                        "reason": (
+                            "No bundled template represents this sampled universal "
+                            "rule condition."
+                        )
+                    },
+                    tool_call_id="scripted-template-no-fit",
+                )
             return self._propose_temporary_datalog()
+        self._reachable_ids = self._read_reachable(messages)
         references = self._candidates + self._reachable_ids[:2]
         if len(self._candidates) > 1:
             answer_text = (
@@ -666,6 +683,26 @@ def run_grounded_qa_turn(
             source_grounded=False,
             disclosure=None,
         )
+    if is_deontic_or_defeasible_request(question):
+        return QATurnResult(
+            answer_text=(
+                "Permission or defeasible exceptions cannot be decided from "
+                "monotone drawing facts; human review is required."
+            ),
+            evidence_references=[],
+            rejected_references=[],
+            interpreted_object_ids=[],
+            tool_call_trace=[],
+            grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+            source_grounded=False,
+            trace_events=[
+                {
+                    "event": "route_outcome",
+                    "outcome": ROUTE_DEONTIC_ABSTENTION,
+                }
+            ],
+        )
+    topology_tools.begin_request(question)
     known_ids = topology_tools.known_evidence_ids()
     messages: list[dict[str, object]] = [
         {"role": "system", "content": topology_tools.system_prompt()}
@@ -686,10 +723,11 @@ def run_grounded_qa_turn(
     messages.append({"role": "user", "content": question})
     last_insufficient_answer: FinalAnswer | None = None
     tool_call_trace: list[dict[str, object]] = []
-    tools = topology_tools.tool_definitions()
 
     for round_index in range(max_rounds):
-        response = provider.complete_with_tools(messages=messages, tools=tools)
+        response = provider.complete_with_tools(
+            messages=messages, tools=topology_tools.tool_definitions()
+        )
         if on_round is not None and isinstance(response, ToolCall):
             on_round(round_index + 1, max_rounds, response.tool_name)
 

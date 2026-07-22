@@ -201,6 +201,36 @@ def default_grounded_qa_manifest(
                 },
             ),
             GroundedQACapability(
+                tool_name="report_template_no_fit",
+                description=(
+                    "Report that no bundled query template faithfully represents the "
+                    "active request. The backend may issue a scoped route receipt."
+                ),
+                permission_class=PERMISSION_ALLOWED_READ_ONLY,
+                when_to_use=(
+                    "Use only after considering bundled templates and finding no exact "
+                    "semantic fit. Do not use for engine outages or policy questions."
+                ),
+                evidence_kind="backend_route_outcome",
+                source_grounding_posture="routing_only",
+                limitations=(
+                    "The model reports no-fit but cannot author receipt scope or fields.",
+                    "Permission and defeasible-exception requests do not unlock generated logic.",
+                ),
+                citation_metadata={"citation_role": "none"},
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": "Brief explanation of the unsupported query shape.",
+                        }
+                    },
+                    "required": ["reason"],
+                    "additionalProperties": False,
+                },
+            ),
+            GroundedQACapability(
                 tool_name="execute_bundled_query_template",
                 description=(
                     "Propose validated bindings for a versioned bundled query template. "
