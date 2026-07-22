@@ -124,16 +124,28 @@ class TopologyTools:
             source_id=str(topology_view.get("source_id") or session_id),
         )
 
-    def begin_request(self, question: str) -> None:
+    def begin_request(
+        self,
+        question: str,
+        *,
+        resume_route_receipt: dict[str, object] | None = None,
+    ) -> None:
         self._active_question = question
         self._route_receipts.begin_request(
             intent=question,
             source_snapshot_id=source_snapshot_identity(self._graph_facts),
             template_catalog_version=TRUSTED_TEMPLATE_CATALOG_VERSION,
+            resume_receipt=resume_route_receipt,
         )
 
     def record_backend_route_outcome(self, outcome: str) -> dict[str, object]:
         return self._route_receipts.record_backend_outcome(outcome)
+
+    @staticmethod
+    def policy_route_outcome(question: str) -> str | None:
+        if is_deontic_or_defeasible_request(question):
+            return ROUTE_DEONTIC_ABSTENTION
+        return None
 
     def tool_definitions(self) -> list[dict[str, object]]:
         definitions = self._capability_manifest.provider_tool_definitions()
@@ -227,10 +239,9 @@ class TopologyTools:
                 code="route.no_fit_reason_required",
                 message="Template no-fit reporting requires a reason.",
             )
-        if is_deontic_or_defeasible_request(self._active_question):
-            result = self._route_receipts.record_backend_outcome(
-                ROUTE_DEONTIC_ABSTENTION
-            )
+        policy_outcome = self.policy_route_outcome(self._active_question)
+        if policy_outcome is not None:
+            result = self.record_backend_route_outcome(policy_outcome)
             return {
                 **result,
                 "status": "policy_abstention",
@@ -240,7 +251,7 @@ class TopologyTools:
                 ),
             }
         return {
-            **self._route_receipts.record_backend_outcome(ROUTE_TEMPLATE_NO_FIT),
+            **self.record_backend_route_outcome(ROUTE_TEMPLATE_NO_FIT),
             "reason": reason,
         }
 

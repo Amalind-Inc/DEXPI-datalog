@@ -5,10 +5,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Protocol, runtime_checkable
 
-from pydexpi_datalog.qa.route_receipts import (
-    ROUTE_DEONTIC_ABSTENTION,
-    is_deontic_or_defeasible_request,
-)
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
 
@@ -652,6 +648,7 @@ def run_grounded_qa_turn(
     max_rounds: int = DEFAULT_MAX_ROUNDS,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     on_round: RoundProgress | None = None,
+    resume_route_receipt: dict[str, object] | None = None,
 ) -> QATurnResult:
     """Execute a grounded QA turn: model calls tools, backend executes them, model answers.
 
@@ -683,7 +680,8 @@ def run_grounded_qa_turn(
             source_grounded=False,
             disclosure=None,
         )
-    if is_deontic_or_defeasible_request(question):
+    policy_outcome = topology_tools.policy_route_outcome(question)
+    if policy_outcome is not None:
         return QATurnResult(
             answer_text=(
                 "Permission or defeasible exceptions cannot be decided from "
@@ -698,11 +696,11 @@ def run_grounded_qa_turn(
             trace_events=[
                 {
                     "event": "route_outcome",
-                    "outcome": ROUTE_DEONTIC_ABSTENTION,
+                    "outcome": policy_outcome,
                 }
             ],
         )
-    topology_tools.begin_request(question)
+    topology_tools.begin_request(question, resume_route_receipt=resume_route_receipt)
     known_ids = topology_tools.known_evidence_ids()
     messages: list[dict[str, object]] = [
         {"role": "system", "content": topology_tools.system_prompt()}

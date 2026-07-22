@@ -108,7 +108,8 @@ def test_duplicate_turn_request_executes_once_and_reconnect_replays_events() -> 
         )
         assert stream.headers["content-type"].startswith("application/x-ndjson")
         assert [
-            __import__("json").loads(line)["type"] for line in stream.text.splitlines()
+            __import__("json").loads(line)["type"]
+            for line in stream.text.splitlines()
         ] == ["evidence", "completion"]
 
 
@@ -201,16 +202,13 @@ def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
         root = Path(tmp_dir) / "sessions"
         client = TestClient(create_review_api_app(artifact_root=root))
         session_id = "paused-session"
-        assert (
-            client.post(
-                f"/api/review/sessions/{session_id}/prepare",
-                json={
-                    "filename": E06_FIXTURE.name,
-                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
-                },
-            ).status_code
-            == 200
-        )
+        assert client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": E06_FIXTURE.name,
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        ).status_code == 200
 
         turns_path = f"/api/review/sessions/{session_id}/turns"
         paused = client.post(
@@ -244,7 +242,9 @@ def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
                 "question": "What is upstream of the segment?",
             },
         ).json()
-        canceled = client.post(f"{turns_path}/{cancelable['turn_id']}/cancel").json()
+        canceled = client.post(
+            f"{turns_path}/{cancelable['turn_id']}/cancel"
+        ).json()
         assert canceled["status"] == "canceled"
         assert canceled["events"][-1]["type"] == "cancellation"
 
@@ -286,9 +286,7 @@ def test_paused_datalog_confirmation_turn_resumes_and_executes_once() -> None:
         client = TestClient(
             create_review_api_app(
                 artifact_root=root,
-                qa_provider_factory=lambda: _DatalogProposalProvider(
-                    holder["answer_id"]
-                ),
+                qa_provider_factory=lambda: _DatalogProposalProvider(holder["answer_id"]),
             )
         )
         session_id = "datalog-turn-session"
@@ -317,17 +315,11 @@ def test_paused_datalog_confirmation_turn_resumes_and_executes_once() -> None:
         resume_path = f"{turns_path}/{paused['turn_id']}/datalog-review"
         resumed = client.post(
             resume_path,
-            json={
-                "decision": "confirm",
-                "proposal_result": confirmation["proposal_result"],
-            },
+            json={"decision": "confirm", "proposal_result": confirmation["proposal_result"]},
         ).json()
         duplicate = client.post(
             resume_path,
-            json={
-                "decision": "confirm",
-                "proposal_result": confirmation["proposal_result"],
-            },
+            json={"decision": "confirm", "proposal_result": confirmation["proposal_result"]},
         ).json()
 
         assert duplicate == resumed
@@ -343,9 +335,7 @@ def test_paused_datalog_confirmation_turn_can_be_canceled() -> None:
         client = TestClient(
             create_review_api_app(
                 artifact_root=root,
-                qa_provider_factory=lambda: _DatalogProposalProvider(
-                    holder["answer_id"]
-                ),
+                qa_provider_factory=lambda: _DatalogProposalProvider(holder["answer_id"]),
             )
         )
         session_id = "datalog-cancel-session"
@@ -369,14 +359,14 @@ def test_paused_datalog_confirmation_turn_can_be_canceled() -> None:
         ).json()
         assert paused["status"] == "paused"
 
-        canceled = client.post(f"{turns_path}/{paused['turn_id']}/cancel").json()
+        canceled = client.post(
+            f"{turns_path}/{paused['turn_id']}/cancel"
+        ).json()
         assert canceled["status"] == "canceled"
         assert canceled["events"][-1]["type"] == "cancellation"
 
 
-def test_default_provider_rule_question_pauses_and_confirms_without_trust_escalation() -> (
-    None
-):
+def test_default_provider_rule_question_pauses_and_confirms_without_trust_escalation() -> None:
     """The OSS default (scripted) provider reaches the confirmation gate live:
     a rule-like chat question pauses with needs_datalog_confirmation, Run
     resumes to a real executed answer, and a later proposal in the same
@@ -385,16 +375,13 @@ def test_default_provider_rule_question_pauses_and_confirms_without_trust_escala
         root = Path(tmp_dir) / "sessions"
         client = TestClient(create_review_api_app(artifact_root=root))
         session_id = "default-gate-session"
-        assert (
-            client.post(
-                f"/api/review/sessions/{session_id}/prepare",
-                json={
-                    "filename": E06_FIXTURE.name,
-                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
-                },
-            ).status_code
-            == 200
-        )
+        assert client.post(
+            f"/api/review/sessions/{session_id}/prepare",
+            json={
+                "filename": E06_FIXTURE.name,
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        ).status_code == 200
 
         turns_path = f"/api/review/sessions/{session_id}/turns"
         question = "Must every connected object satisfy the temporary topology rule?"
@@ -447,9 +434,9 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
     session_id = "race-session"
     request_id = "race-request"
     # Pre-compute the turn_id using the same formula as TurnLifecycleStore.start()
-    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
-        :20
-    ]
+    turn_id = hashlib.sha256(
+        f"{session_id}\n{request_id}".encode("utf-8")
+    ).hexdigest()[:20]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
@@ -493,9 +480,7 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
 
         assert not errors, errors
         # start() must return the canceled state, not the result
-        assert final["status"] == "canceled", (
-            f"expected canceled, got {final['status']}"
-        )
+        assert final["status"] == "canceled", f"expected canceled, got {final['status']}"
         # Disk state must also be canceled — not overwritten
         reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
         assert reloaded is not None
@@ -518,9 +503,9 @@ def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
 
     session_id = "resume-race-session"
     request_id = "resume-race-request"
-    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
-        :20
-    ]
+    turn_id = hashlib.sha256(
+        f"{session_id}\n{request_id}".encode("utf-8")
+    ).hexdigest()[:20]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
@@ -575,9 +560,7 @@ def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
 
         assert not errors, errors
         assert final is not None
-        assert final["status"] == "canceled", (
-            f"expected canceled, got {final['status']}"
-        )
+        assert final["status"] == "canceled", f"expected canceled, got {final['status']}"
         reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
         assert reloaded is not None
         assert reloaded["status"] == "canceled"
@@ -671,8 +654,7 @@ def test_multi_round_turn_persists_live_round_progress_events() -> None:
         round_events = [
             event
             for event in first["events"]
-            if event["type"] == "tool-progress"
-            and event["data"].get("status") == "round"
+            if event["type"] == "tool-progress" and event["data"].get("status") == "round"
         ]
         assert [event["data"]["round"] for event in round_events] == [1, 2]
         assert [event["data"]["tool_name"] for event in round_events] == [

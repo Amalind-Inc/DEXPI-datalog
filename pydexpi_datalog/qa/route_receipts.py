@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hmac
+import json
 import hashlib
 import re
 import secrets
@@ -23,16 +25,11 @@ ROUTE_REASONING_ENGINE_UNAVAILABLE = "reasoning_engine_unavailable"
 _RECEIPT_ELIGIBLE_OUTCOMES = frozenset(
     {ROUTE_TEMPLATE_NO_FIT, ROUTE_TEMPLATE_FAITHFULNESS_FAILURE}
 )
-_DEONTIC_CUES = (
-    " allowed ",
-    " allowable ",
-    " permitted ",
-    " permission ",
-    " exemption ",
-    " exception applies ",
-    " waiver ",
-    " unless an exception ",
-    " unless exempted ",
+_RECEIPT_SIGNING_KEY = secrets.token_bytes(32)
+_DEONTIC_PATTERN = re.compile(
+    r"\b(?:allow(?:ed|able)?|authori[sz](?:e|ed|ation)|permit(?:ted|s|ting)?|"
+    r"permission|exempt(?:ion|ed|ions)?|exception(?:s)?|waiver(?:s)?|"
+    r"notwithstanding|override(?:s|d)?)\b"
 )
 
 
@@ -52,6 +49,7 @@ class RouteReceipt:
     source_snapshot_id: str
     template_catalog_version: str
     policy_version: str
+    signature: str
 
     def artifact(self) -> dict[str, str]:
         return asdict(self)
@@ -72,6 +70,7 @@ class RouteReceiptAuthority:
         source_snapshot_id: str,
         template_catalog_version: str,
         policy_version: str = ROUTE_POLICY_VERSION,
+        resume_receipt: dict[str, object] | None = None,
     ) -> None:
         context = RouteContext(
             normalized_intent=normalize_semantic_intent(intent),
@@ -82,6 +81,8 @@ class RouteReceiptAuthority:
         if context != self._context:
             self._active_receipt_id = None
         self._context = context
+        if resume_receipt is not None:
+            self._restore_receipt(resume_receipt)
 
     def record_backend_outcome(self, outcome: str) -> dict[str, object]:
         if self._context is None:
@@ -97,13 +98,17 @@ class RouteReceiptAuthority:
                 "route_outcome": outcome,
                 "route_receipt": None,
             }
+        receipt_fields = {
+            "receipt_id": secrets.token_hex(16),
+            "route_outcome": outcome,
+            "intent_digest": _digest(self._context.normalized_intent),
+            "source_snapshot_id": self._context.source_snapshot_id,
+            "template_catalog_version": self._context.template_catalog_version,
+            "policy_version": self._context.policy_version,
+        }
         receipt = RouteReceipt(
-            receipt_id=secrets.token_hex(16),
-            route_outcome=outcome,
-            intent_digest=_digest(self._context.normalized_intent),
-            source_snapshot_id=self._context.source_snapshot_id,
-            template_catalog_version=self._context.template_catalog_version,
-            policy_version=self._context.policy_version,
+            **receipt_fields,
+            signature=_sign_receipt_fields(receipt_fields),
         )
         self._receipts[receipt.receipt_id] = (receipt, self._context)
         self._active_receipt_id = receipt.receipt_id
@@ -112,6 +117,37 @@ class RouteReceiptAuthority:
             "route_outcome": outcome,
             "route_receipt": receipt.artifact(),
         }
+
+    def _restore_receipt(self, artifact: dict[str, object]) -> None:
+        if self._context is None:
+            return
+        fields = {
+            name: str(artifact.get(name, ""))
+            for name in (
+                "receipt_id",
+                "route_outcome",
+                "intent_digest",
+                "source_snapshot_id",
+                "template_catalog_version",
+                "policy_version",
+            )
+        }
+        signature = str(artifact.get("signature", ""))
+        expected_context = {
+            "intent_digest": _digest(self._context.normalized_intent),
+            "source_snapshot_id": self._context.source_snapshot_id,
+            "template_catalog_version": self._context.template_catalog_version,
+            "policy_version": self._context.policy_version,
+        }
+        if (
+            fields["route_outcome"] not in _RECEIPT_ELIGIBLE_OUTCOMES
+            or any(fields[name] != value for name, value in expected_context.items())
+            or not hmac.compare_digest(signature, _sign_receipt_fields(fields))
+        ):
+            return
+        receipt = RouteReceipt(**fields, signature=signature)
+        self._receipts[receipt.receipt_id] = (receipt, self._context)
+        self._active_receipt_id = receipt.receipt_id
 
     def active_receipt(self) -> dict[str, str] | None:
         if self._active_receipt_id is None or self._context is None:
@@ -143,12 +179,10 @@ def normalize_semantic_intent(intent: str) -> str:
 
 
 def is_deontic_or_defeasible_request(intent: str) -> bool:
-    padded = f" {normalize_semantic_intent(intent)} "
-    return any(cue in padded for cue in _DEONTIC_CUES)
+    return _DEONTIC_PATTERN.search(normalize_semantic_intent(intent)) is not None
 
 
 def source_snapshot_identity(graph_facts: object) -> str:
-    import json
 
     canonical = json.dumps(
         graph_facts,
@@ -157,6 +191,15 @@ def source_snapshot_identity(graph_facts: object) -> str:
         ensure_ascii=True,
     )
     return _digest(canonical)
+
+
+def _sign_receipt_fields(fields: dict[str, str]) -> str:
+    payload = json.dumps(fields, sort_keys=True, separators=(",", ":"))
+    return hmac.new(
+        _RECEIPT_SIGNING_KEY,
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _digest(value: str) -> str:

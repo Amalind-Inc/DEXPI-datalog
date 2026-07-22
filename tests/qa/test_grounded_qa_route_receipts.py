@@ -119,6 +119,7 @@ def test_template_no_fit_receipt_unlocks_existing_generated_query_path() -> None
         "source_snapshot_id": receipt_result["route_receipt"]["source_snapshot_id"],
         "template_catalog_version": "1.0.0",
         "policy_version": "grounded-qa-route-policy/1",
+        "signature": receipt_result["route_receipt"]["signature"],
     }
     proposal_result = result.tool_call_trace[1]["tool_result"]
     assert proposal_result["status"] == "confirmation_required"
@@ -207,6 +208,69 @@ def test_exact_normalized_retry_reuses_backend_receipt() -> None:
     assert result["route_receipt"] == issued["route_receipt"]
 
 
+class ResumedGeneratedProvider:
+    def complete_with_tools(self, *, messages, tools):
+        offered = {tool["function"]["name"] for tool in tools}
+        assert "propose_temporary_datalog" in offered
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": QUESTION,
+                "generated_datalog": GENERATED_DATALOG,
+                "formal_restatement": (
+                    "Return every centrifugal pump without a reachable ball valve."
+                ),
+            },
+            tool_call_id="resumed-generated",
+        )
+
+
+def test_signed_receipt_resumes_on_a_reconstructed_public_runner() -> None:
+    initial_tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="route-receipt-initial",
+    )
+    initial_tools.begin_request(QUESTION)
+    issued = initial_tools.execute(
+        "report_template_no_fit",
+        {"reason": "No bundled template covers this universal condition."},
+    )
+
+    result = run_grounded_qa_turn(
+        question=QUESTION,
+        topology_tools=TopologyTools(
+            topology_view=MINIMAL_TOPOLOGY,
+            session_id="route-receipt-resumed",
+        ),
+        provider=ResumedGeneratedProvider(),
+        resume_route_receipt=issued["route_receipt"],
+    )
+
+    proposal = result.tool_call_trace[0]["tool_result"]
+    assert proposal["status"] == "confirmation_required"
+    assert proposal["route_receipt"] == issued["route_receipt"]
+
+
+def test_tampered_signed_receipt_cannot_resume() -> None:
+    authority = RouteReceiptAuthority()
+    context = {
+        "intent": QUESTION,
+        "source_snapshot_id": "drawing-snapshot-v1",
+        "template_catalog_version": "1.0.0",
+    }
+    authority.begin_request(**context)
+    issued = authority.record_backend_outcome(ROUTE_TEMPLATE_NO_FIT)
+    tampered = {
+        **issued["route_receipt"],
+        "template_catalog_version": "2.0.0",
+    }
+    resumed = RouteReceiptAuthority()
+
+    resumed.begin_request(**context, resume_receipt=tampered)
+
+    assert resumed.active_receipt() is None
+
+
 @pytest.mark.parametrize(
     ("changed_field", "changed_value"),
     [
@@ -237,15 +301,14 @@ def test_receipt_is_invalidated_by_relevant_context_changes(
 
 
 def test_engine_unavailability_does_not_unlock_but_faithfulness_failure_does() -> None:
-    authority = RouteReceiptAuthority()
-    authority.begin_request(
-        intent=QUESTION,
-        source_snapshot_id="drawing-snapshot-v1",
-        template_catalog_version="1.0.0",
+    tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="route-backend-outcome-test",
     )
+    tools.begin_request(QUESTION)
 
-    unavailable = authority.record_backend_outcome(ROUTE_REASONING_ENGINE_UNAVAILABLE)
-    faithful_failure = authority.record_backend_outcome(
+    unavailable = tools.record_backend_route_outcome(ROUTE_REASONING_ENGINE_UNAVAILABLE)
+    faithful_failure = tools.record_backend_route_outcome(
         ROUTE_TEMPLATE_FAITHFULNESS_FAILURE
     )
 
@@ -262,9 +325,18 @@ class UnexpectedPolicyProvider:
         raise AssertionError("deontic policy gate must run before model planning")
 
 
-def test_deontic_request_abstains_without_template_or_generated_logic() -> None:
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Is this arrangement permitted unless an exemption applies?",
+        "Is this arrangement authorized under any listed exceptions?",
+    ],
+)
+def test_deontic_request_abstains_without_template_or_generated_logic(
+    question: str,
+) -> None:
     result = run_grounded_qa_turn(
-        question="Is this arrangement permitted unless an exemption applies?",
+        question=question,
         topology_tools=TopologyTools(
             topology_view=MINIMAL_TOPOLOGY,
             session_id="route-policy-test",
