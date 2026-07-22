@@ -96,6 +96,10 @@ class QATurnResult:
     grounding_posture: str = POSTURE_UNSPECIFIED
     source_grounded: bool = False
     disclosure: str | None = None
+    deterministic_verdict: str | None = None
+    witnesses: list[str] = field(default_factory=list)
+    route_artifact: dict[str, object] | None = None
+    trace_events: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -292,9 +296,15 @@ def _tool_trace_satisfies_intent(
         )
     if intent.evidence_need == "rule_result":
         return any(
-            trace.get("tool_name") == "propose_temporary_datalog"
-            and _tool_result_status(trace.get("tool_result"))
-            in {"confirmation_required", "executed"}
+            (
+                trace.get("tool_name") == "execute_bundled_query_template"
+                and _tool_result_status(trace.get("tool_result")) == "answered"
+            )
+            or (
+                trace.get("tool_name") == "propose_temporary_datalog"
+                and _tool_result_status(trace.get("tool_result"))
+                in {"confirmation_required", "executed"}
+            )
             for trace in tool_call_trace
         )
     return True
@@ -314,6 +324,8 @@ def _has_structural_witness_result(tool_result: object) -> bool:
         isinstance(item, dict) and isinstance(item.get("witness"), dict)
         for item in reachable
     )
+
+
 def _tool_result_status(tool_result: object) -> str:
     if isinstance(tool_result, dict):
         return str(tool_result.get("status", ""))
@@ -344,7 +356,9 @@ class ScriptedQATurnProvider:
     - It discloses which objects it interpreted the question to mean.
     """
 
-    def __init__(self, *, max_candidates: int = 3, step_delay_seconds: float = 0.0) -> None:
+    def __init__(
+        self, *, max_candidates: int = 3, step_delay_seconds: float = 0.0
+    ) -> None:
         self._step = 0
         self._max_candidates = max_candidates
         self._mode = "direct"
@@ -536,7 +550,9 @@ class ScriptedQATurnProvider:
         for message in reversed(messages):
             if message.get("role") == "tool":
                 result = json.loads(str(message.get("content", "{}")))
-                return [str(item["evidence_id"]) for item in result.get("reachable", [])]
+                return [
+                    str(item["evidence_id"]) for item in result.get("reachable", [])
+                ]
         return []
 
     @staticmethod
@@ -703,7 +719,9 @@ def run_grounded_qa_turn(
             continue
 
         if isinstance(response, ToolCall):
-            tool_result = topology_tools.execute(response.tool_name, response.tool_input)
+            tool_result = topology_tools.execute(
+                response.tool_name, response.tool_input
+            )
             tool_result_json = json.dumps(tool_result)
 
             tool_call_trace.append(
@@ -773,7 +791,9 @@ def run_grounded_qa_turn(
             known_ids,
             tool_call_trace,
         )
-    raise RuntimeError(f"QA harness exceeded {max_rounds} rounds without a final answer.")
+    raise RuntimeError(
+        f"QA harness exceeded {max_rounds} rounds without a final answer."
+    )
 
 
 def _finalize(
@@ -793,6 +813,32 @@ def _finalize(
         if reference in known_ids and reference not in interpreted:
             interpreted.append(reference)
 
+    deterministic_verdict: str | None = None
+    witnesses: list[str] = []
+    route_artifact: dict[str, object] | None = None
+    trace_events: list[dict[str, object]] = []
+    for trace in tool_call_trace:
+        if trace.get("tool_name") != "execute_bundled_query_template":
+            continue
+        tool_result = trace.get("tool_result")
+        if not isinstance(tool_result, dict) or tool_result.get("status") != "answered":
+            continue
+        verdict = tool_result.get("verdict")
+        if isinstance(verdict, str):
+            deterministic_verdict = verdict
+        raw_witnesses = tool_result.get("witnesses")
+        if isinstance(raw_witnesses, list):
+            witnesses = [str(witness) for witness in raw_witnesses]
+        raw_route = tool_result.get("route_artifact")
+        if isinstance(raw_route, dict):
+            route_artifact = dict(raw_route)
+        raw_events = tool_result.get("trace_events")
+        if isinstance(raw_events, list):
+            trace_events = [
+                dict(event) for event in raw_events if isinstance(event, dict)
+            ]
+        break
+
     posture, source_grounded, disclosure = _resolve_grounding(
         response.grounding_posture, valid_references
     )
@@ -806,6 +852,10 @@ def _finalize(
         grounding_posture=posture,
         source_grounded=source_grounded,
         disclosure=disclosure,
+        deterministic_verdict=deterministic_verdict,
+        witnesses=witnesses,
+        route_artifact=route_artifact,
+        trace_events=trace_events,
     )
 
 

@@ -201,6 +201,73 @@ def default_grounded_qa_manifest(
                 },
             ),
             GroundedQACapability(
+                tool_name="execute_bundled_query_template",
+                description=(
+                    "Propose validated bindings for a versioned bundled query template. "
+                    "Accepted bindings execute automatically as trusted read-only logic."
+                ),
+                permission_class=PERMISSION_ALLOWED_READ_ONLY,
+                when_to_use=(
+                    "Use before generated Datalog when the request exactly matches a bundled template."
+                ),
+                evidence_kind="deterministic_template_result",
+                source_grounding_posture="loaded_source_and_trusted_logic",
+                limitations=(
+                    "Approximate matches and incomplete semantic bindings are rejected.",
+                    "Only the advertised template identifiers and binding shapes are supported.",
+                ),
+                citation_metadata={
+                    "primary_id_field": "witnesses",
+                    "citation_role": "deterministic_template_witness",
+                },
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "request": {
+                            "type": "string",
+                            "description": "The exact user request being routed.",
+                        },
+                        "template_id": {
+                            "type": "string",
+                            "enum": ["equipment_without_pump_path"],
+                        },
+                        "bindings": {
+                            "type": "object",
+                            "properties": {
+                                "source_classes": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "target_classes": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "scope": {"type": "string", "enum": ["piping"]},
+                                "direction": {
+                                    "type": "string",
+                                    "enum": ["undirected"],
+                                },
+                                "quantifier": {
+                                    "type": "string",
+                                    "enum": ["every"],
+                                },
+                                "negated": {"type": "boolean", "enum": [True]},
+                            },
+                            "required": [
+                                "source_classes",
+                                "target_classes",
+                                "scope",
+                                "direction",
+                                "quantifier",
+                                "negated",
+                            ],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": ["request", "template_id", "bindings"],
+                },
+            ),
+            GroundedQACapability(
                 tool_name="propose_temporary_datalog",
                 description=(
                     "Propose a temporary generated Datalog query and engineer-readable restatement when read-only retrieval is insufficient."
@@ -260,7 +327,9 @@ def default_grounded_qa_manifest(
                 when_to_use="Never use. Source graph mutation is outside grounded QA.",
                 evidence_kind="none",
                 source_grounding_posture="denied",
-                limitations=("The grounded QA harness never exposes graph mutation tools.",),
+                limitations=(
+                    "The grounded QA harness never exposes graph mutation tools.",
+                ),
                 citation_metadata={"citation_role": "none"},
                 parameters={"type": "object", "properties": {}},
                 denied_reason="Source graph mutation is denied for grounded QA.",

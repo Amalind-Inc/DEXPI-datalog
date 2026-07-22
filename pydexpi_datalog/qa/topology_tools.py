@@ -12,6 +12,7 @@ from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_DENIED,
     default_grounded_qa_manifest,
 )
+from pydexpi_datalog.qa.trusted_templates import execute_bundled_query_template
 
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
@@ -174,11 +175,31 @@ class TopologyTools:
                     claim_type=str(tool_input.get("claim_type", "existential")),
                 )
             )
+        if tool_name == "execute_bundled_query_template":
+            return self._timed_retrieval(
+                lambda: self._execute_bundled_query_template(tool_input)
+            )
         return self._tool_rejection(
             tool_name=tool_name,
             code="tool.unimplemented",
             message=f"no adapter registered for tool: {tool_name}",
         )
+
+    def _execute_bundled_query_template(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        result = execute_bundled_query_template(
+            request=str(tool_input.get("request", "")),
+            template_id=str(tool_input.get("template_id", "")),
+            bindings=tool_input.get("bindings"),
+            graph_facts=self._graph_facts,
+        )
+        raw_witnesses = result.get("witnesses", [])
+        if isinstance(raw_witnesses, list):
+            result["witnesses"] = self._temporary_answer_evidence_ids(
+                [str(witness) for witness in raw_witnesses]
+            )
+        return result
 
     def _timed_retrieval(
         self, run: Callable[[], dict[str, object]]
