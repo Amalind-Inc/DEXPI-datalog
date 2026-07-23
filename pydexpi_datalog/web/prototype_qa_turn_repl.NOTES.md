@@ -36,6 +36,17 @@ hand rather than reading the code:
    discards any it gets anyway, and `RoundProgress`/`append_progress` have no
    field for it even if captured. Filed as `pydexpi-datalog-1-3qo.9.12`.
 
+4. **Correct template answers were not provably correct to the user.** Asked
+   "show me the logic formula you used", the model had nothing to show: the
+   executed Souffle program never left `run_souffle_program`, and the
+   answered payload carried no route artifact. Fixed as
+   `pydexpi-datalog-1-qcof`: `route_artifact.logic_program` now carries the
+   template's executed rules verbatim, the answered payload exposes
+   `route_artifact` for template-backed turns, and this REPL grew a `:o`
+   (`:logic`) command showing the last template-backed turn's program (a
+   real ctrl-o keybinding needs raw-tty handling this line-based prototype
+   deliberately avoids).
+
 ## Status
 
 Kept (not deleted) -- still useful for re-driving the harness by hand while

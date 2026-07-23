@@ -84,6 +84,13 @@ def execute_bundled_query_template(
         "template_version": EQUIPMENT_WITHOUT_PUMP_PATH_TEMPLATE_VERSION,
         "bindings": validated_bindings,
         "validation": validation,
+        # The template's exact contribution to the executed Souffle program,
+        # built from the same lines execution uses so the disclosure cannot
+        # drift from what actually ran. The EDB facts and the bundled topology
+        # IDB (node_label, piping_connected) come from the loaded graph.
+        "logic_program": "\n".join(
+            _equipment_without_pump_path_logic_lines(validated_bindings)
+        ),
     }
     try:
         relations = run_souffle_program(
@@ -272,14 +279,11 @@ def _require_binding(
         )
 
 
-def _render_equipment_without_pump_path(
-    graph_facts: dict[str, object], bindings: dict[str, object]
-) -> str:
-    lines = [
-        build_graph_facts_datalog(graph_facts),
-        load_graph_topology_idb(),
-        ".decl template_pump(id:symbol)",
-    ]
+def _equipment_without_pump_path_logic_lines(
+    bindings: dict[str, object],
+) -> list[str]:
+    """The template-contributed rules of the executed program, verbatim."""
+    lines = [".decl template_pump(id:symbol)"]
     lines.extend(
         f"template_pump(N) :- node_label(N, {souffle_symbol(class_name)})."
         for class_name in bindings["pump_classes"]
@@ -298,4 +302,15 @@ def _render_equipment_without_pump_path(
             "result_witness(T) :- template_equipment(T), !template_hit(T).",
         ]
     )
+    return lines
+
+
+def _render_equipment_without_pump_path(
+    graph_facts: dict[str, object], bindings: dict[str, object]
+) -> str:
+    lines = [
+        build_graph_facts_datalog(graph_facts),
+        load_graph_topology_idb(),
+        *_equipment_without_pump_path_logic_lines(bindings),
+    ]
     return "\n".join(lines) + "\n"

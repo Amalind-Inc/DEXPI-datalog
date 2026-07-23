@@ -39,6 +39,24 @@ VALID_BINDINGS = {
     "quantifier": "every",
     "negated": True,
 }
+# The logic the template contributes to the executed Souffle program, disclosed
+# verbatim so a reviewer can verify the answer is provably derived from it. The
+# EDB facts (node_label et al.) and the bundled topology IDB (piping_connected)
+# are loaded from the drawing and catalog; only the template rules vary.
+EXPECTED_LOGIC_PROGRAM = """\
+.decl template_pump(id:symbol)
+template_pump(N) :- node_label(N, "CentrifugalPump").
+template_pump(N) :- node_label(N, "ReciprocatingPump").
+.decl template_equipment(id:symbol)
+template_equipment(N) :- node_label(N, "PlateHeatExchanger").
+template_equipment(N) :- node_label(N, "TubularHeatExchanger").
+template_equipment(N) :- node_label(N, "Tank").
+template_equipment(N) :- node_label(N, "ProcessColumn").
+.decl template_hit(id:symbol)
+template_hit(T) :- template_equipment(T), template_pump(S), piping_connected(S, T).
+.decl result_witness(id:symbol)
+.output result_witness
+result_witness(T) :- template_equipment(T), !template_hit(T)."""
 
 
 class EquipmentPumpTemplateProvider:
@@ -178,6 +196,7 @@ def test_equipment_pump_template_executes_automatically_through_public_runner() 
                 "TubularHeatExchanger",
             ],
         },
+        "logic_program": EXPECTED_LOGIC_PROGRAM,
     }
     assert [event["event"] for event in result.trace_events] == [
         "template_proposed",
@@ -217,6 +236,10 @@ def test_equipment_pump_template_returns_disconnected_equipment_witness() -> Non
 
     assert result.deterministic_verdict == "violation_found"
     assert result.witnesses == ["disconnected-equipment"]
+    # The disclosed logic is the same regardless of verdict polarity: it is
+    # the template's contribution to the executed program, not a narrative.
+    assert result.route_artifact is not None
+    assert result.route_artifact["logic_program"] == EXPECTED_LOGIC_PROGRAM
     assert result.trace_events[-1] == {
         "event": "result_observed",
         "verdict": "violation_found",

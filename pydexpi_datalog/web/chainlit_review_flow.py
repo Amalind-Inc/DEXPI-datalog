@@ -1470,6 +1470,12 @@ class ChainlitReviewFlow:
             "evidence_highlight": evidence_highlight,
             "conversation_state": list(answer.get("conversation_state", [])),
         }
+        # A deterministic route (bundled template) discloses its artifact --
+        # including the executed logic program -- so clients can show the user
+        # the answer is provably derived. Never fabricated for other turns.
+        route_artifact = getattr(result, "route_artifact", None)
+        if isinstance(route_artifact, dict):
+            payload["route_artifact"] = dict(route_artifact)
         if direction is not None:
             payload["direction"] = direction
         if direction_batch is not None:

@@ -8,6 +8,7 @@ not tool call counts or internal message formats.
 from __future__ import annotations
 
 import tempfile
+import shutil
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -247,6 +248,83 @@ class QATurnsApiTests(unittest.TestCase):
             self.assertEqual(body["status"], "answered")
             self.assertEqual(body["answer_text"], "Direct answer with no tool calls.")
             self.assertEqual(body["evidence_references"], [])
+
+    def test_template_backed_answer_payload_discloses_logic_program(self) -> None:
+        """When a bundled template executed, the answered payload carries the
+        route artifact including the exact logic the engine ran, so a client
+        can show the user the answer is provably derived -- and a turn without
+        a template execution carries no route artifact at all."""
+        if shutil.which("souffle") is None:
+            self.skipTest("souffle engine not on PATH")
+
+        class TemplateProvider:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete_with_tools(self, *, messages, tools):
+                self.calls += 1
+                if self.calls == 1:
+                    return ToolCall(
+                        tool_name="execute_bundled_query_template",
+                        tool_input={
+                            "request": (
+                                "Find every major process equipment item with no "
+                                "piping path to any pump"
+                            ),
+                            "template_id": "equipment_without_pump_path",
+                            "bindings": {
+                                "pump_classes": ["CentrifugalPump"],
+                                "equipment_classes": ["PlateHeatExchanger"],
+                                "scope": "piping",
+                                "direction": "undirected",
+                                "quantifier": "every",
+                                "negated": True,
+                            },
+                        },
+                        tool_call_id="template-call-1",
+                    )
+                return FinalAnswer(answer_text="All equipment reaches a pump.")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = create_review_api_app(
+                artifact_root=Path(tmp) / "sessions",
+                qa_provider_factory=TemplateProvider,
+            )
+            client = TestClient(app)
+            session_id = "qa-template-logic-session"
+            client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            body = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": "Which equipment has no piping path to a pump?"},
+            ).json()
+
+            self.assertEqual(body["status"], "answered")
+            route_artifact = body["route_artifact"]
+            self.assertEqual(route_artifact["route"], "bundled_template")
+            logic_program = route_artifact["logic_program"]
+            self.assertIn(
+                'template_pump(N) :- node_label(N, "CentrifugalPump").',
+                logic_program,
+            )
+            self.assertIn(
+                "result_witness(T) :- template_equipment(T), !template_hit(T).",
+                logic_program,
+            )
+
+    def test_answer_without_template_execution_has_no_route_artifact(self) -> None:
+        """No deterministic route ran: the payload must not fabricate one."""
+        body = self.client.post(
+            f"/api/review/sessions/{self.session_id}/qa-turns",
+            json={"question": "What equipment is in this PID?"},
+        ).json()
+        self.assertEqual(body["status"], "answered")
+        self.assertNotIn("route_artifact", body)
 
     def test_ambiguous_text_returns_multiple_candidate_interpretation(self) -> None:
         """E06 has several nozzles; an ambiguous 'the nozzle' question is answered

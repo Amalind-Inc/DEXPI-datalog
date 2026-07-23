@@ -151,7 +151,7 @@ def render_frame(
         print()
     print(dim("-" * 60))
     print(
-        f"{bold('[type a question + enter]')}  {bold('[:q]')} {dim('quit')}  {bold('[:h]')} {dim('full history')}"
+        f"{bold('[type a question + enter]')}  {bold('[:q]')} {dim('quit')}  {bold('[:h]')} {dim('full history')}  {bold('[:o]')} {dim('logic program')}"
     )
     print(dim("-" * 60))
 
@@ -264,6 +264,50 @@ def main() -> None:
                     history=history,
                 )
                 continue
+            if question in (":o", ":logic"):
+                # Show the deterministic logic behind the most recent
+                # template-backed answer: the exact rules the engine ran.
+                artifact = None
+                for past in reversed(history):
+                    result = past.get("result")
+                    if isinstance(result, dict) and isinstance(
+                        result.get("route_artifact"), dict
+                    ):
+                        artifact = result["route_artifact"]
+                        break
+                if artifact is None:
+                    print(
+                        dim(
+                            "  no template-backed answer yet -- the logic program"
+                            " exists only for deterministic template routes"
+                        )
+                    )
+                    continue
+                print(bold("=== executed logic program (Souffle) ==="))
+                print(
+                    dim(
+                        f"template: {artifact.get('template_id')}"
+                        f" v{artifact.get('template_version')}"
+                    )
+                )
+                print(dim(f"bindings: {artifact.get('bindings')}"))
+                print(
+                    dim(
+                        "EDB facts (node_label, edges) come from the loaded"
+                        " drawing; piping_connected from the bundled topology"
+                        " IDB. Rules below ran verbatim:"
+                    )
+                )
+                print(artifact.get("logic_program", "(missing)"))
+                input(dim("\n[enter to continue]"))
+                render_frame(
+                    session_id=session_id,
+                    provider="openrouter",
+                    model=model,
+                    topology_summary=topology_summary,
+                    history=history,
+                )
+                continue
 
             request_id = uuid.uuid4().hex
             turn_id = compute_turn_id(session_id, request_id)
@@ -318,6 +362,7 @@ def main() -> None:
                     "question": question,
                     "status": body.get("status", "unknown"),
                     "events": body.get("events", []),
+                    "result": body.get("result"),
                 }
             history.append(turn)
             render_frame(
