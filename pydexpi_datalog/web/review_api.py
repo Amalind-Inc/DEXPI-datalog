@@ -369,6 +369,29 @@ def create_review_api_app(
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
         return turn
 
+    @app.get(
+        "/api/review/sessions/{session_id}/turns/{turn_id}/trace/{event_id}"
+    )
+    def get_turn_trace_detail(
+        session_id: str, turn_id: str, event_id: str
+    ) -> dict[str, object]:
+        detail = turns.get_trace_detail(
+            session_id=session_id,
+            turn_id=turn_id,
+            event_id=event_id,
+        )
+        if detail is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "trace_detail_not_found",
+                        "message": "Turn trace detail not found.",
+                    }
+                },
+            )
+        return detail
+
     @app.get("/api/review/sessions/{session_id}/turns/{turn_id}/events")
     def stream_turn_events(
         session_id: str, turn_id: str, after: int = -1

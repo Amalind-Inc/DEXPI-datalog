@@ -4,7 +4,7 @@
 // review-required/terminal events), so steps are derived from what's
 // actually there -- no fabricated timing or fake sub-steps.
 
-export type TurnStepId = "retrieval" | "validation" | "evidence-answer";
+export type TurnStepId = "retrieval" | "validation" | "evidence-answer" | `trace:${string}`;
 export type TurnStepStatus = "done" | "blocked" | "canceled" | "failed" | "pending";
 
 export type TurnStepDetail =
@@ -12,7 +12,15 @@ export type TurnStepDetail =
   | { kind: "retrieval-progress"; round: number; maxRounds: number; toolName: string | null }
   | { kind: "datalog-confirmation" }
   | { kind: "direction-review" }
-  | { kind: "evidence"; evidenceReferences: string[] };
+  | { kind: "evidence"; evidenceReferences: string[] }
+  | {
+      kind: "execution-trace";
+      traceKind: string;
+      occurrenceCount: number;
+      evidenceReferences: string[];
+      artifactPath: string | null;
+      artifactUrl: string | null;
+    };
 
 export type TurnStep = {
   id: TurnStepId;
@@ -22,7 +30,11 @@ export type TurnStep = {
 };
 
 type TurnEventLike = { type: string; data: Record<string, unknown> };
-type TurnLike = { events: TurnEventLike[] };
+type TurnLike = {
+  events: TurnEventLike[];
+  session_id?: string;
+  turn_id?: string;
+};
 
 // Minimal shape of ReducedTurn (from turn-client.ts) needed here -- kept
 // local to avoid a circular import (turn-client.ts imports this module).
@@ -87,6 +99,27 @@ export function deriveTurnSteps(turn: TurnLike, reduced: ReducedTurnLike): TurnS
     });
   }
 
+  for (const event of turn.events) {
+    const trace = readExecutionTrace(event);
+    if (trace === null) continue;
+    steps.push({
+      id: `trace:${trace.eventId}`,
+      label: trace.summary,
+      status: traceStepStatus(trace.status),
+      detail: {
+        kind: "execution-trace",
+        traceKind: trace.traceKind,
+        occurrenceCount: trace.occurrenceCount,
+        evidenceReferences: trace.evidenceReferences,
+        artifactPath: trace.artifactPath,
+        artifactUrl:
+          turn.session_id && turn.turn_id
+            ? `/api/review/sessions/${encodeURIComponent(turn.session_id)}/turns/${encodeURIComponent(turn.turn_id)}/trace/${encodeURIComponent(trace.eventId)}`
+            : null,
+      },
+    });
+  }
+
   if (reduced.kind === "review-required") {
     const isDirectionReview = isRecord(reduced.review.direction_review);
     steps.push({
@@ -107,4 +140,63 @@ export function deriveTurnSteps(turn: TurnLike, reduced: ReducedTurnLike): TurnS
   }
 
   return steps;
+}
+
+function readExecutionTrace(event: TurnEventLike): {
+  eventId: string;
+  traceKind: string;
+  status: string;
+  summary: string;
+  occurrenceCount: number;
+  evidenceReferences: string[];
+  artifactPath: string | null;
+} | null {
+  if (event.type !== "execution-trace" || event.data.schema_version !== 1) return null;
+  const eventId = typeof event.data.event_id === "string" ? event.data.event_id : "";
+  const traceKind = typeof event.data.kind === "string" ? event.data.kind : "";
+  const summary = typeof event.data.summary === "string" ? event.data.summary.slice(0, 160) : "";
+  if (!eventId || !traceKind.includes(".") || !summary) return null;
+  const occurrenceCount =
+    typeof event.data.occurrence_count === "number" && event.data.occurrence_count > 0
+      ? event.data.occurrence_count
+      : 1;
+  const evidenceReferences = Array.isArray(event.data.evidence_references)
+    ? event.data.evidence_references
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, 25)
+    : [];
+  const detail = isRecord(event.data.detail) ? event.data.detail : {};
+  const artifact = isRecord(detail.artifact) ? detail.artifact : {};
+  const rawArtifactPath = typeof artifact.path === "string" ? artifact.path : "";
+  const artifactPath =
+    rawArtifactPath &&
+    !rawArtifactPath.startsWith("/") &&
+    !rawArtifactPath.split("/").includes("..")
+      ? rawArtifactPath
+      : null;
+  return {
+    eventId,
+    traceKind,
+    status: typeof event.data.status === "string" ? event.data.status : "completed",
+    summary,
+    occurrenceCount,
+    evidenceReferences,
+    artifactPath,
+  };
+}
+
+function traceStepStatus(status: string): TurnStepStatus {
+  switch (status) {
+    case "blocked":
+      return "blocked";
+    case "canceled":
+      return "canceled";
+    case "failed":
+      return "failed";
+    case "pending":
+    case "running":
+      return "pending";
+    default:
+      return "done";
+  }
 }

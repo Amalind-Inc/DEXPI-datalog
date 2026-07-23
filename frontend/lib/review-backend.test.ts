@@ -4,6 +4,7 @@ import {
   answerChatWithReviewBackend,
   executeConfirmedDatalog,
   getTurnFromBackend,
+  getTurnTraceDetailFromBackend,
   prepareReviewSession,
   startTurnOnBackend,
   submitDirectionReview,
@@ -812,7 +813,11 @@ test("startTurnOnBackend applies source scope and provider settings before start
     ],
   );
   assert.deepEqual(calls[0].body, { source_scope_ids: ["node-p101"] });
-  assert.deepEqual(calls[1].body, { provider: "ollama", model: "llama3", credential: "ollama-local" });
+  assert.deepEqual(calls[1].body, {
+    provider: "ollama",
+    model: "llama3",
+    credential: "ollama-local",
+  });
   // selected_node_id is frontend routing state, never part of the turn body.
   assert.deepEqual(calls[2].body, {
     question: "What is downstream of the pump?",
@@ -895,4 +900,28 @@ test("getTurnFromBackend preserves the backend HTTP status for failures", async 
   });
   assert.equal(ok.status, 200);
   assert.deepEqual(ok.turn, { turn_id: "turn-1", status: "completed" });
+});
+
+test("getTurnTraceDetailFromBackend proxies bounded artifacts and statuses", async () => {
+  const paths: string[] = [];
+  const ok = await getTurnTraceDetailFromBackend("session one", "turn/one", "event one", {
+    baseUrl: "http://backend.test",
+    fetcher: (async (url: string | URL | Request) => {
+      paths.push(new URL(String(url)).pathname);
+      return Response.json({ kind: "grounded_qa.execution.template" });
+    }) as typeof fetch,
+  });
+  assert.deepEqual(paths, [
+    "/api/review/sessions/session%20one/turns/turn%2Fone/trace/event%20one",
+  ]);
+  assert.deepEqual(ok, {
+    detail: { kind: "grounded_qa.execution.template" },
+    status: 200,
+  });
+
+  const notFound = await getTurnTraceDetailFromBackend("session-1", "turn-1", "missing-event", {
+    baseUrl: "http://backend.test",
+    fetcher: (async () => new Response("nope", { status: 404 })) as typeof fetch,
+  });
+  assert.deepEqual(notFound, { detail: null, status: 404 });
 });

@@ -1051,6 +1051,40 @@
   gap: 12px;
 }
 
+.calm-step-trace-detail {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+  margin-top: 5px;
+}
+
+.calm-step-trace-detail summary {
+  cursor: pointer;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.calm-step-trace-detail dl {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+}
+
+.calm-step-trace-detail dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.calm-step-trace-detail dt {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.calm-step-trace-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .datalog-confirmation-card,
 .grounded-logic-answer-card {
   display: grid;

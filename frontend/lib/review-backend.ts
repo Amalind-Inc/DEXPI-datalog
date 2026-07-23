@@ -1259,6 +1259,22 @@ export async function getTurnFromBackend(
   return { turn: (await res.json()) as Record<string, unknown>, status: res.status };
 }
 
+export async function getTurnTraceDetailFromBackend(
+  sessionId: string,
+  turnId: string,
+  eventId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ detail: Record<string, unknown> | null; status: number }> {
+  const res = await fetcher(
+    `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/trace/${encodeURIComponent(eventId)}`,
+  );
+  if (!res.ok) return { detail: null, status: res.status };
+  return {
+    detail: (await res.json()) as Record<string, unknown>,
+    status: res.status,
+  };
+}
+
 export async function cancelTurnOnBackend(
   sessionId: string,
   turnId: string,

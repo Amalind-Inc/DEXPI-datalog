@@ -106,3 +106,102 @@ test("deriveTurnSteps: in-progress turn shows a single pending retrieval row (be
   const steps = deriveTurnSteps(turn, { kind: "in-progress" as const });
   assert.deepEqual(steps, [{ id: "retrieval", label: "Retrieval", status: "pending" }]);
 });
+
+test("deriveTurnSteps: renders governed execution trace before deterministic evidence", () => {
+  const turn = {
+    session_id: "session-1",
+    turn_id: "turn-1",
+    events: [
+      { type: "tool-progress", data: { status: "started" } },
+      {
+        type: "execution-trace",
+        data: {
+          schema_version: 1,
+          event_id: "route-1",
+          kind: "grounded_qa.routing.template_proposed",
+          category: "routing",
+          status: "completed",
+          summary: "Routed to template equipment_without_pump_path.",
+          occurrence_count: 1,
+          evidence_references: [],
+          detail: {
+            display: "artifact",
+            artifact: {
+              kind: "execution_trace_detail",
+              path: "turns/turn-1.trace/route-1.json",
+              media_type: "application/json",
+            },
+          },
+        },
+      },
+      {
+        type: "execution-trace",
+        data: {
+          schema_version: 1,
+          event_id: "evidence-1",
+          kind: "grounded_qa.evidence.result_observed",
+          category: "evidence",
+          status: "completed",
+          summary: "Observed deterministic result: violation_found with 1 witness(es).",
+          occurrence_count: 1,
+          evidence_references: ["tank-t101"],
+          detail: {
+            display: "artifact",
+            artifact: {
+              kind: "execution_trace_detail",
+              path: "turns/turn-1.trace/evidence-1.json",
+              media_type: "application/json",
+            },
+          },
+        },
+      },
+    ],
+  };
+
+  const steps = deriveTurnSteps(turn, {
+    kind: "answered" as const,
+    evidenceReferences: ["tank-t101"],
+  });
+
+  assert.deepEqual(
+    steps.map((step) => step.id),
+    ["retrieval", "trace:route-1", "trace:evidence-1", "evidence-answer"],
+  );
+  assert.equal(steps[1].label, "Routed to template equipment_without_pump_path.");
+  assert.deepEqual(steps[2].detail, {
+    kind: "execution-trace",
+    traceKind: "grounded_qa.evidence.result_observed",
+    occurrenceCount: 1,
+    evidenceReferences: ["tank-t101"],
+    artifactPath: "turns/turn-1.trace/evidence-1.json",
+    artifactUrl: "/api/review/sessions/session-1/turns/turn-1/trace/evidence-1",
+  });
+});
+
+test("deriveTurnSteps: preserves governed trace lifecycle statuses", () => {
+  const statuses = ["blocked", "canceled", "failed", "running"] as const;
+  const turn = {
+    events: statuses.map((status, index) => ({
+      type: "execution-trace",
+      data: {
+        schema_version: 1,
+        event_id: `event-${index}`,
+        kind: `vendor.widget.${status}`,
+        status,
+        summary: `Widget activity ${status}.`,
+        occurrence_count: 1,
+        evidence_references: [],
+      },
+    })),
+  };
+
+  const steps = deriveTurnSteps(turn, {
+    kind: "answered" as const,
+    evidenceReferences: [],
+  });
+
+  assert.deepEqual(
+    steps.slice(0, 4).map((step) => step.status),
+    ["blocked", "canceled", "failed", "pending"],
+  );
+});

@@ -41,6 +41,46 @@ export function SteppedTurnCard({ steps, children }: { steps: TurnStep[]; childr
               </span>
               <div className={cn("calm-step-content", isLast && "calm-step-content--body")}>
                 <p className="calm-step-label">{step.label}</p>
+                {step.detail?.kind === "execution-trace" && (
+                  <details className="calm-step-trace-detail" data-testid="execution-trace-detail">
+                    <summary>Details</summary>
+                    <dl>
+                      <div>
+                        <dt>Activity</dt>
+                        <dd>
+                          <code>{step.detail.traceKind}</code>
+                        </dd>
+                      </div>
+                      {step.detail.occurrenceCount > 1 && (
+                        <div>
+                          <dt>Occurrences</dt>
+                          <dd>{step.detail.occurrenceCount}</dd>
+                        </div>
+                      )}
+                      {step.detail.evidenceReferences.length > 0 && (
+                        <div>
+                          <dt>Evidence</dt>
+                          <dd>{step.detail.evidenceReferences.join(", ")}</dd>
+                        </div>
+                      )}
+                      {step.detail.artifactUrl && (
+                        <div>
+                          <dt>Detail artifact</dt>
+                          <dd>
+                            <a
+                              href={step.detail.artifactUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              data-testid="execution-trace-artifact-link"
+                            >
+                              Open bounded detail artifact
+                            </a>
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </details>
+                )}
                 {isLast && <div className="calm-step-body">{children}</div>}
               </div>
             </li>

@@ -3,14 +3,26 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 from threading import RLock
 from typing import Callable
+
+from pydexpi_datalog.web.execution_trace import (
+    TRACE_EVENT_ID_LENGTH,
+    render_execution_trace,
+)
+
+TURN_ID_LENGTH = 20
+_TURN_ID_PATTERN = re.compile(rf"[0-9a-f]{{{TURN_ID_LENGTH}}}")
+_TRACE_EVENT_ID_PATTERN = re.compile(rf"[0-9a-f]{{{TRACE_EVENT_ID_LENGTH}}}")
 
 
 def compute_turn_id(session_id: str, request_id: str) -> str:
     """Deterministic turn_id, matching the frontend's computeTurnId() formula
     (frontend/lib/turn-client.ts) so the client can know a turn's id up front."""
-    return hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[:20]
+    return hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
+        :TURN_ID_LENGTH
+    ]
 
 
 class TurnLifecycleStore:
@@ -129,6 +141,26 @@ class TurnLifecycleStore:
         value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else None
 
+    def get_trace_detail(
+        self, *, session_id: str, turn_id: str, event_id: str
+    ) -> dict[str, object] | None:
+        if not _TURN_ID_PATTERN.fullmatch(
+            turn_id
+        ) or not _TRACE_EVENT_ID_PATTERN.fullmatch(event_id):
+            return None
+        root = self._artifact_root.resolve()
+        path = (
+            self._artifact_root
+            / session_id
+            / "turns"
+            / f"{turn_id}.trace"
+            / f"{event_id}.json"
+        ).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
+
     def cancel(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
         with self._lock:
             turn = self.get(session_id=session_id, turn_id=turn_id)
@@ -184,6 +216,17 @@ class TurnLifecycleStore:
         self, turn: dict[str, object], result: dict[str, object]
     ) -> None:
         status = str(result.get("status", "answered"))
+        trace_events = render_execution_trace(
+            artifact_root=self._artifact_root,
+            session_id=str(turn["session_id"]),
+            turn_id=str(turn["turn_id"]),
+            raw_events=result.get("trace_events"),
+            fallback_evidence_references=result.get(
+                "evidence_references", result.get("witnesses", [])
+            ),
+        )
+        for trace_event in trace_events:
+            self._append(turn, "execution-trace", trace_event)
         answer_text = result.get("answer_text")
         if isinstance(answer_text, str) and answer_text:
             self._append(turn, "text", {"text": answer_text})

@@ -62,6 +62,202 @@ def test_review_required_event_preserves_batched_direction_review_items() -> Non
         ]
 
 
+def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        store = TurnLifecycleStore(root)
+
+        turn = store.start(
+            session_id="trace-session",
+            request_id="trace-request",
+            question="Which equipment lacks a path to a pump?",
+            execute=lambda: {
+                "status": "answered",
+                "answer_text": "Tank T-101 lacks a path to a pump.",
+                "evidence_references": ["tank-t101"],
+                "trace_events": [
+                    {
+                        "event": "template_proposed",
+                        "template_id": "equipment_without_pump_path",
+                    },
+                    {
+                        "event": "template_validated",
+                        "template_id": "equipment_without_pump_path",
+                        "outcome": "accepted",
+                    },
+                    {
+                        "event": "template_executed",
+                        "template_id": "equipment_without_pump_path",
+                        "engine": "souffle",
+                    },
+                    {
+                        "event": "result_observed",
+                        "verdict": "violation_found",
+                        "witness_count": 1,
+                    },
+                ],
+            },
+        )
+
+        trace = [
+            event["data"]
+            for event in turn["events"]
+            if event["type"] == "execution-trace"
+        ]
+        assert [event["kind"] for event in trace] == [
+            "grounded_qa.routing.template_proposed",
+            "grounded_qa.validation.template",
+            "grounded_qa.execution.template",
+            "grounded_qa.evidence.result_observed",
+        ]
+        assert all(event["schema_version"] == 1 for event in trace)
+        assert all(len(event["summary"]) <= 160 for event in trace)
+        assert trace[-1]["evidence_references"] == ["tank-t101"]
+        assert all(event["detail"]["artifact"]["path"] for event in trace)
+        for event in trace:
+            artifact = root / "trace-session" / event["detail"]["artifact"]["path"]
+            assert artifact.is_file()
+        client = TestClient(create_review_api_app(artifact_root=root))
+        detail_response = client.get(
+            "/api/review/sessions/trace-session/turns/"
+            f"{turn['turn_id']}/trace/{trace[-1]['event_id']}"
+        )
+        assert detail_response.status_code == 200
+        assert detail_response.json()["kind"] == (
+            "grounded_qa.evidence.result_observed"
+        )
+        invalid_response = client.get(
+            "/api/review/sessions/trace-session/turns/"
+            f"{turn['turn_id']}/trace/not-an-event-id"
+        )
+        assert invalid_response.status_code == 404
+
+
+def test_unknown_trace_activity_is_grouped_bounded_and_redacted() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir) / "sessions"
+        store = TurnLifecycleStore(root)
+        repeated = [
+            {
+                "event": "vendor.widget.inspected",
+                "status": "completed",
+                "evidence_references": [f"node-{index}"],
+                "system_prompt": "private instructions",
+                "chain_of_thought": "private reasoning",
+                "authorization": "Bearer secret-value",
+                "tool_output": "x" * 10_000,
+                "safe_note": "bounded extension metadata",
+            }
+            for index in range(30)
+        ]
+
+        turn = store.start(
+            session_id="extension-trace-session",
+            request_id="extension-trace-request",
+            question="Inspect extension activity",
+            execute=lambda: {
+                "status": "answered",
+                "answer_text": "Inspection complete.",
+                "trace_events": repeated,
+            },
+        )
+
+        trace = [
+            event["data"]
+            for event in turn["events"]
+            if event["type"] == "execution-trace"
+        ]
+        assert len(trace) == 1
+        assert trace[0]["kind"] == "vendor.widget.inspected"
+        assert trace[0]["category"] == "activity"
+        assert trace[0]["occurrence_count"] == 30
+        assert trace[0]["summary"] == (
+            "Recorded extension activity: vendor.widget.inspected (30 occurrences)."
+        )
+        assert (
+            trace[0]["evidence_references"]
+            == sorted(f"node-{index}" for index in range(30))[:25]
+        )
+        artifact_path = (
+            root / "extension-trace-session" / trace[0]["detail"]["artifact"]["path"]
+        )
+        artifact_text = artifact_path.read_text(encoding="utf-8")
+        assert len(__import__("json").loads(artifact_text)["occurrences"]) == 20
+        for private_field in (
+            "system_prompt",
+            "chain_of_thought",
+            "authorization",
+            "tool_output",
+            "safe_note",
+        ):
+            assert private_field not in artifact_text
+
+
+def test_trace_preserves_supported_status_and_ignores_malformed_metadata() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        turn = store.start(
+            session_id="status-trace-session",
+            request_id="status-trace-request",
+            question="Show blocked extension activity",
+            execute=lambda: {
+                "status": "answered",
+                "answer_text": "Activity recorded.",
+                "trace_events": [
+                    {
+                        "event": "vendor.widget.blocked",
+                        "status": "running",
+                        "outcome": ["malformed"],
+                        "template_id": "unsafe secret value",
+                    },
+                    {
+                        "event": "vendor.widget.blocked",
+                        "status": "blocked",
+                        "outcome": ["malformed"],
+                        "template_id": "unsafe secret value",
+                    },
+                ],
+            },
+        )
+
+        trace = next(
+            event["data"]
+            for event in turn["events"]
+            if event["type"] == "execution-trace"
+        )
+        assert trace["status"] == "blocked"
+        assert trace["occurrence_count"] == 2
+        assert trace["summary"] == (
+            "Recorded extension activity: vendor.widget.blocked (2 occurrences)."
+        )
+
+
+def test_trace_rendering_is_independent_of_capability_review_state() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        turn = store.start(
+            session_id="review-trace-session",
+            request_id="review-trace-request",
+            question="Run a capability requiring review",
+            execute=lambda: {
+                "status": "needs_datalog_confirmation",
+                "trace_events": [
+                    {
+                        "event": "vendor.capability.blocked",
+                        "status": "blocked",
+                    }
+                ],
+            },
+        )
+
+        assert turn["status"] == "paused"
+        event_types = [event["type"] for event in turn["events"]]
+        assert "execution-trace" in event_types
+        assert event_types.index("execution-trace") < event_types.index(
+            "review-required"
+        )
+
+
 class CountingProvider:
     def __init__(self) -> None:
         self.calls = 0
