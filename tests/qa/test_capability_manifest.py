@@ -146,6 +146,11 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
                 STRUCTURED_INTENT,
             ),
             "formal_restatement": "Return objects reachable from the pump.",
+            "faithfulness_review": {
+                "status": "faithful",
+                "back_translated_intent": STRUCTURED_INTENT,
+                "diagnostics": [],
+            },
         },
     )
 

@@ -30,6 +30,14 @@ class TopologyTools(ProductTopologyTools):
         if tool_name == "report_template_no_fit":
             tool_input.setdefault("structured_intent", STRUCTURED_INTENT)
         if tool_name == "propose_temporary_datalog":
+            tool_input.setdefault(
+                "faithfulness_review",
+                {
+                    "status": "faithful",
+                    "back_translated_intent": STRUCTURED_INTENT,
+                    "diagnostics": [],
+                },
+            )
             request = str(tool_input.get("request", ""))
             self.begin_request(request)
             super().execute(

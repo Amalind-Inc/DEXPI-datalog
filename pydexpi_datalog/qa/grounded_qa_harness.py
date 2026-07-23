@@ -348,6 +348,65 @@ def _sufficiency_failure(intent: ReviewIntent) -> dict[str, object]:
     }
 
 
+def _missing_faithful_program_result(
+    tool_call_trace: list[dict[str, object]],
+) -> QATurnResult | None:
+    proposal_results = [
+        result
+        for trace in tool_call_trace
+        if trace.get("tool_name") == "propose_temporary_datalog"
+        and isinstance((result := trace.get("tool_result")), dict)
+        and isinstance(result.get("faithfulness_gate"), dict)
+    ]
+    if not proposal_results:
+        return None
+    latest = proposal_results[-1]
+    if latest["faithfulness_gate"].get("status") != "failed":
+        return None
+    gate = latest["faithfulness_gate"]
+    raw_diagnostics = gate.get("diagnostics", [])
+    diagnostics = [dict(item) for item in raw_diagnostics if isinstance(item, dict)]
+    if not diagnostics:
+        diagnostics = [
+            {
+                "code": "faithfulness.evidence_incomplete",
+                "message": "The layered faithfulness gate did not produce usable diagnostics.",
+            }
+        ]
+    blockers = "; ".join(
+        str(item.get("message", "")) for item in diagnostics if item.get("message")
+    )
+    attempts = [
+        dict(attempt)
+        for result in proposal_results
+        for attempt in result.get("faithfulness_gate_attempts", [])
+        if isinstance(attempt, dict)
+    ]
+    outcome = {
+        "status": "missing_capability",
+        "code": "faithfulness.no_faithful_program",
+        "diagnostics": diagnostics,
+        "attempts": attempts,
+    }
+    return QATurnResult(
+        answer_text=(
+            "I could not produce a faithful generated program, so no engineering "
+            f"verdict was returned. Blocking diagnostics: {blockers}"
+        ),
+        evidence_references=[],
+        rejected_references=[],
+        interpreted_object_ids=[],
+        tool_call_trace=tool_call_trace,
+        grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        source_grounded=False,
+        disclosure=_POSTURE_DISCLOSURES[POSTURE_SOURCE_DATA_UNAVAILABLE],
+        deterministic_verdict=None,
+        witnesses=[],
+        route_artifact=None,
+        trace_events=[{"event": "route_outcome", "outcome": outcome}],
+    )
+
+
 class ScriptedQATurnProvider:
     """Deterministic provider used as the OSS default and in tests.
 
@@ -558,6 +617,11 @@ class ScriptedQATurnProvider:
                         "Return every object that appears as a direct process-"
                         "connection target in the loaded source."
                     ),
+                    "faithfulness_review": {
+                        "status": "faithful",
+                        "back_translated_intent": structured_intent,
+                        "diagnostics": [],
+                    },
                     "resolved_identity_ids": [],
                 },
                 tool_call_id="scripted-propose-datalog",
@@ -577,6 +641,11 @@ class ScriptedQATurnProvider:
                     "check result; no further objects were structurally "
                     "reachable from the sampled anchor."
                 ),
+                "faithfulness_review": {
+                    "status": "faithful",
+                    "back_translated_intent": structured_intent,
+                    "diagnostics": [],
+                },
                 "resolved_identity_ids": list(self._candidates),
             },
             tool_call_id="scripted-propose-datalog",
@@ -764,6 +833,9 @@ def run_grounded_qa_turn(
         if isinstance(response, FinalAnswer):
             if _tool_trace_satisfies_intent(intent, tool_call_trace):
                 return _finalize(response, known_ids, tool_call_trace)
+            missing_capability = _missing_faithful_program_result(tool_call_trace)
+            if missing_capability is not None:
+                return missing_capability
             last_insufficient_answer = response
             tool_result = _sufficiency_failure(intent)
             tool_call_trace.append(
@@ -846,6 +918,9 @@ def run_grounded_qa_turn(
             continue
 
         raise TypeError(f"Unexpected provider response type: {type(response)}")
+    missing_capability = _missing_faithful_program_result(tool_call_trace)
+    if missing_capability is not None:
+        return missing_capability
     if last_insufficient_answer is not None:
         return _finalize(
             FinalAnswer(

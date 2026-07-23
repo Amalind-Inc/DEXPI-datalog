@@ -15,6 +15,9 @@ from pydexpi_datalog.qa.capability_manifest import (
 from pydexpi_datalog.qa.counterfactual_probes import (
     run_mandatory_counterfactual_probes,
 )
+from pydexpi_datalog.qa.faithfulness_gate import (
+    evaluate_layered_faithfulness_gate,
+)
 from pydexpi_datalog.qa.route_receipts import (
     ROUTE_DEONTIC_ABSTENTION,
     ROUTE_TEMPLATE_NO_FIT,
@@ -121,6 +124,7 @@ class TopologyTools:
         self._active_question = ""
         self._active_structured_intent: dict[str, object] | None = None
         self._faithfulness_probe_attempts: list[dict[str, object]] = []
+        self._faithfulness_gate_attempts: list[dict[str, object]] = []
         self._loaded_rule_pack_ids = tuple(
             sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
         )
@@ -143,6 +147,7 @@ class TopologyTools:
         self._active_question = question
         self._active_structured_intent = None
         self._faithfulness_probe_attempts = []
+        self._faithfulness_gate_attempts = []
         self._route_receipts.begin_request(
             intent=question,
             source_snapshot_id=source_snapshot_identity(self._graph_facts),
@@ -422,16 +427,24 @@ class TopologyTools:
         request = str(tool_input.get("request", "")).strip()
         generated_datalog = str(tool_input.get("generated_datalog", ""))
         formal_restatement = str(tool_input.get("formal_restatement", "")).strip()
-        resolved_identity_ids = [
-            identity
-            for identity in tool_input.get("resolved_identity_ids", [])
-            if isinstance(identity, str)
-        ]
-        validation = self._validate_temporary_datalog(
+        model_review = tool_input.get("faithfulness_review")
+        raw_resolved_identity_ids = tool_input.get("resolved_identity_ids")
+        resolved_identity_ids = (
+            [
+                identity
+                for identity in raw_resolved_identity_ids
+                if isinstance(identity, str)
+            ]
+            if isinstance(raw_resolved_identity_ids, list)
+            else []
+        )
+        mechanical_validation = self._validate_temporary_datalog(
             generated_datalog=generated_datalog,
             formal_restatement=formal_restatement,
         )
+        validation = mechanical_validation
         encoded_intent: dict[str, object] | None = None
+        semantic_diagnostics: list[dict[str, object]]
         if self._active_structured_intent is None:
             semantic_diagnostics = [
                 {
@@ -449,24 +462,64 @@ class TopologyTools:
                 generated_datalog,
             )
         if semantic_diagnostics:
-            diagnostics = [
-                *list(validation.get("diagnostics", [])),
-                *semantic_diagnostics,
-            ]
+            raw_validation_diagnostics = validation.get("diagnostics")
+            validation_diagnostics = (
+                [
+                    dict(item)
+                    for item in raw_validation_diagnostics
+                    if isinstance(item, dict)
+                ]
+                if isinstance(raw_validation_diagnostics, list)
+                else []
+            )
+            diagnostics = [*validation_diagnostics, *semantic_diagnostics]
             validation = {
                 **validation,
                 "status": "rejected",
                 "diagnostics": diagnostics,
             }
-        # A proposal that fails validation can never execute, so pausing the
-        # turn for user confirmation would be a guaranteed dead end (bead 3cq
-        # follow-up: the live BYOK model omitted `.output answer` and the user
-        # approved a program that could only re-fail). Return the rejection as
-        # an ordinary tool result instead -- the harness feeds it back to the
-        # model, which revises and re-proposes within the same turn. Only
-        # safe_to_confirm proposals reach the user.
+
+        program_id = hashlib.sha256(generated_datalog.encode("utf-8")).hexdigest()
+        if mechanical_validation.get("status") == "safe_to_confirm":
+            counterfactual_validation = run_mandatory_counterfactual_probes(
+                generated_datalog,
+                self._active_structured_intent or {},
+            )
+        else:
+            counterfactual_validation = {
+                "status": "not_applicable",
+                "probes": [],
+                "diagnostics": [],
+                "reason": "mechanical_validation_failed",
+            }
+        probe_attempt = {
+            "program_id": program_id,
+            "generated_datalog": generated_datalog,
+            **counterfactual_validation,
+        }
+        self._faithfulness_probe_attempts.append(probe_attempt)
+        faithfulness_gate = evaluate_layered_faithfulness_gate(
+            mechanical_validation=mechanical_validation,
+            requested_intent=self._active_structured_intent,
+            encoded_intent=encoded_intent,
+            semantic_diagnostics=semantic_diagnostics,
+            counterfactual_validation=counterfactual_validation,
+            model_review=model_review,
+        )
+        self._faithfulness_gate_attempts.append(
+            {
+                "program_id": program_id,
+                "generated_datalog": generated_datalog,
+                **faithfulness_gate,
+            }
+        )
         if validation.get("status") == "rejected":
-            diagnostics = list(validation.get("diagnostics", []))
+            raw_diagnostics = validation.get("diagnostics")
+            diagnostics = (
+                [dict(item) for item in raw_diagnostics if isinstance(item, dict)]
+                if isinstance(raw_diagnostics, list)
+                else []
+            )
             reasons = "; ".join(
                 str(item.get("message", ""))
                 for item in diagnostics
@@ -478,6 +531,10 @@ class TopologyTools:
                 "tool_name": "propose_temporary_datalog",
                 "executed": False,
                 "validation": validation,
+                "counterfactual_validation": counterfactual_validation,
+                "faithfulness_gate": faithfulness_gate,
+                "faithfulness_probe_attempts": [probe_attempt],
+                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
                 "diagnostics": diagnostics,
                 "message": (
                     f"Temporary Datalog proposal rejected: {reasons} "
@@ -488,16 +545,7 @@ class TopologyTools:
                 "matches": [],
                 "reachable": [],
             }
-        counterfactual_validation = run_mandatory_counterfactual_probes(
-            generated_datalog,
-            encoded_intent or {},
-        )
-        probe_attempt = {
-            "program_id": hashlib.sha256(generated_datalog.encode("utf-8")).hexdigest(),
-            "generated_datalog": generated_datalog,
-            **counterfactual_validation,
-        }
-        self._faithfulness_probe_attempts.append(probe_attempt)
+
         if counterfactual_validation.get("status") not in {
             "passed",
             "not_applicable",
@@ -527,11 +575,41 @@ class TopologyTools:
                 "executed": False,
                 "validation": validation,
                 "counterfactual_validation": counterfactual_validation,
-                "faithfulness_probe_attempts": list(self._faithfulness_probe_attempts),
+                "faithfulness_gate": faithfulness_gate,
+                "faithfulness_probe_attempts": [probe_attempt],
+                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
                 "diagnostics": diagnostics,
                 "message": (
                     f"Mandatory counterfactual replay failed: {reasons} "
                     "Revise the program and call propose_temporary_datalog again."
+                ),
+                "matches": [],
+                "reachable": [],
+            }
+        if faithfulness_gate["status"] != "passed":
+            diagnostics = list(
+                faithfulness_gate["layers"]["model_review"]["diagnostics"]  # type: ignore[index]
+            )
+            reasons = "; ".join(
+                str(item.get("message", ""))
+                for item in diagnostics
+                if isinstance(item, dict)
+            )
+            return {
+                "status": "rejected",
+                "code": "faithfulness.model_veto",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "validation": validation,
+                "counterfactual_validation": counterfactual_validation,
+                "faithfulness_gate": faithfulness_gate,
+                "faithfulness_probe_attempts": [probe_attempt],
+                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
+                "diagnostics": diagnostics,
+                "message": (
+                    f"Layered faithfulness gate rejected the model review: {reasons} "
+                    "Revise the program and its back-translation, then call "
+                    "propose_temporary_datalog again."
                 ),
                 "matches": [],
                 "reachable": [],
@@ -555,8 +633,11 @@ class TopologyTools:
                 "resolved_identity_ids": resolved_identity_ids,
                 "structured_intent": self._active_structured_intent,
                 "encoded_intent": encoded_intent,
+                "faithfulness_review": model_review,
+                "faithfulness_gate": faithfulness_gate,
                 "faithfulness_probes": counterfactual_validation["probes"],
                 "faithfulness_probe_attempts": list(self._faithfulness_probe_attempts),
+                "faithfulness_gate_attempts": list(self._faithfulness_gate_attempts),
                 "interpretation": formal_restatement,
                 "exact_datalog": generated_datalog,
                 "effect": TEMPORARY_DATALOG_EFFECT,
@@ -565,6 +646,7 @@ class TopologyTools:
             },
             "validation": validation,
             "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
             "confirmation": {
                 "required": True,
                 "grant": "execute_temporary_datalog_pair",

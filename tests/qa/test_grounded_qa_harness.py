@@ -52,6 +52,15 @@ LEGACY_TEMPORARY_INTENT = {
     "output_obligations": ["answer_ids"],
 }
 
+
+def _faithful_review(intent: dict[str, object]) -> dict[str, object]:
+    return {
+        "status": "faithful",
+        "back_translated_intent": intent,
+        "diagnostics": [],
+    }
+
+
 EDGE_PUMP_NOZZLE = "edge-pump-nozzle"
 EDGE_NOZZLE_SEGMENT = "edge-nozzle-segment"
 EDGE_SEGMENT_VALVE = "edge-segment-valve"
@@ -227,6 +236,7 @@ class SampledPathThenDatalogProvider:
                         LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from pump P-101.",
+                    "faithfulness_review": _faithful_review(LEGACY_TEMPORARY_INTENT),
                     "resolved_identity_ids": [PUMP_ID],
                 },
                 tool_call_id="escalate-datalog",
@@ -314,6 +324,7 @@ class AnswerAfterProposalProvider:
                         LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
+                    "faithfulness_review": _faithful_review(LEGACY_TEMPORARY_INTENT),
                     "resolved_identity_ids": [SEGMENT_ID],
                 },
                 tool_call_id="proposal-shortcircuit",
@@ -378,6 +389,7 @@ class RetryAfterRejectionProvider:
                         LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
+                    "faithfulness_review": _faithful_review(LEGACY_TEMPORARY_INTENT),
                     "resolved_identity_ids": [SEGMENT_ID],
                 },
                 tool_call_id="proposal-invalid",
@@ -399,6 +411,7 @@ class RetryAfterRejectionProvider:
                         LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
+                    "faithfulness_review": _faithful_review(LEGACY_TEMPORARY_INTENT),
                     "resolved_identity_ids": [SEGMENT_ID],
                 },
                 tool_call_id="proposal-corrected",
@@ -425,6 +438,13 @@ def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
     ]
     assert len(proposal_traces) == 2
     assert proposal_traces[0]["tool_result"]["status"] == "rejected"
+    invalid_gate = proposal_traces[0]["tool_result"]
+    assert invalid_gate["counterfactual_validation"]["status"] == "not_applicable"
+    assert (
+        invalid_gate["faithfulness_gate"]["layers"]["counterfactual"]["status"]
+        == "passed"
+    )
+    assert len(invalid_gate["faithfulness_gate_attempts"]) == 1
     assert proposal_traces[1]["tool_result"]["status"] == "confirmation_required"
     assert (
         proposal_traces[1]["tool_result"]["validation"]["status"] == "safe_to_confirm"
@@ -542,6 +562,9 @@ class RepairCounterfactualProbeProvider:
                 "formal_restatement": (
                     "Return tanks without a piping path to a centrifugal pump."
                 ),
+                "faithfulness_review": _faithful_review(
+                    COUNTERFACTUAL_CONNECTIVITY_INTENT
+                ),
             },
             tool_call_id=(
                 "counterfactual-vacuous"
@@ -593,62 +616,258 @@ def test_counterfactual_failure_is_repaired_through_public_runner() -> None:
     assert attempts[0]["program_id"] != attempts[1]["program_id"]
 
 
+class RepairLayeredFaithfulnessProvider:
+    def __init__(self) -> None:
+        self._step = 0
+        self.rejection_feedback: list[str] = []
+
+    def complete_with_tools(self, *, messages, tools):
+        self._step += 1
+        if self._step == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this connectivity obligation.",
+                    "structured_intent": COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="layered-no-fit",
+            )
+        if self._step > 2 and messages[-1].get("role") == "tool":
+            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": "Must every tank have a piping path to a centrifugal pump?",
+                "generated_datalog": _counterfactual_connectivity_program(
+                    faithful=True
+                ),
+                "formal_restatement": (
+                    "Return tanks without a piping path to a centrifugal pump."
+                ),
+                "faithfulness_review": {
+                    "status": "uncertain" if self._step == 2 else "faithful",
+                    "back_translated_intent": COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                    "diagnostics": (
+                        [
+                            "The model could not establish whether direction was preserved."
+                        ]
+                        if self._step == 2
+                        else []
+                    ),
+                },
+            },
+            tool_call_id=(
+                "layered-uncertain" if self._step == 2 else "layered-corrected"
+            ),
+        )
+
+
+def test_model_back_translation_can_veto_but_not_authorize_public_runner(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        _replay_counterfactual_program,
+    )
+    provider = RepairLayeredFaithfulnessProvider()
+
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=provider,
+    )
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposals) == 2
+    vetoed, corrected = proposals
+    assert vetoed["status"] == "rejected"
+    assert vetoed["code"] == "faithfulness.model_veto"
+    assert vetoed["faithfulness_gate"]["status"] == "failed"
+    assert vetoed["faithfulness_gate"]["layers"]["mechanical"]["status"] == "passed"
+    assert vetoed["faithfulness_gate"]["layers"]["semantic"]["status"] == "passed"
+    assert vetoed["faithfulness_gate"]["layers"]["counterfactual"]["status"] == "passed"
+    assert vetoed["faithfulness_gate"]["layers"]["model_review"]["status"] == "failed"
+    assert corrected["status"] == "confirmation_required"
+    assert corrected["faithfulness_gate"]["status"] == "passed"
+    assert corrected["proposal"]["faithfulness_gate_attempts"][0]["status"] == "failed"
+    assert corrected["proposal"]["faithfulness_gate_attempts"][1]["status"] == "passed"
+    assert any(
+        "faithfulness.model_veto" in item for item in provider.rejection_feedback
+    )
+
+
+class ExhaustedConflictingFaithfulnessProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        self._step += 1
+        if self._step == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this connectivity obligation.",
+                    "structured_intent": COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="exhausted-no-fit",
+            )
+        if self._step == 4:
+            return FinalAnswer(
+                answer_text="Every tank has a compliant piping path.",
+                evidence_references=[PUMP_ID],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        if self._step > 4:
+            raise AssertionError("provider consulted after failed gate ended the run")
+        conflicting_intent = {
+            **COUNTERFACTUAL_CONNECTIVITY_INTENT,
+            "direction": "directed",
+        }
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": "Must every tank have a piping path to a centrifugal pump?",
+                "generated_datalog": _counterfactual_connectivity_program(
+                    faithful=True
+                ),
+                "formal_restatement": (
+                    "Return tanks without a piping path to a centrifugal pump."
+                ),
+                "faithfulness_review": {
+                    "status": "faithful",
+                    "back_translated_intent": conflicting_intent,
+                    "diagnostics": [],
+                },
+            },
+            tool_call_id=f"conflicting-revision-{self._step}",
+        )
+
+
+def test_exhausted_conflicting_gate_returns_missing_capability_not_verdict(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        _replay_counterfactual_program,
+    )
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=ExhaustedConflictingFaithfulnessProvider(),
+        max_rounds=3,
+    )
+
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposals) == 2
+    assert all(proposal["status"] == "rejected" for proposal in proposals)
+    assert all(
+        proposal["faithfulness_gate"]["layers"]["model_review"]["diagnostics"][0][
+            "code"
+        ]
+        == "faithfulness.model_review_conflict"
+        for proposal in proposals
+    )
+    assert result.grounding_posture == POSTURE_SOURCE_DATA_UNAVAILABLE
+    assert result.source_grounded is False
+    assert result.deterministic_verdict is None
+    assert result.witnesses == []
+    assert "faithful generated program" in result.answer_text
+    outcome = result.trace_events[-1]["outcome"]
+    assert outcome["status"] == "missing_capability"
+    assert outcome["code"] == "faithfulness.no_faithful_program"
+    assert outcome["diagnostics"]
+
+
+def test_final_answer_cannot_bypass_a_failed_faithfulness_gate(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        _replay_counterfactual_program,
+    )
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=ExhaustedConflictingFaithfulnessProvider(),
+        max_rounds=5,
+    )
+
+    assert result.grounding_posture == POSTURE_SOURCE_DATA_UNAVAILABLE
+    assert result.source_grounded is False
+    assert result.deterministic_verdict is None
+    assert result.evidence_references == []
+    assert "Every tank has a compliant piping path." not in result.answer_text
+    assert result.trace_events[-1]["outcome"]["code"] == (
+        "faithfulness.no_faithful_program"
+    )
+
+
+def _replay_counterfactual_program(
+    program: str, **_limits: object
+) -> dict[str, list[tuple[str, ...]]]:
+    source_match = re.search(
+        r'^node_attribute\("([^"]+)", "label", "Tank"\)\.$',
+        program,
+        re.MULTILINE,
+    )
+    target_match = re.search(
+        r'^node_attribute\("([^"]+)", "label", "CentrifugalPump"\)\.$',
+        program,
+        re.MULTILINE,
+    )
+    assert source_match is not None and target_match is not None
+    source_id, target_id = source_match.group(1), target_match.group(1)
+    connected = bool(
+        re.search(r'^graph_edge\("[^"]+", "[^"]+", ', program, re.MULTILINE)
+    )
+    edge_attrs = re.findall(
+        r'^graph_edge_attribute\(.*"attr_name", "([^"]+)"\)\.$',
+        program,
+        re.MULTILINE,
+    )
+    qualifying_path = connected and any(
+        attr_name
+        in {
+            "sourceItem",
+            "targetItem",
+            "sourceNode",
+            "targetNode",
+            "nodes",
+            "segments",
+            "connections",
+            "items",
+            "pipingNetworkSystems",
+            "nozzles",
+        }
+        for attr_name in edge_attrs
+    )
+    narrowed_to_direct = "graph_edge(Source, Target, _)" in program
+    direct_forward = f'graph_edge("{source_id}", "{target_id}",' in program
+    has_pump = (
+        qualifying_path and direct_forward if narrowed_to_direct else qualifying_path
+    )
+    answer = [] if has_pump else [(source_id,)]
+    return {"answer": answer}
+
+
 def test_counterfactual_repair_loop_does_not_depend_on_local_engine(
     monkeypatch,
 ) -> None:
-    def replay_external_engine(
-        program: str, **_limits: object
-    ) -> dict[str, list[tuple[str, ...]]]:
-        source_match = re.search(
-            r'^node_attribute\("([^"]+)", "label", "Tank"\)\.$',
-            program,
-            re.MULTILINE,
-        )
-        target_match = re.search(
-            r'^node_attribute\("([^"]+)", "label", "CentrifugalPump"\)\.$',
-            program,
-            re.MULTILINE,
-        )
-        assert source_match is not None and target_match is not None
-        source_id, target_id = source_match.group(1), target_match.group(1)
-        connected = bool(
-            re.search(r'^graph_edge\("[^"]+", "[^"]+", ', program, re.MULTILINE)
-        )
-        edge_attrs = re.findall(
-            r'^graph_edge_attribute\(.*"attr_name", "([^"]+)"\)\.$',
-            program,
-            re.MULTILINE,
-        )
-        qualifying_path = connected and any(
-            attr_name
-            in {
-                "sourceItem",
-                "targetItem",
-                "sourceNode",
-                "targetNode",
-                "nodes",
-                "segments",
-                "connections",
-                "items",
-                "pipingNetworkSystems",
-                "nozzles",
-            }
-            for attr_name in edge_attrs
-        )
-        narrowed_to_direct = "graph_edge(Source, Target, _)" in program
-        direct_forward = f'graph_edge("{source_id}", "{target_id}",' in program
-        has_pump = (
-            qualifying_path and direct_forward
-            if narrowed_to_direct
-            else qualifying_path
-        )
-        answer = [] if has_pump else [(source_id,)]
-        return {"answer": answer}
 
     monkeypatch.setattr(
         counterfactual_probes,
         "run_souffle_program",
-        replay_external_engine,
+        _replay_counterfactual_program,
     )
     result = run_grounded_qa_turn(
         question="Must every tank have a piping path to a centrifugal pump?",
@@ -735,6 +954,7 @@ class RepairStructuredIntentProvider:
                 "generated_datalog": program,
                 "formal_restatement": "Return pumps without a reachable ball valve.",
                 "resolved_identity_ids": [SEGMENT_ID],
+                "faithfulness_review": _faithful_review(STRUCTURED_CONNECTIVITY_INTENT),
             },
             tool_call_id=call_id,
         )
@@ -780,6 +1000,12 @@ def test_structured_intent_mismatch_is_repaired_through_public_runner() -> None:
     assert accepted["status"] == "confirmation_required"
     assert accepted["validation"]["status"] == "safe_to_confirm"
     assert accepted["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+    gate_attempts = accepted["proposal"]["faithfulness_gate_attempts"]
+    assert len(gate_attempts) == 4
+    assert all(
+        attempt["layers"]["counterfactual"]["status"] != "not_evaluated"
+        for attempt in gate_attempts
+    )
 
 
 class ValidStructuredIntentProvider:
@@ -806,6 +1032,7 @@ class ValidStructuredIntentProvider:
                     STRUCTURED_CONNECTIVITY_INTENT,
                 ),
                 "formal_restatement": "Return pumps without a reachable ball valve.",
+                "faithfulness_review": _faithful_review(STRUCTURED_CONNECTIVITY_INTENT),
                 "resolved_identity_ids": [SEGMENT_ID],
             },
             tool_call_id="valid-structured-proposal",

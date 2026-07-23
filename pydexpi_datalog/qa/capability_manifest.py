@@ -353,13 +353,42 @@ def default_grounded_qa_manifest(
                             "type": "string",
                             "description": "Engineer-readable restatement of what the temporary query returns.",
                         },
+                        "faithfulness_review": {
+                            "type": "object",
+                            "properties": {
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["faithful", "unfaithful", "uncertain"],
+                                },
+                                "back_translated_intent": STRUCTURED_INTENT_JSON_SCHEMA,
+                                "diagnostics": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                            },
+                            "required": [
+                                "status",
+                                "back_translated_intent",
+                                "diagnostics",
+                            ],
+                            "additionalProperties": False,
+                            "description": (
+                                "Model-produced semantic back-translation. A faithful "
+                                "review cannot authorize execution; unfaithful, uncertain, "
+                                "incomplete, or conflicting evidence blocks progression."
+                            ),
+                        },
                         "resolved_identity_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Evidence IDs already resolved through read-only retrieval.",
                         },
                     },
-                    "required": ["request", "generated_datalog", "formal_restatement"],
+                    "required": [
+                        "request",
+                        "generated_datalog",
+                        "formal_restatement",
+                    ],
                 },
             ),
             GroundedQACapability(

@@ -67,6 +67,11 @@ class TemporaryDatalogProposalProvider:
                         STRUCTURED_INTENT,
                     ),
                     "formal_restatement": "Return objects matching the temporary topology rule.",
+                    "faithfulness_review": {
+                        "status": "faithful",
+                        "back_translated_intent": STRUCTURED_INTENT,
+                        "diagnostics": [],
+                    },
                     "resolved_identity_ids": [self._answer_id],
                 },
                 tool_call_id="proposal-1",
@@ -309,6 +314,18 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             self.assertEqual(
                 confirm_record["faithfulness_probe_attempts"],
                 proposal["faithfulness_probe_attempts"],
+            )
+            self.assertEqual(
+                confirm_record["faithfulness_review"],
+                proposal["faithfulness_review"],
+            )
+            self.assertEqual(
+                confirm_record["faithfulness_gate"],
+                proposal["faithfulness_gate"],
+            )
+            self.assertEqual(
+                confirm_record["faithfulness_gate_attempts"],
+                proposal["faithfulness_gate_attempts"],
             )
             self.assertEqual(confirm_record["decision"], "approved")
             self.assertIn("T", confirm_record["decided_at"])

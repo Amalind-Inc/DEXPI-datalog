@@ -295,6 +295,11 @@ class _DatalogProposalProvider:
                         STRUCTURED_INTENT,
                     ),
                     "formal_restatement": "Return objects matching the temporary topology rule.",
+                    "faithfulness_review": {
+                        "status": "faithful",
+                        "back_translated_intent": STRUCTURED_INTENT,
+                        "diagnostics": [],
+                    },
                     "resolved_identity_ids": [self._answer_id],
                 },
                 tool_call_id="proposal-1",

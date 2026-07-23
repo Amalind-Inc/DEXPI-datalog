@@ -122,6 +122,11 @@ class ProposeDatalogProvider:
                     STRUCTURED_INTENT,
                 ),
                 "formal_restatement": self._formal_restatement,
+                "faithfulness_review": {
+                    "status": "faithful",
+                    "back_translated_intent": STRUCTURED_INTENT,
+                    "diagnostics": [],
+                },
             },
             tool_call_id="scripted-propose",
         )
@@ -197,6 +202,11 @@ def _anchor_with_reachables() -> tuple[str, list[str]]:
                     STRUCTURED_INTENT,
                 ),
                 "formal_restatement": "Return reachable objects.",
+                "faithfulness_review": {
+                    "status": "faithful",
+                    "back_translated_intent": STRUCTURED_INTENT,
+                    "diagnostics": [],
+                },
             },
         )
         if proposal.get("status") != "confirmation_required":
@@ -466,6 +476,11 @@ class TrapOrRuleProvider:
                     STRUCTURED_INTENT,
                 ),
                 "formal_restatement": "Return reachable objects.",
+                "faithfulness_review": {
+                    "status": "faithful",
+                    "back_translated_intent": STRUCTURED_INTENT,
+                    "diagnostics": [],
+                },
             },
             tool_call_id="scripted-propose",
         )

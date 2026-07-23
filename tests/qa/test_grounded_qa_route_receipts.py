@@ -39,6 +39,11 @@ STRUCTURED_INTENT = {
     "negated": True,
     "output_obligations": ["violating_source_ids"],
 }
+FAITHFULNESS_REVIEW = {
+    "status": "faithful",
+    "back_translated_intent": STRUCTURED_INTENT,
+    "diagnostics": [],
+}
 
 MINIMAL_TOPOLOGY = {
     "source_id": "drawing-v1",
@@ -104,6 +109,7 @@ class NoFitThenGeneratedProvider:
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
+                "faithfulness_review": FAITHFULNESS_REVIEW,
             },
             tool_call_id="generated-1",
         )
@@ -247,6 +253,7 @@ def test_exact_normalized_retry_reuses_backend_receipt() -> None:
             "formal_restatement": (
                 "Return every centrifugal pump without a reachable ball valve."
             ),
+            "faithfulness_review": FAITHFULNESS_REVIEW,
         },
     )
 
@@ -269,6 +276,7 @@ class ResumedGeneratedProvider:
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
+                "faithfulness_review": FAITHFULNESS_REVIEW,
             },
             tool_call_id="resumed-generated",
         )
@@ -339,6 +347,7 @@ def test_signed_receipt_restores_structured_intent_validation() -> None:
             "formal_restatement": (
                 "Return every centrifugal pump without a reachable ball valve."
             ),
+            "faithfulness_review": FAITHFULNESS_REVIEW,
         },
     )
 
@@ -398,6 +407,7 @@ def test_model_cannot_change_structured_intent_after_receipt_issuance() -> None:
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
+                "faithfulness_review": FAITHFULNESS_REVIEW,
             },
         )["status"]
         == "confirmation_required"
@@ -559,6 +569,7 @@ def test_direct_backend_route_outcome_activates_its_signed_intent() -> None:
             "formal_restatement": (
                 "Return every centrifugal pump without a reachable ball valve."
             ),
+            "faithfulness_review": FAITHFULNESS_REVIEW,
         },
     )
 

@@ -278,6 +278,25 @@ def test_datalog_audit_persists_counterfactual_probe_versions_and_outcomes(
             "diagnostics": [],
         },
     ]
+    review = {
+        "status": "faithful",
+        "back_translated_intent": CONNECTIVITY_INTENT,
+        "diagnostics": [],
+    }
+    gate = {
+        "status": "passed",
+        "layers": {
+            "mechanical": {"status": "passed", "diagnostics": []},
+            "semantic": {"status": "passed", "diagnostics": []},
+            "counterfactual": {"status": "passed", "diagnostics": []},
+            "model_review": {"status": "passed", "diagnostics": []},
+        },
+        "diagnostics": [],
+    }
+    gate_attempts = [
+        {"program_id": "failed-program-sha256", "status": "failed"},
+        {"program_id": "corrected-program-sha256", **gate},
+    ]
     record = build_datalog_audit_record(
         session_id="session-1",
         question="Must every tank reach a pump?",
@@ -287,6 +306,9 @@ def test_datalog_audit_persists_counterfactual_probe_versions_and_outcomes(
             "generated_datalog": ".output answer",
             "faithfulness_probes": probes,
             "faithfulness_probe_attempts": attempts,
+            "faithfulness_review": review,
+            "faithfulness_gate": gate,
+            "faithfulness_gate_attempts": gate_attempts,
         },
         decision="approved",
         executed=True,
@@ -299,3 +321,6 @@ def test_datalog_audit_persists_counterfactual_probe_versions_and_outcomes(
 
     assert persisted["faithfulness_probes"] == probes
     assert persisted["faithfulness_probe_attempts"] == attempts
+    assert persisted["faithfulness_review"] == review
+    assert persisted["faithfulness_gate"] == gate
+    assert persisted["faithfulness_gate_attempts"] == gate_attempts

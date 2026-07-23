@@ -36,6 +36,16 @@ def build_datalog_audit_record(
         if isinstance(raw_attempts, list)
         else []
     )
+    raw_gate_attempts = proposal.get("faithfulness_gate_attempts")
+    faithfulness_gate_attempts = (
+        [dict(attempt) for attempt in raw_gate_attempts if isinstance(attempt, dict)]
+        if isinstance(raw_gate_attempts, list)
+        else []
+    )
+    raw_review = proposal.get("faithfulness_review")
+    faithfulness_review = dict(raw_review) if isinstance(raw_review, dict) else {}
+    raw_gate = proposal.get("faithfulness_gate")
+    faithfulness_gate = dict(raw_gate) if isinstance(raw_gate, dict) else {}
     return {
         "proposal_id": str(proposal.get("proposal_id", "")),
         "session_id": session_id,
@@ -44,6 +54,9 @@ def build_datalog_audit_record(
         "generated_datalog": str(proposal.get("generated_datalog", "")),
         "faithfulness_probes": faithfulness_probes,
         "faithfulness_probe_attempts": faithfulness_probe_attempts,
+        "faithfulness_review": faithfulness_review,
+        "faithfulness_gate": faithfulness_gate,
+        "faithfulness_gate_attempts": faithfulness_gate_attempts,
         "decision": decision,
         "decided_at": decided_at
         or datetime.now(timezone.utc).isoformat(timespec="seconds"),
