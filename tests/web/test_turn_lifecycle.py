@@ -322,6 +322,58 @@ def test_progress_events_carry_sanitized_tool_arguments_and_bounded_reasoning() 
         assert "reasoning" not in bare
 
 
+def test_progress_events_preserve_scalars_inside_nested_tool_arguments() -> None:
+    """The depth cap bounds container nesting, not leaf scalars: class-name
+    strings inside lists inside the bindings mapping must survive into the
+    persisted progress event, or the live channel misleads the reviewer with
+    empty lists while the real tool call carried the full bindings."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        session_id = "nested-progress-session"
+        request_id = "nested-progress-request"
+        turn_id = compute_turn_id(session_id, request_id)
+
+        def execute() -> dict[str, object]:
+            store.append_progress(
+                session_id=session_id,
+                turn_id=turn_id,
+                round_index=1,
+                max_rounds=20,
+                tool_name="execute_bundled_query_template",
+                tool_input={
+                    "request": "Find equipment without a pump path.",
+                    "template_id": "equipment_without_pump_path",
+                    "bindings": {
+                        "pump_classes": ["CentrifugalPump", "ReciprocatingPump"],
+                        "equipment_classes": ["PlateHeatExchanger", "Tank"],
+                        "scope": "piping",
+                        "negated": True,
+                    },
+                },
+            )
+            return {"status": "answered", "answer_text": "Done."}
+
+        turn = store.start(
+            session_id=session_id,
+            request_id=request_id,
+            question="Find equipment without a pump path.",
+            execute=execute,
+        )
+
+        progress = [
+            event["data"]
+            for event in turn["events"]
+            if event["type"] == "tool-progress"
+            and event["data"].get("status") == "round"
+        ]
+        assert len(progress) == 1
+        bindings = progress[0]["tool_input"]["bindings"]
+        assert bindings["pump_classes"] == ["CentrifugalPump", "ReciprocatingPump"]
+        assert bindings["equipment_classes"] == ["PlateHeatExchanger", "Tank"]
+        assert bindings["scope"] == "piping"
+        assert bindings["negated"] is True
+
+
 class CountingProvider:
     def __init__(self) -> None:
         self.calls = 0

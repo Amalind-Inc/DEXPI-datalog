@@ -86,12 +86,15 @@ def bound_reasoning_text(value: object) -> str | None:
 
 
 def _sanitize_progress_value(value: object, *, depth: int) -> object | None:
-    if depth >= 3:
-        return None
     if value is None or isinstance(value, (bool, int, float)):
         return value
     if isinstance(value, str):
         return value[:MAX_PROGRESS_STRING_LENGTH]
+    # The depth cap bounds container nesting only: leaf scalars survive at any
+    # depth, otherwise class lists nested under a bindings mapping render as
+    # empty and the live channel misreports the actual tool arguments.
+    if depth >= 3:
+        return None
     if isinstance(value, list):
         items = [
             item
