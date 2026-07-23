@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
-from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore
+from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
 
 
 STRUCTURED_INTENT = {
@@ -256,6 +256,70 @@ def test_trace_rendering_is_independent_of_capability_review_state() -> None:
         assert event_types.index("execution-trace") < event_types.index(
             "review-required"
         )
+
+
+def test_progress_events_carry_sanitized_tool_arguments_and_bounded_reasoning() -> None:
+    """The live progress channel surfaces what the model is doing (tool
+    arguments) and why (reasoning) -- bounded and redacted with the same
+    discipline as the governed execution trace, and omitted entirely when a
+    provider supplies nothing (no fabrication)."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        session_id = "progress-session"
+        request_id = "progress-request"
+        turn_id = compute_turn_id(session_id, request_id)
+
+        def execute() -> dict[str, object]:
+            store.append_progress(
+                session_id=session_id,
+                turn_id=turn_id,
+                round_index=1,
+                max_rounds=20,
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every tank reach a pump?",
+                    "credential": "sk-secret-value",
+                    "authorization": "Bearer secret-value",
+                    "generated_datalog": "x" * 10_000,
+                },
+                reasoning="r" * 10_000,
+            )
+            store.append_progress(
+                session_id=session_id,
+                turn_id=turn_id,
+                round_index=2,
+                max_rounds=20,
+                tool_name="find_equipment",
+            )
+            return {"status": "answered", "answer_text": "Done."}
+
+        turn = store.start(
+            session_id=session_id,
+            request_id=request_id,
+            question="Must every tank reach a pump?",
+            execute=execute,
+        )
+
+        progress = [
+            event["data"]
+            for event in turn["events"]
+            if event["type"] == "tool-progress"
+            and event["data"].get("status") == "round"
+        ]
+        assert len(progress) == 2
+        enriched, bare = progress
+
+        tool_input = enriched["tool_input"]
+        assert tool_input["request"] == "Must every tank reach a pump?"
+        assert "credential" not in tool_input
+        assert "authorization" not in tool_input
+        assert len(tool_input["generated_datalog"]) <= 400
+        assert "sk-secret-value" not in str(enriched)
+        assert "Bearer secret-value" not in str(enriched)
+        assert 0 < len(enriched["reasoning"]) <= 2_000
+
+        assert "tool_input" not in bare
+        assert "reasoning" not in bare
 
 
 class CountingProvider:

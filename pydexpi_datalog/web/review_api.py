@@ -327,13 +327,21 @@ def create_review_api_app(
 
         turn_id = compute_turn_id(session_id, request_id)
 
-        def _report_round(round_index: int, max_rounds: int, tool_name: str | None) -> None:
+        def _report_round(
+            round_index: int,
+            max_rounds: int,
+            tool_name: str | None,
+            tool_input: dict[str, object] | None = None,
+            reasoning: str | None = None,
+        ) -> None:
             turns.append_progress(
                 session_id=session_id,
                 turn_id=turn_id,
                 round_index=round_index,
                 max_rounds=max_rounds,
                 tool_name=tool_name,
+                tool_input=tool_input,
+                reasoning=reasoning,
             )
 
         def _execute() -> dict[str, object]:

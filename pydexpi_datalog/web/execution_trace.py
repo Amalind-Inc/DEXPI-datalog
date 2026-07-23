@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from pathlib import Path
 import re
 
+from pydexpi_datalog.qa.grounded_qa_harness import MAX_TRACE_REASONING_LENGTH
+
 TRACE_SCHEMA_VERSION = 1
 TRACE_EVENT_ID_LENGTH = 16
 MAX_TRACE_EVENTS = 64
@@ -42,6 +44,73 @@ _SAFE_DETAIL_FIELDS = (
     "route",
     "code",
 )
+
+# Live progress channel bounds (bead 3qo.9.12): the same redaction discipline
+# as trace details, applied to per-round tool arguments and model reasoning.
+# Single source of truth: the harness bounds reasoning at capture time and the
+# progress channel applies the identical bound when persisting.
+MAX_REASONING_LENGTH = MAX_TRACE_REASONING_LENGTH
+MAX_PROGRESS_STRING_LENGTH = 400
+MAX_PROGRESS_DETAIL_KEYS = 16
+MAX_PROGRESS_LIST_ITEMS = 10
+_BLOCKED_PROGRESS_KEY_PARTS = (
+    "api_key",
+    "authorization",
+    "chain_of_thought",
+    "credential",
+    "password",
+    "private",
+    "secret",
+    "system_prompt",
+    "token",
+)
+
+
+def sanitize_progress_tool_input(value: object) -> dict[str, object]:
+    """Bounded, redacted projection of a tool call's arguments for the live
+    progress channel. Keys matching credential/prompt-like names are dropped;
+    strings, lists, and nesting are truncated."""
+    sanitized = _sanitize_progress_value(value, depth=0)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def bound_reasoning_text(value: object) -> str | None:
+    """Bounded model reasoning excerpt; None for anything that is not a
+    non-empty string -- absent reasoning is never fabricated."""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return stripped[:MAX_REASONING_LENGTH]
+
+
+def _sanitize_progress_value(value: object, *, depth: int) -> object | None:
+    if depth >= 3:
+        return None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:MAX_PROGRESS_STRING_LENGTH]
+    if isinstance(value, list):
+        items = [
+            item
+            for raw in value[:MAX_PROGRESS_LIST_ITEMS]
+            if (item := _sanitize_progress_value(raw, depth=depth + 1)) is not None
+        ]
+        return items
+    if isinstance(value, Mapping):
+        sanitized: dict[str, object] = {}
+        for raw_key, raw_value in list(value.items())[:MAX_PROGRESS_DETAIL_KEYS]:
+            key = str(raw_key)
+            lowered = key.lower()
+            if any(part in lowered for part in _BLOCKED_PROGRESS_KEY_PARTS):
+                continue
+            item = _sanitize_progress_value(raw_value, depth=depth + 1)
+            if item is not None:
+                sanitized[key] = item
+        return sanitized
+    return None
 
 
 def render_execution_trace(

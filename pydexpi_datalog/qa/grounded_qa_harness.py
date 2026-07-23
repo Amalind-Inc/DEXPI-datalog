@@ -14,6 +14,9 @@ class ToolCall:
     tool_name: str
     tool_input: dict[str, object]
     tool_call_id: str
+    # Model-supplied reasoning excerpt for this step, when the provider
+    # captured one (bead 3qo.9.12). Never fabricated: None when absent.
+    reasoning: str | None = None
 
 
 # Grounding posture: the model declares how a final answer relates to the loaded
@@ -61,6 +64,9 @@ class FinalAnswer:
     evidence_references: list[str] = field(default_factory=list)
     interpreted_object_ids: list[str] = field(default_factory=list)
     grounding_posture: str = POSTURE_UNSPECIFIED
+    # Model-supplied reasoning excerpt for the final answer, when the provider
+    # captured one (bead 3qo.9.12). Never fabricated: None when absent.
+    reasoning: str | None = None
 
 
 @dataclass(frozen=True)
@@ -735,7 +741,16 @@ DEFAULT_MAX_ROUNDS = 20
 # Reported to an optional progress callback once per round so callers (e.g. the
 # web API's turn lifecycle) can surface live progress instead of a static
 # "working" placeholder for the whole (potentially long) tool-calling loop.
-RoundProgress = Callable[[int, int, str | None], None]
+# (round_number, max_rounds, tool_name, tool_input, reasoning): tool_input and
+# reasoning surface what the model is doing and why (bead 3qo.9.12); both are
+# None when the provider supplied nothing -- never fabricated.
+RoundProgress = Callable[
+    [int, int, str | None, dict[str, object] | None, str | None], None
+]
+
+# Model reasoning recorded into the audit trace is bounded at the source so no
+# unbounded provider output enters persisted proposal/audit records.
+MAX_TRACE_REASONING_LENGTH = 2_000
 
 
 def compact_conversation(
@@ -871,7 +886,13 @@ def run_grounded_qa_turn(
             messages=messages, tools=topology_tools.tool_definitions()
         )
         if on_round is not None and isinstance(response, ToolCall):
-            on_round(round_index + 1, max_rounds, response.tool_name)
+            on_round(
+                round_index + 1,
+                max_rounds,
+                response.tool_name,
+                dict(response.tool_input),
+                response.reasoning,
+            )
 
         if isinstance(response, FinalAnswer):
             if _tool_trace_satisfies_intent(intent, tool_call_trace):
@@ -923,14 +944,17 @@ def run_grounded_qa_turn(
             )
             tool_result_json = json.dumps(tool_result)
 
-            tool_call_trace.append(
-                {
-                    "tool_call_id": response.tool_call_id,
-                    "tool_name": response.tool_name,
-                    "tool_input": response.tool_input,
-                    "tool_result": tool_result,
-                }
-            )
+            trace_entry: dict[str, object] = {
+                "tool_call_id": response.tool_call_id,
+                "tool_name": response.tool_name,
+                "tool_input": response.tool_input,
+                "tool_result": tool_result,
+            }
+            if response.reasoning:
+                trace_entry["reasoning"] = response.reasoning[
+                    :MAX_TRACE_REASONING_LENGTH
+                ]
+            tool_call_trace.append(trace_entry)
 
             if (
                 response.tool_name == "propose_temporary_datalog"

@@ -9,7 +9,9 @@ from typing import Callable
 
 from pydexpi_datalog.web.execution_trace import (
     TRACE_EVENT_ID_LENGTH,
+    bound_reasoning_text,
     render_execution_trace,
+    sanitize_progress_tool_input,
 )
 
 TURN_ID_LENGTH = 20
@@ -44,7 +46,10 @@ class TurnLifecycleStore:
         with self._lock:
             existing = self.get(session_id=session_id, turn_id=turn_id)
             if existing is not None:
-                if existing["request_id"] != request_id or existing["question"] != question:
+                if (
+                    existing["request_id"] != request_id
+                    or existing["question"] != question
+                ):
                     raise ValueError("request_id was already used for a different turn")
                 return existing
             turn = self.begin(
@@ -88,7 +93,10 @@ class TurnLifecycleStore:
         with self._lock:
             existing = self.get(session_id=session_id, turn_id=turn_id)
             if existing is not None:
-                if existing["request_id"] != request_id or existing["question"] != question:
+                if (
+                    existing["request_id"] != request_id
+                    or existing["question"] != question
+                ):
                     raise ValueError("request_id was already used for a different turn")
                 return existing
             turn: dict[str, object] = {
@@ -111,27 +119,35 @@ class TurnLifecycleStore:
         round_index: int,
         max_rounds: int,
         tool_name: str | None,
+        tool_input: dict[str, object] | None = None,
+        reasoning: str | None = None,
     ) -> None:
         """Append a live round-progress event while a turn is still executing.
 
         Called from inside the (synchronous, in-request) tool-calling loop, so
         the frontend's existing poll-while-waiting loop has something new to
         render instead of a static "working" placeholder for the whole turn.
+
+        Tool arguments and model reasoning are persisted bounded and redacted
+        (bead 3qo.9.12) and omitted entirely when absent -- never fabricated.
         """
         with self._lock:
             turn = self.get(session_id=session_id, turn_id=turn_id)
             if turn is None or turn.get("status") != "active":
                 return
-            self._append(
-                turn,
-                "tool-progress",
-                {
-                    "status": "round",
-                    "round": round_index,
-                    "max_rounds": max_rounds,
-                    "tool_name": tool_name,
-                },
-            )
+            data: dict[str, object] = {
+                "status": "round",
+                "round": round_index,
+                "max_rounds": max_rounds,
+                "tool_name": tool_name,
+            }
+            sanitized_input = sanitize_progress_tool_input(tool_input)
+            if sanitized_input:
+                data["tool_input"] = sanitized_input
+            bounded_reasoning = bound_reasoning_text(reasoning)
+            if bounded_reasoning:
+                data["reasoning"] = bounded_reasoning
+            self._append(turn, "tool-progress", data)
             self._save(turn)
 
     def get(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
@@ -270,9 +286,7 @@ class TurnLifecycleStore:
     def _event(sequence: int, event_type: str, data: object) -> dict[str, object]:
         return {"sequence": sequence, "type": event_type, "data": data}
 
-    def _append(
-        self, turn: dict[str, object], event_type: str, data: object
-    ) -> None:
+    def _append(self, turn: dict[str, object], event_type: str, data: object) -> None:
         events = turn.setdefault("events", [])
         assert isinstance(events, list)
         events.append(self._event(len(events), event_type, data))

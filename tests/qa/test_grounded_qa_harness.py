@@ -1845,11 +1845,12 @@ def test_default_max_rounds_is_20():
 
 def test_on_round_is_reported_once_per_tool_call_not_before_a_first_round_final_answer():
     """
-    Behavior: on_round fires with (round_number, max_rounds, tool_name) for
-    each round that dispatches a tool call, so a caller can surface live
-    progress instead of a static "working" placeholder for a long-running
-    turn. A round that answers immediately (no tool call at all) must not
-    report progress -- there's nothing "in flight" to describe.
+    Behavior: on_round fires with (round_number, max_rounds, tool_name,
+    tool_input, reasoning) for each round that dispatches a tool call, so a
+    caller can surface live progress -- including what the model is doing and
+    why -- instead of a static "working" placeholder for a long-running turn.
+    A round that answers immediately (no tool call at all) must not report
+    progress -- there's nothing "in flight" to describe.
     """
 
     class TwoToolCallsThenAnswerProvider:
@@ -1863,23 +1864,76 @@ def test_on_round_is_reported_once_per_tool_call_not_before_a_first_round_final_
                     tool_name="find_equipment",
                     tool_input={"pattern": "pump"},
                     tool_call_id=f"call-{self.calls}",
+                    reasoning="Scanning for pump candidates."
+                    if self.calls == 1
+                    else None,
                 )
             return FinalAnswer(answer_text="Found it.")
 
-    reported: list[tuple[int, int, str | None]] = []
+    reported: list[tuple[int, int, str | None, dict | None, str | None]] = []
     tools = make_tools()
     run_grounded_qa_turn(
         question="find the pump",
         topology_tools=tools,
         provider=TwoToolCallsThenAnswerProvider(),
-        on_round=lambda round_number, max_rounds, tool_name: reported.append(
-            (round_number, max_rounds, tool_name)
+        on_round=lambda round_number, max_rounds, tool_name, tool_input, reasoning: (
+            reported.append(
+                (round_number, max_rounds, tool_name, tool_input, reasoning)
+            )
         ),
     )
     assert reported == [
-        (1, DEFAULT_MAX_ROUNDS, "find_equipment"),
-        (2, DEFAULT_MAX_ROUNDS, "find_equipment"),
+        (
+            1,
+            DEFAULT_MAX_ROUNDS,
+            "find_equipment",
+            {"pattern": "pump"},
+            "Scanning for pump candidates.",
+        ),
+        (2, DEFAULT_MAX_ROUNDS, "find_equipment", {"pattern": "pump"}, None),
     ]
+
+
+def test_tool_call_trace_records_bounded_model_reasoning():
+    """The audit trail carries the model's reasoning for each tool call --
+    bounded, never fabricated (absent reasoning stays absent)."""
+
+    class ReasonedProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def complete_with_tools(self, *, messages, tools):
+            self.calls += 1
+            if self.calls == 1:
+                return ToolCall(
+                    tool_name="find_equipment",
+                    tool_input={"pattern": "pump"},
+                    tool_call_id="reasoned-1",
+                    reasoning="x" * 10_000,
+                )
+            return FinalAnswer(answer_text="Found it.")
+
+    result = run_grounded_qa_turn(
+        question="find the pump",
+        topology_tools=make_tools(),
+        provider=ReasonedProvider(),
+    )
+
+    traced = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "find_equipment"
+    ]
+    assert traced
+    recorded = traced[0]["reasoning"]
+    assert isinstance(recorded, str)
+    assert 0 < len(recorded) <= 2_000
+    assert "reasoning" not in {
+        key
+        for trace in result.tool_call_trace
+        if trace["tool_name"] != "find_equipment"
+        for key in trace
+    }
 
 
 def test_harness_raises_on_unknown_tool_name_error():
