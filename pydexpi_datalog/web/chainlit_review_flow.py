@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 import shutil
@@ -155,12 +156,17 @@ class ChainlitReviewFlow:
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
         max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
+        automatic_temporary_datalog: bool = False,
     ) -> None:
         self._service = ReviewSessionService(
             artifact_root=artifact_root, limits=limits
         )
         self._clock = clock
         self._max_conversation_turns = max_conversation_turns
+        # Internal automatic-execution migration guard (3qo.9.7): when set,
+        # gate-passing temporary Datalog executes immediately in the QA turn
+        # and the confirmation pause is never raised for it.
+        self._automatic_temporary_datalog = bool(automatic_temporary_datalog)
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
@@ -1233,6 +1239,45 @@ class ChainlitReviewFlow:
             self._service.artifact_root / session_id, record
         )
 
+    def _persist_automatic_datalog_audits(
+        self,
+        *,
+        session_id: str,
+        qa_provider: QATurnProvider,
+        tool_call_trace: list[dict[str, object]],
+    ) -> None:
+        """Durably record every automatic temporary-Datalog execution
+        (3qo.9.7): the backend-built audit skeleton from the tool result is
+        enriched with provider attribution and usage, which only this layer
+        knows, then appended to the same per-session audit trail as manual
+        confirm/cancel decisions."""
+        settings = self._provider_settings_by_session.get(session_id, {})
+        provider_attribution = {
+            "provider": str(settings.get("provider", "")) or None,
+            "model": str(settings.get("model", "")) or None,
+            "configured": bool(settings.get("configured", False)),
+        }
+        raw_usage = getattr(qa_provider, "usage", None)
+        provider_usage = dict(raw_usage) if isinstance(raw_usage, dict) else {}
+        for trace_entry in tool_call_trace:
+            if trace_entry.get("tool_name") != "propose_temporary_datalog":
+                continue
+            tool_result = trace_entry.get("tool_result")
+            if not isinstance(tool_result, dict):
+                continue
+            audit_record = tool_result.get("audit_record")
+            if not isinstance(audit_record, dict):
+                continue
+            record = {
+                **audit_record,
+                "provider_attribution": provider_attribution,
+                "provider_usage": provider_usage,
+                "decided_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+            append_datalog_audit_record(
+                self._service.artifact_root / session_id, record
+            )
+
     @staticmethod
     def _temporary_datalog_confirmation_payload(
         *,
@@ -1246,6 +1291,11 @@ class ChainlitReviewFlow:
                 continue
             proposal_result = trace_entry.get("tool_result")
             if not isinstance(proposal_result, dict):
+                continue
+            # Only an actual confirmation pause raises the review payload. An
+            # automatically executed proposal (3qo.9.7) shares the tool name
+            # but carries no confirmation state and must never re-pause.
+            if proposal_result.get("status") != "confirmation_required":
                 continue
             proposal = proposal_result.get("proposal")
             validation = proposal_result.get("validation")
@@ -1315,6 +1365,7 @@ class ChainlitReviewFlow:
             loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
                 session_id, set()
             ),
+            automatic_temporary_datalog=self._automatic_temporary_datalog,
         )
         prior_turns = [
             ConversationTurn(
@@ -1336,6 +1387,11 @@ class ChainlitReviewFlow:
             conversation=prior_turns,
             max_conversation_turns=self._max_conversation_turns,
             on_round=on_round,
+        )
+        self._persist_automatic_datalog_audits(
+            session_id=session_id,
+            qa_provider=qa_provider,
+            tool_call_trace=result.tool_call_trace,
         )
         conversation_state = self._compacted_conversation_state(
             prior_turns, question=question, result=result

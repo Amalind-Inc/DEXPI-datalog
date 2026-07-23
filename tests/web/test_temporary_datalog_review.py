@@ -3,15 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_SOURCE_GROUNDED,
+    FinalAnswer,
+    ToolCall,
+)
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
-
 
 STRUCTURED_INTENT = {
     "source_classes": ["TopologyObject"],
@@ -336,6 +339,187 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             self.assertFalse(cancel_record["executed"])
             self.assertEqual(cancel_record["proposal_id"], proposal["proposal_id"])
             self.assertEqual(cancel_record["session_id"], session_id)
+
+
+class AutomaticExecutionProvider(TemporaryDatalogProposalProvider):
+    """No-fit -> proposal -> grounded final answer over the executed result."""
+
+    def complete_with_tools(self, *, messages, tools):
+        if self._step >= 2:
+            return FinalAnswer(
+                answer_text="Every connected object satisfies the temporary rule.",
+                evidence_references=[self._answer_id],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        return super().complete_with_tools(messages=messages, tools=tools)
+
+
+class AutomaticTemporaryDatalogTests(unittest.TestCase):
+    def test_automatic_mode_executes_without_creating_confirmation_state(
+        self,
+    ) -> None:
+        """Behind the migration guard, a gate-passing proposal answers the turn
+        directly: no confirmation payload, no pending proposal to confirm, and
+        a durable automatic-execution audit record."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_root = Path(tmp_dir) / "sessions"
+            answer_id_holder: dict[str, str] = {}
+
+            def provider_factory():
+                return AutomaticExecutionProvider(answer_id_holder["answer_id"])
+
+            app = create_review_api_app(
+                artifact_root=artifact_root,
+                qa_provider_factory=provider_factory,
+                automatic_temporary_datalog=True,
+            )
+            client = TestClient(app)
+            session_id = "automatic-temp-datalog"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
+            )
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            answer_id = prepared.json()["topology_view"]["nodes"][0]["id"]
+            answer_id_holder["answer_id"] = answer_id
+
+            question = (
+                "Must every connected object satisfy the temporary topology rule?"
+            )
+            response = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": question},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            body = response.json()
+
+            # The turn answers directly -- no confirmation state in the payload.
+            self.assertEqual(body["status"], "answered")
+            self.assertNotIn("datalog_confirmation", body)
+            self.assertEqual(
+                body["answer_text"],
+                "Every connected object satisfies the temporary rule.",
+            )
+            self.assertIn(answer_id, body["evidence_references"])
+
+            # The executed generated route is disclosed through the artifact.
+            route_artifact = body["route_artifact"]
+            self.assertEqual(route_artifact["route"], "generated_temporary_datalog")
+            self.assertEqual(route_artifact["execution_mode"], "automatic")
+            self.assertIn("answer(", route_artifact["logic_program"])
+            self.assertEqual(
+                route_artifact["trust"],
+                {
+                    "temporary": True,
+                    "reusable_rule_trust": False,
+                    "promotion": "separate_explicit_authoring_action",
+                },
+            )
+
+            # No pending proposal exists server-side: a confirm replay of the
+            # exact executed pair is refused as unknown.
+            request = question
+            generated_datalog = str(route_artifact["logic_program"])
+            formal_restatement = str(route_artifact["restatement"])
+            replay_id = hashlib.sha256(
+                (request + "\n" + generated_datalog + "\n" + formal_restatement).encode(
+                    "utf-8"
+                )
+            ).hexdigest()[:16]
+            replay = client.post(
+                f"/api/review/sessions/{session_id}/temporary-datalog-reviews",
+                json={
+                    "question": request,
+                    "decision": "confirm",
+                    "proposal_result": {
+                        "status": "confirmation_required",
+                        "code": "tool.confirmation_required",
+                        "tool_name": "propose_temporary_datalog",
+                        "executed": False,
+                        "proposal": {
+                            "proposal_id": replay_id,
+                            "request": request,
+                            "generated_datalog": generated_datalog,
+                            "formal_restatement": formal_restatement,
+                            "resolved_identity_ids": [answer_id],
+                        },
+                        "validation": {
+                            "status": "safe_to_confirm",
+                            "diagnostics": [],
+                        },
+                        "confirmation": {
+                            "required": True,
+                            "grant": "execute_temporary_datalog_pair",
+                            "proposal_id": replay_id,
+                        },
+                    },
+                },
+            )
+            self.assertEqual(replay.status_code, 200, replay.text)
+            replay_body = replay.json()
+            self.assertEqual(replay_body["status"], "execution_failed")
+            codes = [diag.get("code") for diag in replay_body["diagnostics"]]
+            self.assertIn("temporary_datalog.proposal_unknown", codes)
+
+            # A durable audit record captures the automatic decision with
+            # provider attribution, latency, and cost.
+            audit_path = artifact_root / session_id / "datalog_audit.jsonl"
+            self.assertTrue(audit_path.exists(), "automatic execution must audit")
+            records = [
+                json.loads(line)
+                for line in audit_path.read_text(encoding="utf-8").splitlines()
+            ]
+            automatic_records = [
+                record
+                for record in records
+                if record.get("decision") == "automatic_execution"
+            ]
+            self.assertEqual(len(automatic_records), 1)
+            record = automatic_records[0]
+            self.assertEqual(record["session_id"], session_id)
+            self.assertEqual(record["route"], "generated_temporary_datalog")
+            self.assertEqual(len(record["program_id"]), 64)
+            self.assertEqual(record["faithfulness_gate"]["status"], "passed")
+            self.assertEqual(record["repair_summary"]["failed_gate_attempts"], 0)
+            self.assertEqual(record["evidence_ids"], [answer_id])
+            self.assertTrue(record["executed"])
+            self.assertEqual(record["execution_status"], "answered")
+            self.assertGreaterEqual(record["latency_seconds"], 0.0)
+            self.assertIn("provider_attribution", record)
+            self.assertIn("provider_usage", record)
+            self.assertIn("T", record["decided_at"])
+
+    def test_guard_off_app_still_pauses_for_confirmation(self) -> None:
+        """Without the guard the web seam behaves exactly as before."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            answer_id_holder: dict[str, str] = {}
+
+            def provider_factory():
+                return AutomaticExecutionProvider(answer_id_holder["answer_id"])
+
+            app = create_review_api_app(
+                artifact_root=Path(tmp_dir) / "sessions",
+                qa_provider_factory=provider_factory,
+            )
+            client = TestClient(app)
+            session_id = "guard-off-temp-datalog"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
+            )
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
+                0
+            ]["id"]
+
+            proposed = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={
+                    "question": "Must every connected object satisfy the temporary topology rule?"
+                },
+            )
+            self.assertEqual(proposed.status_code, 200, proposed.text)
+            self.assertEqual(proposed.json()["status"], "needs_datalog_confirmation")
 
 
 if __name__ == "__main__":

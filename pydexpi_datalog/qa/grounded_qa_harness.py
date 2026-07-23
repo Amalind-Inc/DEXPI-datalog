@@ -310,7 +310,7 @@ def _tool_trace_satisfies_intent(
             or (
                 trace.get("tool_name") == "propose_temporary_datalog"
                 and _tool_result_status(trace.get("tool_result"))
-                in {"confirmation_required", "executed"}
+                in {"confirmation_required", "executed", "answered"}
             )
             for trace in tool_call_trace
         )
@@ -1043,12 +1043,24 @@ def _finalize(
     witnesses: list[str] = []
     route_artifact: dict[str, object] | None = None
     trace_events: list[dict[str, object]] = []
+    has_deterministic_result = False
     for trace in tool_call_trace:
-        if trace.get("tool_name") != "execute_bundled_query_template":
-            continue
+        tool_name = trace.get("tool_name")
         tool_result = trace.get("tool_result")
         if not isinstance(tool_result, dict) or tool_result.get("status") != "answered":
             continue
+        # Both deterministic routes ground the answer with a real engine run
+        # over the loaded graph: an answered bundled-template execution, and
+        # an automatically executed generated program (3qo.9.7) whose gates
+        # all passed before the run.
+        is_answered_template = tool_name == "execute_bundled_query_template"
+        is_executed_generated = (
+            tool_name == "propose_temporary_datalog"
+            and tool_result.get("executed") is True
+        )
+        if not (is_answered_template or is_executed_generated):
+            continue
+        has_deterministic_result = True
         verdict = tool_result.get("verdict")
         if isinstance(verdict, str):
             deterministic_verdict = verdict
@@ -1068,7 +1080,7 @@ def _finalize(
     posture, source_grounded, disclosure = _resolve_grounding(
         response.grounding_posture,
         valid_references,
-        has_deterministic_result=deterministic_verdict is not None,
+        has_deterministic_result=has_deterministic_result,
     )
 
     return QATurnResult(

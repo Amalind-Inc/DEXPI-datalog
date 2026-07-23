@@ -97,10 +97,16 @@ class TopologyTools:
         graph_facts: dict[str, object] | None = None,
         retrieval_budgets: RetrievalBudgets | None = None,
         loaded_rule_pack_ids: list[str] | tuple[str, ...] | set[str] | None = None,
+        automatic_temporary_datalog: bool = False,
     ) -> None:
         self._topology = topology_view
         self._session_id = session_id
         self._retrieval_budgets = retrieval_budgets or RetrievalBudgets()
+        # Internal automatic-execution migration guard (3qo.9.7): backend-owned
+        # and never model-visible. Off preserves the legacy confirmation
+        # workflow byte-for-byte; on executes gate-passing temporary Datalog
+        # immediately through real Souffle with post-execution disclosure.
+        self._automatic_temporary_datalog = bool(automatic_temporary_datalog)
         self._retrieval_steps = 0
         # Accumulates only time actually spent executing a tool's retrieval
         # work (see execute()'s timing wrapper below) -- deliberately excludes
@@ -620,6 +626,18 @@ class TopologyTools:
             generated_datalog=generated_datalog,
             formal_restatement=formal_restatement,
         )
+        if self._automatic_temporary_datalog:
+            return self._execute_automatic_temporary_datalog(
+                request=request,
+                generated_datalog=generated_datalog,
+                formal_restatement=formal_restatement,
+                resolved_identity_ids=resolved_identity_ids,
+                proposal_id=proposal_id,
+                program_id=program_id,
+                validation=validation,
+                counterfactual_validation=counterfactual_validation,
+                faithfulness_gate=faithfulness_gate,
+            )
         return {
             "status": "confirmation_required",
             "code": "tool.confirmation_required",
@@ -654,6 +672,188 @@ class TopologyTools:
             },
             "matches": [],
             "reachable": [],
+        }
+
+    def _execute_automatic_temporary_datalog(
+        self,
+        *,
+        request: str,
+        generated_datalog: str,
+        formal_restatement: str,
+        resolved_identity_ids: list[str],
+        proposal_id: str,
+        program_id: str,
+        validation: dict[str, object],
+        counterfactual_validation: dict[str, object],
+        faithfulness_gate: dict[str, object],
+    ) -> dict[str, object]:
+        """Execute a gate-passing temporary proposal immediately (3qo.9.7).
+
+        Reached only behind the internal automatic-execution migration guard
+        and only after mechanical safety validation, mandatory counterfactual
+        replay, and the layered faithfulness gate have all passed on this exact
+        program. The result never creates confirmation state; it disclosures
+        the executed pair after the fact and carries a minimal audit record.
+        Generated logic stays temporary: nothing here grants reusable-rule
+        trust or touches persistent promotion.
+        """
+        started = monotonic()
+        try:
+            matched_ids = self._temporary_datalog_answer_ids(generated_datalog)
+        except SouffleExecutionError as error:
+            diagnostic: dict[str, object] = {
+                "code": f"temporary_datalog.{error.code}",
+                "message": str(error),
+            }
+            if error.detail:
+                diagnostic["detail"] = error.detail
+            return {
+                "status": "execution_failed",
+                "code": "temporary_datalog.engine_failure",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "execution_mode": "automatic",
+                "validation": validation,
+                "counterfactual_validation": counterfactual_validation,
+                "faithfulness_gate": faithfulness_gate,
+                "diagnostics": [diagnostic],
+                "message": (
+                    "The generated program passed every gate but the engine "
+                    "run failed. Repair the program using the diagnostics and "
+                    "call propose_temporary_datalog again."
+                ),
+                "matches": [],
+                "reachable": [],
+            }
+        latency_seconds = monotonic() - started
+        evidence_ids = self._temporary_answer_evidence_ids(matched_ids)
+        evidence_items = [
+            {
+                "id": evidence_id,
+                "label": self._node_label(evidence_id),
+                "source": "temporary_datalog",
+                "topology_evidence": self._evidence_map[evidence_id],
+            }
+            for evidence_id in evidence_ids
+            if evidence_id in self._evidence_map
+        ]
+        gate_attempts = len(self._faithfulness_gate_attempts)
+        failed_gate_attempts = sum(
+            1
+            for attempt in self._faithfulness_gate_attempts
+            if attempt.get("status") != "passed"
+        )
+        source_scope = self._temporary_datalog_scope(resolved_identity_ids)
+        deterministic_result = {
+            "matched_object_ids": evidence_ids,
+            "raw_answer_ids": matched_ids,
+            "row_count": len(matched_ids),
+        }
+        disclosure = {
+            "restatement": formal_restatement,
+            "source_scope": source_scope,
+            "route": "generated_temporary_datalog",
+            "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
+            "inspectable_datalog": {
+                "display": "collapsed",
+                "generated_datalog": generated_datalog,
+            },
+            "deterministic_result": deterministic_result,
+            "effect": TEMPORARY_DATALOG_EFFECT,
+            "assumptions": TEMPORARY_DATALOG_ASSUMPTIONS,
+        }
+        route_artifact: dict[str, object] = {
+            "route": "generated_temporary_datalog",
+            "execution_mode": "automatic",
+            "engine": "souffle",
+            "program_id": program_id,
+            "proposal_id": proposal_id,
+            "request": request,
+            "restatement": formal_restatement,
+            "source_scope": source_scope,
+            "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
+            "repair_summary": {
+                "gate_attempts": gate_attempts,
+                "failed_gate_attempts": failed_gate_attempts,
+            },
+            "logic_program": generated_datalog,
+            "execution": {
+                "latency_seconds": latency_seconds,
+                "row_count": len(matched_ids),
+            },
+            "trust": {
+                "temporary": True,
+                "reusable_rule_trust": False,
+                "promotion": "separate_explicit_authoring_action",
+            },
+        }
+        audit_record = {
+            "route": "generated_temporary_datalog",
+            "decision": "automatic_execution",
+            "proposal_id": proposal_id,
+            "program_id": program_id,
+            "session_id": self._session_id,
+            "question": request,
+            "formal_restatement": formal_restatement,
+            "generated_datalog": generated_datalog,
+            "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
+            "repair_summary": {
+                "gate_attempts": gate_attempts,
+                "failed_gate_attempts": failed_gate_attempts,
+            },
+            "evidence_ids": evidence_ids,
+            "executed": True,
+            "execution_status": "answered",
+            "latency_seconds": latency_seconds,
+        }
+        trace_events = [
+            {"event": "generated_proposed", "proposal_id": proposal_id},
+            {
+                "event": "generated_gates_passed",
+                "validation": str(validation.get("status", "")),
+                "counterfactual": str(counterfactual_validation.get("status", "")),
+                "faithfulness_gate": str(faithfulness_gate.get("status", "")),
+            },
+            {
+                "event": "generated_executed",
+                "engine": "souffle",
+                "execution_mode": "automatic",
+            },
+            {
+                "event": "result_observed",
+                "row_count": len(matched_ids),
+                "evidence_count": len(evidence_ids),
+            },
+        ]
+        return {
+            "status": "answered",
+            "code": "temporary_datalog.automatic_execution",
+            "tool_name": "propose_temporary_datalog",
+            "executed": True,
+            "execution_mode": "automatic",
+            "confirmation": {"required": False},
+            "summary": {"text": formal_restatement},
+            "disclosure": disclosure,
+            "matched_object_ids": evidence_ids,
+            "matches": evidence_items,
+            "reachable": [],
+            "evidence": {
+                "display": "expandable",
+                "items": evidence_items,
+            },
+            "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
+            "route_artifact": route_artifact,
+            "audit_record": audit_record,
+            "trace_events": trace_events,
+            "diagnostics": [],
         }
 
     def _temporary_datalog_scope(
