@@ -47,6 +47,25 @@ hand rather than reading the code:
    real ctrl-o keybinding needs raw-tty handling this line-based prototype
    deliberately avoids).
 
+5. **`get_reachable_equipment` calls nozzle-connected equipment isolated.**
+   Asked which equipment is NOT connected to piping on E06 ("...Nozzles
+   Connected With PNS"), the tool returned `reachable=[]` with
+   `outcome=violated` and `coverage.complete=true` for both P-4713 and
+   H-1009, and the model faithfully answered that both are isolated -- with
+   validated citations and no disclosure -- directly contradicting the
+   deterministic template verdict on the same drawing. Probed: topology_view
+   drops the `nozzles`/`taggedPlantItems` relationships (graph_facts has
+   `CentrifugalPump --nozzles--> Nozzle`), so traversal from any equipment
+   node starts with zero edges. Filed as `pydexpi-datalog-1-22q2` (P1).
+
+6. **Answers displayed no grounding/reliability.** The payload carries
+   `grounding_posture`/`source_grounded`/`disclosure` and (since `qcof`)
+   `route_artifact`, but the REPL rendered none of it, so a deterministic
+   template answer and a model-assembled guess looked identical. Fixed as
+   `pydexpi-datalog-1-29yf`: every rendered turn now shows a grounding line
+   and a method line (deterministic template + version vs "not
+   deterministically verified, model-assembled from tool calls: ...").
+
 ## Status
 
 Kept (not deleted) -- still useful for re-driving the harness by hand while

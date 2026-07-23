@@ -128,6 +128,52 @@ def render_event(event: dict[str, object]) -> None:
         print(dim(f"  {event_type}: {data}"))
 
 
+def render_grounding(turn: dict[str, object]) -> None:
+    """One reliability line per answer: how grounded it is and how it was
+    assembled -- deterministic template execution vs model-assembled tool use.
+    All data comes from the answered payload; nothing is inferred here."""
+    result = turn.get("result")
+    if not isinstance(result, dict):
+        return
+    posture = result.get("grounding_posture") or "unspecified"
+    grounded = result.get("source_grounded")
+    grounded_text = (
+        f"{GREEN}source-grounded{RESET}"
+        if grounded
+        else f"{YELLOW}not source-grounded{RESET}"
+    )
+    print(f"  {bold('grounding')} {grounded_text} {dim(f'(posture: {posture})')}")
+
+    route_artifact = result.get("route_artifact")
+    if isinstance(route_artifact, dict):
+        template = route_artifact.get("template_id", "?")
+        version = route_artifact.get("template_version", "?")
+        print(
+            f"  {bold('method')} {GREEN}deterministic{RESET} "
+            f"{dim(f'bundled template {template} v{version}, real engine run over the loaded graph -- [:o] shows the executed logic')}"
+        )
+    else:
+        tool_names = [
+            str(event["data"].get("tool_name"))
+            for event in turn.get("events", [])
+            if isinstance(event, dict)
+            and event.get("type") == "tool-progress"
+            and isinstance(event.get("data"), dict)
+            and event["data"].get("tool_name")
+        ]
+        assembled = (
+            f"model-assembled from tool calls: {', '.join(tool_names)}"
+            if tool_names
+            else "model-assembled without tool calls"
+        )
+        print(
+            f"  {bold('method')} {YELLOW}not deterministically verified{RESET} {dim(f'({assembled})')}"
+        )
+    disclosure = result.get("disclosure")
+    if disclosure:
+        print(f"  {bold('disclosure')} {YELLOW}{disclosure}{RESET}")
+
+
 def render_frame(
     *,
     session_id: str,
@@ -148,6 +194,7 @@ def render_frame(
         print(f"{bold('status:')} {colored_status(str(turn['status']))}")
         for event in turn.get("events", []):
             render_event(event)
+        render_grounding(turn)
         print()
     print(dim("-" * 60))
     print(
