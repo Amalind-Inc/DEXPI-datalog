@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_SOURCE_GROUNDED,
     FinalAnswer,
     ToolCall,
     run_grounded_qa_turn,
@@ -42,10 +43,16 @@ VALID_BINDINGS = {
 
 class EquipmentPumpTemplateProvider:
     def __init__(
-        self, question: str, bindings: dict[str, object] | None = None
+        self,
+        question: str,
+        bindings: dict[str, object] | None = None,
+        final_answer: FinalAnswer | None = None,
     ) -> None:
         self._question = question
         self._bindings = bindings or VALID_BINDINGS
+        self._final_answer = final_answer or FinalAnswer(
+            answer_text="No major process equipment lacks a pump path."
+        )
         self.calls = 0
         self.offered_tool_names: list[str] = []
 
@@ -62,7 +69,7 @@ class EquipmentPumpTemplateProvider:
                 },
                 tool_call_id="template-call-1",
             )
-        return FinalAnswer(answer_text="No major process equipment lacks a pump path.")
+        return self._final_answer
 
 
 def _question() -> str:
@@ -215,6 +222,70 @@ def test_equipment_pump_template_returns_disconnected_equipment_witness() -> Non
         "verdict": "violation_found",
         "witness_count": 1,
     }
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_no_violation_template_answer_keeps_source_grounded_posture() -> None:
+    """A clean (no_violation) deterministic template verdict yields zero
+    witnesses to cite, yet it is the strongest evidence the system produces:
+    a source_grounded declaration must not be downgraded to an unsupported
+    source claim, and no disclaimer may be attached."""
+    question = _question()
+
+    result = run_grounded_qa_turn(
+        question=question,
+        topology_tools=_prepared_tools(),
+        provider=EquipmentPumpTemplateProvider(
+            question,
+            final_answer=FinalAnswer(
+                answer_text="Every major process equipment item has a pump path.",
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            ),
+        ),
+    )
+
+    assert result.deterministic_verdict == "no_violation"
+    assert result.witnesses == []
+    assert result.grounding_posture == POSTURE_SOURCE_GROUNDED
+    assert result.source_grounded is True
+    assert result.disclosure is None
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_violation_template_answer_without_citations_keeps_source_grounded() -> None:
+    """The deterministic result itself grounds the answer even when the model
+    does not restate witness ids as evidence_references."""
+    graph_facts = json.loads(GRAPH_FACTS_PATH.read_text(encoding="utf-8"))
+    graph_facts["facts"]["nodes"].append(
+        {
+            "fact_type": "node",
+            "node_id": "disconnected-equipment",
+            "attributes": {"label": "Tank", "tagName": "T-999"},
+        }
+    )
+    question = _question()
+
+    result = run_grounded_qa_turn(
+        question=question,
+        topology_tools=_prepared_tools(graph_facts),
+        provider=EquipmentPumpTemplateProvider(
+            question,
+            final_answer=FinalAnswer(
+                answer_text="Tank T-999 has no piping path to any pump.",
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            ),
+        ),
+    )
+
+    assert result.deterministic_verdict == "violation_found"
+    assert result.evidence_references == []
+    assert result.grounding_posture == POSTURE_SOURCE_GROUNDED
+    assert result.source_grounded is True
+    assert result.disclosure is None
 
 
 @pytest.mark.parametrize(

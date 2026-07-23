@@ -1066,7 +1066,9 @@ def _finalize(
         break
 
     posture, source_grounded, disclosure = _resolve_grounding(
-        response.grounding_posture, valid_references
+        response.grounding_posture,
+        valid_references,
+        has_deterministic_result=deterministic_verdict is not None,
     )
 
     return QATurnResult(
@@ -1086,7 +1088,10 @@ def _finalize(
 
 
 def _resolve_grounding(
-    declared_posture: str, valid_references: list[str]
+    declared_posture: str,
+    valid_references: list[str],
+    *,
+    has_deterministic_result: bool = False,
 ) -> tuple[str, bool, str | None]:
     """Enforce the posture <-> evidence boundary deterministically.
 
@@ -1094,8 +1099,13 @@ def _resolve_grounding(
     model-declared grounding posture is consistent with the evidence references
     that survived validation, and attaches an authoritative disclosure whenever
     the answer is not a validated conclusion derived from the loaded source.
+
+    An answered deterministic template execution in the same turn counts as
+    source grounding even when its verdict produced zero witnesses to cite
+    (e.g. a clean ``no_violation`` result): the answer is backed by validated
+    bindings plus a real engine run over the loaded graph.
     """
-    has_evidence = bool(valid_references)
+    has_evidence = bool(valid_references) or has_deterministic_result
 
     if declared_posture == POSTURE_SOURCE_GROUNDED:
         if has_evidence:
