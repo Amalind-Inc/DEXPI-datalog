@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import json
 import hashlib
+import os
 import re
 import secrets
 import unicodedata
@@ -25,11 +26,20 @@ ROUTE_REASONING_ENGINE_UNAVAILABLE = "reasoning_engine_unavailable"
 _RECEIPT_ELIGIBLE_OUTCOMES = frozenset(
     {ROUTE_TEMPLATE_NO_FIT, ROUTE_TEMPLATE_FAITHFULNESS_FAILURE}
 )
-_RECEIPT_SIGNING_KEY = secrets.token_bytes(32)
+_CONFIGURED_SIGNING_SECRET = os.environ.get("PYDEXPI_ROUTE_RECEIPT_SECRET")
+_RECEIPT_SIGNING_KEY = (
+    _CONFIGURED_SIGNING_SECRET.encode("utf-8")
+    if _CONFIGURED_SIGNING_SECRET
+    else secrets.token_bytes(32)
+)
 _DEONTIC_PATTERN = re.compile(
     r"\b(?:allow(?:ed|able)?|authori[sz](?:e|ed|ation)|permit(?:ted|s|ting)?|"
     r"permission|exempt(?:ion|ed|ions)?|exception(?:s)?|waiver(?:s)?|"
-    r"notwithstanding|override(?:s|d)?)\b"
+    r"notwithstanding|overrid(?:e|es|den|ing))\b|"
+    r"\bmay\s+(?:i|we|an?\s+operator|the\s+operator|users?)\b|"
+    r"\bcan\s+(?:this|that|it|i|we|an?\s+operator|the\s+operator)\s+"
+    r"(?:be\s+)?(?:bypass(?:ed)?|overrid(?:e|den)|ignore(?:d)?|operate(?:d)?|"
+    r"start(?:ed)?|run)\b"
 )
 
 

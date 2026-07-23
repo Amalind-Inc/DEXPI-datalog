@@ -148,7 +148,19 @@ class TopologyTools:
         return None
 
     def tool_definitions(self) -> list[dict[str, object]]:
+        policy_outcome = self.policy_route_outcome(self._active_question)
         definitions = self._capability_manifest.provider_tool_definitions()
+        if policy_outcome is not None:
+            return [
+                definition
+                for definition in definitions
+                if definition["function"]["name"]
+                not in {
+                    "execute_bundled_query_template",
+                    "report_template_no_fit",
+                    "propose_temporary_datalog",
+                }
+            ]
         if self._route_receipts.active_receipt() is not None:
             return definitions
         return [
@@ -171,6 +183,23 @@ class TopologyTools:
                 code="tool.unknown",
                 message=f"unknown tool: {tool_name}",
             )
+        policy_outcome = self.policy_route_outcome(self._active_question)
+        if policy_outcome is not None and tool_name in {
+            "execute_bundled_query_template",
+            "report_template_no_fit",
+            "propose_temporary_datalog",
+        }:
+            result = self.record_backend_route_outcome(policy_outcome)
+            return {
+                **result,
+                "status": "policy_abstention",
+                "tool_name": tool_name,
+                "executed": False,
+                "message": (
+                    "Permission and defeasible-exception questions require "
+                    "abstention or human review."
+                ),
+            }
         if capability.permission_class == PERMISSION_DENIED:
             return self._tool_rejection(
                 tool_name=tool_name,
@@ -239,17 +268,6 @@ class TopologyTools:
                 code="route.no_fit_reason_required",
                 message="Template no-fit reporting requires a reason.",
             )
-        policy_outcome = self.policy_route_outcome(self._active_question)
-        if policy_outcome is not None:
-            result = self.record_backend_route_outcome(policy_outcome)
-            return {
-                **result,
-                "status": "policy_abstention",
-                "message": (
-                    "Permission and defeasible-exception questions require "
-                    "abstention or human review."
-                ),
-            }
         return {
             **self.record_backend_route_outcome(ROUTE_TEMPLATE_NO_FIT),
             "reason": reason,

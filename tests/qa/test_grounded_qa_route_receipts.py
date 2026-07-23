@@ -308,16 +308,23 @@ def test_engine_unavailability_does_not_unlock_but_faithfulness_failure_does() -
     tools.begin_request(QUESTION)
 
     unavailable = tools.record_backend_route_outcome(ROUTE_REASONING_ENGINE_UNAVAILABLE)
+    unavailable_tool_names = {
+        tool["function"]["name"] for tool in tools.tool_definitions()
+    }
     faithful_failure = tools.record_backend_route_outcome(
         ROUTE_TEMPLATE_FAITHFULNESS_FAILURE
     )
 
     assert unavailable["status"] == "route_outcome_recorded"
     assert unavailable["route_receipt"] is None
+    assert "propose_temporary_datalog" not in unavailable_tool_names
     assert faithful_failure["status"] == "route_receipt_issued"
     assert faithful_failure["route_receipt"]["route_outcome"] == (
         ROUTE_TEMPLATE_FAITHFULNESS_FAILURE
     )
+    assert "propose_temporary_datalog" in {
+        tool["function"]["name"] for tool in tools.tool_definitions()
+    }
 
 
 class UnexpectedPolicyProvider:
@@ -330,6 +337,8 @@ class UnexpectedPolicyProvider:
     [
         "Is this arrangement permitted unless an exemption applies?",
         "Is this arrangement authorized under any listed exceptions?",
+        "May an operator bypass this interlock?",
+        "Can this be overridden?",
     ],
 )
 def test_deontic_request_abstains_without_template_or_generated_logic(
@@ -349,3 +358,27 @@ def test_deontic_request_abstains_without_template_or_generated_logic(
     assert result.trace_events == [
         {"event": "route_outcome", "outcome": "deontic_abstention"}
     ]
+
+
+def test_deontic_policy_is_enforced_at_direct_tool_execution_boundary() -> None:
+    tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="route-policy-boundary-test",
+    )
+    tools.begin_request("May an operator bypass this interlock?")
+
+    result = tools.execute(
+        "execute_bundled_query_template",
+        {
+            "request": QUESTION,
+            "template_id": "equipment_without_pump_path",
+            "bindings": {},
+        },
+    )
+
+    assert result["status"] == "policy_abstention"
+    assert result["executed"] is False
+    assert result["route_receipt"] is None
+    assert "execute_bundled_query_template" not in {
+        tool["function"]["name"] for tool in tools.tool_definitions()
+    }
