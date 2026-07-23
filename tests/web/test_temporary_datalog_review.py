@@ -302,6 +302,14 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             self.assertEqual(
                 confirm_record["generated_datalog"], proposal["generated_datalog"]
             )
+            self.assertEqual(
+                confirm_record["faithfulness_probes"],
+                proposal["faithfulness_probes"],
+            )
+            self.assertEqual(
+                confirm_record["faithfulness_probe_attempts"],
+                proposal["faithfulness_probe_attempts"],
+            )
             self.assertEqual(confirm_record["decision"], "approved")
             self.assertIn("T", confirm_record["decided_at"])
             self.assertTrue(confirm_record["executed"])

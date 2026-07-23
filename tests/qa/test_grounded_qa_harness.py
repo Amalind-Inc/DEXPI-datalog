@@ -6,8 +6,11 @@ These tests do not inspect message lists, tool call counts, or internal state.
 They assert what a caller observes: answer text, evidence references, witnesses.
 """
 
+import re
 import pytest
+import shutil
 
+from pydexpi_datalog.qa import counterfactual_probes
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
@@ -448,6 +451,222 @@ STRUCTURED_CONNECTIVITY_INTENT = {
 }
 
 
+def _faithful_structured_connectivity_program() -> str:
+    return "\n".join(
+        [
+            ".decl source(x:symbol)",
+            'source(X) :- node_attribute(X, "label", "CentrifugalPump").',
+            'source(X) :- node_attribute(X, "label", "ReciprocatingPump").',
+            ".decl target(x:symbol)",
+            'target(X) :- node_attribute(X, "label", "BallValve").',
+            ".decl has_target(x:symbol)",
+            "has_target(Source) :- source(Source), target(Target), "
+            "piping_connected(Source, Target).",
+            ".decl answer(x:symbol)",
+            ".output answer",
+            "answer(Source) :- source(Source), !has_target(Source).",
+        ]
+    )
+
+
+COUNTERFACTUAL_CONNECTIVITY_INTENT = {
+    "source_classes": ["Tank"],
+    "target_classes": ["CentrifugalPump"],
+    "source_role": "process_equipment",
+    "target_role": "pump",
+    "graph_scope": "piping_only",
+    "direction": "undirected",
+    "quantifier": "all",
+    "negated": True,
+    "output_obligations": ["violating_source_ids"],
+}
+
+
+def _counterfactual_connectivity_program(*, faithful: bool) -> str:
+    rules = [
+        ".decl source(x:symbol)",
+        'source(X) :- node_attribute(X, "label", "Tank").',
+        ".decl pump(x:symbol)",
+        'pump(X) :- node_attribute(X, "label", "CentrifugalPump").',
+    ]
+    rules.append(".decl has_pump(x:symbol)")
+    if faithful:
+        rules.append(
+            "has_pump(Source) :- source(Source), pump(Target), "
+            "piping_connected(Source, Target)."
+        )
+    else:
+        rules.append(
+            "has_pump(Source) :- source(Source), pump(Target), "
+            "piping_connected(Source, Target), graph_edge(Source, Target, _)."
+        )
+    answer_rule = "answer(X) :- source(X), !has_pump(X)."
+    rules.extend(
+        [
+            ".decl answer(x:symbol)",
+            ".output answer",
+            answer_rule,
+        ]
+    )
+    return encode_structured_intent_program(
+        "\n".join(rules),
+        COUNTERFACTUAL_CONNECTIVITY_INTENT,
+    )
+
+
+class RepairCounterfactualProbeProvider:
+    def __init__(self) -> None:
+        self._step = 0
+        self.rejection_feedback: list[str] = []
+
+    def complete_with_tools(self, *, messages, tools):
+        self._step += 1
+        if self._step == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this connectivity obligation.",
+                    "structured_intent": COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="counterfactual-no-fit",
+            )
+        if self._step > 2 and messages[-1].get("role") == "tool":
+            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": "Must every tank have a piping path to a centrifugal pump?",
+                "generated_datalog": _counterfactual_connectivity_program(
+                    faithful=self._step > 2
+                ),
+                "formal_restatement": (
+                    "Return tanks without a piping path to a centrifugal pump."
+                ),
+            },
+            tool_call_id=(
+                "counterfactual-vacuous"
+                if self._step == 2
+                else "counterfactual-corrected"
+            ),
+        )
+
+
+@pytest.mark.skipif(shutil.which("souffle") is None, reason="souffle not on PATH")
+def test_counterfactual_failure_is_repaired_through_public_runner() -> None:
+    provider = RepairCounterfactualProbeProvider()
+
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=provider,
+    )
+
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposals) == 2
+    failed, corrected = proposals
+    assert failed["status"] == "rejected"
+    assert failed["code"] == "faithfulness.counterfactual_failed"
+    assert failed["counterfactual_validation"]["status"] == "failed"
+    assert any(
+        outcome["probe_id"].endswith(":multihop") and outcome["outcome"] == "failed"
+        for outcome in failed["counterfactual_validation"]["probes"]
+    )
+    assert any(
+        "faithfulness.counterfactual_failed" in feedback
+        for feedback in provider.rejection_feedback
+    )
+    assert corrected["status"] == "confirmation_required"
+    assert corrected["counterfactual_validation"]["status"] == "passed"
+    assert all(
+        outcome["input_version"] and outcome["outcome"] == "passed"
+        for outcome in corrected["proposal"]["faithfulness_probes"]
+    )
+    attempts = corrected["proposal"]["faithfulness_probe_attempts"]
+    assert len(attempts) == 2
+    assert attempts[0]["status"] == "failed"
+    assert attempts[0]["diagnostics"]
+    assert attempts[1]["status"] == "passed"
+    assert attempts[0]["program_id"] != attempts[1]["program_id"]
+
+
+def test_counterfactual_repair_loop_does_not_depend_on_local_engine(
+    monkeypatch,
+) -> None:
+    def replay_external_engine(
+        program: str, **_limits: object
+    ) -> dict[str, list[tuple[str, ...]]]:
+        source_match = re.search(
+            r'^node_attribute\("([^"]+)", "label", "Tank"\)\.$',
+            program,
+            re.MULTILINE,
+        )
+        target_match = re.search(
+            r'^node_attribute\("([^"]+)", "label", "CentrifugalPump"\)\.$',
+            program,
+            re.MULTILINE,
+        )
+        assert source_match is not None and target_match is not None
+        source_id, target_id = source_match.group(1), target_match.group(1)
+        connected = bool(
+            re.search(r'^graph_edge\("[^"]+", "[^"]+", ', program, re.MULTILINE)
+        )
+        edge_attrs = re.findall(
+            r'^graph_edge_attribute\(.*"attr_name", "([^"]+)"\)\.$',
+            program,
+            re.MULTILINE,
+        )
+        qualifying_path = connected and any(
+            attr_name
+            in {
+                "sourceItem",
+                "targetItem",
+                "sourceNode",
+                "targetNode",
+                "nodes",
+                "segments",
+                "connections",
+                "items",
+                "pipingNetworkSystems",
+                "nozzles",
+            }
+            for attr_name in edge_attrs
+        )
+        narrowed_to_direct = "graph_edge(Source, Target, _)" in program
+        direct_forward = f'graph_edge("{source_id}", "{target_id}",' in program
+        has_pump = (
+            qualifying_path and direct_forward
+            if narrowed_to_direct
+            else qualifying_path
+        )
+        answer = [] if has_pump else [(source_id,)]
+        return {"answer": answer}
+
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        replay_external_engine,
+    )
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=RepairCounterfactualProbeProvider(),
+    )
+
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert [proposal["status"] for proposal in proposals] == [
+        "rejected",
+        "confirmation_required",
+    ]
+
+
 class RepairStructuredIntentProvider:
     def __init__(self) -> None:
         self._step = 0
@@ -506,15 +725,7 @@ class RepairStructuredIntentProvider:
             call_id = "structured-polarity"
         else:
             encoded_intent = STRUCTURED_CONNECTIVITY_INTENT
-            program = (
-                ".decl candidate(x:symbol)\n"
-                ".decl violating_source(x:symbol)\n"
-                ".decl answer(x:symbol)\n"
-                ".output answer\n"
-                f'candidate("{SEGMENT_ID}").\n'
-                "violating_source(x) :- candidate(x).\n"
-                "answer(x) :- violating_source(x)."
-            )
+            program = _faithful_structured_connectivity_program()
             call_id = "structured-corrected"
         program = encode_structured_intent_program(program, encoded_intent)
         return ToolCall(
@@ -591,10 +802,7 @@ class ValidStructuredIntentProvider:
             tool_input={
                 "request": "Must every pump have a reachable ball valve?",
                 "generated_datalog": encode_structured_intent_program(
-                    (
-                        ".decl answer(x:symbol)\n.output answer\n"
-                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
-                    ),
+                    _faithful_structured_connectivity_program(),
                     STRUCTURED_CONNECTIVITY_INTENT,
                 ),
                 "formal_restatement": "Return pumps without a reachable ball valve.",

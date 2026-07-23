@@ -12,6 +12,9 @@ from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_DENIED,
     default_grounded_qa_manifest,
 )
+from pydexpi_datalog.qa.counterfactual_probes import (
+    run_mandatory_counterfactual_probes,
+)
 from pydexpi_datalog.qa.route_receipts import (
     ROUTE_DEONTIC_ABSTENTION,
     ROUTE_TEMPLATE_NO_FIT,
@@ -117,6 +120,7 @@ class TopologyTools:
         self._route_receipts = RouteReceiptAuthority()
         self._active_question = ""
         self._active_structured_intent: dict[str, object] | None = None
+        self._faithfulness_probe_attempts: list[dict[str, object]] = []
         self._loaded_rule_pack_ids = tuple(
             sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
         )
@@ -138,6 +142,7 @@ class TopologyTools:
     ) -> None:
         self._active_question = question
         self._active_structured_intent = None
+        self._faithfulness_probe_attempts = []
         self._route_receipts.begin_request(
             intent=question,
             source_snapshot_id=source_snapshot_identity(self._graph_facts),
@@ -483,6 +488,55 @@ class TopologyTools:
                 "matches": [],
                 "reachable": [],
             }
+        counterfactual_validation = run_mandatory_counterfactual_probes(
+            generated_datalog,
+            encoded_intent or {},
+        )
+        probe_attempt = {
+            "program_id": hashlib.sha256(generated_datalog.encode("utf-8")).hexdigest(),
+            "generated_datalog": generated_datalog,
+            **counterfactual_validation,
+        }
+        self._faithfulness_probe_attempts.append(probe_attempt)
+        if counterfactual_validation.get("status") not in {
+            "passed",
+            "not_applicable",
+        }:
+            raw_diagnostics = counterfactual_validation.get("diagnostics")
+            diagnostics = (
+                list(raw_diagnostics)
+                if isinstance(raw_diagnostics, list)
+                else [
+                    {
+                        "code": "faithfulness.counterfactual_invalid_result",
+                        "message": (
+                            "Counterfactual replay returned no usable diagnostics."
+                        ),
+                    }
+                ]
+            )
+            reasons = "; ".join(
+                str(item.get("message", ""))
+                for item in diagnostics
+                if isinstance(item, dict)
+            )
+            return {
+                "status": "rejected",
+                "code": "faithfulness.counterfactual_failed",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "validation": validation,
+                "counterfactual_validation": counterfactual_validation,
+                "faithfulness_probe_attempts": list(self._faithfulness_probe_attempts),
+                "diagnostics": diagnostics,
+                "message": (
+                    f"Mandatory counterfactual replay failed: {reasons} "
+                    "Revise the program and call propose_temporary_datalog again."
+                ),
+                "matches": [],
+                "reachable": [],
+            }
+
         proposal_id = self._temporary_datalog_proposal_id(
             request=request,
             generated_datalog=generated_datalog,
@@ -501,6 +555,8 @@ class TopologyTools:
                 "resolved_identity_ids": resolved_identity_ids,
                 "structured_intent": self._active_structured_intent,
                 "encoded_intent": encoded_intent,
+                "faithfulness_probes": counterfactual_validation["probes"],
+                "faithfulness_probe_attempts": list(self._faithfulness_probe_attempts),
                 "interpretation": formal_restatement,
                 "exact_datalog": generated_datalog,
                 "effect": TEMPORARY_DATALOG_EFFECT,
@@ -508,6 +564,7 @@ class TopologyTools:
                 "assumptions": TEMPORARY_DATALOG_ASSUMPTIONS,
             },
             "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
             "confirmation": {
                 "required": True,
                 "grant": "execute_temporary_datalog_pair",

@@ -169,7 +169,7 @@ def compare_structured_intents(
     return normalized_encoded, mismatches
 
 
-def _without_datalog_comments(program: str) -> str:
+def without_datalog_comments(program: str) -> str:
     """Remove line/block comments without treating comment markers in strings as syntax."""
     cleaned: list[str] = []
     index = 0
@@ -217,7 +217,7 @@ def _without_datalog_comments(program: str) -> str:
 def _extract_program_intent(
     program: str,
 ) -> tuple[dict[str, object] | None, list[dict[str, object]]]:
-    executable_program = _without_datalog_comments(program)
+    executable_program = without_datalog_comments(program)
     declaration = ".decl query_intent_contract(payload:symbol)"
     if executable_program.count(declaration) != 1:
         return None, [

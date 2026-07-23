@@ -23,7 +23,7 @@ pump(X) :- node_attribute(X, "label", "CentrifugalPump").
 .decl valve(x:symbol)
 valve(X) :- node_attribute(X, "label", "BallValve").
 .decl pump_with_valve(x:symbol)
-pump_with_valve(P) :- pump(P), valve(V), reachable(P, V).
+pump_with_valve(P) :- pump(P), valve(V), piping_connected(P, V).
 .decl answer(x:symbol)
 .output answer
 answer(P) :- pump(P), !pump_with_valve(P).
