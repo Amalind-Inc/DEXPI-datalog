@@ -14,6 +14,7 @@ from ..llm.model_access import ModelProvider
 from ..qa.grounded_qa_harness import (
     DEFAULT_MAX_CONVERSATION_TURNS,
     QATurnProvider,
+    RunConstraints,
     ScriptedQATurnProvider,
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
@@ -346,6 +347,11 @@ def create_review_api_app(
                 reasoning=reasoning,
             )
 
+        steering_constraints = _parse_run_constraints(body.get("constraints"))
+
+        def _steering() -> str | None:
+            return turns.steering_directive(session_id=session_id, turn_id=turn_id)
+
         def _execute() -> dict[str, object]:
             # The bundled pump check is a trusted rule-pack execution command,
             # not a QA question; run it inside the turn so dedupe, replay, and
@@ -361,6 +367,8 @@ def create_review_api_app(
                 qa_provider=_resolve_qa_provider(session_id),
                 conversation=conversation_turns,
                 on_round=_report_round,
+                steering=_steering,
+                constraints=steering_constraints,
             )
 
         return _call_ready(
@@ -421,6 +429,18 @@ def create_review_api_app(
         turn = turns.cancel(session_id=session_id, turn_id=turn_id)
         if turn is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
+        return turn
+
+    @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/answer-now")
+    def answer_now_turn(session_id: str, turn_id: str) -> dict[str, object]:
+        turn = turns.request_answer_now(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {"code": "turn.not_found", "message": "Turn not found."}
+                },
+            )
         return turn
 
     @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/direction-review")
@@ -597,6 +617,43 @@ def _string_list(body: dict[str, object], key: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise _bad_request(f"request body must include {key} as a list of strings")
     return list(value)
+
+
+def _positive_number(raw: dict[str, object], key: str) -> float | None:
+    value = raw.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if value > 0 else None
+
+
+def _parse_run_constraints(raw: object) -> RunConstraints | None:
+    """Parse optional user answer-constraints from a turn request body. Values
+    are advisory tightenings only; the harness clamps them against operational
+    ceilings and never widens (bead 3qo.9.8). Returns None when none are set."""
+    if not isinstance(raw, dict):
+        return None
+    turns_value = _positive_number(raw, "turns")
+    max_rounds = int(turns_value) if turns_value is not None else None
+    capabilities_raw = raw.get("capabilities")
+    capabilities = (
+        frozenset(item for item in capabilities_raw if isinstance(item, str))
+        if isinstance(capabilities_raw, list)
+        else None
+    )
+    constraints = RunConstraints(
+        max_rounds=max_rounds,
+        max_duration_seconds=_positive_number(raw, "duration_seconds"),
+        max_provider_cost=_positive_number(raw, "provider_cost"),
+        allowed_capabilities=capabilities,
+    )
+    if (
+        constraints.max_rounds is None
+        and constraints.max_duration_seconds is None
+        and constraints.max_provider_cost is None
+        and constraints.allowed_capabilities is None
+    ):
+        return None
+    return constraints
 
 
 def _bad_request(message: str) -> HTTPException:

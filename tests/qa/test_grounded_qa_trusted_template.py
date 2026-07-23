@@ -8,6 +8,7 @@ import pytest
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
     POSTURE_SOURCE_GROUNDED,
+    STEER_ANSWER_NOW,
     FinalAnswer,
     ToolCall,
     run_grounded_qa_turn,
@@ -212,6 +213,43 @@ def test_equipment_pump_template_executes_automatically_through_public_runner() 
         trace["tool_name"] != "propose_temporary_datalog"
         for trace in result.tool_call_trace
     )
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_answer_now_synthesizes_from_the_executed_template_verdict() -> None:
+    """Answer Now during a run synthesizes a grounded answer from the completed
+    validated template verdict, not from the model's own final answer, and never
+    launches a further tool (bead 3qo.9.8, criterion 1)."""
+    question = _question()
+    provider = EquipmentPumpTemplateProvider(question)
+    state = {"count": 0}
+
+    def _steer() -> str | None:
+        # Poll 0 (before the template runs) yields nothing; poll 1 (after the
+        # template executed) requests Answer Now.
+        current = state["count"]
+        state["count"] += 1
+        return STEER_ANSWER_NOW if current >= 1 else None
+
+    result = run_grounded_qa_turn(
+        question=question,
+        topology_tools=_prepared_tools(),
+        provider=provider,
+        steering=_steer,
+    )
+
+    assert provider.calls == 1
+    assert result.steering_outcome == STEER_ANSWER_NOW
+    assert result.source_grounded is True
+    assert result.grounding_posture == POSTURE_SOURCE_GROUNDED
+    assert result.deterministic_verdict == "no_violation"
+    assert result.route_artifact is not None
+    assert result.route_artifact["template_id"] == "equipment_without_pump_path"
+    # Synthesized from the verdict -- not the provider's own drafted answer.
+    assert result.answer_text != "No major process equipment lacks a pump path."
+    assert "no_violation" in result.answer_text
 
 
 @pytest.mark.skipif(

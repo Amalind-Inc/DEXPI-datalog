@@ -192,6 +192,35 @@ class TurnLifecycleStore:
                 self._save(turn)
             return turn
 
+    def request_answer_now(
+        self, *, session_id: str, turn_id: str
+    ) -> dict[str, object] | None:
+        """Record an Answer Now steering directive on an active turn without
+        terminating it. The running turn polls this between rounds and
+        synthesizes from completed validated artifacts (bead 3qo.9.8)."""
+        with self._lock:
+            turn = self.get(session_id=session_id, turn_id=turn_id)
+            if turn is None:
+                return None
+            if turn.get("status") == "active":
+                turn["steering"] = "answer_now"
+                self._save(turn)
+            return turn
+
+    def steering_directive(self, *, session_id: str, turn_id: str) -> str | None:
+        """Poll the current steering directive for a running turn: "stop" once
+        the turn has been canceled, "answer_now" when Answer Now was requested,
+        else None. Read fresh from disk so a concurrent steering request issued
+        while the turn is still executing is observed between rounds."""
+        turn = self.get(session_id=session_id, turn_id=turn_id)
+        if turn is None:
+            return None
+        if turn.get("status") in {"canceled", "cancelled"}:
+            return "stop"
+        if turn.get("steering") == "answer_now":
+            return "answer_now"
+        return None
+
     def resume(
         self,
         *,

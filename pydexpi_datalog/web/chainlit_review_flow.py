@@ -30,6 +30,8 @@ from ..qa.grounded_qa_harness import (
     ConversationTurn,
     QATurnProvider,
     RoundProgress,
+    RunConstraints,
+    Steering,
     compact_conversation,
     run_grounded_qa_turn,
 )
@@ -923,6 +925,8 @@ class ChainlitReviewFlow:
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None = None,
         on_round: RoundProgress | None = None,
+        steering: Steering | None = None,
+        constraints: RunConstraints | None = None,
     ) -> dict[str, object]:
         topology = self._topology_for_session(session_id)
         answer = self._compute_qa_answer(
@@ -932,6 +936,8 @@ class ChainlitReviewFlow:
             qa_provider=qa_provider,
             conversation=conversation,
             on_round=on_round,
+            steering=steering,
+            constraints=constraints,
         )
         datalog_confirmation = self._temporary_datalog_confirmation_payload(
             session_id=session_id,
@@ -1353,6 +1359,8 @@ class ChainlitReviewFlow:
         qa_provider: QATurnProvider,
         conversation: list[dict[str, object]] | None,
         on_round: RoundProgress | None = None,
+        steering: Steering | None = None,
+        constraints: RunConstraints | None = None,
     ) -> dict[str, object]:
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
@@ -1380,6 +1388,15 @@ class ChainlitReviewFlow:
             for turn in (conversation or [])
             if isinstance(turn, dict)
         ]
+
+        def _provider_cost() -> float:
+            usage = getattr(qa_provider, "usage", None)
+            if isinstance(usage, dict):
+                value = usage.get("cost_usd")
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    return float(value)
+            return 0.0
+
         result = run_grounded_qa_turn(
             question=question,
             topology_tools=tools,
@@ -1387,6 +1404,9 @@ class ChainlitReviewFlow:
             conversation=prior_turns,
             max_conversation_turns=self._max_conversation_turns,
             on_round=on_round,
+            steering=steering,
+            constraints=constraints,
+            provider_cost=_provider_cost,
         )
         self._persist_automatic_datalog_audits(
             session_id=session_id,

@@ -107,6 +107,34 @@ class QATurnResult:
     witnesses: list[str] = field(default_factory=list)
     route_artifact: dict[str, object] | None = None
     trace_events: list[dict[str, object]] = field(default_factory=list)
+    # Set only when a human steering directive or a user answer-constraint
+    # ended the run instead of the ordinary model/tool loop (bead 3qo.9.8):
+    # "answer_now" | "stop" | "turn_limit" | "duration_limit" | "cost_limit".
+    steering_outcome: str | None = None
+
+
+# Human steering directives, polled between rounds. Backend-owned: the model
+# cannot emit these -- only the human operator through the web lifecycle
+# (bead 3qo.9.8). Answer Now stops exploration and synthesizes from completed
+# validated artifacts; Stop terminates the run while preserving the trace.
+STEER_ANSWER_NOW = "answer_now"
+STEER_STOP = "stop"
+
+# Polled with no arguments at the top of each round; returns a directive or None.
+Steering = Callable[[], str | None]
+
+
+@dataclass(frozen=True)
+class RunConstraints:
+    """Optional user-selected answer constraints. These only ever *tighten* a
+    run: they never disable a validator, widen a capability permission, or
+    raise an operational ceiling (bead 3qo.9.8). Unset fields impose no limit.
+    """
+
+    max_rounds: int | None = None
+    max_duration_seconds: float | None = None
+    max_provider_cost: float | None = None
+    allowed_capabilities: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -808,6 +836,10 @@ def run_grounded_qa_turn(
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     on_round: RoundProgress | None = None,
     resume_route_receipt: dict[str, object] | None = None,
+    constraints: RunConstraints | None = None,
+    steering: Steering | None = None,
+    provider_cost: Callable[[], float] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> QATurnResult:
     """Execute a grounded QA turn: model calls tools, backend executes them, model answers.
 
@@ -881,9 +913,46 @@ def run_grounded_qa_turn(
     last_insufficient_answer: FinalAnswer | None = None
     tool_call_trace: list[dict[str, object]] = []
 
-    for round_index in range(max_rounds):
+    # Steering + answer-constraints (bead 3qo.9.8). Every limit only *tightens*
+    # the run: the effective turn cap is clamped to the operational ceiling and
+    # never raised, and capabilities can only be narrowed -- never widened, and
+    # validators (backend gates inside execute()) are never disabled.
+    now = clock or time.monotonic
+    run_started_at = now()
+    effective_max_rounds = max_rounds
+    if constraints is not None and constraints.max_rounds is not None:
+        effective_max_rounds = max(1, min(max_rounds, constraints.max_rounds))
+    user_turn_cap_binds = effective_max_rounds < max_rounds
+    duration_limit = constraints.max_duration_seconds if constraints else None
+    cost_limit = constraints.max_provider_cost if constraints else None
+    allowed_capabilities = _resolve_allowed_capabilities(constraints, topology_tools)
+
+    def _poll_steering() -> str | None:
+        if steering is not None:
+            directive = steering()
+            if directive in (STEER_STOP, STEER_ANSWER_NOW):
+                return directive
+        if duration_limit is not None and (now() - run_started_at) >= duration_limit:
+            return "duration_limit"
+        if (
+            cost_limit is not None
+            and provider_cost is not None
+            and provider_cost() >= cost_limit
+        ):
+            return "cost_limit"
+        return None
+
+    for round_index in range(effective_max_rounds):
+        steer = _poll_steering()
+        if steer is not None:
+            return _steered_result(
+                steer, known_ids=known_ids, tool_call_trace=tool_call_trace
+            )
         response = provider.complete_with_tools(
-            messages=messages, tools=topology_tools.tool_definitions()
+            messages=messages,
+            tools=_narrow_tool_definitions(
+                topology_tools.tool_definitions(), allowed_capabilities
+            ),
         )
         if on_round is not None and isinstance(response, ToolCall):
             on_round(
@@ -939,6 +1008,42 @@ def run_grounded_qa_turn(
             continue
 
         if isinstance(response, ToolCall):
+            if (
+                allowed_capabilities is not None
+                and response.tool_name not in allowed_capabilities
+            ):
+                # A user capability narrowing blocks this tool. The backend
+                # refuses execution rather than only hiding the tool in the
+                # prompt (bead 3qo.9.8); validators are not model-facing tools
+                # and so are never disabled by narrowing.
+                blocked = {
+                    "status": "capability_unavailable",
+                    "code": "capability.constrained_out",
+                    "tool_name": response.tool_name,
+                    "message": (
+                        "This capability is unavailable under the current answer "
+                        "constraints."
+                    ),
+                }
+                tool_call_trace.append(
+                    {
+                        "tool_call_id": response.tool_call_id,
+                        "tool_name": response.tool_name,
+                        "tool_input": response.tool_input,
+                        "tool_result": blocked,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"The capability '{response.tool_name}' is unavailable "
+                            "under the active answer constraints. Use an available "
+                            "capability or answer from the evidence already gathered."
+                        ),
+                    }
+                )
+                continue
             tool_result = topology_tools.execute(
                 response.tool_name, response.tool_input
             )
@@ -1001,6 +1106,12 @@ def run_grounded_qa_turn(
             continue
 
         raise TypeError(f"Unexpected provider response type: {type(response)}")
+    if user_turn_cap_binds:
+        # A user turn constraint (not the operational ceiling) ended the run;
+        # synthesize from validated artifacts rather than raising (bead 3qo.9.8).
+        return _steered_result(
+            "turn_limit", known_ids=known_ids, tool_call_trace=tool_call_trace
+        )
     missing_capability = _missing_faithful_program_result(tool_call_trace)
     if missing_capability is not None:
         return missing_capability
@@ -1022,23 +1133,18 @@ def run_grounded_qa_turn(
     )
 
 
-def _finalize(
-    response: FinalAnswer,
-    known_ids: set[str],
+def _extract_deterministic_artifacts(
     tool_call_trace: list[dict[str, object]],
-) -> QATurnResult:
-    valid_references: list[str] = []
-    rejected_references: list[str] = []
-    for reference in response.evidence_references:
-        bucket = valid_references if reference in known_ids else rejected_references
-        if reference not in bucket:
-            bucket.append(reference)
+) -> tuple[
+    bool, str | None, list[str], dict[str, object] | None, list[dict[str, object]]
+]:
+    """Locate the answered deterministic route in the trace, if any.
 
-    interpreted: list[str] = []
-    for reference in response.interpreted_object_ids:
-        if reference in known_ids and reference not in interpreted:
-            interpreted.append(reference)
-
+    Both routes ground an answer with a real engine run over the loaded graph:
+    an answered bundled-template execution, and an automatically executed
+    generated program (3qo.9.7) whose gates all passed before the run. Returns
+    (has_result, verdict, witnesses, route_artifact, trace_events).
+    """
     deterministic_verdict: str | None = None
     witnesses: list[str] = []
     route_artifact: dict[str, object] | None = None
@@ -1049,10 +1155,6 @@ def _finalize(
         tool_result = trace.get("tool_result")
         if not isinstance(tool_result, dict) or tool_result.get("status") != "answered":
             continue
-        # Both deterministic routes ground the answer with a real engine run
-        # over the loaded graph: an answered bundled-template execution, and
-        # an automatically executed generated program (3qo.9.7) whose gates
-        # all passed before the run.
         is_answered_template = tool_name == "execute_bundled_query_template"
         is_executed_generated = (
             tool_name == "propose_temporary_datalog"
@@ -1076,6 +1178,39 @@ def _finalize(
                 dict(event) for event in raw_events if isinstance(event, dict)
             ]
         break
+    return (
+        has_deterministic_result,
+        deterministic_verdict,
+        witnesses,
+        route_artifact,
+        trace_events,
+    )
+
+
+def _finalize(
+    response: FinalAnswer,
+    known_ids: set[str],
+    tool_call_trace: list[dict[str, object]],
+) -> QATurnResult:
+    valid_references: list[str] = []
+    rejected_references: list[str] = []
+    for reference in response.evidence_references:
+        bucket = valid_references if reference in known_ids else rejected_references
+        if reference not in bucket:
+            bucket.append(reference)
+
+    interpreted: list[str] = []
+    for reference in response.interpreted_object_ids:
+        if reference in known_ids and reference not in interpreted:
+            interpreted.append(reference)
+
+    (
+        has_deterministic_result,
+        deterministic_verdict,
+        witnesses,
+        route_artifact,
+        trace_events,
+    ) = _extract_deterministic_artifacts(tool_call_trace)
 
     posture, source_grounded, disclosure = _resolve_grounding(
         response.grounding_posture,
@@ -1139,3 +1274,221 @@ def _resolve_grounding(
     # as source-grounded exactly when it carries validated evidence, with no
     # backend-authored disclosure.
     return POSTURE_UNSPECIFIED, has_evidence, None
+
+
+# Routes that carry a deterministic verdict (handled via witnesses/route
+# artifact); their ids are not re-collected as ordinary established facts.
+_VERDICT_ROUTE_TOOLS = {
+    "execute_bundled_query_template",
+    "propose_temporary_datalog",
+}
+
+# Blocker phrasing per reason a steered run ended without model-authored answer.
+_STEER_BLOCKERS: dict[str, str] = {
+    STEER_ANSWER_NOW: "Answer Now was requested, so further exploration stopped.",
+    "turn_limit": "Your turn limit was reached, so further exploration stopped.",
+    "duration_limit": "Your time limit was reached, so further exploration stopped.",
+    "cost_limit": (
+        "Your provider-cost limit was reached, so further exploration stopped."
+    ),
+}
+
+
+def _scan_evidence_ids(node: object, collected: list[str]) -> None:
+    """Collect string values under ``id``/``evidence_id`` keys, recursively."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("id", "evidence_id") and isinstance(value, str):
+                collected.append(value)
+            _scan_evidence_ids(value, collected)
+    elif isinstance(node, list):
+        for item in node:
+            _scan_evidence_ids(item, collected)
+
+
+def _established_evidence_ids(
+    tool_call_trace: list[dict[str, object]], known_ids: set[str]
+) -> list[str]:
+    """Validated evidence object ids surfaced by read-only retrieval tools so
+    far. Verdict-route ids are excluded (reported through witnesses instead)."""
+    ordered: list[str] = []
+    for trace in tool_call_trace:
+        if trace.get("tool_name") in _VERDICT_ROUTE_TOOLS:
+            continue
+        result = trace.get("tool_result")
+        if not isinstance(result, dict):
+            continue
+        found: list[str] = []
+        _scan_evidence_ids(result, found)
+        for ident in found:
+            if ident in known_ids and ident not in ordered:
+                ordered.append(ident)
+    return ordered
+
+
+def _rejected_attempt_summaries(
+    tool_call_trace: list[dict[str, object]],
+) -> list[str]:
+    """Human-readable notes for attempts the backend rejected during the run."""
+    summaries: list[str] = []
+    for trace in tool_call_trace:
+        name = trace.get("tool_name")
+        result = trace.get("tool_result")
+        if not isinstance(result, dict):
+            continue
+        status = result.get("status")
+        gate = result.get("faithfulness_gate")
+        if name == "report_template_no_fit":
+            summaries.append("No bundled template faithfully matched the question.")
+        elif isinstance(gate, dict) and gate.get("status") == "failed":
+            summaries.append("A generated program failed the faithfulness gate.")
+        elif name == "propose_temporary_datalog" and status not in (
+            "answered",
+            "confirmation_required",
+        ):
+            code = str(result.get("code") or status or "rejected")
+            summaries.append(f"A generated-Datalog proposal was rejected ({code}).")
+    return summaries
+
+
+def _steered_result(
+    reason: str,
+    *,
+    known_ids: set[str],
+    tool_call_trace: list[dict[str, object]],
+) -> QATurnResult:
+    """Backend-authored result when a human directive or answer-constraint ends
+    the run. Reads only completed validated artifacts already in the trace: it
+    never runs another tool, so safety and faithfulness gates cannot be bypassed
+    (bead 3qo.9.8)."""
+    (
+        has_deterministic_result,
+        deterministic_verdict,
+        witnesses,
+        route_artifact,
+        trace_events,
+    ) = _extract_deterministic_artifacts(tool_call_trace)
+    events = list(trace_events)
+
+    if reason == STEER_STOP:
+        events.append({"event": "steering", "directive": STEER_STOP})
+        return QATurnResult(
+            answer_text=(
+                "The run was stopped. The completed trace and any validated "
+                "artifacts are preserved."
+            ),
+            evidence_references=[],
+            rejected_references=[],
+            interpreted_object_ids=[],
+            tool_call_trace=tool_call_trace,
+            grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+            source_grounded=False,
+            disclosure=_POSTURE_DISCLOSURES[POSTURE_SOURCE_DATA_UNAVAILABLE],
+            deterministic_verdict=deterministic_verdict,
+            witnesses=witnesses,
+            route_artifact=route_artifact,
+            trace_events=events,
+            steering_outcome=STEER_STOP,
+        )
+
+    established = _established_evidence_ids(tool_call_trace, known_ids)
+    events.append(
+        {"event": "steering", "directive": STEER_ANSWER_NOW, "reason": reason}
+    )
+
+    if has_deterministic_result:
+        # Criterion 1: synthesize from the completed validated verdict.
+        verdict_text = deterministic_verdict or "a deterministic result"
+        answer_text = (
+            f"Answering now from the completed validated result: {verdict_text}."
+        )
+        if witnesses:
+            answer_text += " Witnesses: " + ", ".join(witnesses) + "."
+        posture, source_grounded, disclosure = _resolve_grounding(
+            POSTURE_SOURCE_GROUNDED,
+            established,
+            has_deterministic_result=True,
+        )
+        return QATurnResult(
+            answer_text=answer_text,
+            evidence_references=established,
+            rejected_references=[],
+            interpreted_object_ids=[],
+            tool_call_trace=tool_call_trace,
+            grounding_posture=posture,
+            source_grounded=source_grounded,
+            disclosure=disclosure,
+            deterministic_verdict=deterministic_verdict,
+            witnesses=witnesses,
+            route_artifact=route_artifact,
+            trace_events=events,
+            steering_outcome=reason,
+        )
+
+    # Criterion 2: no validated verdict -- report established facts, rejected
+    # attempts, and the blocker, without guessing a conclusion.
+    rejected = _rejected_attempt_summaries(tool_call_trace)
+    parts = [_STEER_BLOCKERS.get(reason, _STEER_BLOCKERS[STEER_ANSWER_NOW])]
+    if established:
+        parts.append("Established facts so far: " + ", ".join(established) + ".")
+    else:
+        parts.append("No validated evidence was established before the interrupt.")
+    if rejected:
+        parts.append("Rejected attempts: " + " ".join(rejected))
+    parts.append(
+        "No validated verdict was reached, so no engineering conclusion is asserted."
+    )
+    return QATurnResult(
+        answer_text=" ".join(parts),
+        evidence_references=established,
+        rejected_references=[],
+        interpreted_object_ids=[],
+        tool_call_trace=tool_call_trace,
+        grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        source_grounded=False,
+        disclosure=_POSTURE_DISCLOSURES[POSTURE_SOURCE_DATA_UNAVAILABLE],
+        deterministic_verdict=None,
+        witnesses=[],
+        route_artifact=None,
+        trace_events=events,
+        steering_outcome=reason,
+    )
+
+
+def _backend_tool_names(topology_tools: TopologyTools) -> frozenset[str]:
+    names: set[str] = set()
+    for definition in topology_tools.tool_definitions():
+        if not isinstance(definition, dict):
+            continue
+        function = definition.get("function")
+        if isinstance(function, dict) and isinstance(function.get("name"), str):
+            names.add(function["name"])
+    return frozenset(names)
+
+
+def _resolve_allowed_capabilities(
+    constraints: RunConstraints | None, topology_tools: TopologyTools
+) -> frozenset[str] | None:
+    """Intersect a user capability request with the backend-authorized tools.
+
+    A user constraint can only *narrow* the tools the backend already exposes;
+    it can never add one (no capability widening, bead 3qo.9.8)."""
+    if constraints is None or constraints.allowed_capabilities is None:
+        return None
+    return frozenset(constraints.allowed_capabilities) & _backend_tool_names(
+        topology_tools
+    )
+
+
+def _narrow_tool_definitions(
+    definitions: list[dict[str, object]], allowed: frozenset[str] | None
+) -> list[dict[str, object]]:
+    if allowed is None:
+        return definitions
+    narrowed: list[dict[str, object]] = []
+    for definition in definitions:
+        function = definition.get("function") if isinstance(definition, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if name in allowed:
+            narrowed.append(definition)
+    return narrowed
