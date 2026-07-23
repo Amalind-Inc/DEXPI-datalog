@@ -242,7 +242,9 @@ def default_grounded_qa_manifest(
                 tool_name="execute_bundled_query_template",
                 description=(
                     "Propose validated bindings for a versioned bundled query template. "
-                    "Accepted bindings execute automatically as trusted read-only logic."
+                    "Bindings may name any non-empty subset of the supported classes -- "
+                    "you do not need to enumerate the full catalog. Accepted bindings "
+                    "execute automatically as trusted read-only logic."
                 ),
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
@@ -251,7 +253,7 @@ def default_grounded_qa_manifest(
                 evidence_kind="deterministic_template_result",
                 source_grounding_posture="loaded_source_and_trusted_logic",
                 limitations=(
-                    "Approximate matches and incomplete semantic bindings are rejected.",
+                    "Bindings outside the supported class catalog or binding shape are rejected.",
                     "Only the advertised template identifiers and binding shapes are supported.",
                 ),
                 citation_metadata={
@@ -263,7 +265,7 @@ def default_grounded_qa_manifest(
                     "properties": {
                         "request": {
                             "type": "string",
-                            "description": "The exact user request being routed.",
+                            "description": "A short restatement of the request being routed, for audit purposes only.",
                         },
                         "template_id": {
                             "type": "string",
@@ -272,13 +274,35 @@ def default_grounded_qa_manifest(
                         "bindings": {
                             "type": "object",
                             "properties": {
-                                "source_classes": {
+                                "equipment_classes": {
                                     "type": "array",
-                                    "items": {"type": "string"},
+                                    "description": (
+                                        "Non-empty subset of the equipment classes this "
+                                        "request is asking about."
+                                    ),
+                                    "items": {
+                                        "type": "string",
+                                        "enum": [
+                                            "PlateHeatExchanger",
+                                            "TubularHeatExchanger",
+                                            "Tank",
+                                            "ProcessColumn",
+                                        ],
+                                    },
                                 },
-                                "target_classes": {
+                                "pump_classes": {
                                     "type": "array",
-                                    "items": {"type": "string"},
+                                    "description": (
+                                        "Non-empty subset of the pump classes the "
+                                        "equipment must reach via piping."
+                                    ),
+                                    "items": {
+                                        "type": "string",
+                                        "enum": [
+                                            "CentrifugalPump",
+                                            "ReciprocatingPump",
+                                        ],
+                                    },
                                 },
                                 "scope": {"type": "string", "enum": ["piping"]},
                                 "direction": {
@@ -292,8 +316,8 @@ def default_grounded_qa_manifest(
                                 "negated": {"type": "boolean", "enum": [True]},
                             },
                             "required": [
-                                "source_classes",
-                                "target_classes",
+                                "equipment_classes",
+                                "pump_classes",
                                 "scope",
                                 "direction",
                                 "quantifier",

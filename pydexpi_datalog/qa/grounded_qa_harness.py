@@ -348,9 +348,40 @@ def _sufficiency_failure(intent: ReviewIntent) -> dict[str, object]:
     }
 
 
-def _missing_faithful_program_result(
+def _faithfulness_gate_attempt_count(tool_call_trace: list[dict[str, object]]) -> int:
+    return sum(
+        1
+        for trace in tool_call_trace
+        if trace.get("tool_name") == "propose_temporary_datalog"
+        and isinstance((result := trace.get("tool_result")), dict)
+        and isinstance(result.get("faithfulness_gate"), dict)
+    )
+
+
+def _faithfulness_repair_nudge(diagnostics: list[dict[str, object]]) -> str:
+    blockers = "; ".join(
+        str(item.get("message", "")) for item in diagnostics if item.get("message")
+    )
+    return (
+        "Your answer did not include a faithful generated program, and no "
+        f"repair has been attempted yet. Blocking diagnostics: {blockers} "
+        "Revise the program and its back-translated intent to resolve these "
+        "diagnostics, then call propose_temporary_datalog again before "
+        "answering."
+    )
+
+
+# A failed gate with repair guidance must be retried at least once before the
+# turn may end in faithfulness.no_faithful_program (bead 3qo.9.11): a total of
+# two gate attempts = the original proposal plus one mandatory repair.
+MIN_FAITHFULNESS_GATE_ATTEMPTS_BEFORE_GIVING_UP = 2
+
+
+def _faithfulness_gate_diagnostics(
     tool_call_trace: list[dict[str, object]],
-) -> QATurnResult | None:
+) -> tuple[list[dict[str, object]], list[dict[str, object]]] | None:
+    """Diagnostics and attempts for the latest failed propose_temporary_datalog
+    gate result, or None if no proposal has gone through the gate and failed."""
     proposal_results = [
         result
         for trace in tool_call_trace
@@ -365,7 +396,9 @@ def _missing_faithful_program_result(
         return None
     gate = latest["faithfulness_gate"]
     raw_diagnostics = gate.get("diagnostics", [])
-    diagnostics = [dict(item) for item in raw_diagnostics if isinstance(item, dict)]
+    diagnostics: list[dict[str, object]] = [
+        dict(item) for item in raw_diagnostics if isinstance(item, dict)
+    ]
     if not diagnostics:
         diagnostics = [
             {
@@ -373,15 +406,25 @@ def _missing_faithful_program_result(
                 "message": "The layered faithfulness gate did not produce usable diagnostics.",
             }
         ]
-    blockers = "; ".join(
-        str(item.get("message", "")) for item in diagnostics if item.get("message")
-    )
-    attempts = [
+    attempts: list[dict[str, object]] = [
         dict(attempt)
         for result in proposal_results
         for attempt in result.get("faithfulness_gate_attempts", [])
         if isinstance(attempt, dict)
     ]
+    return diagnostics, attempts
+
+
+def _missing_faithful_program_result(
+    tool_call_trace: list[dict[str, object]],
+) -> QATurnResult | None:
+    found = _faithfulness_gate_diagnostics(tool_call_trace)
+    if found is None:
+        return None
+    diagnostics, attempts = found
+    blockers = "; ".join(
+        str(item.get("message", "")) for item in diagnostics if item.get("message")
+    )
     outcome = {
         "status": "missing_capability",
         "code": "faithfulness.no_faithful_program",
@@ -833,8 +876,24 @@ def run_grounded_qa_turn(
         if isinstance(response, FinalAnswer):
             if _tool_trace_satisfies_intent(intent, tool_call_trace):
                 return _finalize(response, known_ids, tool_call_trace)
-            missing_capability = _missing_faithful_program_result(tool_call_trace)
-            if missing_capability is not None:
+            gate_diagnostics = _faithfulness_gate_diagnostics(tool_call_trace)
+            if gate_diagnostics is not None:
+                remaining_rounds = max_rounds - round_index - 1
+                diagnostics, _attempts = gate_diagnostics
+                if (
+                    remaining_rounds > 0
+                    and _faithfulness_gate_attempt_count(tool_call_trace)
+                    < MIN_FAITHFULNESS_GATE_ATTEMPTS_BEFORE_GIVING_UP
+                ):
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": _faithfulness_repair_nudge(diagnostics),
+                        }
+                    )
+                    continue
+                missing_capability = _missing_faithful_program_result(tool_call_trace)
+                assert missing_capability is not None
                 return missing_capability
             last_insufficient_answer = response
             tool_result = _sufficiency_failure(intent)

@@ -32,8 +32,8 @@ _EQUIPMENT_CLASSES = (
     "ProcessColumn",
 )
 _REQUIRED_BINDINGS = {
-    "source_classes",
-    "target_classes",
+    "equipment_classes",
+    "pump_classes",
     "scope",
     "direction",
     "quantifier",
@@ -54,9 +54,9 @@ def execute_bundled_query_template(
         "template_id": template_id,
     }
     validation = _validate_equipment_without_pump_path(
-        request=request,
         template_id=template_id,
         bindings=bindings,
+        graph_facts=graph_facts,
     )
     validated_event = {
         "event": "template_validated",
@@ -144,7 +144,7 @@ def execute_bundled_query_template(
 
 
 def _validate_equipment_without_pump_path(
-    *, request: str, template_id: str, bindings: object
+    *, template_id: str, bindings: object, graph_facts: dict[str, object]
 ) -> dict[str, object]:
     diagnostics: list[dict[str, str]] = []
     if template_id != EQUIPMENT_WITHOUT_PUMP_PATH_TEMPLATE_ID:
@@ -161,7 +161,11 @@ def _validate_equipment_without_pump_path(
                 "message": "Template bindings must be an object.",
             }
         )
-        return {"status": "rejected", "diagnostics": diagnostics}
+        return {
+            "status": "rejected",
+            "diagnostics": diagnostics,
+            "absent_classes": [],
+        }
 
     keys = {str(key) for key in bindings}
     if keys != _REQUIRED_BINDINGS:
@@ -171,61 +175,84 @@ def _validate_equipment_without_pump_path(
                 "message": "Template bindings must contain exactly the supported semantic fields.",
             }
         )
-    _require_class_binding(bindings, "source_classes", _PUMP_CLASSES, diagnostics)
-    _require_class_binding(bindings, "target_classes", _EQUIPMENT_CLASSES, diagnostics)
+    _require_class_subset(
+        bindings, "equipment_classes", _EQUIPMENT_CLASSES, diagnostics
+    )
+    _require_class_subset(bindings, "pump_classes", _PUMP_CLASSES, diagnostics)
     _require_binding(bindings, "scope", "piping", diagnostics)
     _require_binding(bindings, "direction", "undirected", diagnostics)
     _require_binding(bindings, "quantifier", "every", diagnostics)
     _require_binding(bindings, "negated", True, diagnostics)
 
-    normalized = " ".join(request.lower().split())
-    for class_name in (*_PUMP_CLASSES, *_EQUIPMENT_CLASSES):
-        if class_name.lower() not in normalized:
-            diagnostics.append(
-                {
-                    "code": "trusted_template.explicit_class_omitted",
-                    "message": f"The request does not explicitly include {class_name}.",
-                }
-            )
-    semantic_cues = {
-        "scope": "piping path",
-        "direction": "in either direction",
-        "quantifier": "every",
-        "negation": " no piping path",
-    }
-    for obligation, cue in semantic_cues.items():
-        if cue not in f" {normalized}":
-            diagnostics.append(
-                {
-                    "code": f"trusted_template.{obligation}_not_explicit",
-                    "message": f"The request does not explicitly establish {obligation}={bindings.get(obligation)}.",
-                }
-            )
-
+    bound_classes: list[str] = []
+    for name in ("equipment_classes", "pump_classes"):
+        value = bindings.get(name)
+        if isinstance(value, list):
+            bound_classes.extend(str(item) for item in value)
+    present_labels = _graph_node_labels(graph_facts)
     return {
         "status": "rejected" if diagnostics else "accepted",
         "diagnostics": diagnostics,
+        # Graph-grounded disclosure (bead 3qo.9.11): bound classes with no
+        # instance in the loaded source are legitimate (the quantified check
+        # is vacuously satisfied for them) but must be visible to reviewers.
+        "absent_classes": sorted(
+            item for item in set(bound_classes) if item not in present_labels
+        ),
     }
 
 
-def _require_class_binding(
+def _graph_node_labels(graph_facts: dict[str, object]) -> set[str]:
+    labels: set[str] = set()
+    facts = graph_facts.get("facts")
+    if not isinstance(facts, dict):
+        return labels
+    nodes = facts.get("nodes")
+    if not isinstance(nodes, list):
+        return labels
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        attributes = node.get("attributes")
+        if isinstance(attributes, dict):
+            label = attributes.get("label")
+            if isinstance(label, str) and label:
+                labels.add(label)
+    return labels
+
+
+def _require_class_subset(
     bindings: Mapping[object, object],
     name: str,
-    expected: tuple[str, ...],
+    catalog: tuple[str, ...],
     diagnostics: list[dict[str, str]],
 ) -> None:
+    """Accept any non-empty, duplicate-free subset of the supported class
+    catalog -- the model narrows scope to what the question actually asks
+    about instead of being forced to enumerate the entire static catalog."""
     value = bindings.get(name)
-    valid = (
+    if not (
         isinstance(value, list)
+        and value
         and all(isinstance(item, str) for item in value)
         and len(value) == len(set(value))
-        and set(value) == set(expected)
-    )
-    if not valid:
+    ):
         diagnostics.append(
             {
-                "code": f"trusted_template.{name}_mismatch",
-                "message": f"Binding {name} must exactly preserve the requested class set and role.",
+                "code": f"trusted_template.{name}_shape",
+                "message": f"Binding {name} must be a non-empty list of distinct class names.",
+            }
+        )
+        return
+    unsupported = sorted(item for item in value if item not in catalog)
+    if unsupported:
+        diagnostics.append(
+            {
+                "code": f"trusted_template.{name}_unsupported",
+                "message": (
+                    f"Binding {name} includes classes outside the supported "
+                    f"catalog: {unsupported}."
+                ),
             }
         )
 
@@ -251,24 +278,24 @@ def _render_equipment_without_pump_path(
     lines = [
         build_graph_facts_datalog(graph_facts),
         load_graph_topology_idb(),
-        ".decl template_source(id:symbol)",
+        ".decl template_pump(id:symbol)",
     ]
     lines.extend(
-        f"template_source(N) :- node_label(N, {souffle_symbol(class_name)})."
-        for class_name in bindings["source_classes"]
+        f"template_pump(N) :- node_label(N, {souffle_symbol(class_name)})."
+        for class_name in bindings["pump_classes"]
     )
-    lines.append(".decl template_target(id:symbol)")
+    lines.append(".decl template_equipment(id:symbol)")
     lines.extend(
-        f"template_target(N) :- node_label(N, {souffle_symbol(class_name)})."
-        for class_name in bindings["target_classes"]
+        f"template_equipment(N) :- node_label(N, {souffle_symbol(class_name)})."
+        for class_name in bindings["equipment_classes"]
     )
     lines.extend(
         [
             ".decl template_hit(id:symbol)",
-            "template_hit(T) :- template_target(T), template_source(S), piping_connected(S, T).",
+            "template_hit(T) :- template_equipment(T), template_pump(S), piping_connected(S, T).",
             ".decl result_witness(id:symbol)",
             ".output result_witness",
-            "result_witness(T) :- template_target(T), !template_hit(T).",
+            "result_witness(T) :- template_equipment(T), !template_hit(T).",
         ]
     )
     return "\n".join(lines) + "\n"

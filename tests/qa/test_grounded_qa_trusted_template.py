@@ -26,8 +26,8 @@ GRAPH_FACTS_PATH = (
 )
 MANIFEST_PATH = REPO_ROOT / "testdata" / "benchmark" / "harder_questions_manifest.json"
 VALID_BINDINGS = {
-    "source_classes": ["CentrifugalPump", "ReciprocatingPump"],
-    "target_classes": [
+    "pump_classes": ["CentrifugalPump", "ReciprocatingPump"],
+    "equipment_classes": [
         "PlateHeatExchanger",
         "TubularHeatExchanger",
         "Tank",
@@ -147,8 +147,8 @@ def test_equipment_pump_template_executes_automatically_through_public_runner() 
         "template_id": "equipment_without_pump_path",
         "template_version": "1.0.0",
         "bindings": {
-            "source_classes": ["CentrifugalPump", "ReciprocatingPump"],
-            "target_classes": [
+            "pump_classes": ["CentrifugalPump", "ReciprocatingPump"],
+            "equipment_classes": [
                 "PlateHeatExchanger",
                 "TubularHeatExchanger",
                 "Tank",
@@ -159,7 +159,18 @@ def test_equipment_pump_template_executes_automatically_through_public_runner() 
             "quantifier": "every",
             "negated": True,
         },
-        "validation": {"status": "accepted", "diagnostics": []},
+        "validation": {
+            "status": "accepted",
+            "diagnostics": [],
+            # E06 contains only a CentrifugalPump and a PlateHeatExchanger;
+            # the other bound catalog classes are absent and disclosed.
+            "absent_classes": [
+                "ProcessColumn",
+                "ReciprocatingPump",
+                "Tank",
+                "TubularHeatExchanger",
+            ],
+        },
     }
     assert [event["event"] for event in result.trace_events] == [
         "template_proposed",
@@ -209,8 +220,8 @@ def test_equipment_pump_template_returns_disconnected_equipment_witness() -> Non
 @pytest.mark.parametrize(
     (("field", "invalid_value")),
     [
-        ("source_classes", VALID_BINDINGS["target_classes"]),
-        ("target_classes", ["Tank"]),
+        ("pump_classes", VALID_BINDINGS["equipment_classes"]),
+        ("equipment_classes", ["Nozzle"]),
         ("scope", "any"),
         ("direction", "directed"),
         ("quantifier", "any"),
@@ -239,3 +250,80 @@ def test_template_rejects_semantic_binding_changes_without_execution(
         "template_proposed",
         "template_validated",
     ]
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_template_accepts_a_natural_paraphrase_without_magic_phrases() -> None:
+    """The model should not have to echo the template's internal validation
+    vocabulary verbatim -- only the structured bindings need to be correct."""
+    result = _prepared_tools().execute(
+        "execute_bundled_query_template",
+        {
+            "request": "Find equipment on this drawing with no path to a pump.",
+            "template_id": "equipment_without_pump_path",
+            "bindings": {
+                "equipment_classes": ["PlateHeatExchanger"],
+                "pump_classes": ["CentrifugalPump"],
+                "scope": "piping",
+                "direction": "undirected",
+                "quantifier": "every",
+                "negated": True,
+            },
+        },
+    )
+
+    assert result["status"] == "answered"
+    assert result["route_artifact"]["validation"]["status"] == "accepted"
+
+
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_template_accepts_a_true_subset_of_the_catalog() -> None:
+    """Binding just the classes relevant to the question is valid -- the model
+    should never have to enumerate the entire static catalog to be accepted."""
+    result = _prepared_tools().execute(
+        "execute_bundled_query_template",
+        {
+            "request": "Does every tank have a piping path to a pump?",
+            "template_id": "equipment_without_pump_path",
+            "bindings": {
+                "equipment_classes": ["Tank"],
+                "pump_classes": ["CentrifugalPump"],
+                "scope": "piping",
+                "direction": "undirected",
+                "quantifier": "every",
+                "negated": True,
+            },
+        },
+    )
+
+    assert result["status"] == "answered"
+    assert result["route_artifact"]["validation"]["status"] == "accepted"
+    # E06 has no Tank: the check is vacuously satisfied for it, and the
+    # validation artifact discloses that grounding fact to reviewers.
+    assert result["route_artifact"]["validation"]["absent_classes"] == ["Tank"]
+
+
+def test_template_rejects_a_class_outside_the_supported_catalog() -> None:
+    bindings = {
+        **VALID_BINDINGS,
+        "equipment_classes": ["Nozzle"],
+    }
+
+    result = _prepared_tools().execute(
+        "execute_bundled_query_template",
+        {
+            "request": "Find equipment on this drawing with no path to a pump.",
+            "template_id": "equipment_without_pump_path",
+            "bindings": bindings,
+        },
+    )
+
+    assert result["status"] == "rejected"
+    assert any(
+        diagnostic["code"] == "trusted_template.equipment_classes_unsupported"
+        for diagnostic in result["validation"]["diagnostics"]
+    )

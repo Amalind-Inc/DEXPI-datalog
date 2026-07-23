@@ -812,6 +812,137 @@ def test_final_answer_cannot_bypass_a_failed_faithfulness_gate(
     )
 
 
+class SingleRejectionThenRepairedAnswerProvider:
+    """Mirrors the live bug: one faithfulness-gate rejection followed by a
+    premature final answer, while round budget remains and no repair has
+    been attempted yet. The harness must push the model to retry instead of
+    immediately declaring faithfulness.no_faithful_program."""
+
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        self._step += 1
+        if self._step == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this connectivity obligation.",
+                    "structured_intent": COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="single-rejection-no-fit",
+            )
+        if self._step == 2:
+            conflicting_intent = {
+                **COUNTERFACTUAL_CONNECTIVITY_INTENT,
+                "direction": "directed",
+            }
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every tank have a piping path to a centrifugal pump?",
+                    "generated_datalog": _counterfactual_connectivity_program(
+                        faithful=True
+                    ),
+                    "formal_restatement": (
+                        "Return tanks without a piping path to a centrifugal pump."
+                    ),
+                    "faithfulness_review": {
+                        "status": "faithful",
+                        "back_translated_intent": conflicting_intent,
+                        "diagnostics": [],
+                    },
+                },
+                tool_call_id="single-rejection-conflicting",
+            )
+        if self._step == 3:
+            # The bug this guards against: giving up immediately after one
+            # rejection instead of using the backend's repair guidance.
+            return FinalAnswer(
+                answer_text="Every tank has a compliant piping path.",
+                evidence_references=[PUMP_ID],
+                grounding_posture=POSTURE_SOURCE_GROUNDED,
+            )
+        if self._step == 4:
+            return ToolCall(
+                tool_name="propose_temporary_datalog",
+                tool_input={
+                    "request": "Must every tank have a piping path to a centrifugal pump?",
+                    "generated_datalog": _counterfactual_connectivity_program(
+                        faithful=True
+                    ),
+                    "formal_restatement": (
+                        "Return tanks without a piping path to a centrifugal pump."
+                    ),
+                    "faithfulness_review": _faithful_review(
+                        COUNTERFACTUAL_CONNECTIVITY_INTENT
+                    ),
+                },
+                tool_call_id="single-rejection-corrected",
+            )
+        raise AssertionError("provider consulted beyond the expected repair sequence")
+
+
+def test_single_gate_rejection_forces_a_repair_attempt_before_giving_up(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        _replay_counterfactual_program,
+    )
+    provider = SingleRejectionThenRepairedAnswerProvider()
+
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=provider,
+        max_rounds=6,
+    )
+
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert [proposal["status"] for proposal in proposals] == [
+        "rejected",
+        "confirmation_required",
+    ]
+    assert "Every tank has a compliant piping path." not in result.answer_text
+    assert "confirmation" in result.answer_text.lower()
+
+
+def test_single_gate_rejection_with_no_remaining_budget_still_gives_up(
+    monkeypatch,
+) -> None:
+    """Forcing a repair attempt only applies when round budget remains --
+    the harness must not loop forever waiting for a retry it cannot afford."""
+    monkeypatch.setattr(
+        counterfactual_probes,
+        "run_souffle_program",
+        _replay_counterfactual_program,
+    )
+    provider = SingleRejectionThenRepairedAnswerProvider()
+
+    result = run_grounded_qa_turn(
+        question="Must every tank have a piping path to a centrifugal pump?",
+        topology_tools=make_tools(),
+        provider=provider,
+        max_rounds=3,
+    )
+
+    proposals = [
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert [proposal["status"] for proposal in proposals] == ["rejected"]
+    assert result.trace_events[-1]["outcome"]["code"] == (
+        "faithfulness.no_faithful_program"
+    )
+
+
 def _replay_counterfactual_program(
     program: str, **_limits: object
 ) -> dict[str, list[tuple[str, ...]]]:
