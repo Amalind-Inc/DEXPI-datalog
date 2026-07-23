@@ -8,6 +8,7 @@ They assert what a caller observes: answer text, evidence references, witnesses.
 
 import pytest
 
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
     DEFAULT_MAX_ROUNDS,
@@ -36,6 +37,17 @@ PUMP_ID = "node-pump-p101"
 NOZZLE_ID = "node-nozzle-n1"
 SEGMENT_ID = "node-segment-s1"
 VALVE_ID = "node-valve-v102"
+LEGACY_TEMPORARY_INTENT = {
+    "source_classes": ["TopologyObject"],
+    "target_classes": ["TopologyObject"],
+    "source_role": "resolved_source",
+    "target_role": "reachable_result",
+    "graph_scope": "all_topology",
+    "direction": "directed",
+    "quantifier": "any",
+    "negated": False,
+    "output_obligations": ["answer_ids"],
+}
 
 EDGE_PUMP_NOZZLE = "edge-pump-nozzle"
 EDGE_NOZZLE_SEGMENT = "edge-nozzle-segment"
@@ -193,7 +205,10 @@ class SampledPathThenDatalogProvider:
         if step == 2:
             return ToolCall(
                 tool_name="report_template_no_fit",
-                tool_input={"reason": "No template covers this universal rule."},
+                tool_input={
+                    "reason": "No template covers this universal rule.",
+                    "structured_intent": LEGACY_TEMPORARY_INTENT,
+                },
                 tool_call_id="sample-no-fit",
             )
         if step == 3:
@@ -201,9 +216,12 @@ class SampledPathThenDatalogProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Do all pumps have a reachable valve?",
-                    "generated_datalog": (
-                        ".decl answer(x:symbol)\n.output answer\n"
-                        f'answer(x) :- reachable("{PUMP_ID}", x).'
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n.output answer\n"
+                            f'answer(x) :- reachable("{PUMP_ID}", x).'
+                        ),
+                        LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from pump P-101.",
                     "resolved_identity_ids": [PUMP_ID],
@@ -273,7 +291,10 @@ class AnswerAfterProposalProvider:
             self._routed = True
             return ToolCall(
                 tool_name="report_template_no_fit",
-                tool_input={"reason": "No template covers this segment rule."},
+                tool_input={
+                    "reason": "No template covers this segment rule.",
+                    "structured_intent": LEGACY_TEMPORARY_INTENT,
+                },
                 tool_call_id="proposal-no-fit",
             )
         if not self._proposed:
@@ -282,9 +303,12 @@ class AnswerAfterProposalProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Must every segment reach a valve?",
-                    "generated_datalog": (
-                        ".decl answer(x:symbol)\n.output answer\n"
-                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n.output answer\n"
+                            f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                        ),
+                        LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
                     "resolved_identity_ids": [SEGMENT_ID],
@@ -331,7 +355,10 @@ class RetryAfterRejectionProvider:
             self._step += 1
             return ToolCall(
                 tool_name="report_template_no_fit",
-                tool_input={"reason": "No template covers this segment rule."},
+                tool_input={
+                    "reason": "No template covers this segment rule.",
+                    "structured_intent": LEGACY_TEMPORARY_INTENT,
+                },
                 tool_call_id="retry-no-fit",
             )
         if self._step == 1:
@@ -340,9 +367,12 @@ class RetryAfterRejectionProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Must every segment reach a valve?",
-                    "generated_datalog": (
-                        ".decl answer(x:symbol)\n"
-                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n"
+                            f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                        ),
+                        LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
                     "resolved_identity_ids": [SEGMENT_ID],
@@ -358,9 +388,12 @@ class RetryAfterRejectionProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Must every segment reach a valve?",
-                    "generated_datalog": (
-                        ".decl answer(x:symbol)\n.output answer\n"
-                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n.output answer\n"
+                            f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                        ),
+                        LEGACY_TEMPORARY_INTENT,
                     ),
                     "formal_restatement": "Return objects reachable from segment S-1.",
                     "resolved_identity_ids": [SEGMENT_ID],
@@ -483,6 +516,7 @@ class RepairStructuredIntentProvider:
                 "answer(x) :- violating_source(x)."
             )
             call_id = "structured-corrected"
+        program = encode_structured_intent_program(program, encoded_intent)
         return ToolCall(
             tool_name="propose_temporary_datalog",
             tool_input={
@@ -490,7 +524,6 @@ class RepairStructuredIntentProvider:
                 "generated_datalog": program,
                 "formal_restatement": "Return pumps without a reachable ball valve.",
                 "resolved_identity_ids": [SEGMENT_ID],
-                "encoded_intent": encoded_intent,
             },
             tool_call_id=call_id,
         )
@@ -557,13 +590,15 @@ class ValidStructuredIntentProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": "Must every pump have a reachable ball valve?",
-                "generated_datalog": (
-                    ".decl answer(x:symbol)\n.output answer\n"
-                    f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                "generated_datalog": encode_structured_intent_program(
+                    (
+                        ".decl answer(x:symbol)\n.output answer\n"
+                        f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                    ),
+                    STRUCTURED_CONNECTIVITY_INTENT,
                 ),
                 "formal_restatement": "Return pumps without a reachable ball valve.",
                 "resolved_identity_ids": [SEGMENT_ID],
-                "encoded_intent": STRUCTURED_CONNECTIVITY_INTENT,
             },
             tool_call_id="valid-structured-proposal",
         )
@@ -585,6 +620,101 @@ def test_valid_structured_intent_reaches_confirmation_through_public_runner() ->
     assert proposal["validation"]["status"] == "safe_to_confirm"
     assert proposal["proposal"]["structured_intent"] == STRUCTURED_CONNECTIVITY_INTENT
     assert proposal["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+
+
+def test_model_metadata_cannot_substitute_for_program_intent_contract() -> None:
+    tools = make_tools()
+    tools.begin_request("Must every pump have a reachable ball valve?")
+    tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this valve obligation.",
+            "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+        },
+    )
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Must every pump have a reachable ball valve?",
+            "generated_datalog": (
+                ".decl answer(x:symbol)\n.output answer\n"
+                f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+            ),
+            "formal_restatement": "Return pumps without a reachable ball valve.",
+            "encoded_intent": STRUCTURED_CONNECTIVITY_INTENT,
+        },
+    )
+
+    assert result["status"] == "rejected"
+    assert result["diagnostics"][-1] == {
+        "code": "structured_intent.program_contract_invalid",
+        "field": "contract",
+        "message": ("Generated query must declare exactly one query_intent_contract."),
+    }
+
+
+def test_program_contract_guard_in_comment_cannot_authorize_answer_rule() -> None:
+    tools = make_tools()
+    tools.begin_request("Must every pump have a reachable ball valve?")
+    tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this valve obligation.",
+            "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+        },
+    )
+    guarded = encode_structured_intent_program(
+        (
+            ".decl answer(x:symbol)\n.output answer\n"
+            f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+        ),
+        STRUCTURED_CONNECTIVITY_INTENT,
+    )
+    lines = guarded.splitlines()
+    guard = lines[1][:-1]
+    lines[-1] = lines[-1].replace(f"{guard},", "", 1) + f" // {guard}"
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Must every pump have a reachable ball valve?",
+            "generated_datalog": "\n".join(lines),
+            "formal_restatement": "Return pumps without a reachable ball valve.",
+        },
+    )
+
+    assert result["status"] == "rejected"
+    assert result["diagnostics"][-1]["field"] == "output_obligations"
+
+
+def test_malformed_program_contract_returns_diagnostic_instead_of_raising() -> None:
+    tools = make_tools()
+    tools.begin_request("Must every pump have a reachable ball valve?")
+    tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this valve obligation.",
+            "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+        },
+    )
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Must every pump have a reachable ball valve?",
+            "generated_datalog": (
+                ".decl query_intent_contract(payload:symbol)\n"
+                'query_intent_contract("A").\n'
+                ".decl answer(x:symbol)\n.output answer\n"
+                'answer("node-segment-s1") :- query_intent_contract("A").'
+            ),
+            "formal_restatement": "Return pumps without a reachable ball valve.",
+        },
+    )
+
+    assert result["status"] == "rejected"
+    assert result["diagnostics"][-1]["field"] == "contract"
 
 
 @pytest.mark.parametrize(
@@ -620,19 +750,20 @@ def test_every_structured_intent_obligation_is_mechanically_compared(
         "propose_temporary_datalog",
         {
             "request": "Must every pump have a reachable ball valve?",
-            "generated_datalog": (
-                ".decl answer(x:symbol)\n.output answer\n"
-                f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+            "generated_datalog": encode_structured_intent_program(
+                (
+                    ".decl answer(x:symbol)\n.output answer\n"
+                    f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                ),
+                {
+                    **STRUCTURED_CONNECTIVITY_INTENT,
+                    field: encoded_value,
+                },
             ),
             "formal_restatement": "Return pumps without a reachable ball valve.",
             "resolved_identity_ids": [SEGMENT_ID],
-            "encoded_intent": {
-                **STRUCTURED_CONNECTIVITY_INTENT,
-                field: encoded_value,
-            },
         },
     )
-
     assert result["status"] == "rejected"
     semantic_diagnostics = [
         diagnostic

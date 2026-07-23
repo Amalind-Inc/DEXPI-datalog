@@ -12,6 +12,8 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
+from pydexpi_datalog.qa.structured_intent import normalize_structured_intent
+
 
 ROUTE_POLICY_VERSION = "grounded-qa-route-policy/1"
 
@@ -115,6 +117,20 @@ class RouteReceiptAuthority:
                 "route_outcome": outcome,
                 "route_receipt": None,
             }
+        normalized_structured_intent: dict[str, object] | None = None
+        if structured_intent is not None:
+            normalized_structured_intent, diagnostics = normalize_structured_intent(
+                structured_intent
+            )
+            if diagnostics:
+                self._active_receipt_id = None
+                return {
+                    "status": "route_structured_intent_invalid",
+                    "route_outcome": outcome,
+                    "route_receipt": None,
+                    "diagnostics": diagnostics,
+                }
+
         receipt_fields = {
             "receipt_id": secrets.token_hex(16),
             "route_outcome": outcome,
@@ -122,7 +138,9 @@ class RouteReceiptAuthority:
             "source_snapshot_id": self._context.source_snapshot_id,
             "template_catalog_version": self._context.template_catalog_version,
             "policy_version": self._context.policy_version,
-            "structured_intent_json": _canonical_intent_json(structured_intent),
+            "structured_intent_json": _canonical_intent_json(
+                normalized_structured_intent
+            ),
         }
         receipt = RouteReceipt(
             **receipt_fields,
@@ -184,8 +202,12 @@ class RouteReceiptAuthority:
         active = self.active_receipt()
         if active is None or not active["structured_intent_json"]:
             return None
-        parsed = json.loads(active["structured_intent_json"])
-        return dict(parsed) if isinstance(parsed, dict) else None
+        try:
+            parsed = json.loads(active["structured_intent_json"])
+        except json.JSONDecodeError:
+            return None
+        normalized, diagnostics = normalize_structured_intent(parsed)
+        return None if diagnostics else normalized
 
     def validates(self, receipt_id: str) -> bool:
         active = self.active_receipt()

@@ -21,6 +21,7 @@ from pydexpi_datalog.qa.route_receipts import (
 )
 from pydexpi_datalog.qa.structured_intent import (
     compare_structured_intents,
+    compare_program_structured_intent,
     normalize_structured_intent,
 )
 from pydexpi_datalog.qa.trusted_templates import (
@@ -151,10 +152,12 @@ class TopologyTools:
         *,
         structured_intent: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        return self._route_receipts.record_backend_outcome(
+        result = self._route_receipts.record_backend_outcome(
             outcome,
             structured_intent=structured_intent,
         )
+        self._active_structured_intent = self._route_receipts.active_structured_intent()
+        return result
 
     @staticmethod
     def policy_route_outcome(question: str) -> str | None:
@@ -284,6 +287,26 @@ class TopologyTools:
                 message="Template no-fit reporting requires a reason.",
             )
         raw_structured_intent = tool_input.get("structured_intent")
+        if raw_structured_intent is None:
+            return {
+                **self._tool_rejection(
+                    tool_name="report_template_no_fit",
+                    code="route.structured_intent_required",
+                    message=(
+                        "Template no-fit reporting requires structured logic intent."
+                    ),
+                ),
+                "diagnostics": [
+                    {
+                        "code": "structured_intent.required",
+                        "field": "structured_intent",
+                        "message": (
+                            "Supply requested classes, roles, scope, direction, "
+                            "quantifier, polarity, and output obligations."
+                        ),
+                    }
+                ],
+            }
         if raw_structured_intent is not None:
             structured_intent, diagnostics = normalize_structured_intent(
                 raw_structured_intent
@@ -404,21 +427,32 @@ class TopologyTools:
             formal_restatement=formal_restatement,
         )
         encoded_intent: dict[str, object] | None = None
-        if self._active_structured_intent is not None:
-            encoded_intent, semantic_diagnostics = compare_structured_intents(
-                self._active_structured_intent,
-                tool_input.get("encoded_intent"),
-            )
-            if semantic_diagnostics:
-                diagnostics = [
-                    *list(validation.get("diagnostics", [])),
-                    *semantic_diagnostics,
-                ]
-                validation = {
-                    **validation,
-                    "status": "rejected",
-                    "diagnostics": diagnostics,
+        if self._active_structured_intent is None:
+            semantic_diagnostics = [
+                {
+                    "code": "structured_intent.required",
+                    "field": "structured_intent",
+                    "message": (
+                        "Generated query execution requires backend-bound "
+                        "structured intent."
+                    ),
                 }
+            ]
+        else:
+            encoded_intent, semantic_diagnostics = compare_program_structured_intent(
+                self._active_structured_intent,
+                generated_datalog,
+            )
+        if semantic_diagnostics:
+            diagnostics = [
+                *list(validation.get("diagnostics", [])),
+                *semantic_diagnostics,
+            ]
+            validation = {
+                **validation,
+                "status": "rejected",
+                "diagnostics": diagnostics,
+            }
         # A proposal that fails validation can never execute, so pausing the
         # turn for user confirmation would be a guaranteed dead end (bead 3cq
         # follow-up: the live BYOK model omitted `.output answer` and the user

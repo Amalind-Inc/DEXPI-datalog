@@ -12,6 +12,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     ToolCall,
     run_grounded_qa_turn,
 )
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
 
@@ -86,7 +87,8 @@ class NoFitThenGeneratedProvider:
             return ToolCall(
                 tool_name="report_template_no_fit",
                 tool_input={
-                    "reason": "No bundled template represents this universal condition."
+                    "reason": "No bundled template represents this universal condition.",
+                    "structured_intent": STRUCTURED_INTENT,
                 },
                 tool_call_id="no-fit-1",
             )
@@ -95,7 +97,10 @@ class NoFitThenGeneratedProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": QUESTION,
-                "generated_datalog": GENERATED_DATALOG,
+                "generated_datalog": encode_structured_intent_program(
+                    GENERATED_DATALOG,
+                    STRUCTURED_INTENT,
+                ),
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
@@ -130,7 +135,9 @@ def test_template_no_fit_receipt_unlocks_existing_generated_query_path() -> None
         "source_snapshot_id": receipt_result["route_receipt"]["source_snapshot_id"],
         "template_catalog_version": "1.0.0",
         "policy_version": "grounded-qa-route-policy/1",
-        "structured_intent_json": "",
+        "structured_intent_json": receipt_result["route_receipt"][
+            "structured_intent_json"
+        ],
         "signature": receipt_result["route_receipt"]["signature"],
     }
     proposal_result = result.tool_call_trace[1]["tool_result"]
@@ -166,6 +173,26 @@ def test_model_cannot_forge_or_widen_a_route_receipt() -> None:
     }
 
 
+def test_template_no_fit_without_structured_intent_cannot_unlock_generation() -> None:
+    tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="route-receipt-missing-intent-test",
+    )
+    tools.begin_request(QUESTION)
+
+    result = tools.execute(
+        "report_template_no_fit",
+        {"reason": "No bundled template covers this universal condition."},
+    )
+
+    assert result["status"] == "rejected"
+    assert result["code"] == "route.structured_intent_required"
+    assert result["diagnostics"][0]["code"] == "structured_intent.required"
+    assert "propose_temporary_datalog" not in {
+        tool["function"]["name"] for tool in tools.tool_definitions()
+    }
+
+
 def test_model_fields_cannot_alter_backend_receipt_scope() -> None:
     tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
@@ -177,6 +204,7 @@ def test_model_fields_cannot_alter_backend_receipt_scope() -> None:
         "report_template_no_fit",
         {
             "reason": "No bundled template covers this universal condition.",
+            "structured_intent": STRUCTURED_INTENT,
             "receipt_id": "model-selected-id",
             "source_snapshot_id": "model-selected-snapshot",
             "template_catalog_version": "999",
@@ -201,7 +229,10 @@ def test_exact_normalized_retry_reuses_backend_receipt() -> None:
     tools.begin_request(QUESTION)
     issued = tools.execute(
         "report_template_no_fit",
-        {"reason": "No bundled template covers this universal condition."},
+        {
+            "reason": "No bundled template covers this universal condition.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
     )
 
     tools.begin_request("  MUST EVERY CentrifugalPump have a reachable BallValve?  ")
@@ -209,7 +240,10 @@ def test_exact_normalized_retry_reuses_backend_receipt() -> None:
         "propose_temporary_datalog",
         {
             "request": "MUST EVERY CentrifugalPump have a reachable BallValve.",
-            "generated_datalog": GENERATED_DATALOG,
+            "generated_datalog": encode_structured_intent_program(
+                GENERATED_DATALOG,
+                STRUCTURED_INTENT,
+            ),
             "formal_restatement": (
                 "Return every centrifugal pump without a reachable ball valve."
             ),
@@ -228,7 +262,10 @@ class ResumedGeneratedProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": QUESTION,
-                "generated_datalog": GENERATED_DATALOG,
+                "generated_datalog": encode_structured_intent_program(
+                    GENERATED_DATALOG,
+                    STRUCTURED_INTENT,
+                ),
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
@@ -245,7 +282,10 @@ def test_signed_receipt_resumes_on_a_reconstructed_public_runner() -> None:
     initial_tools.begin_request(QUESTION)
     issued = initial_tools.execute(
         "report_template_no_fit",
-        {"reason": "No bundled template covers this universal condition."},
+        {
+            "reason": "No bundled template covers this universal condition.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
     )
 
     result = run_grounded_qa_turn(
@@ -289,14 +329,16 @@ def test_signed_receipt_restores_structured_intent_validation() -> None:
         "propose_temporary_datalog",
         {
             "request": QUESTION,
-            "generated_datalog": GENERATED_DATALOG,
+            "generated_datalog": encode_structured_intent_program(
+                GENERATED_DATALOG,
+                {
+                    **STRUCTURED_INTENT,
+                    "direction": "directed",
+                },
+            ),
             "formal_restatement": (
                 "Return every centrifugal pump without a reachable ball valve."
             ),
-            "encoded_intent": {
-                **STRUCTURED_INTENT,
-                "direction": "directed",
-            },
         },
     )
 
@@ -349,11 +391,13 @@ def test_model_cannot_change_structured_intent_after_receipt_issuance() -> None:
             "propose_temporary_datalog",
             {
                 "request": QUESTION,
-                "generated_datalog": GENERATED_DATALOG,
+                "generated_datalog": encode_structured_intent_program(
+                    GENERATED_DATALOG,
+                    STRUCTURED_INTENT,
+                ),
                 "formal_restatement": (
                     "Return every centrifugal pump without a reachable ball valve."
                 ),
-                "encoded_intent": STRUCTURED_INTENT,
             },
         )["status"]
         == "confirmation_required"
@@ -491,3 +535,52 @@ def test_deontic_policy_is_enforced_at_direct_tool_execution_boundary() -> None:
     assert "execute_bundled_query_template" not in {
         tool["function"]["name"] for tool in tools.tool_definitions()
     }
+
+
+def test_direct_backend_route_outcome_activates_its_signed_intent() -> None:
+    tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="route-direct-backend-outcome-test",
+    )
+    tools.begin_request(QUESTION)
+    issued = tools.record_backend_route_outcome(
+        ROUTE_TEMPLATE_NO_FIT,
+        structured_intent=STRUCTURED_INTENT,
+    )
+
+    proposal = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": QUESTION,
+            "generated_datalog": encode_structured_intent_program(
+                GENERATED_DATALOG,
+                STRUCTURED_INTENT,
+            ),
+            "formal_restatement": (
+                "Return every centrifugal pump without a reachable ball valve."
+            ),
+        },
+    )
+
+    assert issued["status"] == "route_receipt_issued"
+    assert proposal["status"] == "confirmation_required"
+    assert proposal["route_receipt"] == issued["route_receipt"]
+
+
+def test_route_authority_refuses_to_sign_malformed_structured_intent() -> None:
+    authority = RouteReceiptAuthority()
+    authority.begin_request(
+        intent=QUESTION,
+        source_snapshot_id="snapshot-1",
+        template_catalog_version="1.0.0",
+    )
+
+    result = authority.record_backend_outcome(
+        ROUTE_TEMPLATE_NO_FIT,
+        structured_intent={"direction": "sideways"},
+    )
+
+    assert result["status"] == "route_structured_intent_invalid"
+    assert result["route_receipt"] is None
+    assert result["diagnostics"][0]["code"] == "structured_intent.invalid"
+    assert authority.active_receipt() is None

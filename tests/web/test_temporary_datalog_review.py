@@ -9,7 +9,21 @@ import unittest
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
+
+
+STRUCTURED_INTENT = {
+    "source_classes": ["TopologyObject"],
+    "target_classes": ["TopologyObject"],
+    "source_role": "connected_object",
+    "target_role": "answer_object",
+    "graph_scope": "all_topology",
+    "direction": "undirected",
+    "quantifier": "all",
+    "negated": False,
+    "output_obligations": ["answer_ids"],
+}
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +47,10 @@ class TemporaryDatalogProposalProvider:
             self._step += 1
             return ToolCall(
                 tool_name="report_template_no_fit",
-                tool_input={"reason": "No bundled template covers this rule."},
+                tool_input={
+                    "reason": "No bundled template covers this rule.",
+                    "structured_intent": STRUCTURED_INTENT,
+                },
                 tool_call_id="no-fit-1",
             )
         if self._step == 1:
@@ -42,7 +59,13 @@ class TemporaryDatalogProposalProvider:
                 tool_name="propose_temporary_datalog",
                 tool_input={
                     "request": "Must every connected object satisfy the temporary topology rule?",
-                    "generated_datalog": f'.decl answer(x:symbol)\n.output answer\nanswer("{self._answer_id}").',
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n.output answer\n"
+                            f'answer("{self._answer_id}").'
+                        ),
+                        STRUCTURED_INTENT,
+                    ),
                     "formal_restatement": "Return objects matching the temporary topology rule.",
                     "resolved_identity_ids": [self._answer_id],
                 },
@@ -52,7 +75,9 @@ class TemporaryDatalogProposalProvider:
 
 
 class TemporaryDatalogReviewTests(unittest.TestCase):
-    def test_qa_turn_pauses_for_temporary_datalog_confirmation_then_executes(self) -> None:
+    def test_qa_turn_pauses_for_temporary_datalog_confirmation_then_executes(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             answer_id_holder: dict[str, str] = {}
 
@@ -70,11 +95,15 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
                 json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
             )
             self.assertEqual(prepared.status_code, 200, prepared.text)
-            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][0]["id"]
+            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
+                0
+            ]["id"]
 
             proposed = client.post(
                 f"/api/review/sessions/{session_id}/qa-turns",
-                json={"question": "Must every connected object satisfy the temporary topology rule?"},
+                json={
+                    "question": "Must every connected object satisfy the temporary topology rule?"
+                },
             )
             self.assertEqual(proposed.status_code, 200, proposed.text)
             proposal_body = proposed.json()
@@ -111,8 +140,13 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             self.assertEqual(executed.status_code, 200, executed.text)
             answer = executed.json()
             self.assertEqual(answer["status"], "answered")
-            self.assertEqual(answer["evidence"]["items"][0]["id"], answer_id_holder["answer_id"])
-            self.assertEqual(answer["evidence_highlight"]["matched_object_ids"], [answer_id_holder["answer_id"]])
+            self.assertEqual(
+                answer["evidence"]["items"][0]["id"], answer_id_holder["answer_id"]
+            )
+            self.assertEqual(
+                answer["evidence_highlight"]["matched_object_ids"],
+                [answer_id_holder["answer_id"]],
+            )
 
     def test_cancel_temporary_datalog_confirmation_does_not_execute(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -212,9 +246,13 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
                 json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
             )
             self.assertEqual(prepared.status_code, 200, prepared.text)
-            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][0]["id"]
+            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
+                0
+            ]["id"]
 
-            question = "Must every connected object satisfy the temporary topology rule?"
+            question = (
+                "Must every connected object satisfy the temporary topology rule?"
+            )
             proposed = client.post(
                 f"/api/review/sessions/{session_id}/qa-turns",
                 json={"question": question},

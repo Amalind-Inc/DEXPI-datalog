@@ -229,12 +229,12 @@ def default_grounded_qa_manifest(
                         "structured_intent": {
                             **STRUCTURED_INTENT_JSON_SCHEMA,
                             "description": (
-                                "Optional mechanically comparable request obligations. "
-                                "When supplied, generated proposals must encode an exact match."
+                                "Mechanically comparable request obligations. Generated "
+                                "programs must preserve this exact closed contract."
                             ),
                         },
                     },
-                    "required": ["reason"],
+                    "required": ["reason", "structured_intent"],
                     "additionalProperties": False,
                 },
             ),
@@ -343,6 +343,10 @@ def default_grounded_qa_manifest(
                                 "directives. Canonical shape: `.decl answer(x:symbol)` then "
                                 "`.output answer` then "
                                 '`answer(x) :- reachable("<evidence-id>", x).`'
+                                "For structured requests, declare "
+                                "query_intent_contract(payload:symbol), define one fact "
+                                "whose payload is URL-safe base64 of canonical JSON, and "
+                                "include that exact fact as a guard in every answer rule."
                             ),
                         },
                         "formal_restatement": {
@@ -353,13 +357,6 @@ def default_grounded_qa_manifest(
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Evidence IDs already resolved through read-only retrieval.",
-                        },
-                        "encoded_intent": {
-                            **STRUCTURED_INTENT_JSON_SCHEMA,
-                            "description": (
-                                "Semantic obligations encoded by the generated query. "
-                                "Required when template no-fit established structured intent."
-                            ),
                         },
                     },
                     "required": ["request", "generated_datalog", "formal_restatement"],

@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Protocol, runtime_checkable
 
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
 
@@ -449,7 +450,8 @@ class ScriptedQATurnProvider:
                         "reason": (
                             "No bundled template represents this sampled universal "
                             "rule condition."
-                        )
+                        ),
+                        "structured_intent": self._rule_evaluation_structured_intent(),
                     },
                     tool_call_id="scripted-template-no-fit",
                 )
@@ -501,6 +503,31 @@ class ScriptedQATurnProvider:
                 return str(match["evidence_id"])
         return self._candidates[0]
 
+    def _rule_evaluation_structured_intent(self) -> dict[str, object]:
+        if self._reachable_ids:
+            return {
+                "source_classes": ["TopologyObject"],
+                "target_classes": ["TopologyObject"],
+                "source_role": "process_connection_source",
+                "target_role": "process_connection_target",
+                "graph_scope": "all_topology",
+                "direction": "directed",
+                "quantifier": "any",
+                "negated": False,
+                "output_obligations": ["matching_target_ids"],
+            }
+        return {
+            "source_classes": ["ResolvedTopologyObject"],
+            "target_classes": ["ResolvedTopologyObject"],
+            "source_role": "resolved_object",
+            "target_role": "answer_object",
+            "graph_scope": "all_topology",
+            "direction": "undirected",
+            "quantifier": "any",
+            "negated": False,
+            "output_obligations": ["resolved_answer_ids"],
+        }
+
     def _propose_temporary_datalog(self) -> ToolCall:
         """Escalate a rule-like question to the confirmation-gated capability.
 
@@ -509,6 +536,7 @@ class ScriptedQATurnProvider:
         generic-schema join over direct process connections; otherwise fall
         back to the resolved objects themselves as literal facts.
         """
+        structured_intent = self._rule_evaluation_structured_intent()
         if self._reachable_ids:
             return ToolCall(
                 tool_name="propose_temporary_datalog",
@@ -518,10 +546,13 @@ class ScriptedQATurnProvider:
                     # the executor is a real Souffle engine over the generic
                     # schema, so the OSS default provider exercises an IDB join
                     # that the old regex path could never evaluate.
-                    "generated_datalog": (
-                        ".decl answer(x:symbol)\n"
-                        ".output answer\n"
-                        "answer(result) :- direct_process_connection(_, result)."
+                    "generated_datalog": encode_structured_intent_program(
+                        (
+                            ".decl answer(x:symbol)\n"
+                            ".output answer\n"
+                            "answer(result) :- direct_process_connection(_, result)."
+                        ),
+                        structured_intent,
                     ),
                     "formal_restatement": (
                         "Return every object that appears as a direct process-"
@@ -536,8 +567,9 @@ class ScriptedQATurnProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": self._question,
-                "generated_datalog": (
-                    ".decl answer(x:symbol)\n.output answer\n" + facts
+                "generated_datalog": encode_structured_intent_program(
+                    ".decl answer(x:symbol)\n.output answer\n" + facts,
+                    structured_intent,
                 ),
                 "formal_restatement": (
                     "Return the resolved objects "

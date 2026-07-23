@@ -37,8 +37,22 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     FinalAnswer,
     ToolCall,
 )
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.workflow.review_session import build_topology_view_model
+
+STRUCTURED_INTENT = {
+    "source_classes": ["TopologyObject"],
+    "target_classes": ["TopologyObject"],
+    "source_role": "resolved_source",
+    "target_role": "reachable_result",
+    "graph_scope": "all_topology",
+    "direction": "directed",
+    "quantifier": "any",
+    "negated": False,
+    "output_obligations": ["answer_ids"],
+}
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = (
@@ -87,7 +101,10 @@ class ProposeDatalogProvider:
         if self.calls == 1:
             return ToolCall(
                 tool_name="report_template_no_fit",
-                tool_input={"reason": "No bundled template covers this rule."},
+                tool_input={
+                    "reason": "No bundled template covers this rule.",
+                    "structured_intent": STRUCTURED_INTENT,
+                },
                 tool_call_id="scripted-no-fit",
             )
         assert self.calls == 2, "model consulted after the confirmation gate"
@@ -100,7 +117,10 @@ class ProposeDatalogProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": active_question,
-                "generated_datalog": self._generated_datalog,
+                "generated_datalog": encode_structured_intent_program(
+                    self._generated_datalog,
+                    STRUCTURED_INTENT,
+                ),
                 "formal_restatement": self._formal_restatement,
             },
             tool_call_id="scripted-propose",
@@ -158,7 +178,10 @@ def _anchor_with_reachables() -> tuple[str, list[str]]:
     tools.begin_request("reachability probe")
     tools.execute(
         "report_template_no_fit",
-        {"reason": "No bundled template covers this reachability probe."},
+        {
+            "reason": "No bundled template covers this reachability probe.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
     )
     for raw_id in raw_ids:
         datalog = (
@@ -169,7 +192,10 @@ def _anchor_with_reachables() -> tuple[str, list[str]]:
             "propose_temporary_datalog",
             {
                 "request": "reachability probe",
-                "generated_datalog": datalog,
+                "generated_datalog": encode_structured_intent_program(
+                    datalog,
+                    STRUCTURED_INTENT,
+                ),
                 "formal_restatement": "Return reachable objects.",
             },
         )
@@ -422,7 +448,8 @@ class TrapOrRuleProvider:
             return ToolCall(
                 tool_name="report_template_no_fit",
                 tool_input={
-                    "reason": "No bundled template covers this benchmark rule."
+                    "reason": "No bundled template covers this benchmark rule.",
+                    "structured_intent": STRUCTURED_INTENT,
                 },
                 tool_call_id="scripted-no-fit",
             )
@@ -431,9 +458,12 @@ class TrapOrRuleProvider:
             tool_name="propose_temporary_datalog",
             tool_input={
                 "request": question,
-                "generated_datalog": (
-                    ".decl answer(x:symbol)\n.output answer\n"
-                    f'answer(x) :- reachable("{self._anchor}", x).'
+                "generated_datalog": encode_structured_intent_program(
+                    (
+                        ".decl answer(x:symbol)\n.output answer\n"
+                        f'answer(x) :- reachable("{self._anchor}", x).'
+                    ),
+                    STRUCTURED_INTENT,
                 ),
                 "formal_restatement": "Return reachable objects.",
             },

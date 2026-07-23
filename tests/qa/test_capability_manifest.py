@@ -6,7 +6,21 @@ from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_CONFIRMATION_REQUIRED,
     default_grounded_qa_manifest,
 )
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
+
+
+STRUCTURED_INTENT = {
+    "source_classes": ["Pump"],
+    "target_classes": ["TopologyObject"],
+    "source_role": "resolved_source",
+    "target_role": "reachable_result",
+    "graph_scope": "all_topology",
+    "direction": "directed",
+    "quantifier": "any",
+    "negated": False,
+    "output_obligations": ["answer_ids"],
+}
 
 
 MINIMAL_TOPOLOGY: dict[str, object] = {
@@ -87,7 +101,10 @@ def test_topology_tools_expose_manifest_projected_tools() -> None:
     tools.begin_request("find pumps")
     tools.execute(
         "report_template_no_fit",
-        {"reason": "No bundled template covers this request."},
+        {
+            "reason": "No bundled template covers this request.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
     )
     routed_tool_names = {tool["function"]["name"] for tool in tools.tool_definitions()}
     assert "propose_temporary_datalog" in routed_tool_names
@@ -108,7 +125,10 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
     tools.begin_request("find pumps")
     tools.execute(
         "report_template_no_fit",
-        {"reason": "No bundled template covers this request."},
+        {
+            "reason": "No bundled template covers this request.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
     )
 
     # A valid proposal pauses for user confirmation without executing; an
@@ -118,8 +138,12 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
         "propose_temporary_datalog",
         {
             "request": "find pumps",
-            "generated_datalog": (
-                '.decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable("node-pump", x).'
+            "generated_datalog": encode_structured_intent_program(
+                (
+                    ".decl answer(x:symbol)\n.output answer\n"
+                    'answer(x) :- reachable("node-pump", x).'
+                ),
+                STRUCTURED_INTENT,
             ),
             "formal_restatement": "Return objects reachable from the pump.",
         },

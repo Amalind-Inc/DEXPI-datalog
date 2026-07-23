@@ -3,7 +3,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools as ProductTopologyTools
+
+
+STRUCTURED_INTENT = {
+    "source_classes": ["TopologyObject"],
+    "target_classes": ["TopologyObject"],
+    "source_role": "resolved_source",
+    "target_role": "answer_object",
+    "graph_scope": "all_topology",
+    "direction": "directed",
+    "quantifier": "any",
+    "negated": False,
+    "output_obligations": ["answer_ids"],
+}
 
 
 class TopologyTools(ProductTopologyTools):
@@ -12,18 +26,32 @@ class TopologyTools(ProductTopologyTools):
     def execute(
         self, tool_name: str, tool_input: dict[str, object]
     ) -> dict[str, object]:
+        tool_input = dict(tool_input)
+        if tool_name == "report_template_no_fit":
+            tool_input.setdefault("structured_intent", STRUCTURED_INTENT)
         if tool_name == "propose_temporary_datalog":
             request = str(tool_input.get("request", ""))
             self.begin_request(request)
             super().execute(
                 "report_template_no_fit",
-                {"reason": "No bundled template covers this mechanics test."},
+                {
+                    "reason": "No bundled template covers this mechanics test.",
+                    "structured_intent": STRUCTURED_INTENT,
+                },
             )
+            generated_datalog = str(tool_input.get("generated_datalog", ""))
+            if "answer(" in generated_datalog:
+                tool_input["generated_datalog"] = encode_structured_intent_program(
+                    generated_datalog,
+                    STRUCTURED_INTENT,
+                )
         return super().execute(tool_name, tool_input)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-E06_GRAPH_FACTS = REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
+E06_GRAPH_FACTS = (
+    REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
+)
 
 
 TOPOLOGY = {
@@ -66,8 +94,14 @@ def test_propose_temporary_datalog_returns_confirmation_without_execution() -> N
 
     assert result["status"] == "confirmation_required"
     assert result["executed"] is False
-    assert result["proposal"]["generated_datalog"] == '.decl answer(x:symbol)\n.output answer\nanswer("node-pump-p101").'
-    assert result["proposal"]["formal_restatement"] == "Return the pump as the temporary check result."
+    assert result["proposal"]["generated_datalog"] == encode_structured_intent_program(
+        '.decl answer(x:symbol)\n.output answer\nanswer("node-pump-p101").',
+        STRUCTURED_INTENT,
+    )
+    assert (
+        result["proposal"]["formal_restatement"]
+        == "Return the pump as the temporary check result."
+    )
     assert result["validation"]["status"] == "safe_to_confirm"
     assert result["confirmation"]["required"] is True
 
@@ -91,7 +125,9 @@ def test_propose_temporary_datalog_describes_interpretation_scope_and_effect() -
     )
 
     proposal = result["proposal"]
-    assert proposal["interpretation"] == "Return the pump as the temporary check result."
+    assert (
+        proposal["interpretation"] == "Return the pump as the temporary check result."
+    )
     assert proposal["exact_datalog"] == proposal["generated_datalog"]
     assert (
         proposal["effect"]
@@ -130,7 +166,10 @@ def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:
     assert result["code"] == "tool.proposal_rejected"
     assert result["executed"] is False
     assert result["validation"]["status"] == "rejected"
-    assert result["validation"]["diagnostics"][0]["code"] == "temporary_datalog.filesystem_forbidden"
+    assert (
+        result["validation"]["diagnostics"][0]["code"]
+        == "temporary_datalog.filesystem_forbidden"
+    )
     assert "Authoring contract" in result["message"]
 
 
@@ -195,13 +234,16 @@ def test_propose_temporary_datalog_rejects_unapproved_rule_predicates() -> None:
         "propose_temporary_datalog",
         {
             "request": "Use an unapproved predicate",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- evil_pred(x).',
+            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(x) :- evil_pred(x).",
             "formal_restatement": "Return evil matches.",
         },
     )
 
     assert result["validation"]["status"] == "rejected"
-    assert result["validation"]["diagnostics"][0]["code"] == "temporary_datalog.predicate_not_approved"
+    assert (
+        result["validation"]["diagnostics"][0]["code"]
+        == "temporary_datalog.predicate_not_approved"
+    )
 
 
 def test_propose_temporary_datalog_rejects_basic_syntax_errors() -> None:
@@ -217,10 +259,15 @@ def test_propose_temporary_datalog_rejects_basic_syntax_errors() -> None:
     )
 
     assert result["validation"]["status"] == "rejected"
-    assert result["validation"]["diagnostics"][0]["code"] == "temporary_datalog.syntax_invalid"
+    assert (
+        result["validation"]["diagnostics"][0]["code"]
+        == "temporary_datalog.syntax_invalid"
+    )
 
 
-def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_two() -> None:
+def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_two() -> (
+    None
+):
     """
     Behavior: a confirmed query built only from approved predicates executes for
     real even when it is not one of the two historical text shapes. The reversed
@@ -254,7 +301,7 @@ def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> 
         "propose_temporary_datalog",
         {
             "request": "Use reachable with the wrong arity",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable(x).',
+            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(x) :- reachable(x).",
             "formal_restatement": "Return reachable objects.",
         },
     )
@@ -265,7 +312,9 @@ def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> 
     assert answer["status"] == "execution_failed"
     assert answer["executed"] is False
     assert answer["diagnostics"], "engine failure must carry diagnostics"
-    assert answer["diagnostics"][0]["code"] == "temporary_datalog.souffle_execution_failed"
+    assert (
+        answer["diagnostics"][0]["code"] == "temporary_datalog.souffle_execution_failed"
+    )
 
 
 def _tools_for_e06(*, loaded_rule_pack_ids: list[str] | None = None) -> TopologyTools:
@@ -309,13 +358,15 @@ def test_temporary_datalog_contract_mentions_generic_schema_predicates() -> None
     assert "`diameter_satisfied`" not in generated_datalog_description
 
 
-def test_execute_confirmed_temporary_datalog_joins_against_generic_schema_predicate() -> None:
+def test_execute_confirmed_temporary_datalog_joins_against_generic_schema_predicate() -> (
+    None
+):
     tools = _tools_for_e06()
     proposal = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which objects are direct process targets?",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- direct_process_connection(_, x).',
+            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(x) :- direct_process_connection(_, x).",
             "formal_restatement": "Return objects that are direct process-connection targets.",
         },
     )
@@ -337,7 +388,7 @@ def test_temporary_datalog_rejects_predicate_from_unloaded_rule_pack() -> None:
         "propose_temporary_datalog",
         {
             "request": "Which discharge lines satisfy the diameter rule?",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).',
+            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).",
             "formal_restatement": "Return discharge line objects that satisfy the diameter rule.",
         },
     )
@@ -351,13 +402,15 @@ def test_temporary_datalog_rejects_predicate_from_unloaded_rule_pack() -> None:
     ]
 
 
-def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb() -> None:
+def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb() -> (
+    None
+):
     tools = _tools_for_e06(loaded_rule_pack_ids=["demo-process-safety"])
     proposal = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which discharge lines satisfy the diameter rule?",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).',
+            "generated_datalog": ".decl answer(x:symbol)\n.output answer\nanswer(x) :- diameter_satisfied(_, x, _).",
             "formal_restatement": "Return discharge line objects that satisfy the diameter rule.",
         },
     )
@@ -371,7 +424,9 @@ def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb(
     ]
 
 
-def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule() -> None:
+def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule() -> (
+    None
+):
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
     proposal = tools.execute(
         "propose_temporary_datalog",
