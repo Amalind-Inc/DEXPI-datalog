@@ -19,6 +19,10 @@ from pydexpi_datalog.qa.route_receipts import (
     is_deontic_or_defeasible_request,
     source_snapshot_identity,
 )
+from pydexpi_datalog.qa.structured_intent import (
+    compare_structured_intents,
+    normalize_structured_intent,
+)
 from pydexpi_datalog.qa.trusted_templates import (
     TRUSTED_TEMPLATE_CATALOG_VERSION,
     execute_bundled_query_template,
@@ -111,6 +115,7 @@ class TopologyTools:
         self._graph_facts = graph_facts or self._graph_facts_from_topology_view()
         self._route_receipts = RouteReceiptAuthority()
         self._active_question = ""
+        self._active_structured_intent: dict[str, object] | None = None
         self._loaded_rule_pack_ids = tuple(
             sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
         )
@@ -131,15 +136,25 @@ class TopologyTools:
         resume_route_receipt: dict[str, object] | None = None,
     ) -> None:
         self._active_question = question
+        self._active_structured_intent = None
         self._route_receipts.begin_request(
             intent=question,
             source_snapshot_id=source_snapshot_identity(self._graph_facts),
             template_catalog_version=TRUSTED_TEMPLATE_CATALOG_VERSION,
             resume_receipt=resume_route_receipt,
         )
+        self._active_structured_intent = self._route_receipts.active_structured_intent()
 
-    def record_backend_route_outcome(self, outcome: str) -> dict[str, object]:
-        return self._route_receipts.record_backend_outcome(outcome)
+    def record_backend_route_outcome(
+        self,
+        outcome: str,
+        *,
+        structured_intent: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return self._route_receipts.record_backend_outcome(
+            outcome,
+            structured_intent=structured_intent,
+        )
 
     @staticmethod
     def policy_route_outcome(question: str) -> str | None:
@@ -268,9 +283,47 @@ class TopologyTools:
                 code="route.no_fit_reason_required",
                 message="Template no-fit reporting requires a reason.",
             )
+        raw_structured_intent = tool_input.get("structured_intent")
+        if raw_structured_intent is not None:
+            structured_intent, diagnostics = normalize_structured_intent(
+                raw_structured_intent
+            )
+            if diagnostics or structured_intent is None:
+                return {
+                    **self._tool_rejection(
+                        tool_name="report_template_no_fit",
+                        code="route.structured_intent_invalid",
+                        message="Template no-fit structured intent is invalid.",
+                    ),
+                    "diagnostics": diagnostics,
+                }
+            if (
+                self._active_structured_intent is not None
+                and structured_intent != self._active_structured_intent
+            ):
+                _, changed_diagnostics = compare_structured_intents(
+                    self._active_structured_intent,
+                    structured_intent,
+                )
+                return {
+                    **self._tool_rejection(
+                        tool_name="report_template_no_fit",
+                        code="route.structured_intent_changed",
+                        message=(
+                            "Structured intent is already fixed for this request "
+                            "and cannot be changed."
+                        ),
+                    ),
+                    "diagnostics": changed_diagnostics,
+                }
+            self._active_structured_intent = structured_intent
         return {
-            **self.record_backend_route_outcome(ROUTE_TEMPLATE_NO_FIT),
+            **self.record_backend_route_outcome(
+                ROUTE_TEMPLATE_NO_FIT,
+                structured_intent=self._active_structured_intent,
+            ),
             "reason": reason,
+            "structured_intent": self._active_structured_intent,
         }
 
     def _propose_temporary_datalog_with_route_receipt(
@@ -350,6 +403,22 @@ class TopologyTools:
             generated_datalog=generated_datalog,
             formal_restatement=formal_restatement,
         )
+        encoded_intent: dict[str, object] | None = None
+        if self._active_structured_intent is not None:
+            encoded_intent, semantic_diagnostics = compare_structured_intents(
+                self._active_structured_intent,
+                tool_input.get("encoded_intent"),
+            )
+            if semantic_diagnostics:
+                diagnostics = [
+                    *list(validation.get("diagnostics", [])),
+                    *semantic_diagnostics,
+                ]
+                validation = {
+                    **validation,
+                    "status": "rejected",
+                    "diagnostics": diagnostics,
+                }
         # A proposal that fails validation can never execute, so pausing the
         # turn for user confirmation would be a guaranteed dead end (bead 3cq
         # follow-up: the live BYOK model omitted `.output answer` and the user
@@ -396,6 +465,8 @@ class TopologyTools:
                 "generated_datalog": generated_datalog,
                 "formal_restatement": formal_restatement,
                 "resolved_identity_ids": resolved_identity_ids,
+                "structured_intent": self._active_structured_intent,
+                "encoded_intent": encoded_intent,
                 "interpretation": formal_restatement,
                 "exact_datalog": generated_datalog,
                 "effect": TEMPORARY_DATALOG_EFFECT,

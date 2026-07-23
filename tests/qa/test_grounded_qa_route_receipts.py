@@ -27,6 +27,17 @@ pump_with_valve(P) :- pump(P), valve(V), reachable(P, V).
 .output answer
 answer(P) :- pump(P), !pump_with_valve(P).
 """
+STRUCTURED_INTENT = {
+    "source_classes": ["CentrifugalPump"],
+    "target_classes": ["BallValve"],
+    "source_role": "equipment",
+    "target_role": "reachable_object",
+    "graph_scope": "piping_only",
+    "direction": "undirected",
+    "quantifier": "all",
+    "negated": True,
+    "output_obligations": ["violating_source_ids"],
+}
 
 MINIMAL_TOPOLOGY = {
     "source_id": "drawing-v1",
@@ -119,6 +130,7 @@ def test_template_no_fit_receipt_unlocks_existing_generated_query_path() -> None
         "source_snapshot_id": receipt_result["route_receipt"]["source_snapshot_id"],
         "template_catalog_version": "1.0.0",
         "policy_version": "grounded-qa-route-policy/1",
+        "structured_intent_json": "",
         "signature": receipt_result["route_receipt"]["signature"],
     }
     proposal_result = result.tool_call_trace[1]["tool_result"]
@@ -249,6 +261,103 @@ def test_signed_receipt_resumes_on_a_reconstructed_public_runner() -> None:
     proposal = result.tool_call_trace[0]["tool_result"]
     assert proposal["status"] == "confirmation_required"
     assert proposal["route_receipt"] == issued["route_receipt"]
+
+
+def test_signed_receipt_restores_structured_intent_validation() -> None:
+    initial_tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="structured-receipt-initial",
+    )
+    initial_tools.begin_request(QUESTION)
+    issued = initial_tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this universal condition.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
+    )
+    resumed_tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="structured-receipt-resumed",
+    )
+    resumed_tools.begin_request(
+        QUESTION,
+        resume_route_receipt=issued["route_receipt"],
+    )
+
+    result = resumed_tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": QUESTION,
+            "generated_datalog": GENERATED_DATALOG,
+            "formal_restatement": (
+                "Return every centrifugal pump without a reachable ball valve."
+            ),
+            "encoded_intent": {
+                **STRUCTURED_INTENT,
+                "direction": "directed",
+            },
+        },
+    )
+
+    assert result["status"] == "rejected"
+    assert result["diagnostics"] == [
+        {
+            "code": "structured_intent.direction_mismatch",
+            "field": "direction",
+            "requested": "undirected",
+            "encoded": "directed",
+            "message": (
+                "Generated query changed direction: requested "
+                "'undirected', encoded 'directed'."
+            ),
+        }
+    ]
+
+
+def test_model_cannot_change_structured_intent_after_receipt_issuance() -> None:
+    tools = TopologyTools(
+        topology_view=MINIMAL_TOPOLOGY,
+        session_id="structured-receipt-immutable",
+    )
+    tools.begin_request(QUESTION)
+    issued = tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this universal condition.",
+            "structured_intent": STRUCTURED_INTENT,
+        },
+    )
+
+    changed = tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "Try a narrower directed interpretation.",
+            "structured_intent": {
+                **STRUCTURED_INTENT,
+                "direction": "directed",
+            },
+        },
+    )
+
+    assert issued["status"] == "route_receipt_issued"
+    assert changed["status"] == "rejected"
+    assert changed["code"] == "route.structured_intent_changed"
+    assert changed["diagnostics"][0]["code"] == ("structured_intent.direction_mismatch")
+    assert (
+        tools.execute(
+            "propose_temporary_datalog",
+            {
+                "request": QUESTION,
+                "generated_datalog": GENERATED_DATALOG,
+                "formal_restatement": (
+                    "Return every centrifugal pump without a reachable ball valve."
+                ),
+                "encoded_intent": STRUCTURED_INTENT,
+            },
+        )["status"]
+        == "confirmation_required"
+    )
 
 
 def test_tampered_signed_receipt_cannot_resume() -> None:

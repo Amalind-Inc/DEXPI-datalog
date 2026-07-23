@@ -402,6 +402,256 @@ def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
     )
 
 
+STRUCTURED_CONNECTIVITY_INTENT = {
+    "source_classes": ["CentrifugalPump", "ReciprocatingPump"],
+    "target_classes": ["BallValve"],
+    "source_role": "equipment",
+    "target_role": "reachable_object",
+    "graph_scope": "piping_only",
+    "direction": "undirected",
+    "quantifier": "all",
+    "negated": True,
+    "output_obligations": ["violating_source_ids"],
+}
+
+
+class RepairStructuredIntentProvider:
+    def __init__(self) -> None:
+        self._step = 0
+        self.rejection_feedback: list[str] = []
+
+    def complete_with_tools(self, *, messages, tools):
+        if self._step == 0:
+            self._step += 1
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this valve obligation.",
+                    "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="structured-no-fit",
+            )
+
+        if self._step > 1 and messages[-1].get("role") == "tool":
+            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        self._step += 1
+        if self._step == 2:
+            encoded_intent = {
+                **STRUCTURED_CONNECTIVITY_INTENT,
+                "source_classes": ["BallValve"],
+                "target_classes": ["CentrifugalPump", "ReciprocatingPump"],
+                "source_role": "reachable_object",
+                "target_role": "equipment",
+            }
+            program = (
+                ".decl answer(x:symbol)\n.output answer\n"
+                f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+            )
+            call_id = "structured-reversed"
+        elif self._step == 3:
+            encoded_intent = {
+                **STRUCTURED_CONNECTIVITY_INTENT,
+                "direction": "directed",
+            }
+            program = (
+                ".decl answer(x:symbol)\n.output answer\n"
+                f'answer(x) :- direct_process_connection("{SEGMENT_ID}", x).'
+            )
+            call_id = "structured-direction"
+        elif self._step == 4:
+            encoded_intent = {
+                **STRUCTURED_CONNECTIVITY_INTENT,
+                "negated": False,
+            }
+            program = (
+                ".decl candidate(x:symbol)\n"
+                ".decl answer(x:symbol)\n"
+                ".output answer\n"
+                f'candidate("{SEGMENT_ID}").\n'
+                "answer(x) :- candidate(x)."
+            )
+            call_id = "structured-polarity"
+        else:
+            encoded_intent = STRUCTURED_CONNECTIVITY_INTENT
+            program = (
+                ".decl candidate(x:symbol)\n"
+                ".decl violating_source(x:symbol)\n"
+                ".decl answer(x:symbol)\n"
+                ".output answer\n"
+                f'candidate("{SEGMENT_ID}").\n'
+                "violating_source(x) :- candidate(x).\n"
+                "answer(x) :- violating_source(x)."
+            )
+            call_id = "structured-corrected"
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": "Must every pump have a reachable ball valve?",
+                "generated_datalog": program,
+                "formal_restatement": "Return pumps without a reachable ball valve.",
+                "resolved_identity_ids": [SEGMENT_ID],
+                "encoded_intent": encoded_intent,
+            },
+            tool_call_id=call_id,
+        )
+
+
+def test_structured_intent_mismatch_is_repaired_through_public_runner() -> None:
+    provider = RepairStructuredIntentProvider()
+
+    result = run_grounded_qa_turn(
+        question="Must every pump have a reachable ball valve?",
+        topology_tools=make_tools(),
+        provider=provider,
+    )
+
+    proposal_traces = [
+        trace
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    ]
+    assert len(proposal_traces) == 4
+    assert all(
+        trace["tool_result"]["status"] == "rejected" for trace in proposal_traces[:3]
+    )
+    rejected = proposal_traces[0]["tool_result"]
+    assert rejected["status"] == "rejected"
+    assert rejected["validation"]["status"] == "rejected"
+    assert {diagnostic["field"] for diagnostic in rejected["diagnostics"]} >= {
+        "source_classes",
+        "target_classes",
+        "source_role",
+        "target_role",
+    }
+    assert all(
+        "requested" in diagnostic and "encoded" in diagnostic
+        for diagnostic in rejected["diagnostics"]
+        if diagnostic["code"].startswith("structured_intent.")
+    )
+    assert any(
+        "structured_intent.source_classes_mismatch" in feedback
+        for feedback in provider.rejection_feedback
+    )
+    accepted = proposal_traces[-1]["tool_result"]
+    assert accepted["status"] == "confirmation_required"
+    assert accepted["validation"]["status"] == "safe_to_confirm"
+    assert accepted["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+
+
+class ValidStructuredIntentProvider:
+    def __init__(self) -> None:
+        self._step = 0
+
+    def complete_with_tools(self, *, messages, tools):
+        self._step += 1
+        if self._step == 1:
+            return ToolCall(
+                tool_name="report_template_no_fit",
+                tool_input={
+                    "reason": "No bundled template covers this valve obligation.",
+                    "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+                },
+                tool_call_id="valid-structured-no-fit",
+            )
+        return ToolCall(
+            tool_name="propose_temporary_datalog",
+            tool_input={
+                "request": "Must every pump have a reachable ball valve?",
+                "generated_datalog": (
+                    ".decl answer(x:symbol)\n.output answer\n"
+                    f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+                ),
+                "formal_restatement": "Return pumps without a reachable ball valve.",
+                "resolved_identity_ids": [SEGMENT_ID],
+                "encoded_intent": STRUCTURED_CONNECTIVITY_INTENT,
+            },
+            tool_call_id="valid-structured-proposal",
+        )
+
+
+def test_valid_structured_intent_reaches_confirmation_through_public_runner() -> None:
+    result = run_grounded_qa_turn(
+        question="Must every pump have a reachable ball valve?",
+        topology_tools=make_tools(),
+        provider=ValidStructuredIntentProvider(),
+    )
+
+    proposal = next(
+        trace["tool_result"]
+        for trace in result.tool_call_trace
+        if trace["tool_name"] == "propose_temporary_datalog"
+    )
+    assert proposal["status"] == "confirmation_required"
+    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert proposal["proposal"]["structured_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+    assert proposal["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+
+
+@pytest.mark.parametrize(
+    ("field", "encoded_value"),
+    [
+        ("source_classes", ["CentrifugalPump"]),
+        ("target_classes", ["GateValve"]),
+        ("source_role", "reachable_object"),
+        ("target_role", "equipment"),
+        ("graph_scope", "instrumentation_inclusive"),
+        ("direction", "directed"),
+        ("quantifier", "any"),
+        ("negated", False),
+        ("output_obligations", ["matching_target_ids"]),
+    ],
+)
+def test_every_structured_intent_obligation_is_mechanically_compared(
+    field: str,
+    encoded_value: object,
+) -> None:
+    tools = make_tools()
+    tools.begin_request("Must every pump have a reachable ball valve?")
+    route = tools.execute(
+        "report_template_no_fit",
+        {
+            "reason": "No bundled template covers this valve obligation.",
+            "structured_intent": STRUCTURED_CONNECTIVITY_INTENT,
+        },
+    )
+    assert route["status"] == "route_receipt_issued"
+
+    result = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": "Must every pump have a reachable ball valve?",
+            "generated_datalog": (
+                ".decl answer(x:symbol)\n.output answer\n"
+                f'answer(x) :- reachable("{SEGMENT_ID}", x).'
+            ),
+            "formal_restatement": "Return pumps without a reachable ball valve.",
+            "resolved_identity_ids": [SEGMENT_ID],
+            "encoded_intent": {
+                **STRUCTURED_CONNECTIVITY_INTENT,
+                field: encoded_value,
+            },
+        },
+    )
+
+    assert result["status"] == "rejected"
+    semantic_diagnostics = [
+        diagnostic
+        for diagnostic in result["diagnostics"]
+        if diagnostic["code"].startswith("structured_intent.")
+    ]
+    assert len(semantic_diagnostics) == 1
+    assert semantic_diagnostics[0] == {
+        "code": f"structured_intent.{field}_mismatch",
+        "field": field,
+        "requested": STRUCTURED_CONNECTIVITY_INTENT[field],
+        "encoded": encoded_value,
+        "message": (
+            f"Generated query changed {field}: requested "
+            f"{STRUCTURED_CONNECTIVITY_INTENT[field]!r}, encoded {encoded_value!r}."
+        ),
+    }
+
+
 def test_scripted_provider_escalates_rule_evaluation_to_datalog_proposal():
     """The OSS default provider reaches the confirmation gate for rule-like
     questions instead of dead-ending in a retrieval-only answer."""

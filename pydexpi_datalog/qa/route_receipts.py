@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 
@@ -59,6 +60,7 @@ class RouteReceipt:
     source_snapshot_id: str
     template_catalog_version: str
     policy_version: str
+    structured_intent_json: str
     signature: str
 
     def artifact(self) -> dict[str, str]:
@@ -94,7 +96,12 @@ class RouteReceiptAuthority:
         if resume_receipt is not None:
             self._restore_receipt(resume_receipt)
 
-    def record_backend_outcome(self, outcome: str) -> dict[str, object]:
+    def record_backend_outcome(
+        self,
+        outcome: str,
+        *,
+        structured_intent: Mapping[str, object] | None = None,
+    ) -> dict[str, object]:
         if self._context is None:
             return {
                 "status": "route_context_missing",
@@ -115,6 +122,7 @@ class RouteReceiptAuthority:
             "source_snapshot_id": self._context.source_snapshot_id,
             "template_catalog_version": self._context.template_catalog_version,
             "policy_version": self._context.policy_version,
+            "structured_intent_json": _canonical_intent_json(structured_intent),
         }
         receipt = RouteReceipt(
             **receipt_fields,
@@ -140,6 +148,7 @@ class RouteReceiptAuthority:
                 "source_snapshot_id",
                 "template_catalog_version",
                 "policy_version",
+                "structured_intent_json",
             )
         }
         signature = str(artifact.get("signature", ""))
@@ -171,6 +180,13 @@ class RouteReceiptAuthority:
             return None
         return receipt.artifact()
 
+    def active_structured_intent(self) -> dict[str, object] | None:
+        active = self.active_receipt()
+        if active is None or not active["structured_intent_json"]:
+            return None
+        parsed = json.loads(active["structured_intent_json"])
+        return dict(parsed) if isinstance(parsed, dict) else None
+
     def validates(self, receipt_id: str) -> bool:
         active = self.active_receipt()
         return active is not None and active["receipt_id"] == receipt_id
@@ -201,6 +217,17 @@ def source_snapshot_identity(graph_facts: object) -> str:
         ensure_ascii=True,
     )
     return _digest(canonical)
+
+
+def _canonical_intent_json(value: Mapping[str, object] | None) -> str:
+    if value is None:
+        return ""
+    return json.dumps(
+        dict(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
 
 
 def _sign_receipt_fields(fields: dict[str, str]) -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pydexpi_datalog.qa.structured_intent import STRUCTURED_INTENT_JSON_SCHEMA
 
 PERMISSION_ALLOWED_READ_ONLY = "allowed_read_only"
 PERMISSION_CONFIRMATION_REQUIRED = "confirmation_required"
@@ -224,7 +225,14 @@ def default_grounded_qa_manifest(
                         "reason": {
                             "type": "string",
                             "description": "Brief explanation of the unsupported query shape.",
-                        }
+                        },
+                        "structured_intent": {
+                            **STRUCTURED_INTENT_JSON_SCHEMA,
+                            "description": (
+                                "Optional mechanically comparable request obligations. "
+                                "When supplied, generated proposals must encode an exact match."
+                            ),
+                        },
                     },
                     "required": ["reason"],
                     "additionalProperties": False,
@@ -345,6 +353,13 @@ def default_grounded_qa_manifest(
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Evidence IDs already resolved through read-only retrieval.",
+                        },
+                        "encoded_intent": {
+                            **STRUCTURED_INTENT_JSON_SCHEMA,
+                            "description": (
+                                "Semantic obligations encoded by the generated query. "
+                                "Required when template no-fit established structured intent."
+                            ),
                         },
                     },
                     "required": ["request", "generated_datalog", "formal_restatement"],
