@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import time
 from dataclasses import dataclass, field
@@ -90,6 +91,7 @@ class QATurnProvider(Protocol):
         *,
         messages: list[dict[str, object]],
         tools: list[dict[str, object]],
+        tool_choice: str = "auto",
     ) -> ToolCall | FinalAnswer: ...
 
 
@@ -206,6 +208,14 @@ def _question_token(question: str) -> str:
     return ""
 
 
+_SME_GRADING_PHRASES = (
+    "answer violation_found",
+    "answer no_violation",
+    "return every matching object as a witness",
+    "return every matching object",
+)
+
+
 def _classify_review_intent(question: str) -> ReviewIntent:
     normalized = question.lower()
     if _looks_like_source_mutation(normalized):
@@ -214,7 +224,17 @@ def _classify_review_intent(question: str) -> ReviewIntent:
             evidence_need="denial",
             suggested_next_tools=("mutate_source_graph",),
         )
-    if _looks_like_rule_evaluation(normalized):
+    # SME retrieval prompts often include grading vocabulary ("answer
+    # violation_found…") or existential containment ("contain any …"). Those
+    # are object lookups; they must not be forced onto the Datalog/template
+    # rule_result path (bead 1g7l / holdout 3qo.9.10).
+    if _looks_like_object_presence_lookup(normalized):
+        return ReviewIntent(
+            intent_type="object_lookup",
+            evidence_need="candidate_objects",
+            suggested_next_tools=("find_equipment",),
+        )
+    if _looks_like_rule_evaluation(_strip_sme_grading_vocabulary(normalized)):
         return ReviewIntent(
             intent_type="rule_evaluation",
             evidence_need="rule_result",
@@ -236,6 +256,29 @@ def _classify_review_intent(question: str) -> ReviewIntent:
     return ReviewIntent(intent_type="conversation", evidence_need="none")
 
 
+def _strip_sme_grading_vocabulary(normalized: str) -> str:
+    """Remove benchmark grading coda so it cannot trip deontic detection."""
+    text = normalized
+    for phrase in _SME_GRADING_PHRASES:
+        text = text.replace(phrase, " ")
+    return " ".join(text.split())
+
+
+def _looks_like_object_presence_lookup(normalized: str) -> bool:
+    """Existential containment / tagged-object presence is an object lookup.
+
+    Examples: "contain any nozzles?", "contain the … tagged H-1009?".
+    Universal ownership/compliance ("every X have …") is not presence lookup.
+    """
+    text = _strip_sme_grading_vocabulary(normalized)
+    padded = f" {text} "
+    if not (" contain" in padded or " include" in padded):
+        return False
+    if " every " in padded or " all " in padded:
+        return False
+    return True
+
+
 def _looks_like_source_mutation(normalized: str) -> bool:
     mutation_phrases = (
         "delete ",
@@ -253,7 +296,11 @@ def _looks_like_source_mutation(normalized: str) -> bool:
 def _looks_like_rule_evaluation(normalized: str) -> bool:
     """Deontic/compliance wording alone marks a rule claim; bare quantifiers
     do not. "Any valves?" is a lookup, not a rule -- a quantifier only counts
-    when the question also claims a condition over the quantified set."""
+    when the question also claims a condition over the quantified set.
+
+    Callers must strip SME grading vocabulary before invoking this helper so
+    phrases like "answer violation_found" are not treated as deontic claims.
+    """
     deontic_tokens = (
         " violation",
         " violates",
@@ -510,7 +557,9 @@ class ScriptedQATurnProvider:
         *,
         messages: list[dict[str, object]],
         tools: list[dict[str, object]],
+        tool_choice: str = "auto",
     ) -> ToolCall | FinalAnswer:
+        del tool_choice  # Scripted path ignores provider tool_choice hints.
         # Test-only pacing (bead 2ki.12): gives a polling client a real window
         # to observe the turn mid-flight instead of it resolving before the
         # first poll tick. Zero by default -- never sleeps in production.
@@ -816,6 +865,11 @@ DEFAULT_MAX_CONVERSATION_TURNS = 12
 # for a given model; raising it only widens the window.
 DEFAULT_MAX_ROUNDS = 20
 
+# After this many consecutive insufficient FinalAnswers, stop burning rounds and
+# return the conservative unanswerable path (bead 1g7l). Live models that answer
+# in prose under tool_choice=auto otherwise loop until DEFAULT_MAX_ROUNDS.
+MAX_CONSECUTIVE_INSUFFICIENT_ANSWERS = 3
+
 # Reported to an optional progress callback once per round so callers (e.g. the
 # web API's turn lifecycle) can surface live progress instead of a static
 # "working" placeholder for the whole (potentially long) tool-calling loop.
@@ -976,6 +1030,8 @@ def run_grounded_qa_turn(
     duration_limit = constraints.max_duration_seconds if constraints else None
     cost_limit = constraints.max_provider_cost if constraints else None
     allowed_capabilities = _resolve_allowed_capabilities(constraints, topology_tools)
+    require_tool_next = False
+    consecutive_insufficient_answers = 0
 
     def _poll_steering() -> str | None:
         if steering is not None:
@@ -998,11 +1054,14 @@ def run_grounded_qa_turn(
             return _steered_result(
                 steer, known_ids=known_ids, tool_call_trace=tool_call_trace
             )
-        response = provider.complete_with_tools(
+        tool_choice = "required" if require_tool_next else "auto"
+        response = _complete_with_tools(
+            provider,
             messages=messages,
             tools=_narrow_tool_definitions(
                 topology_tools.tool_definitions(), allowed_capabilities
             ),
+            tool_choice=tool_choice,
         )
         if on_round is not None and isinstance(response, ToolCall):
             on_round(
@@ -1025,6 +1084,7 @@ def run_grounded_qa_turn(
                     and _faithfulness_gate_attempt_count(tool_call_trace)
                     < MIN_FAITHFULNESS_GATE_ATTEMPTS_BEFORE_GIVING_UP
                 ):
+                    require_tool_next = True
                     messages.append(
                         {
                             "role": "user",
@@ -1036,6 +1096,8 @@ def run_grounded_qa_turn(
                 assert missing_capability is not None
                 return missing_capability
             last_insufficient_answer = response
+            consecutive_insufficient_answers += 1
+            require_tool_next = True
             tool_result = _sufficiency_failure(intent)
             tool_call_trace.append(
                 {
@@ -1045,6 +1107,22 @@ def run_grounded_qa_turn(
                     "tool_result": tool_result,
                 }
             )
+            if consecutive_insufficient_answers >= MAX_CONSECUTIVE_INSUFFICIENT_ANSWERS:
+                return _finalize(
+                    FinalAnswer(
+                        answer_text=(
+                            "I could not ground that answer with the required evidence. "
+                            "Please narrow the question or approve the suggested "
+                            "deterministic check."
+                        ),
+                        evidence_references=last_insufficient_answer.evidence_references,
+                        interpreted_object_ids=(
+                            last_insufficient_answer.interpreted_object_ids
+                        ),
+                    ),
+                    known_ids,
+                    tool_call_trace,
+                )
             messages.append(
                 {
                     "role": "user",
@@ -1058,6 +1136,8 @@ def run_grounded_qa_turn(
             continue
 
         if isinstance(response, ToolCall):
+            consecutive_insufficient_answers = 0
+            require_tool_next = False
             if (
                 allowed_capabilities is not None
                 and response.tool_name not in allowed_capabilities
@@ -1161,6 +1241,25 @@ def run_grounded_qa_turn(
     raise RuntimeError(
         f"QA harness exceeded {max_rounds} rounds without a final answer."
     )
+
+
+def _complete_with_tools(
+    provider: QATurnProvider,
+    *,
+    messages: list[dict[str, object]],
+    tools: list[dict[str, object]],
+    tool_choice: str,
+) -> ToolCall | FinalAnswer:
+    """Call the provider with tool_choice when the adapter accepts it."""
+    try:
+        parameters = inspect.signature(provider.complete_with_tools).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if "tool_choice" in parameters:
+        return provider.complete_with_tools(
+            messages=messages, tools=tools, tool_choice=tool_choice
+        )
+    return provider.complete_with_tools(messages=messages, tools=tools)
 
 
 def _extract_deterministic_artifacts(

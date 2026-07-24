@@ -20,6 +20,7 @@ from pydexpi_datalog.qa.faithfulness_gate import (
 )
 from pydexpi_datalog.qa.route_receipts import (
     ROUTE_DEONTIC_ABSTENTION,
+    ROUTE_GENERATED_QUERY_AUTHORIZED,
     ROUTE_TEMPLATE_NO_FIT,
     RouteReceiptAuthority,
     is_deontic_or_defeasible_request,
@@ -252,13 +253,10 @@ class TopologyTools:
                     "propose_temporary_datalog",
                 }
             ]
-        if self._route_receipts.active_receipt() is not None:
-            return definitions
-        return [
-            definition
-            for definition in definitions
-            if definition["function"]["name"] != "propose_temporary_datalog"
-        ]
+        # Generated Datalog is always offered (except deontic policy above).
+        # Authorization binds to the session question + structured intent, not
+        # to a prior no-fit ceremony or a paraphrased model request (bead 2669).
+        return definitions
 
     def system_prompt(self) -> str:
         """Model-facing system prompt derived from the capability manifest."""
@@ -425,10 +423,16 @@ class TopologyTools:
     def _propose_temporary_datalog_with_route_receipt(
         self, tool_input: dict[str, object]
     ) -> dict[str, object]:
+        # Ignore model-authored receipt blobs; authorization is backend-owned.
+        authorization = self._authorize_generated_query_for_session(tool_input)
+        if authorization is not None:
+            return authorization
         route_receipt = self._route_receipts.active_receipt()
-        request = str(tool_input.get("request", ""))
+        # Bind to the session question, not a paraphrased model `request`
+        # field — live models routinely rewrite the request string (bead 2669).
+        session_question = self._active_question or ""
         if route_receipt is None or not self._route_receipts.matches_active_intent(
-            request
+            session_question
         ):
             return {
                 "status": "rejected",
@@ -445,6 +449,112 @@ class TopologyTools:
         result = self._propose_temporary_datalog(tool_input)
         result["route_receipt"] = route_receipt
         return result
+
+    def _authorize_generated_query_for_session(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object] | None:
+        """Ensure a session-bound receipt + structured intent exist.
+
+        Returns a rejection dict when authorization cannot proceed; None when
+        the active receipt is ready for proposal validation/execution.
+        """
+        session_question = self._active_question or ""
+        active = self._route_receipts.active_receipt()
+        if active is not None and self._route_receipts.matches_active_intent(
+            session_question
+        ):
+            if self._active_structured_intent is None:
+                restored = self._route_receipts.active_structured_intent()
+                if restored is not None:
+                    self._active_structured_intent = restored
+            if self._active_structured_intent is not None:
+                return None
+
+        structured_intent = self._structured_intent_from_proposal(tool_input)
+        if structured_intent is None:
+            return {
+                "status": "rejected",
+                "code": "route.structured_intent_required",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "message": (
+                    "Generated Datalog requires structured logic intent "
+                    "(via faithfulness_review.back_translated_intent or a prior "
+                    "template no-fit receipt)."
+                ),
+                "matches": [],
+                "reachable": [],
+                "diagnostics": [
+                    {
+                        "code": "structured_intent.required",
+                        "field": "structured_intent",
+                        "message": (
+                            "Supply requested classes, roles, scope, direction, "
+                            "quantifier, polarity, and output obligations."
+                        ),
+                    }
+                ],
+            }
+
+        if (
+            self._active_structured_intent is not None
+            and structured_intent != self._active_structured_intent
+        ):
+            _, changed_diagnostics = compare_structured_intents(
+                self._active_structured_intent,
+                structured_intent,
+            )
+            return {
+                "status": "rejected",
+                "code": "route.structured_intent_changed",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "message": (
+                    "Structured intent is already fixed for this request "
+                    "and cannot be changed."
+                ),
+                "matches": [],
+                "reachable": [],
+                "diagnostics": changed_diagnostics,
+            }
+
+        self._active_structured_intent = structured_intent
+        issued = self.record_backend_route_outcome(
+            ROUTE_GENERATED_QUERY_AUTHORIZED,
+            structured_intent=structured_intent,
+        )
+        if issued.get("status") != "route_receipt_issued":
+            return {
+                "status": "rejected",
+                "code": "route.valid_receipt_required",
+                "tool_name": "propose_temporary_datalog",
+                "executed": False,
+                "message": (
+                    "Generated Datalog could not obtain a backend route receipt "
+                    "for this session question."
+                ),
+                "matches": [],
+                "reachable": [],
+                "diagnostics": issued.get("diagnostics", []),
+            }
+        return None
+
+    def _structured_intent_from_proposal(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object] | None:
+        raw = tool_input.get("structured_intent")
+        if raw is None:
+            review = tool_input.get("faithfulness_review")
+            if isinstance(review, dict):
+                raw = review.get("back_translated_intent")
+        if raw is None and self._active_structured_intent is not None:
+            return dict(self._active_structured_intent)
+        if raw is None:
+            return None
+        structured_intent, diagnostics = normalize_structured_intent(raw)
+        if diagnostics or structured_intent is None:
+            return None
+        return structured_intent
 
     def _execute_bundled_query_template(
         self, tool_input: dict[str, object]

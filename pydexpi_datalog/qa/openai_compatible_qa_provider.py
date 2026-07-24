@@ -125,6 +125,7 @@ class OpenAICompatibleQATurnProvider:
         *,
         messages: list[dict[str, object]],
         tools: list[dict[str, object]],
+        tool_choice: str = "auto",
     ) -> ToolCall | FinalAnswer:
         headers = {"Content-Type": "application/json"}
         if self._credential:
@@ -133,7 +134,7 @@ class OpenAICompatibleQATurnProvider:
             "model": self.model,
             "messages": self._clean_messages(messages),
             "tools": [*tools, _PROVIDE_ANSWER_TOOL],
-            "tool_choice": "auto",
+            "tool_choice": tool_choice,
         }
         if self.provider in _REASONING_REQUEST_PROVIDERS:
             payload["reasoning"] = {"enabled": True}

@@ -284,8 +284,8 @@ def test_gate_failure_never_executes_automatically() -> None:
     assert "route_artifact" not in vetoed
 
 
-def test_automatic_execution_requires_a_route_receipt() -> None:
-    """Automatic execution never bypasses the backend receipt precondition."""
+def test_propose_with_faithfulness_intent_auto_issues_session_receipt() -> None:
+    """Propose no longer requires a prior no-fit ceremony when intent is supplied."""
     tools = make_tools()
     tools.begin_request(QUESTION)
 
@@ -304,6 +304,6 @@ def test_automatic_execution_requires_a_route_receipt() -> None:
         },
     )
 
-    assert result["status"] == "rejected"
-    assert result["code"] == "route.valid_receipt_required"
-    assert result["executed"] is False
+    assert result["status"] == "answered"
+    assert result["executed"] is True
+    assert result["route_receipt"]["route_outcome"] == "generated_query_authorized"

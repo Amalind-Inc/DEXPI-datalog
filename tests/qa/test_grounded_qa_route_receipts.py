@@ -94,7 +94,7 @@ class NoFitThenGeneratedProvider:
         self.offered_tools_by_round.append(offered)
         self.calls += 1
         if self.calls == 1:
-            assert "propose_temporary_datalog" not in offered
+            assert "propose_temporary_datalog" in offered
             return ToolCall(
                 tool_name="report_template_no_fit",
                 tool_input={
@@ -181,10 +181,12 @@ def test_model_cannot_forge_or_widen_a_route_receipt() -> None:
         },
     )
 
+    # Forged receipts are ignored; without structured intent the proposal fails closed.
     assert result["status"] == "rejected"
-    assert result["code"] == "route.valid_receipt_required"
+    assert result["code"] == "route.structured_intent_required"
     assert result["executed"] is False
-    assert "propose_temporary_datalog" not in {
+    # Propose remains offered; authorization is enforced at execute time.
+    assert "propose_temporary_datalog" in {
         tool["function"]["name"] for tool in tools.tool_definitions()
     }
 
@@ -204,9 +206,21 @@ def test_template_no_fit_without_structured_intent_cannot_unlock_generation() ->
     assert result["status"] == "rejected"
     assert result["code"] == "route.structured_intent_required"
     assert result["diagnostics"][0]["code"] == "structured_intent.required"
-    assert "propose_temporary_datalog" not in {
+    # Incomplete no-fit does not bind intent; propose stays offered but still
+    # fails closed without structured intent at execute time.
+    assert "propose_temporary_datalog" in {
         tool["function"]["name"] for tool in tools.tool_definitions()
     }
+    blocked = tools.execute(
+        "propose_temporary_datalog",
+        {
+            "request": QUESTION,
+            "generated_datalog": GENERATED_DATALOG,
+            "formal_restatement": "A restatement.",
+        },
+    )
+    assert blocked["status"] == "rejected"
+    assert blocked["code"] == "route.structured_intent_required"
 
 
 def test_model_fields_cannot_alter_backend_receipt_scope() -> None:
@@ -484,7 +498,7 @@ def test_receipt_is_invalidated_by_relevant_context_changes(
     assert authority.validates(receipt_id) is False
 
 
-def test_engine_unavailability_does_not_unlock_but_faithfulness_failure_does() -> None:
+def test_engine_unavailability_does_not_issue_receipt_but_faithfulness_failure_does() -> None:
     tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
         session_id="route-backend-outcome-test",
@@ -492,23 +506,20 @@ def test_engine_unavailability_does_not_unlock_but_faithfulness_failure_does() -
     tools.begin_request(QUESTION)
 
     unavailable = tools.record_backend_route_outcome(ROUTE_REASONING_ENGINE_UNAVAILABLE)
-    unavailable_tool_names = {
-        tool["function"]["name"] for tool in tools.tool_definitions()
-    }
     faithful_failure = tools.record_backend_route_outcome(
         ROUTE_TEMPLATE_FAITHFULNESS_FAILURE
     )
 
     assert unavailable["status"] == "route_outcome_recorded"
     assert unavailable["route_receipt"] is None
-    assert "propose_temporary_datalog" not in unavailable_tool_names
+    # Propose stays offered; only a signed receipt authorizes execution.
+    assert "propose_temporary_datalog" in {
+        tool["function"]["name"] for tool in tools.tool_definitions()
+    }
     assert faithful_failure["status"] == "route_receipt_issued"
     assert faithful_failure["route_receipt"]["route_outcome"] == (
         ROUTE_TEMPLATE_FAITHFULNESS_FAILURE
     )
-    assert "propose_temporary_datalog" in {
-        tool["function"]["name"] for tool in tools.tool_definitions()
-    }
 
 
 class UnexpectedPolicyProvider:

@@ -336,7 +336,10 @@ def default_grounded_qa_manifest(
                 ),
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
-                    "Use only after bounded retrieval when the question requires recursion, formal constraints, or predicate contract reasoning."
+                    "Use when bounded retrieval is insufficient and the question "
+                    "requires recursion, formal constraints, or predicate contract "
+                    "reasoning. Always available for read-only generated queries; "
+                    "backend safety and faithfulness gates authorize execution."
                 ),
                 evidence_kind="datalog_query_pair",
                 source_grounding_posture="predicate_contract_and_resolved_identities",

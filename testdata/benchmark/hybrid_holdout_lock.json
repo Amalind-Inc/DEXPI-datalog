@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "design_revision": "hybrid-product-holdout-v1",
+  "protocol": {
+    "bead": "pydexpi-datalog-1-3qo.9.10",
+    "document": "../../docs/research/3qo.9.10-hybrid-holdout-protocol.md",
+    "sha256": "dbeb38fda24fc6cae89c3f9365ed61d1f1db571506b4c1811963511b1b49a5d1"
+  },
+  "protocol_approval": {
+    "status": "product_owner_approved",
+    "approved_on": "2026-07-24"
+  },
+  "certification": {
+    "bead": "pydexpi-datalog-1-rmso.7",
+    "status": "product_owner_sme_approved",
+    "approved_on": "2026-07-17"
+  },
+  "accounting_contract": {
+    "provider_ledger": "required",
+    "unknown_cost": "run_incomplete",
+    "policy_violation": "run_incomplete"
+  },
+  "generalization_gate": {
+    "minimum_grounded_credit_rate": 1.0,
+    "deferred_case_tags": [
+      "deontic_abstention",
+      "deliberate_no_fit",
+      "generated_repair",
+      "ambiguity"
+    ]
+  },
+  "required_case_tags": [
+    "template_fit",
+    "explicit_class",
+    "implicit_class",
+    "piping_scope",
+    "instrumentation_scope",
+    "directed"
+  ],
+  "episode_budgets": {
+    "max_turns": 64,
+    "max_commands": 128,
+    "max_output_tokens": 8192,
+    "agent_timeout_sec": 300.0,
+    "verifier_timeout_sec": 60.0
+  },
+  "sources": [
+    {
+      "key": "hand_authored",
+      "path": "hand_authored_manifest.json",
+      "sha256": "f2120cfe538925a53d07df192d047ef92a1dd00d40469734fc66a205e6cfd9d9"
+    },
+    {
+      "key": "harder_questions",
+      "path": "harder_questions_manifest.json",
+      "sha256": "c2d1b016924c7ae08d912823ad4dae2dacac19dce11c1d26639a1bcaaf8ce28b"
+    }
+  ],
+  "excluded_development_matrix_ids": [
+    "ha-e03-pump-p4713-retrieval",
+    "hq-nozzle-piping-attachment-small",
+    "hq-nozzle-piping-attachment-large",
+    "hq-valve-monitoring-reachability-small",
+    "hq-valve-monitoring-reachability-large",
+    "hq-equipment-pump-connectivity-small",
+    "hq-equipment-pump-connectivity-large",
+    "hq-permission-defeasible-control-small",
+    "hq-permission-defeasible-control-large"
+  ],
+  "entries": [
+    {
+      "id": "ha-e04-exchanger-h1009-retrieval",
+      "source": "hand_authored",
+      "case_tags": ["template_fit", "explicit_class"]
+    },
+    {
+      "id": "ha-c01-centrifugal-pumps-retrieval",
+      "source": "hand_authored",
+      "case_tags": ["template_fit", "explicit_class"]
+    },
+    {
+      "id": "ha-e05-nozzles-retrieval",
+      "source": "hand_authored",
+      "case_tags": ["implicit_class"]
+    },
+    {
+      "id": "ha-e12-chambers-retrieval",
+      "source": "hand_authored",
+      "case_tags": ["implicit_class"]
+    },
+    {
+      "id": "ha-e06-segment-source-compliance",
+      "source": "hand_authored",
+      "case_tags": ["piping_scope"]
+    },
+    {
+      "id": "ha-i03-piping-systems-retrieval",
+      "source": "hand_authored",
+      "case_tags": ["piping_scope"]
+    },
+    {
+      "id": "hq-instrumentation-actuation-closure-small",
+      "source": "harder_questions",
+      "case_tags": ["instrumentation_scope", "directed"]
+    },
+    {
+      "id": "hq-instrumentation-actuation-closure-large",
+      "source": "harder_questions",
+      "case_tags": ["instrumentation_scope", "directed"]
+    },
+    {
+      "id": "ha-e03-pump-nozzles-compliance",
+      "source": "hand_authored",
+      "case_tags": ["template_fit"]
+    },
+    {
+      "id": "ha-i04-function-ownership-compliance",
+      "source": "hand_authored",
+      "case_tags": ["instrumentation_scope"]
+    }
+  ]
+}

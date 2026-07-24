@@ -103,7 +103,8 @@ def test_topology_tools_expose_manifest_projected_tools() -> None:
     assert "find_equipment" in initial_tool_names
     assert "get_reachable_equipment" in initial_tool_names
     assert "report_template_no_fit" in initial_tool_names
-    assert "propose_temporary_datalog" not in initial_tool_names
+    # Generated Datalog is always offered; execute-time gates authorize it.
+    assert "propose_temporary_datalog" in initial_tool_names
 
     tools.begin_request("find pumps")
     tools.execute(
