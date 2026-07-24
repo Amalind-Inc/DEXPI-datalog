@@ -747,6 +747,7 @@ class ChainlitReviewFlow:
                     "authoritative": pack["authoritative"],
                     "trust_notice": pack["trust_notice"],
                     "loaded": pack["pack_id"] in loaded,
+                    "advisory_guidance": pack.get("advisory_guidance", []),
                     "rules": [
                         {
                             "rule_id": rule["rule_id"],

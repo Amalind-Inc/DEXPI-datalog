@@ -12,6 +12,12 @@ export type RuleExecutableLogic = {
   disclosure: string;
 };
 
+export type AdvisoryPackGuidance = {
+  kind: string;
+  title: string;
+  body: string;
+};
+
 export type RulePackRule = {
   rule_id: string;
   title: string;
@@ -27,6 +33,7 @@ export type RulePackSummary = {
   authoritative: boolean;
   trust_notice: string;
   loaded: boolean;
+  advisory_guidance: AdvisoryPackGuidance[];
   rules: RulePackRule[];
 };
 
@@ -44,7 +51,7 @@ export type RulePackBrowseListResponse = {
   packs: RulePackBrowseSummary[];
 };
 
-/** Filter packs by pack title, rule titles, and restatement text. */
+/** Filter packs by pack title, advisory guidance, rule titles, and restatement text. */
 export function filterRulePacks(
   packs: RulePackBrowseSummary[],
   query: string,
@@ -54,12 +61,34 @@ export function filterRulePacks(
   return packs.filter(
     (pack) =>
       pack.title.toLowerCase().includes(needle) ||
+      (pack.advisory_guidance ?? []).some(
+        (section) =>
+          section.title.toLowerCase().includes(needle) ||
+          section.body.toLowerCase().includes(needle),
+      ) ||
       pack.rules.some(
         (rule) =>
           rule.title.toLowerCase().includes(needle) ||
           rule.restatement.plain_language_meaning.toLowerCase().includes(needle),
       ),
   );
+}
+
+/**
+ * Compact browse-table label distinguishing advisory guidance from rules.
+ */
+export function packContentsLabel(pack: {
+  advisory_guidance?: AdvisoryPackGuidance[];
+  rules: RulePackRule[];
+}): string {
+  const guidanceCount = pack.advisory_guidance?.length ?? 0;
+  const ruleCount = pack.rules.length;
+  if (guidanceCount === 0 && ruleCount === 0) return "Empty";
+  if (guidanceCount === 0) return `${ruleCount} rule${ruleCount === 1 ? "" : "s"}`;
+  if (ruleCount === 0) {
+    return `${guidanceCount} guidance`;
+  }
+  return `${guidanceCount} guidance · ${ruleCount} rule${ruleCount === 1 ? "" : "s"}`;
 }
 
 /** Remove the leading YAML frontmatter block from pack markdown, if present. */

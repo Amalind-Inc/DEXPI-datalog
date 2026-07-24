@@ -87,6 +87,126 @@ def test_bundled_demo_pack_is_parsed_from_markdown_source() -> None:
     assert "```souffle-datalog" in markdown
 
 
+def test_advisory_only_markdown_is_a_valid_pack_with_zero_rules() -> None:
+    markdown = textwrap.dedent(
+        """\
+        ---
+        pack_id: epa-highlights
+        version: 1
+        title: EPA review highlights
+        authoritative: false
+        trust_notice: Advisory guidance only; not executable compliance.
+        ---
+
+        # EPA review highlights
+
+        Paste-friendly checklist for a first-pass review.
+
+        ## Isolation expectations
+
+        Confirm isolation valves are present around major equipment.
+
+        ## Relief considerations
+
+        Note relief paths that need SME judgment; do not invent physics.
+        """
+    )
+
+    pack = parse_rule_pack_markdown(markdown)
+
+    assert pack["pack_id"] == "epa-highlights"
+    assert pack["rules"] == []
+    guidance = pack["advisory_guidance"]
+    assert isinstance(guidance, list)
+    assert len(guidance) >= 2
+    titles = [section["title"] for section in guidance]
+    assert "Isolation expectations" in titles
+    assert "Relief considerations" in titles
+    isolation = next(
+        section for section in guidance if section["title"] == "Isolation expectations"
+    )
+    assert "isolation valves" in str(isolation["body"]).lower()
+
+
+def test_hybrid_markdown_keeps_advisory_and_executable_rules_distinct() -> None:
+    markdown = textwrap.dedent(
+        """\
+        ---
+        pack_id: hybrid-pack
+        version: 1
+        title: Hybrid checks
+        authoritative: false
+        trust_notice: Mixed advisory and executable content.
+        ---
+
+        # Hybrid checks
+
+        ## Review posture
+
+        Walk the advisory checklist before trusting engine outcomes.
+
+        ## Pump present {#pump_present}
+
+        A centrifugal pump must appear in the prepared graph.
+
+        ```souffle-datalog
+        .decl pump(id:symbol)
+        pump(id) :- node_label(id, "CentrifugalPump").
+        .decl rule_result(subject_id:symbol, result_type:symbol)
+        rule_result(id, "pass") :- pump(id).
+        .decl rule_message(subject_id:symbol, message:symbol)
+        rule_message(id, "Pump present.") :- pump(id).
+        .decl rule_subject_attr(subject_id:symbol, attr:symbol, value:symbol)
+        rule_subject_attr(id, "pump_id", id) :- pump(id).
+        .decl rule_engine_attr(subject_id:symbol, key:symbol, value:symbol)
+        rule_engine_attr(id, "engine", "souffle") :- pump(id).
+        .output rule_result
+        .output rule_message
+        .output rule_subject_attr
+        .output rule_engine_attr
+        ```
+        """
+    )
+
+    pack = parse_rule_pack_markdown(markdown)
+
+    assert [section["title"] for section in pack["advisory_guidance"]] == [
+        "Review posture"
+    ]
+    assert [rule["rule_id"] for rule in pack["rules"]] == ["pump_present"]
+    rule = pack["rules"][0]
+    assert rule["restatement"]["plain_language_meaning"].startswith(
+        "A centrifugal pump"
+    )
+    assert rule["executable_logic"]["language"] == "souffle_datalog"
+    assert ".decl rule_result" in rule["executable_logic"]["content"]
+
+
+def test_rule_heading_still_requires_souffle_fence() -> None:
+    markdown = textwrap.dedent(
+        """\
+        ---
+        pack_id: broken-rule
+        version: 1
+        title: Broken
+        authoritative: false
+        trust_notice: Test.
+        ---
+
+        ## Almost a rule {#almost}
+
+        Prose without a fence must not silently become advisory.
+        """
+    )
+
+    try:
+        parse_rule_pack_markdown(markdown)
+    except ValueError as error:
+        assert "almost" in str(error).lower() or "fence" in str(error).lower()
+    else:
+        raise AssertionError("expected missing-fence ValueError")
+
+
 def test_executable_logic_and_displayed_logic_share_one_markdown_source() -> None:
     packs = bundled_rule_packs()
     demo = next(pack for pack in packs if pack["pack_id"] == "demo-process-safety")

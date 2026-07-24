@@ -47,6 +47,7 @@ const fixturePacks = {
       authoritative: false,
       trust_notice: "Demo trust notice",
       markdown: demoMarkdown,
+      advisory_guidance: [],
       rules: [
         {
           rule_id: "r1",
@@ -71,6 +72,7 @@ const fixturePacks = {
       authoritative: false,
       trust_notice: "Other trust notice",
       markdown: otherMarkdown,
+      advisory_guidance: [],
       rules: [
         {
           rule_id: "r2",

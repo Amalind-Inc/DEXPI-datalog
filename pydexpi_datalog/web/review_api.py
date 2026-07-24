@@ -268,6 +268,7 @@ def create_review_api_app(
                     "authoritative": pack["authoritative"],
                     "trust_notice": pack["trust_notice"],
                     "markdown": pack["markdown"],
+                    "advisory_guidance": pack.get("advisory_guidance", []),
                     "rules": [
                         {
                             "rule_id": rule["rule_id"],

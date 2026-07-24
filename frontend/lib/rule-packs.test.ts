@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   filterRulePacks,
+  packContentsLabel,
   packDocumentMarkdown,
   stripFrontmatter,
   type RulePackBrowseSummary,
@@ -15,6 +16,7 @@ function pack(overrides: Partial<RulePackBrowseSummary> = {}): RulePackBrowseSum
     authoritative: false,
     trust_notice: "Demo trust notice",
     markdown: "---\npack_id: demo-pack\n---\n\n# Demo Pack\n",
+    advisory_guidance: [],
     rules: [
       {
         rule_id: "r1",
@@ -74,6 +76,53 @@ test("filterRulePacks: matches rule title and restatement text", () => {
     ["other"],
   );
   assert.deepEqual(filterRulePacks(packs, "nonexistent"), []);
+});
+
+test("filterRulePacks: matches advisory guidance text", () => {
+  const packs = [
+    pack(),
+    pack({
+      pack_id: "epa",
+      title: "EPA highlights",
+      advisory_guidance: [
+        {
+          kind: "advisory_pack_guidance",
+          title: "Isolation expectations",
+          body: "Confirm isolation valves around major equipment.",
+        },
+      ],
+      rules: [],
+    }),
+  ];
+  assert.deepEqual(
+    filterRulePacks(packs, "isolation valves").map((entry) => entry.pack_id),
+    ["epa"],
+  );
+});
+
+test("packContentsLabel: distinguishes advisory guidance from rules", () => {
+  assert.equal(packContentsLabel(pack()), "1 rule");
+  assert.equal(
+    packContentsLabel(
+      pack({
+        advisory_guidance: [
+          { kind: "advisory_pack_guidance", title: "A", body: "B" },
+        ],
+        rules: [],
+      }),
+    ),
+    "1 guidance",
+  );
+  assert.equal(
+    packContentsLabel(
+      pack({
+        advisory_guidance: [
+          { kind: "advisory_pack_guidance", title: "A", body: "B" },
+        ],
+      }),
+    ),
+    "1 guidance · 1 rule",
+  );
 });
 
 test("stripFrontmatter: removes the YAML frontmatter block", () => {

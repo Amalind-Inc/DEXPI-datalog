@@ -73,15 +73,21 @@ export default function RulePackDetailPage() {
             </div>
             <div>
               <dt>Language</dt>
-              <dd>Souffle Datalog</dd>
+              <dd>{pack.rules.length > 0 ? "Souffle Datalog" : "Advisory"}</dd>
             </div>
             <div>
               <dt>Version</dt>
               <dd>{pack.version}</dd>
             </div>
             <div>
+              <dt>Advisory</dt>
+              <dd data-testid="rule-pack-advisory-count">
+                {pack.advisory_guidance?.length ?? 0}
+              </dd>
+            </div>
+            <div>
               <dt>Rules</dt>
-              <dd>{pack.rules.length}</dd>
+              <dd data-testid="rule-pack-rule-count">{pack.rules.length}</dd>
             </div>
             <div>
               <dt>Standing</dt>
@@ -89,6 +95,43 @@ export default function RulePackDetailPage() {
             </div>
           </dl>
           <p className="rule-pack-trust-notice">{pack.trust_notice}</p>
+
+          {(pack.advisory_guidance?.length ?? 0) > 0 && (
+            <section className="rule-pack-advisory" data-testid="rule-pack-advisory">
+              <h2>Advisory guidance</h2>
+              <p className="shell-page-empty">
+                Non-executable checklist and review posture. Does not produce engine
+                verdicts.
+              </p>
+              {pack.advisory_guidance.map((section, index) => (
+                <article
+                  key={`${section.title}-${index}`}
+                  data-testid="rule-pack-advisory-section"
+                >
+                  {section.title ? <h3>{section.title}</h3> : null}
+                  <p>{section.body}</p>
+                </article>
+              ))}
+            </section>
+          )}
+
+          <section className="rule-pack-rules" data-testid="rule-pack-rules">
+            <h2>Executable rules</h2>
+            {pack.rules.length === 0 ? (
+              <p className="shell-page-empty" data-testid="rule-pack-no-rules">
+                This pack has no executable rules yet.
+              </p>
+            ) : (
+              <ul>
+                {pack.rules.map((rule) => (
+                  <li key={rule.rule_id} data-testid="rule-pack-rule-item">
+                    <strong>{rule.title}</strong>
+                    <span> ({rule.rule_id})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <section className="rule-pack-doc" data-testid="rule-pack-doc">
             <header className="rule-pack-doc-toolbar">

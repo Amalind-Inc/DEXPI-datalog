@@ -11,6 +11,7 @@ const fixturePacks = {
       authoritative: true,
       trust_notice: "Demo trust notice",
       loaded: false,
+      advisory_guidance: [],
       rules: [
         {
           rule_id: "r1",

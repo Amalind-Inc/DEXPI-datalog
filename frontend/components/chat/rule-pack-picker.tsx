@@ -283,6 +283,26 @@ function RulePackDetail({
       )}
       <p className="rule-pack-trust-notice">{pack.trust_notice}</p>
 
+      {(pack.advisory_guidance?.length ?? 0) > 0 && (
+        <section data-testid="rule-pack-picker-advisory">
+          <p className="rule-pack-rule-title">Advisory guidance</p>
+          {pack.advisory_guidance.map((section, index) => (
+            <div key={`${section.title}-${index}`} className="rule-pack-rule">
+              {section.title ? (
+                <p className="rule-pack-rule-title">{section.title}</p>
+              ) : null}
+              <p data-testid="rule-pack-advisory-body">{section.body}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {pack.rules.length === 0 && (
+        <p className="shell-page-empty" data-testid="rule-pack-picker-no-rules">
+          No executable rules in this pack.
+        </p>
+      )}
+
       {pack.rules.map((rule) => (
         <div key={rule.rule_id} className="rule-pack-rule">
           <p className="rule-pack-rule-title">{rule.title}</p>

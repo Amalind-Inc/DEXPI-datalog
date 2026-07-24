@@ -1,21 +1,20 @@
 """Parse a rule pack authored as a canonical markdown document.
 
-A rule pack IS a markdown file (bead pydexpi-datalog-1-1vd). The format:
+A rule pack IS a markdown file (bead pydexpi-datalog-1-1vd, ADR 0013). The
+format:
 
 - YAML frontmatter with pack metadata: ``pack_id``, ``version``, ``title``,
   ``authoritative``, ``trust_notice``.
-- One ``##`` heading per rule, carrying the rule title and an explicit id
-  anchor: ``## Pump discharge check valve {#pump_discharge_check_valve}``.
-- The prose between the heading and the rule's fenced code block is the
-  engineer-readable restatement (wrapped source lines are unwrapped per
-  paragraph).
-- One fenced ```` ```souffle-datalog ```` block per rule holding the exact
-  Souffle program that is executed for the rule -- displayed logic and
-  executed logic share this single source.
+- Optional advisory pack guidance: ``##`` headings *without* a ``{#id}``
+  anchor (plus leading overview prose under the pack ``#`` title).
+- Zero or more executable rules: ``##`` headings *with* an explicit id
+  anchor ``## Title {#rule_id}``, engineer-readable restatement prose, and
+  exactly one fenced ```` ```souffle-datalog ```` block (displayed ==
+  executed).
 
-``parse_rule_pack_markdown`` returns the same structured pack shape the rest
-of the system already consumes, plus a ``markdown`` key with the raw source
-for document-style rendering.
+``parse_rule_pack_markdown`` returns the structured pack shape the rest of
+the system consumes, including ``advisory_guidance`` and ``rules``, plus a
+``markdown`` key with the raw source for document-style rendering.
 """
 
 from __future__ import annotations
@@ -28,6 +27,8 @@ import yaml
 DEFAULT_OUTCOMES = ["satisfied", "violated", "indeterminate"]
 
 _RULE_HEADING = re.compile(r"^##\s+(?P<title>.+?)\s*\{#(?P<rule_id>[A-Za-z0-9_.-]+)\}\s*$")
+_ADVISORY_HEADING = re.compile(r"^##\s+(?P<title>.+?)\s*$")
+_DOC_TITLE = re.compile(r"^#\s+(?P<title>.+?)\s*$")
 _FENCE = re.compile(r"^```(?P<language>[A-Za-z0-9_-]*)\s*$")
 
 _FENCE_LANGUAGES = {
@@ -41,13 +42,15 @@ def parse_rule_pack_markdown(text: str) -> dict[str, object]:
     for key in ("pack_id", "version", "title", "authoritative", "trust_notice"):
         if key not in metadata:
             raise ValueError(f"rule pack markdown frontmatter is missing '{key}'")
+    advisory_guidance, rules = _parse_body(body)
     return {
         "pack_id": str(metadata["pack_id"]),
         "version": int(metadata["version"]),  # type: ignore[call-overload]
         "title": str(metadata["title"]),
         "authoritative": bool(metadata["authoritative"]),
         "trust_notice": str(metadata["trust_notice"]).strip(),
-        "rules": _parse_rules(body),
+        "advisory_guidance": advisory_guidance,
+        "rules": rules,
         "markdown": text,
     }
 
@@ -67,39 +70,66 @@ def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
     raise ValueError("rule pack markdown frontmatter is not terminated")
 
 
-def _parse_rules(body: str) -> list[dict[str, object]]:
+def _parse_body(body: str) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    advisory: list[dict[str, object]] = []
     rules: list[dict[str, object]] = []
-    current: dict[str, object] | None = None
+
+    mode: str | None = None  # "advisory" | "rule"
+    section_title = ""
     prose_lines: list[str] = []
+    current_rule: dict[str, object] | None = None
     fence_language: str | None = None
     fence_lines: list[str] | None = None
+    saw_doc_title = False
+
+    def finish_advisory() -> None:
+        nonlocal mode, section_title, prose_lines
+        body_text = _unwrap_paragraphs(prose_lines)
+        if section_title or body_text:
+            advisory.append(
+                {
+                    "kind": "advisory_pack_guidance",
+                    "title": section_title,
+                    "body": body_text,
+                }
+            )
+        mode = None
+        section_title = ""
+        prose_lines = []
 
     def finish_rule() -> None:
-        nonlocal current, prose_lines
-        if current is None:
+        nonlocal mode, current_rule, prose_lines
+        if current_rule is None:
             return
-        if current.get("executable_logic") is None:
+        if current_rule.get("executable_logic") is None:
             raise ValueError(
-                f"rule '{current['rule_id']}' has no fenced souffle-datalog block"
+                f"rule '{current_rule['rule_id']}' has no fenced souffle-datalog block"
             )
-        current["restatement"] = {
+        current_rule["restatement"] = {
             "kind": "engineer_readable_rule_restatement",
             "plain_language_meaning": _unwrap_paragraphs(prose_lines),
         }
-        rules.append(current)
-        current = None
+        rules.append(current_rule)
+        current_rule = None
+        mode = None
         prose_lines = []
+
+    def finish_current() -> None:
+        if mode == "rule":
+            finish_rule()
+        elif mode == "advisory":
+            finish_advisory()
 
     for line in body.splitlines():
         if fence_lines is not None:
             if line.strip() == "```":
-                if current is None or fence_language is None:
+                if current_rule is None or fence_language is None:
                     raise ValueError("fenced block outside of a rule section")
-                if current.get("executable_logic") is not None:
+                if current_rule.get("executable_logic") is not None:
                     raise ValueError(
-                        f"rule '{current['rule_id']}' has more than one fenced block"
+                        f"rule '{current_rule['rule_id']}' has more than one fenced block"
                     )
-                current["executable_logic"] = {
+                current_rule["executable_logic"] = {
                     "kind": "collapsed_executable_logic",
                     "language": _FENCE_LANGUAGES.get(fence_language, fence_language),
                     "content": "\n".join(fence_lines) + "\n",
@@ -113,34 +143,57 @@ def _parse_rules(body: str) -> list[dict[str, object]]:
                 fence_lines.append(line)
             continue
 
-        heading = _RULE_HEADING.match(line)
-        if heading is not None:
-            finish_rule()
-            current = {
-                "rule_id": heading.group("rule_id"),
-                "title": heading.group("title"),
+        rule_heading = _RULE_HEADING.match(line)
+        if rule_heading is not None:
+            finish_current()
+            mode = "rule"
+            current_rule = {
+                "rule_id": rule_heading.group("rule_id"),
+                "title": rule_heading.group("title"),
                 "outcomes": list(DEFAULT_OUTCOMES),
                 "restatement": None,
                 "executable_logic": None,
             }
+            prose_lines = []
+            continue
+
+        advisory_heading = _ADVISORY_HEADING.match(line)
+        if advisory_heading is not None:
+            finish_current()
+            mode = "advisory"
+            section_title = advisory_heading.group("title")
+            prose_lines = []
+            continue
+
+        doc_title = _DOC_TITLE.match(line)
+        if doc_title is not None and mode is None and not saw_doc_title:
+            saw_doc_title = True
+            # Leading overview prose after the pack H1 is advisory guidance.
+            mode = "advisory"
+            section_title = ""
+            prose_lines = []
             continue
 
         fence = _FENCE.match(line)
-        if fence is not None and current is not None:
+        if fence is not None and mode == "rule":
             fence_language = fence.group("language")
             fence_lines = []
             continue
 
-        if current is not None:
+        if mode is None and line.strip():
+            # Body prose before any heading becomes untitled overview advisory.
+            mode = "advisory"
+            section_title = ""
+            prose_lines = [line]
+            continue
+
+        if mode is not None:
             prose_lines.append(line)
 
     if fence_lines is not None:
         raise ValueError("rule pack markdown ends inside a fenced block")
-    finish_rule()
-
-    if not rules:
-        raise ValueError("rule pack markdown declares no rules")
-    return rules
+    finish_current()
+    return advisory, rules
 
 
 def _unwrap_paragraphs(lines: list[str]) -> str:

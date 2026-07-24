@@ -134,6 +134,8 @@ class ReviewApiTests(unittest.TestCase):
                 all_packs["packs"][0]["pack_id"], packs_before["packs"][0]["pack_id"]
             )
             self.assertNotIn("loaded", all_packs["packs"][0])
+            self.assertIn("advisory_guidance", all_packs["packs"][0])
+            self.assertIsInstance(all_packs["packs"][0]["advisory_guidance"], list)
             # The pack's canonical markdown source travels with the
             # session-independent payload (document-style detail page).
             self.assertIn("```souffle-datalog", all_packs["packs"][0]["markdown"])

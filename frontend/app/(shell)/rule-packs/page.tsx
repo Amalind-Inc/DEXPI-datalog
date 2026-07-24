@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { filterRulePacks, type RulePackBrowseSummary } from "@/lib/rule-packs";
+import { filterRulePacks, packContentsLabel, type RulePackBrowseSummary } from "@/lib/rule-packs";
 
 // Session-independent rule-pack browse page (bead pydexpi-datalog-1-2c5.3).
 // A searchable table of all bundled rule packs (MikeOSS Workflows-style);
@@ -43,8 +43,9 @@ export default function RulePacksPage() {
     <div className="shell-page shell-page-wide">
       <h1 className="shell-page-title">Rule Packs</h1>
       <p className="shell-page-empty">
-        Browse all bundled rule packs and their rules&apos; plain-language restatements. Attaching a
-        pack to a chat still happens from the Rule Packs button next to the composer.
+        Browse bundled and authored rule packs. Advisory guidance and executable
+        rules are listed separately; attaching a pack to a chat still happens from
+        the Rule Packs button next to the composer.
       </p>
 
       <div className="rule-pack-search-row">
@@ -74,7 +75,7 @@ export default function RulePacksPage() {
           <thead>
             <tr>
               <th scope="col">Name</th>
-              <th scope="col">Rules</th>
+              <th scope="col">Contents</th>
               <th scope="col">Language</th>
               <th scope="col">Version</th>
               <th scope="col">Source</th>
@@ -110,8 +111,8 @@ export default function RulePacksPage() {
                 }}
               >
                 <td className="rule-pack-table-name">{pack.title}</td>
-                <td>{pack.rules.length}</td>
-                <td>Souffle Datalog</td>
+                <td data-testid="rule-pack-contents">{packContentsLabel(pack)}</td>
+                <td>{pack.rules.length > 0 ? "Souffle Datalog" : "Advisory"}</td>
                 <td>{pack.version}</td>
                 <td>System</td>
               </tr>
