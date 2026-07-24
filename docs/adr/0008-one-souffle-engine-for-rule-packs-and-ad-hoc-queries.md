@@ -16,14 +16,15 @@ was incorrect and should not be treated as prior art.
 The two paths remain separate trust tiers on top of the shared engine, not
 merged into one permission model: repository-bundled rule packs run
 immediately with full EDB+IDB access (maintainer-reviewed, per
-`bundled rule-pack trust`), while model-generated ad-hoc queries stay behind
-the mandatory `generated-Datalog confirmation gate` regardless of whether the
-query is read-only, and receive a narrower dynamically-derived predicate
-contract (the generic topology-semantics layer plus the IDB predicates of
-whichever rule pack(s) are loaded in the session, read-only). Rejected: a
-read-only exception to the confirmation gate — this was the original
-proposal but contradicts the PRD's actual trust axis, which is
-trust-of-author (reviewed vs. unreviewed logic), not read/write.
+`bundled rule-pack trust`), while model-generated ad-hoc queries receive a
+narrower dynamically-derived predicate contract (the generic
+topology-semantics layer plus the IDB predicates of whichever rule pack(s)
+are loaded in the session, read-only) and execute only after backend
+mechanical safety and layered faithfulness validation. **Superseded by
+ADR 0009 / cutover 3qo.9.9:** temporary read-only generated queries no longer
+pause behind a generated-Datalog confirmation gate; confirmation remains only
+for reusable-rule promotion and unrelated human-review surfaces such as
+inferred direction review.
 
 Schema extension: a typed numeric-attribute predicate (e.g.
 `node_attribute_number(id, attr_name, attr_value:number)`, derived from the
@@ -37,9 +38,7 @@ must surface as `source_data_unavailable` rather than being computed inside a
 Consequence: existing rule-pack tests (`test_bundled_rule_pack.py`) assert on
 the `evaluate_bundled_rule` outcome/evidence contract, not on Python-traversal
 internals, so they serve as regression coverage for the Souffle rewrite
-rather than needing separate migration. `grounded_qa_harness`'s intent
-classifier must be wired to actually raise `needs_datalog_confirmation` and
-pause via the existing `TurnLifecycleStore` mechanism for
-`propose_temporary_datalog` — that pause/resume/confirmation-card
-infrastructure already exists (built for a different, non-conversational
-Datalog flow) and is being reused, not rebuilt.
+rather than needing separate migration. The grounded-QA harness follows the
+accepted model-driven restricted-harness contract (ADR 0003 / 0012): the model
+plans among backend-owned capabilities, and validated temporary Datalog
+executes automatically without a read-only confirmation pause.

@@ -158,17 +158,12 @@ class ChainlitReviewFlow:
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
         max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
-        automatic_temporary_datalog: bool = False,
     ) -> None:
         self._service = ReviewSessionService(
             artifact_root=artifact_root, limits=limits
         )
         self._clock = clock
         self._max_conversation_turns = max_conversation_turns
-        # Internal automatic-execution migration guard (3qo.9.7): when set,
-        # gate-passing temporary Datalog executes immediately in the QA turn
-        # and the confirmation pause is never raised for it.
-        self._automatic_temporary_datalog = bool(automatic_temporary_datalog)
         self._timing_records: list[dict[str, object]] = []
         self._artifacts_by_session: dict[str, dict[str, object]] = {}
         self._topology_by_session: dict[str, dict[str, object]] = {}
@@ -939,14 +934,8 @@ class ChainlitReviewFlow:
             steering=steering,
             constraints=constraints,
         )
-        datalog_confirmation = self._temporary_datalog_confirmation_payload(
-            session_id=session_id,
-            question=question,
-            answer=answer,
-        )
-        if datalog_confirmation is not None:
-            self._store_pending_datalog_proposal(session_id, datalog_confirmation)
-            return datalog_confirmation
+        # Temporary generated-query confirmation retired after cutover (3qo.9.9);
+        # validated proposals execute inside the harness. Direction review remains.
 
         directed = detect_directed_intent(question)
         review_paths = self._direction_review_paths(
@@ -1373,7 +1362,6 @@ class ChainlitReviewFlow:
             loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
                 session_id, set()
             ),
-            automatic_temporary_datalog=self._automatic_temporary_datalog,
         )
         prior_turns = [
             ConversationTurn(

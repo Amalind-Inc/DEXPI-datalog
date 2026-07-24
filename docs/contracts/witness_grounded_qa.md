@@ -40,8 +40,10 @@ language interpretation, retrieval planning, ambiguity handling, and prose.
 - Tool arguments, permissions, budgets, outputs, and evidence references are
   validated by the backend.
 - Read-only topology retrieval and bundled-rule execution may run immediately.
-- Generated Datalog is exposed as a confirmation-required proposal capability
-  and never executes directly from a model request.
+- Generated temporary Datalog is an allowed read-only capability: after
+  mechanical safety validation and layered semantic-faithfulness gates pass,
+  it executes automatically through the restricted harness. It never executes
+  directly from an unvalidated model request.
 - Models must support native tool calls and tool-result continuation. Text-only
   pseudo-tool parsing is unsupported.
 - The product does not certify, score, or label model answer quality.
@@ -76,8 +78,9 @@ language interpretation, retrieval planning, ambiguity handling, and prose.
 - The complete session fact database is not sent to the model by default.
 - Backend validation establishes execution safety, not semantic correctness.
 - A generated Datalog query and its engineer-readable restatement form one
-  exact query pair. User confirmation is consent to execute that pair in the
-  active session; it is not reusable-rule approval.
+  exact query pair. After automatic validated execution, the product discloses
+  that pair for audit; disclosure is not reusable-rule approval. Promotion into
+  a reusable authored rule remains a separate explicit authoring action.
 - All model-generated logic remains temporary, even when it appears
   source-independent.
 - OSS v1 reusable rules come only from repository-bundled, versioned rule packs.

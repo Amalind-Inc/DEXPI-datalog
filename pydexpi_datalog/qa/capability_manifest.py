@@ -334,19 +334,20 @@ def default_grounded_qa_manifest(
                 description=(
                     "Propose a temporary generated Datalog query and engineer-readable restatement when read-only retrieval is insufficient."
                 ),
-                permission_class=PERMISSION_CONFIRMATION_REQUIRED,
+                permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
                     "Use only after bounded retrieval when the question requires recursion, formal constraints, or predicate contract reasoning."
                 ),
                 evidence_kind="datalog_query_pair",
                 source_grounding_posture="predicate_contract_and_resolved_identities",
                 limitations=(
-                    "This capability proposes but never executes generated Datalog without explicit user confirmation.",
+                    "Validated temporary Datalog executes automatically as read-only logic after mechanical safety and layered faithfulness gates pass.",
+                    "Automatic execution never grants reusable-rule trust; promotion remains a separate explicit authoring action.",
                     "The model receives predicate contract context and relevant resolved identities, not the complete full fact database by default.",
                 ),
                 citation_metadata={
                     "primary_id_field": "proposal_id",
-                    "citation_role": "confirmation_required_query_pair",
+                    "citation_role": "executed_temporary_query_pair",
                 },
                 parameters={
                     "type": "object",
@@ -359,8 +360,8 @@ def default_grounded_qa_manifest(
                             "type": "string",
                             "description": (
                                 "The exact temporary Souffle Datalog program proposed for "
-                                "confirmation. Contract (violations are rejected before "
-                                f"confirmation): {datalog_contract} "
+                                "automatic validated execution. Contract (violations are "
+                                f"rejected before execution): {datalog_contract} "
                                 "Refer to objects exclusively by their exact quoted evidence "
                                 "IDs already resolved through read-only retrieval (never "
                                 "invented names); no `.input`, `.include`, or filesystem "

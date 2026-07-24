@@ -241,7 +241,7 @@ class SampledPathThenDatalogProvider:
                 },
                 tool_call_id="escalate-datalog",
             )
-        return FinalAnswer(answer_text="This needs confirmed generated logic.")
+        return FinalAnswer(answer_text="Automatic generated logic completed.")
 
 
 class ImmediateConversationProvider:
@@ -276,23 +276,21 @@ def test_topology_relationship_answer_requires_structural_witness_before_accepta
     ]
 
 
-def test_universal_claim_from_sampled_path_escalates_to_confirmed_logic():
+def test_universal_claim_from_sampled_path_escalates_to_automatic_logic():
     result = run_grounded_qa_turn(
         question="Do all pumps have a reachable valve?",
         topology_tools=make_tools(),
         provider=SampledPathThenDatalogProvider(),
     )
 
-    # The proposal itself ends the turn: the model never authors the final
-    # answer after a confirmation_required tool result (37x.22.34.2).
-    assert "confirmation" in result.answer_text.lower()
+    assert result.answer_text == "Automatic generated logic completed."
     tool_names = [trace["tool_name"] for trace in result.tool_call_trace]
     assert "__evidence_sufficiency__" in tool_names
     assert "propose_temporary_datalog" in tool_names
 
 
 class AnswerAfterProposalProvider:
-    """Would author its own final answer after proposing; must never get to."""
+    """Authors a final answer after observing automatic execution."""
 
     def __init__(self) -> None:
         self.calls_after_proposal = 0
@@ -330,12 +328,11 @@ class AnswerAfterProposalProvider:
                 tool_call_id="proposal-shortcircuit",
             )
         self.calls_after_proposal += 1
-        return FinalAnswer(answer_text="Model-authored answer that must not appear.")
+        return FinalAnswer(answer_text="Model-authored answer after execution.")
 
 
-def test_confirmation_required_proposal_short_circuits_before_model_answer():
-    """A confirmation_required tool result pauses the turn deterministically:
-    the provider is never consulted again and cannot author the final answer."""
+def test_automatic_proposal_continues_to_model_answer():
+    """An executed proposal is returned to the model before its final answer."""
     provider = AnswerAfterProposalProvider()
     result = run_grounded_qa_turn(
         question="Must every segment reach a valve?",
@@ -343,22 +340,25 @@ def test_confirmation_required_proposal_short_circuits_before_model_answer():
         provider=provider,
     )
 
-    assert provider.calls_after_proposal == 0
-    assert "Model-authored answer" not in result.answer_text
+    assert provider.calls_after_proposal == 1
+    assert result.answer_text == "Model-authored answer after execution."
     proposal_traces = [
         trace
         for trace in result.tool_call_trace
         if trace["tool_name"] == "propose_temporary_datalog"
     ]
     assert len(proposal_traces) == 1
-    assert proposal_traces[0]["tool_result"]["status"] == "confirmation_required"
+    executed = proposal_traces[0]["tool_result"]
+    assert executed["status"] == "answered"
+    assert executed["executed"] is True
+    assert executed["confirmation"] == {"required": False}
 
 
 class RetryAfterRejectionProvider:
     """Mirrors the live 3cq follow-up: the first proposal omits `.output
     answer` (exactly what the BYOK model generated live). The harness must
     hand the rejection back to the model as tool feedback instead of pausing
-    the turn, and only the corrected re-proposal may pause for confirmation."""
+    the turn, and the corrected re-proposal executes automatically."""
 
     def __init__(self) -> None:
         self.rejection_feedback: list[str] = []
@@ -416,14 +416,14 @@ class RetryAfterRejectionProvider:
                 },
                 tool_call_id="proposal-corrected",
             )
-        return FinalAnswer(answer_text="Model-authored answer that must not appear.")
+        return FinalAnswer(answer_text="Model-authored answer after automatic execution.")
 
 
 def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
     """An invalid temporary-Datalog proposal must not reach the user as a
     confirmation card (it can never execute). The rejection diagnostics go
     back to the model as an ordinary tool result so it can revise within the
-    same turn; the corrected proposal is the one that pauses."""
+    same turn; the corrected proposal executes automatically."""
     provider = RetryAfterRejectionProvider()
     result = run_grounded_qa_turn(
         question="Must every segment reach a valve?",
@@ -445,16 +445,19 @@ def test_rejected_proposal_feeds_back_to_model_and_never_pauses():
         == "passed"
     )
     assert len(invalid_gate["faithfulness_gate_attempts"]) == 1
-    assert proposal_traces[1]["tool_result"]["status"] == "confirmation_required"
+    assert proposal_traces[1]["tool_result"]["status"] == "answered"
+    assert proposal_traces[1]["tool_result"]["executed"] is True
     assert (
         proposal_traces[1]["tool_result"]["validation"]["status"] == "safe_to_confirm"
     )
     # The model saw the rejection diagnostics and the authoring contract.
     assert provider.rejection_feedback
     assert "answer(x:symbol)" in provider.rejection_feedback[0]
-    # The paused proposal is the corrected program, not the invalid one.
+    # The executed proposal is the corrected program, not the invalid one.
     assert ".output answer" in str(
-        proposal_traces[1]["tool_result"]["proposal"]["generated_datalog"]
+        proposal_traces[1]["tool_result"]["disclosure"]["inspectable_datalog"][
+            "generated_datalog"
+        ]
     )
 
 
@@ -541,6 +544,8 @@ class RepairCounterfactualProbeProvider:
 
     def complete_with_tools(self, *, messages, tools):
         self._step += 1
+        if self._step == 4:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         if self._step == 1:
             return ToolCall(
                 tool_name="report_template_no_fit",
@@ -602,18 +607,13 @@ def test_counterfactual_failure_is_repaired_through_public_runner() -> None:
         "faithfulness.counterfactual_failed" in feedback
         for feedback in provider.rejection_feedback
     )
-    assert corrected["status"] == "confirmation_required"
+    assert corrected["status"] == "answered"
+    assert corrected["executed"] is True
     assert corrected["counterfactual_validation"]["status"] == "passed"
-    assert all(
-        outcome["input_version"] and outcome["outcome"] == "passed"
-        for outcome in corrected["proposal"]["faithfulness_probes"]
-    )
-    attempts = corrected["proposal"]["faithfulness_probe_attempts"]
-    assert len(attempts) == 2
-    assert attempts[0]["status"] == "failed"
-    assert attempts[0]["diagnostics"]
-    assert attempts[1]["status"] == "passed"
-    assert attempts[0]["program_id"] != attempts[1]["program_id"]
+    assert corrected["route_artifact"]["repair_summary"] == {
+        "gate_attempts": 2,
+        "failed_gate_attempts": 1,
+    }
 
 
 class RepairLayeredFaithfulnessProvider:
@@ -623,6 +623,8 @@ class RepairLayeredFaithfulnessProvider:
 
     def complete_with_tools(self, *, messages, tools):
         self._step += 1
+        if self._step == 4:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         if self._step == 1:
             return ToolCall(
                 tool_name="report_template_no_fit",
@@ -691,10 +693,13 @@ def test_model_back_translation_can_veto_but_not_authorize_public_runner(
     assert vetoed["faithfulness_gate"]["layers"]["semantic"]["status"] == "passed"
     assert vetoed["faithfulness_gate"]["layers"]["counterfactual"]["status"] == "passed"
     assert vetoed["faithfulness_gate"]["layers"]["model_review"]["status"] == "failed"
-    assert corrected["status"] == "confirmation_required"
+    assert corrected["status"] == "answered"
+    assert corrected["executed"] is True
     assert corrected["faithfulness_gate"]["status"] == "passed"
-    assert corrected["proposal"]["faithfulness_gate_attempts"][0]["status"] == "failed"
-    assert corrected["proposal"]["faithfulness_gate_attempts"][1]["status"] == "passed"
+    assert corrected["route_artifact"]["repair_summary"] == {
+        "gate_attempts": 2,
+        "failed_gate_attempts": 1,
+    }
     assert any(
         "faithfulness.model_veto" in item for item in provider.rejection_feedback
     )
@@ -823,6 +828,8 @@ class SingleRejectionThenRepairedAnswerProvider:
 
     def complete_with_tools(self, *, messages, tools):
         self._step += 1
+        if self._step == 5:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         if self._step == 1:
             return ToolCall(
                 tool_name="report_template_no_fit",
@@ -907,10 +914,9 @@ def test_single_gate_rejection_forces_a_repair_attempt_before_giving_up(
     ]
     assert [proposal["status"] for proposal in proposals] == [
         "rejected",
-        "confirmation_required",
+        "answered",
     ]
-    assert "Every tank has a compliant piping path." not in result.answer_text
-    assert "confirmation" in result.answer_text.lower()
+    assert result.answer_text == "Automatic generated logic completed."
 
 
 def test_single_gate_rejection_with_no_remaining_budget_still_gives_up(
@@ -1013,7 +1019,7 @@ def test_counterfactual_repair_loop_does_not_depend_on_local_engine(
     ]
     assert [proposal["status"] for proposal in proposals] == [
         "rejected",
-        "confirmation_required",
+        "answered",
     ]
 
 
@@ -1023,6 +1029,8 @@ class RepairStructuredIntentProvider:
         self.rejection_feedback: list[str] = []
 
     def complete_with_tools(self, *, messages, tools):
+        if self._step >= 5:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         if self._step == 0:
             self._step += 1
             return ToolCall(
@@ -1128,15 +1136,13 @@ def test_structured_intent_mismatch_is_repaired_through_public_runner() -> None:
         for feedback in provider.rejection_feedback
     )
     accepted = proposal_traces[-1]["tool_result"]
-    assert accepted["status"] == "confirmation_required"
+    assert accepted["status"] == "answered"
+    assert accepted["executed"] is True
     assert accepted["validation"]["status"] == "safe_to_confirm"
-    assert accepted["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
-    gate_attempts = accepted["proposal"]["faithfulness_gate_attempts"]
-    assert len(gate_attempts) == 4
-    assert all(
-        attempt["layers"]["counterfactual"]["status"] != "not_evaluated"
-        for attempt in gate_attempts
-    )
+    assert accepted["route_artifact"]["repair_summary"] == {
+        "gate_attempts": 4,
+        "failed_gate_attempts": 3,
+    }
 
 
 class ValidStructuredIntentProvider:
@@ -1144,6 +1150,8 @@ class ValidStructuredIntentProvider:
         self._step = 0
 
     def complete_with_tools(self, *, messages, tools):
+        if self._step >= 2:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         self._step += 1
         if self._step == 1:
             return ToolCall(
@@ -1170,7 +1178,7 @@ class ValidStructuredIntentProvider:
         )
 
 
-def test_valid_structured_intent_reaches_confirmation_through_public_runner() -> None:
+def test_valid_structured_intent_executes_through_public_runner() -> None:
     result = run_grounded_qa_turn(
         question="Must every pump have a reachable ball valve?",
         topology_tools=make_tools(),
@@ -1182,10 +1190,10 @@ def test_valid_structured_intent_reaches_confirmation_through_public_runner() ->
         for trace in result.tool_call_trace
         if trace["tool_name"] == "propose_temporary_datalog"
     )
-    assert proposal["status"] == "confirmation_required"
+    assert proposal["status"] == "answered"
+    assert proposal["executed"] is True
     assert proposal["validation"]["status"] == "safe_to_confirm"
-    assert proposal["proposal"]["structured_intent"] == STRUCTURED_CONNECTIVITY_INTENT
-    assert proposal["proposal"]["encoded_intent"] == STRUCTURED_CONNECTIVITY_INTENT
+    assert proposal["confirmation"] == {"required": False}
 
 
 def test_model_metadata_cannot_substitute_for_program_intent_contract() -> None:
@@ -1349,13 +1357,24 @@ def test_every_structured_intent_obligation_is_mechanically_compared(
     }
 
 
-def test_scripted_provider_escalates_rule_evaluation_to_datalog_proposal():
-    """The OSS default provider reaches the confirmation gate for rule-like
+class ScriptedThenAnswerProvider(ScriptedQATurnProvider):
+    def complete_with_tools(self, *, messages, tools):
+        if any(
+            message.get("role") == "tool"
+            and '"status": "answered"' in str(message.get("content", ""))
+            for message in messages
+        ):
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
+        return super().complete_with_tools(messages=messages, tools=tools)
+
+
+def test_scripted_provider_escalates_rule_evaluation_to_automatic_datalog():
+    """The OSS provider reaches automatic generated execution for rule-like
     questions instead of dead-ending in a retrieval-only answer."""
     result = run_grounded_qa_turn(
         question="Must every connected object satisfy the temporary topology rule?",
         topology_tools=make_tools(),
-        provider=ScriptedQATurnProvider(),
+        provider=ScriptedThenAnswerProvider(),
     )
 
     proposal_traces = [
@@ -1365,10 +1384,10 @@ def test_scripted_provider_escalates_rule_evaluation_to_datalog_proposal():
     ]
     assert len(proposal_traces) == 1
     tool_result = proposal_traces[0]["tool_result"]
-    assert tool_result["status"] == "confirmation_required"
-    proposal = tool_result["proposal"]
-    assert proposal["generated_datalog"]
-    assert proposal["formal_restatement"]
+    assert tool_result["status"] == "answered"
+    assert tool_result["executed"] is True
+    assert tool_result["disclosure"]["inspectable_datalog"]["generated_datalog"]
+    assert tool_result["disclosure"]["restatement"]
     assert tool_result["validation"]["status"] == "safe_to_confirm"
 
 

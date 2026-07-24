@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from pydexpi_datalog.qa.route_receipts import (
@@ -9,6 +11,7 @@ from pydexpi_datalog.qa.route_receipts import (
     RouteReceiptAuthority,
 )
 from pydexpi_datalog.qa.grounded_qa_harness import (
+    FinalAnswer,
     ToolCall,
     run_grounded_qa_turn,
 )
@@ -76,6 +79,9 @@ MINIMAL_TOPOLOGY = {
         "valve-1": {"source_graph_node_id": "valve-1"},
     },
 }
+requires_souffle = pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
 
 
 class NoFitThenGeneratedProvider:
@@ -97,6 +103,8 @@ class NoFitThenGeneratedProvider:
                 },
                 tool_call_id="no-fit-1",
             )
+        if self.calls >= 3:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         assert "propose_temporary_datalog" in offered
         return ToolCall(
             tool_name="propose_temporary_datalog",
@@ -115,6 +123,7 @@ class NoFitThenGeneratedProvider:
         )
 
 
+@requires_souffle
 def test_template_no_fit_receipt_unlocks_existing_generated_query_path() -> None:
     provider = NoFitThenGeneratedProvider()
 
@@ -147,7 +156,8 @@ def test_template_no_fit_receipt_unlocks_existing_generated_query_path() -> None
         "signature": receipt_result["route_receipt"]["signature"],
     }
     proposal_result = result.tool_call_trace[1]["tool_result"]
-    assert proposal_result["status"] == "confirmation_required"
+    assert proposal_result["status"] == "answered"
+    assert proposal_result["executed"] is True
     assert proposal_result["route_receipt"] == receipt_result["route_receipt"]
 
 
@@ -227,6 +237,7 @@ def test_model_fields_cannot_alter_backend_receipt_scope() -> None:
     assert receipt["route_outcome"] == ROUTE_TEMPLATE_NO_FIT
 
 
+@requires_souffle
 def test_exact_normalized_retry_reuses_backend_receipt() -> None:
     tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
@@ -257,12 +268,19 @@ def test_exact_normalized_retry_reuses_backend_receipt() -> None:
         },
     )
 
-    assert result["status"] == "confirmation_required"
+    assert result["status"] == "answered"
+    assert result["executed"] is True
     assert result["route_receipt"] == issued["route_receipt"]
 
 
 class ResumedGeneratedProvider:
     def complete_with_tools(self, *, messages, tools):
+        if any(
+            message.get("role") == "tool"
+            and '"status": "answered"' in str(message.get("content", ""))
+            for message in messages
+        ):
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         offered = {tool["function"]["name"] for tool in tools}
         assert "propose_temporary_datalog" in offered
         return ToolCall(
@@ -282,6 +300,7 @@ class ResumedGeneratedProvider:
         )
 
 
+@requires_souffle
 def test_signed_receipt_resumes_on_a_reconstructed_public_runner() -> None:
     initial_tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
@@ -307,7 +326,8 @@ def test_signed_receipt_resumes_on_a_reconstructed_public_runner() -> None:
     )
 
     proposal = result.tool_call_trace[0]["tool_result"]
-    assert proposal["status"] == "confirmation_required"
+    assert proposal["status"] == "answered"
+    assert proposal["executed"] is True
     assert proposal["route_receipt"] == issued["route_receipt"]
 
 
@@ -366,6 +386,7 @@ def test_signed_receipt_restores_structured_intent_validation() -> None:
     ]
 
 
+@requires_souffle
 def test_model_cannot_change_structured_intent_after_receipt_issuance() -> None:
     tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
@@ -410,7 +431,7 @@ def test_model_cannot_change_structured_intent_after_receipt_issuance() -> None:
                 "faithfulness_review": FAITHFULNESS_REVIEW,
             },
         )["status"]
-        == "confirmation_required"
+        == "answered"
     )
 
 
@@ -547,6 +568,7 @@ def test_deontic_policy_is_enforced_at_direct_tool_execution_boundary() -> None:
     }
 
 
+@requires_souffle
 def test_direct_backend_route_outcome_activates_its_signed_intent() -> None:
     tools = TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
@@ -574,7 +596,8 @@ def test_direct_backend_route_outcome_activates_its_signed_intent() -> None:
     )
 
     assert issued["status"] == "route_receipt_issued"
-    assert proposal["status"] == "confirmation_required"
+    assert proposal["status"] == "answered"
+    assert proposal["executed"] is True
     assert proposal["route_receipt"] == issued["route_receipt"]
 
 

@@ -47,6 +47,52 @@ from pydexpi_datalog.semantics.souffle_runner import (
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 from pydexpi_datalog.verification.bundled_rule_pack import pack_metadata
 
+MANDATORY_TEMPORARY_DATALOG_VALIDATORS = (
+    "mechanical_safety",
+    "counterfactual_probes",
+    "layered_faithfulness_gate",
+)
+
+
+class AutomaticExecutionUnavailableError(RuntimeError):
+    """Raised when automatic temporary Datalog cannot be activated safely."""
+
+
+@dataclass(frozen=True)
+class TemporaryDatalogValidatorBundle:
+    """Mandatory validators required to activate automatic temporary Datalog."""
+
+    mechanical_safety: Callable[..., dict[str, object]] | None
+    counterfactual_probes: Callable[..., dict[str, object]] | None
+    layered_faithfulness_gate: Callable[..., dict[str, object]] | None
+
+    @classmethod
+    def production(cls) -> TemporaryDatalogValidatorBundle:
+        return cls(
+            mechanical_safety=_production_mechanical_safety_marker,
+            counterfactual_probes=run_mandatory_counterfactual_probes,
+            layered_faithfulness_gate=evaluate_layered_faithfulness_gate,
+        )
+
+    def unavailable_names(self) -> tuple[str, ...]:
+        missing: list[str] = []
+        if self.mechanical_safety is None:
+            missing.append("mechanical_safety")
+        if self.counterfactual_probes is None:
+            missing.append("counterfactual_probes")
+        if self.layered_faithfulness_gate is None:
+            missing.append("layered_faithfulness_gate")
+        return tuple(missing)
+
+
+def _production_mechanical_safety_marker(**_kwargs: object) -> dict[str, object]:
+    """Sentinel proving the mechanical-safety validator seam is wired.
+
+    TopologyTools owns the concrete mechanical check; this marker exists so
+    automatic mode can refuse activation when that seam is explicitly unset.
+    """
+    return {"status": "available"}
+
 
 # Reviewer-facing consent context for temporary Datalog proposals. The effect
 # statement is hardcoded — never model-generated — because the executor is
@@ -97,16 +143,16 @@ class TopologyTools:
         graph_facts: dict[str, object] | None = None,
         retrieval_budgets: RetrievalBudgets | None = None,
         loaded_rule_pack_ids: list[str] | tuple[str, ...] | set[str] | None = None,
-        automatic_temporary_datalog: bool = False,
+        validators: TemporaryDatalogValidatorBundle | None = None,
     ) -> None:
         self._topology = topology_view
         self._session_id = session_id
         self._retrieval_budgets = retrieval_budgets or RetrievalBudgets()
-        # Internal automatic-execution migration guard (3qo.9.7): backend-owned
-        # and never model-visible. Off preserves the legacy confirmation
-        # workflow byte-for-byte; on executes gate-passing temporary Datalog
-        # immediately through real Souffle with post-execution disclosure.
-        self._automatic_temporary_datalog = bool(automatic_temporary_datalog)
+        # Released hybrid workflow always auto-executes validated temporary
+        # Datalog. Activation is refused when any mandatory safety or
+        # faithfulness validator is unavailable (3qo.9.9).
+        self._validators = validators or TemporaryDatalogValidatorBundle.production()
+        self._ensure_automatic_execution_available(self._validators)
         self._retrieval_steps = 0
         # Accumulates only time actually spent executing a tool's retrieval
         # work (see execute()'s timing wrapper below) -- deliberately excludes
@@ -143,6 +189,17 @@ class TopologyTools:
             session_id=session_id,
             source_id=str(topology_view.get("source_id") or session_id),
         )
+
+    @staticmethod
+    def _ensure_automatic_execution_available(
+        validators: TemporaryDatalogValidatorBundle,
+    ) -> None:
+        missing = validators.unavailable_names()
+        if missing:
+            raise AutomaticExecutionUnavailableError(
+                "Automatic temporary Datalog execution requires every mandatory "
+                f"safety and faithfulness validator; unavailable: {', '.join(missing)}."
+            )
 
     def begin_request(
         self,
@@ -241,8 +298,6 @@ class TopologyTools:
                 message=capability.denied_reason or f"denied tool: {tool_name}",
             )
         if capability.permission_class == PERMISSION_CONFIRMATION_REQUIRED:
-            if tool_name == "propose_temporary_datalog":
-                return self._propose_temporary_datalog_with_route_receipt(tool_input)
             return {
                 "status": "confirmation_required",
                 "code": "tool.confirmation_required",
@@ -262,6 +317,8 @@ class TopologyTools:
             )
         if tool_name == "report_template_no_fit":
             return self._report_template_no_fit(tool_input)
+        if tool_name == "propose_temporary_datalog":
+            return self._propose_temporary_datalog_with_route_receipt(tool_input)
         budget_rejection = self._operation_budget_rejection()
         if budget_rejection is not None:
             return budget_rejection
@@ -487,7 +544,13 @@ class TopologyTools:
 
         program_id = hashlib.sha256(generated_datalog.encode("utf-8")).hexdigest()
         if mechanical_validation.get("status") == "safe_to_confirm":
-            counterfactual_validation = run_mandatory_counterfactual_probes(
+            counterfactual = self._validators.counterfactual_probes
+            if counterfactual is None:
+                raise AutomaticExecutionUnavailableError(
+                    "Automatic temporary Datalog execution requires every mandatory "
+                    "safety and faithfulness validator; unavailable: counterfactual_probes."
+                )
+            counterfactual_validation = counterfactual(
                 generated_datalog,
                 self._active_structured_intent or {},
             )
@@ -504,7 +567,13 @@ class TopologyTools:
             **counterfactual_validation,
         }
         self._faithfulness_probe_attempts.append(probe_attempt)
-        faithfulness_gate = evaluate_layered_faithfulness_gate(
+        faithfulness = self._validators.layered_faithfulness_gate
+        if faithfulness is None:
+            raise AutomaticExecutionUnavailableError(
+                "Automatic temporary Datalog execution requires every mandatory "
+                "safety and faithfulness validator; unavailable: layered_faithfulness_gate."
+            )
+        faithfulness_gate = faithfulness(
             mechanical_validation=mechanical_validation,
             requested_intent=self._active_structured_intent,
             encoded_intent=encoded_intent,
@@ -626,53 +695,17 @@ class TopologyTools:
             generated_datalog=generated_datalog,
             formal_restatement=formal_restatement,
         )
-        if self._automatic_temporary_datalog:
-            return self._execute_automatic_temporary_datalog(
-                request=request,
-                generated_datalog=generated_datalog,
-                formal_restatement=formal_restatement,
-                resolved_identity_ids=resolved_identity_ids,
-                proposal_id=proposal_id,
-                program_id=program_id,
-                validation=validation,
-                counterfactual_validation=counterfactual_validation,
-                faithfulness_gate=faithfulness_gate,
-            )
-        return {
-            "status": "confirmation_required",
-            "code": "tool.confirmation_required",
-            "tool_name": "propose_temporary_datalog",
-            "executed": False,
-            "proposal": {
-                "proposal_id": proposal_id,
-                "request": request,
-                "generated_datalog": generated_datalog,
-                "formal_restatement": formal_restatement,
-                "resolved_identity_ids": resolved_identity_ids,
-                "structured_intent": self._active_structured_intent,
-                "encoded_intent": encoded_intent,
-                "faithfulness_review": model_review,
-                "faithfulness_gate": faithfulness_gate,
-                "faithfulness_probes": counterfactual_validation["probes"],
-                "faithfulness_probe_attempts": list(self._faithfulness_probe_attempts),
-                "faithfulness_gate_attempts": list(self._faithfulness_gate_attempts),
-                "interpretation": formal_restatement,
-                "exact_datalog": generated_datalog,
-                "effect": TEMPORARY_DATALOG_EFFECT,
-                "scope": self._temporary_datalog_scope(resolved_identity_ids),
-                "assumptions": TEMPORARY_DATALOG_ASSUMPTIONS,
-            },
-            "validation": validation,
-            "counterfactual_validation": counterfactual_validation,
-            "faithfulness_gate": faithfulness_gate,
-            "confirmation": {
-                "required": True,
-                "grant": "execute_temporary_datalog_pair",
-                "proposal_id": proposal_id,
-            },
-            "matches": [],
-            "reachable": [],
-        }
+        return self._execute_automatic_temporary_datalog(
+            request=request,
+            generated_datalog=generated_datalog,
+            formal_restatement=formal_restatement,
+            resolved_identity_ids=resolved_identity_ids,
+            proposal_id=proposal_id,
+            program_id=program_id,
+            validation=validation,
+            counterfactual_validation=counterfactual_validation,
+            faithfulness_gate=faithfulness_gate,
+        )
 
     def _execute_automatic_temporary_datalog(
         self,
@@ -687,15 +720,14 @@ class TopologyTools:
         counterfactual_validation: dict[str, object],
         faithfulness_gate: dict[str, object],
     ) -> dict[str, object]:
-        """Execute a gate-passing temporary proposal immediately (3qo.9.7).
+        """Execute a gate-passing temporary proposal immediately.
 
-        Reached only behind the internal automatic-execution migration guard
-        and only after mechanical safety validation, mandatory counterfactual
-        replay, and the layered faithfulness gate have all passed on this exact
-        program. The result never creates confirmation state; it disclosures
-        the executed pair after the fact and carries a minimal audit record.
-        Generated logic stays temporary: nothing here grants reusable-rule
-        trust or touches persistent promotion.
+        Reached only after mechanical safety validation, mandatory
+        counterfactual replay, and the layered faithfulness gate have all
+        passed on this exact program. The result never creates confirmation
+        state; it discloses the executed pair after the fact and carries a
+        minimal audit record. Generated logic stays temporary: nothing here
+        grants reusable-rule trust or touches persistent promotion.
         """
         started = monotonic()
         try:

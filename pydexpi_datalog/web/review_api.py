@@ -94,7 +94,6 @@ def create_review_api_app(
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
-    automatic_temporary_datalog: bool = False,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API."""
 
@@ -103,7 +102,6 @@ def create_review_api_app(
         artifact_root=artifact_root,
         limits=preparation_limits,
         max_conversation_turns=max_conversation_turns,
-        automatic_temporary_datalog=automatic_temporary_datalog,
     )
     turns = TurnLifecycleStore(artifact_root)
 

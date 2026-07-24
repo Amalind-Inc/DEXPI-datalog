@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import shutil
+
+import pytest
+
 from pydexpi_datalog.qa.capability_manifest import (
     GROUNDING_DISCLOSURE_POLICY,
     PERMISSION_ALLOWED_READ_ONLY,
-    PERMISSION_CONFIRMATION_REQUIRED,
     default_grounded_qa_manifest,
 )
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
@@ -59,15 +62,19 @@ def test_default_manifest_exposes_topology_capabilities_with_policy_metadata() -
     assert reachable.limitations
 
 
-def test_default_manifest_declares_temporary_datalog_as_confirmation_required() -> None:
+def test_default_manifest_declares_temporary_datalog_as_allowed_read_only() -> None:
     manifest = default_grounded_qa_manifest()
 
     proposal = manifest.require("propose_temporary_datalog")
 
-    assert proposal.permission_class == PERMISSION_CONFIRMATION_REQUIRED
+    assert proposal.permission_class == PERMISSION_ALLOWED_READ_ONLY
     assert proposal.evidence_kind == "datalog_query_pair"
     assert "predicate contract" in proposal.when_to_use.lower()
-    assert "full fact database" in " ".join(proposal.limitations).lower()
+    limitations = " ".join(proposal.limitations).lower()
+    assert "automatic" in limitations
+    assert "validated" in limitations
+    assert "reusable-rule trust" in limitations
+    assert "confirmation" not in limitations
 
 
 def test_provider_tool_definitions_are_projected_from_manifest() -> None:
@@ -120,7 +127,12 @@ def test_topology_tools_reject_unknown_tools_before_execution() -> None:
     assert result["tool_name"] == "delete_graph"
 
 
-def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> None:
+@pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
+def test_topology_tools_execute_valid_read_only_proposals_and_reject_invalid_ones() -> (
+    None
+):
     tools = TopologyTools(topology_view=MINIMAL_TOPOLOGY, session_id="s")
     tools.begin_request("find pumps")
     tools.execute(
@@ -131,9 +143,8 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
         },
     )
 
-    # A valid proposal pauses for user confirmation without executing; an
-    # invalid one is rejected back to the model (bead 3cq follow-up), so the
-    # confirmation gate is only ever reached by an executable pair.
+    # A valid proposal executes automatically; an invalid one is rejected back
+    # to the model without execution.
     result = tools.execute(
         "propose_temporary_datalog",
         {
@@ -154,10 +165,11 @@ def test_topology_tools_do_not_execute_confirmation_required_capabilities() -> N
         },
     )
 
-    assert result["status"] == "confirmation_required"
-    assert result["code"] == "tool.confirmation_required"
+    assert result["status"] == "answered"
     assert result["tool_name"] == "propose_temporary_datalog"
-    assert result["executed"] is False
+    assert result["executed"] is True
+    assert result["execution_mode"] == "automatic"
+    assert result["confirmation"] == {"required": False}
 
     rejected = tools.execute("propose_temporary_datalog", {"request": "find pumps"})
     assert rejected["status"] == "rejected"

@@ -121,26 +121,24 @@ def test_model_drafted_generic_schema_join_confirms_executes_and_grounds() -> No
         for trace in result.tool_call_trace
         if trace.get("tool_name") == "propose_temporary_datalog"
         and isinstance(trace.get("tool_result"), dict)
-        and trace["tool_result"].get("status") == "confirmation_required"
+        and trace["tool_result"].get("status") == "answered"
     ]
     assert proposal_results, (
-        "expected the live model to draft the join question into a "
-        f"confirmation-gated temporary Datalog proposal, got: {result.answer_text!r}"
+        "expected the live model to draft the join question into an "
+        f"automatically executed temporary Datalog proposal, got: {result.answer_text!r}"
     )
     proposal_result = proposal_results[-1]
     CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
     CAPTURE_PATH.write_text(
         json.dumps(proposal_result, indent=2, default=str), encoding="utf-8"
     )
-    assert proposal_result["validation"]["status"] == "safe_to_confirm", (
-        "model-drafted Datalog failed validation.\n"
-        f"diagnostics: {proposal_result['validation']['diagnostics']!r}\n"
-        f"generated_datalog:\n{proposal_result['proposal']['generated_datalog']}\n"
-        f"(captured to {CAPTURE_PATH})"
+    assert proposal_result.get("executed") is True
+    assert proposal_result["disclosure"]["validation"]["status"] == "safe_to_confirm"
+    assert (
+        "direct_process_connection"
+        in proposal_result["disclosure"]["inspectable_datalog"]["generated_datalog"]
     )
-    assert "direct_process_connection" in proposal_result["proposal"]["generated_datalog"]
-
-    answer = tools.execute_confirmed_temporary_datalog(proposal_result)
+    answer = proposal_result
 
     assert answer["status"] == "answered", f"execution failed: {answer!r}"
     assert {item["id"] for item in answer["evidence"]["items"]} == {
@@ -149,10 +147,10 @@ def test_model_drafted_generic_schema_join_confirms_executes_and_grounds() -> No
     }
 
 
-def test_model_drafted_datalog_confirms_executes_and_grounds_a_correct_answer() -> None:
-    """A real model reaches the confirmation gate; confirming the exact
-    proposal pair executes on real Souffle and yields non-empty evidence that
-    is a subset of the session's known evidence identities."""
+def test_model_drafted_datalog_executes_automatically_and_grounds_a_correct_answer() -> None:
+    """A real model drafts temporary Datalog that executes automatically on
+    real Souffle and yields non-empty evidence that is a subset of the
+    session's known evidence identities."""
     tools = _e06_topology_tools()
     result = run_grounded_qa_turn(
         question=QUESTION,
@@ -165,31 +163,23 @@ def test_model_drafted_datalog_confirms_executes_and_grounds_a_correct_answer() 
         for trace in result.tool_call_trace
         if trace.get("tool_name") == "propose_temporary_datalog"
         and isinstance(trace.get("tool_result"), dict)
-        and trace["tool_result"].get("status") == "confirmation_required"
+        and trace["tool_result"].get("status") == "answered"
     ]
     assert proposal_results, (
-        "expected the live model to draft the rule question into a "
-        f"confirmation-gated temporary Datalog proposal, got: {result.answer_text!r}"
+        "expected the live model to draft the rule question into an "
+        f"automatically executed temporary Datalog proposal, got: {result.answer_text!r}"
     )
     proposal_result = proposal_results[-1]
     CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
     CAPTURE_PATH.write_text(
         json.dumps(proposal_result, indent=2, default=str), encoding="utf-8"
     )
-    assert proposal_result["validation"]["status"] == "safe_to_confirm", (
-        "model-drafted Datalog failed validation.\n"
-        f"diagnostics: {proposal_result['validation']['diagnostics']!r}\n"
-        f"generated_datalog:\n{proposal_result['proposal']['generated_datalog']}\n"
-        f"(captured to {CAPTURE_PATH})"
-    )
-
-    # Confirm exactly as the web workflow's datalog-review resume does.
-    answer = tools.execute_confirmed_temporary_datalog(proposal_result)
+    answer = proposal_result
 
     assert answer["status"] == "answered", f"execution failed: {answer!r}"
     assert answer["executed"] is True
     items = answer["evidence"]["items"]
-    assert items, "confirmed execution must ground the answer in evidence"
+    assert items, "automatic execution must ground the answer in evidence"
     known_ids = tools.known_evidence_ids()
     assert all(item["id"] in known_ids for item in items), (
         "executed evidence must reference known session evidence identities"

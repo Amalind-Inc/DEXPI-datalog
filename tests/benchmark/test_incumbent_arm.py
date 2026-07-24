@@ -1,8 +1,8 @@
 """Behavior tests for Arm B: the incumbent grounded-QA pipeline adapter.
 
 The incumbent is driven at its existing public boundary (``run_grounded_qa_turn``
-+ ``TopologyTools``), its generated-Datalog confirmation gate stays and is
-auto-confirmed as part of the episode, and the pipeline outcome maps to a
++ ``TopologyTools``), validated generated Datalog executes automatically, and
+the pipeline outcome maps to a
 :class:`StructuredAnswer` so the incumbent is graded on the same terms as the
 challengers.  Scripted QA providers only: zero live LLM calls.
 """
@@ -10,7 +10,10 @@ challengers.  Scripted QA providers only: zero live LLM calls.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
+
+import pytest
 
 from pydexpi_datalog.benchmark import (
     POSTURE_OUT_OF_SCOPE,
@@ -58,6 +61,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = (
     REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
 )
+requires_souffle = pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
 
 
 # --------------------------------------------------------------------------
@@ -84,9 +90,8 @@ class ImmediateFinalAnswerProvider:
 
 
 class ProposeDatalogProvider:
-    """Reports template no-fit, then proposes temporary Datalog once. After the
-    confirmation-required result the harness ends the turn and the adapter
-    auto-confirms without re-authoring through the model."""
+    """Reports template no-fit, proposes temporary Datalog, then answers after
+    observing the automatic execution result."""
 
     def __init__(
         self, *, generated_datalog: str, formal_restatement: str, request: str
@@ -107,7 +112,8 @@ class ProposeDatalogProvider:
                 },
                 tool_call_id="scripted-no-fit",
             )
-        assert self.calls == 2, "model consulted after the confirmation gate"
+        if self.calls >= 3:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         active_question = next(
             str(message["content"])
             for message in reversed(messages)
@@ -209,11 +215,10 @@ def _anchor_with_reachables() -> tuple[str, list[str]]:
                 },
             },
         )
-        if proposal.get("status") != "confirmation_required":
+        if proposal.get("status") != "answered":
             continue
-        execution = tools.execute_confirmed_temporary_datalog(proposal)
-        items = execution.get("evidence", {}).get("items", [])
-        if execution.get("status") == "answered" and items:
+        items = proposal.get("evidence", {}).get("items", [])
+        if items:
             matched_raw = sorted(_raw_of(str(item["id"]), view) for item in items)
             return raw_id, matched_raw
     raise AssertionError("no reachable anchor found in E06 fixture")
@@ -297,11 +302,12 @@ def test_general_knowledge_answer_maps_to_unanswerable() -> None:
 
 
 # --------------------------------------------------------------------------
-# Confirmation gate: auto-confirmed, cost surfaces in the transcript
+# Automatic temporary-Datalog execution
 # --------------------------------------------------------------------------
 
 
-def test_confirmed_datalog_with_matches_maps_to_violation_found() -> None:
+@requires_souffle
+def test_automatic_datalog_with_matches_maps_to_violation_found() -> None:
     anchor, expected_raw = _anchor_with_reachables()
     provider = ProposeDatalogProvider(
         request="Which objects are reachable, as a rule?",
@@ -325,20 +331,19 @@ def test_confirmed_datalog_with_matches_maps_to_violation_found() -> None:
     graph_facts = json.loads(E06_GRAPH_FACTS.read_text(encoding="utf-8"))
     known_raw = {str(node["node_id"]) for node in graph_facts["facts"]["nodes"]}
     assert set(answer.witness_ids) <= known_raw
-    # The model proposed once and was never consulted again after the gate.
-    assert provider.calls == 2
-    # The confirmation gate's cost is on the transcript: the proposal and its
-    # executed result both appear.
+    # The model observes the automatic result before authoring its final answer.
+    assert provider.calls == 3
     tool_names = [
         str(message.get("tool_name", ""))
         for message in answer.transcript
         if message.get("role") == "tool"
     ]
     assert "propose_temporary_datalog" in tool_names
-    assert "execute_confirmed_temporary_datalog" in tool_names
+    assert "execute_confirmed_temporary_datalog" not in tool_names
 
 
-def test_confirmed_datalog_without_matches_maps_to_no_violation() -> None:
+@requires_souffle
+def test_automatic_datalog_without_matches_maps_to_no_violation() -> None:
     provider = ProposeDatalogProvider(
         request="Any violations reachable from a non-existent anchor?",
         generated_datalog=(
@@ -356,7 +361,8 @@ def test_confirmed_datalog_without_matches_maps_to_no_violation() -> None:
     assert answer.witness_ids == ()
 
 
-def test_failed_gate_execution_maps_to_unanswerable() -> None:
+@requires_souffle
+def test_failed_automatic_execution_maps_to_unanswerable() -> None:
     # Wrong reachable arity passes static validation but fails at the engine.
     provider = ProposeDatalogProvider(
         request="Use reachable with the wrong arity",
@@ -435,7 +441,7 @@ def test_create_incumbent_arm_selects_all_three_models() -> None:
 
 class TrapOrRuleProvider:
     """One provider that branches on the question: traps refuse, rule
-    questions escalate to the confirmation-gated Datalog capability."""
+    questions escalate to automatic temporary Datalog."""
 
     def __init__(self, *, anchor: str) -> None:
         self._anchor = anchor
@@ -453,6 +459,8 @@ class TrapOrRuleProvider:
                 answer_text="No approval metadata is recorded.",
                 grounding_posture=HARNESS_SOURCE_DATA_UNAVAILABLE,
             )
+        if self._proposed:
+            return FinalAnswer(answer_text="Automatic generated logic completed.")
         if not self._routed:
             self._routed = True
             return ToolCall(
@@ -486,6 +494,7 @@ class TrapOrRuleProvider:
         )
 
 
+@requires_souffle
 def test_run_benchmark_grades_incumbent_end_to_end(tmp_path: Path) -> None:
     anchor, expected_raw = _anchor_with_reachables()
     manifest = tmp_path / "manifest.json"

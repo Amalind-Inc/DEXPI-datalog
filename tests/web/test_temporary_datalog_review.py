@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
@@ -83,79 +85,6 @@ class TemporaryDatalogProposalProvider:
 
 
 class TemporaryDatalogReviewTests(unittest.TestCase):
-    def test_qa_turn_pauses_for_temporary_datalog_confirmation_then_executes(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            answer_id_holder: dict[str, str] = {}
-
-            def provider_factory():
-                return TemporaryDatalogProposalProvider(answer_id_holder["answer_id"])
-
-            app = create_review_api_app(
-                artifact_root=Path(tmp_dir) / "sessions",
-                qa_provider_factory=provider_factory,
-            )
-            client = TestClient(app)
-            session_id = "temp-datalog-session"
-            prepared = client.post(
-                f"/api/review/sessions/{session_id}/prepare",
-                json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
-            )
-            self.assertEqual(prepared.status_code, 200, prepared.text)
-            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
-                0
-            ]["id"]
-
-            proposed = client.post(
-                f"/api/review/sessions/{session_id}/qa-turns",
-                json={
-                    "question": "Must every connected object satisfy the temporary topology rule?"
-                },
-            )
-            self.assertEqual(proposed.status_code, 200, proposed.text)
-            proposal_body = proposed.json()
-            self.assertEqual(proposal_body["status"], "needs_datalog_confirmation")
-            confirmation = proposal_body["datalog_confirmation"]
-            self.assertEqual(confirmation["validation"]["status"], "safe_to_confirm")
-            self.assertFalse(confirmation["proposal_result"]["executed"])
-            self.assertEqual(
-                confirmation["allowed_actions"],
-                ["run", "revise_interpretation", "revise_query", "cancel"],
-            )
-            self.assertEqual(
-                confirmation["interpretation"],
-                "Return objects matching the temporary topology rule.",
-            )
-            self.assertEqual(
-                confirmation["effect"],
-                "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
-            )
-            self.assertIn("starting_object_ids", confirmation["scope"])
-            self.assertIn("included_edge_types", confirmation["assumptions"])
-            self.assertEqual(
-                confirmation["exact_datalog"], confirmation["generated_datalog"]
-            )
-
-            executed = client.post(
-                f"/api/review/sessions/{session_id}/temporary-datalog-reviews",
-                json={
-                    "question": "Must every connected object satisfy the temporary topology rule?",
-                    "decision": "confirm",
-                    "proposal_result": confirmation["proposal_result"],
-                },
-            )
-            self.assertEqual(executed.status_code, 200, executed.text)
-            answer = executed.json()
-            self.assertEqual(answer["status"], "answered")
-            self.assertEqual(
-                answer["evidence"]["items"][0]["id"], answer_id_holder["answer_id"]
-            )
-            self.assertEqual(
-                answer["evidence_highlight"]["matched_object_ids"],
-                [answer_id_holder["answer_id"]],
-            )
-
     def test_cancel_temporary_datalog_confirmation_does_not_execute(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
@@ -235,112 +164,6 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
             codes = [diag.get("code") for diag in body["diagnostics"]]
             self.assertIn("temporary_datalog.proposal_unknown", codes)
 
-    def test_confirm_and_cancel_decisions_append_audit_records(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            artifact_root = Path(tmp_dir) / "sessions"
-            answer_id_holder: dict[str, str] = {}
-
-            def provider_factory():
-                return TemporaryDatalogProposalProvider(answer_id_holder["answer_id"])
-
-            app = create_review_api_app(
-                artifact_root=artifact_root,
-                qa_provider_factory=provider_factory,
-            )
-            client = TestClient(app)
-            session_id = "audit-temp-datalog"
-            prepared = client.post(
-                f"/api/review/sessions/{session_id}/prepare",
-                json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
-            )
-            self.assertEqual(prepared.status_code, 200, prepared.text)
-            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
-                0
-            ]["id"]
-
-            question = (
-                "Must every connected object satisfy the temporary topology rule?"
-            )
-            proposed = client.post(
-                f"/api/review/sessions/{session_id}/qa-turns",
-                json={"question": question},
-            )
-            self.assertEqual(proposed.status_code, 200, proposed.text)
-            confirmation = proposed.json()["datalog_confirmation"]
-            proposal_result = confirmation["proposal_result"]
-
-            executed = client.post(
-                f"/api/review/sessions/{session_id}/temporary-datalog-reviews",
-                json={
-                    "question": question,
-                    "decision": "confirm",
-                    "proposal_result": proposal_result,
-                },
-            )
-            self.assertEqual(executed.status_code, 200, executed.text)
-            self.assertEqual(executed.json()["status"], "answered")
-
-            canceled = client.post(
-                f"/api/review/sessions/{session_id}/temporary-datalog-reviews",
-                json={
-                    "question": question,
-                    "decision": "cancel",
-                    "proposal_result": proposal_result,
-                },
-            )
-            self.assertEqual(canceled.status_code, 200, canceled.text)
-
-            audit_path = artifact_root / session_id / "datalog_audit.jsonl"
-            self.assertTrue(audit_path.exists(), "audit log must exist after decisions")
-            records = [
-                json.loads(line)
-                for line in audit_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-            self.assertEqual(len(records), 2)
-
-            confirm_record, cancel_record = records
-            proposal = proposal_result["proposal"]
-            self.assertEqual(confirm_record["proposal_id"], proposal["proposal_id"])
-            self.assertEqual(confirm_record["session_id"], session_id)
-            self.assertEqual(confirm_record["question"], question)
-            self.assertEqual(
-                confirm_record["formal_restatement"], proposal["formal_restatement"]
-            )
-            self.assertEqual(
-                confirm_record["generated_datalog"], proposal["generated_datalog"]
-            )
-            self.assertEqual(
-                confirm_record["faithfulness_probes"],
-                proposal["faithfulness_probes"],
-            )
-            self.assertEqual(
-                confirm_record["faithfulness_probe_attempts"],
-                proposal["faithfulness_probe_attempts"],
-            )
-            self.assertEqual(
-                confirm_record["faithfulness_review"],
-                proposal["faithfulness_review"],
-            )
-            self.assertEqual(
-                confirm_record["faithfulness_gate"],
-                proposal["faithfulness_gate"],
-            )
-            self.assertEqual(
-                confirm_record["faithfulness_gate_attempts"],
-                proposal["faithfulness_gate_attempts"],
-            )
-            self.assertEqual(confirm_record["decision"], "approved")
-            self.assertIn("T", confirm_record["decided_at"])
-            self.assertTrue(confirm_record["executed"])
-            self.assertEqual(confirm_record["execution_status"], "answered")
-
-            self.assertEqual(cancel_record["decision"], "canceled")
-            self.assertFalse(cancel_record["executed"])
-            self.assertEqual(cancel_record["proposal_id"], proposal["proposal_id"])
-            self.assertEqual(cancel_record["session_id"], session_id)
-
-
 class AutomaticExecutionProvider(TemporaryDatalogProposalProvider):
     """No-fit -> proposal -> grounded final answer over the executed result."""
 
@@ -355,10 +178,13 @@ class AutomaticExecutionProvider(TemporaryDatalogProposalProvider):
 
 
 class AutomaticTemporaryDatalogTests(unittest.TestCase):
+    @pytest.mark.skipif(
+        shutil.which("souffle") is None, reason="souffle engine not on PATH"
+    )
     def test_automatic_mode_executes_without_creating_confirmation_state(
         self,
     ) -> None:
-        """Behind the migration guard, a gate-passing proposal answers the turn
+        """Released default: a gate-passing proposal answers the turn
         directly: no confirmation payload, no pending proposal to confirm, and
         a durable automatic-execution audit record."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -371,7 +197,6 @@ class AutomaticTemporaryDatalogTests(unittest.TestCase):
             app = create_review_api_app(
                 artifact_root=artifact_root,
                 qa_provider_factory=provider_factory,
-                automatic_temporary_datalog=True,
             )
             client = TestClient(app)
             session_id = "automatic-temp-datalog"
@@ -488,39 +313,6 @@ class AutomaticTemporaryDatalogTests(unittest.TestCase):
             self.assertIn("provider_attribution", record)
             self.assertIn("provider_usage", record)
             self.assertIn("T", record["decided_at"])
-
-    def test_guard_off_app_still_pauses_for_confirmation(self) -> None:
-        """Without the guard the web seam behaves exactly as before."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            answer_id_holder: dict[str, str] = {}
-
-            def provider_factory():
-                return AutomaticExecutionProvider(answer_id_holder["answer_id"])
-
-            app = create_review_api_app(
-                artifact_root=Path(tmp_dir) / "sessions",
-                qa_provider_factory=provider_factory,
-            )
-            client = TestClient(app)
-            session_id = "guard-off-temp-datalog"
-            prepared = client.post(
-                f"/api/review/sessions/{session_id}/prepare",
-                json={"filename": E06_FIXTURE.name, "content": E06_FIXTURE.read_text()},
-            )
-            self.assertEqual(prepared.status_code, 200, prepared.text)
-            answer_id_holder["answer_id"] = prepared.json()["topology_view"]["nodes"][
-                0
-            ]["id"]
-
-            proposed = client.post(
-                f"/api/review/sessions/{session_id}/qa-turns",
-                json={
-                    "question": "Must every connected object satisfy the temporary topology rule?"
-                },
-            )
-            self.assertEqual(proposed.status_code, 200, proposed.text)
-            self.assertEqual(proposed.json()["status"], "needs_datalog_confirmation")
-
 
 if __name__ == "__main__":
     unittest.main()

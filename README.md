@@ -134,9 +134,11 @@ cd frontend
 node screenshot.mjs
 ```
 
-Screenshots are written to `frontend/03-confirmation.png` (after the Datalog
-confirmation card appears) and `frontend/04-after-run.png` (after the grounded
-answer appears).
+Screenshots are written to `frontend/03-confirmation.png` (authored-rule /
+direction-review confirmation surfaces when present) and
+`frontend/04-after-run.png` (after the grounded answer appears). Read-only
+template and temporary generated-query execution no longer pause for
+confirmation.
 
 ## Verifier substrate
 

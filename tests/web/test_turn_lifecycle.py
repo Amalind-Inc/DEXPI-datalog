@@ -616,10 +616,14 @@ class _DatalogProposalProvider:
                 },
                 tool_call_id="proposal-1",
             )
-        return FinalAnswer(answer_text="Proposal ready for confirmation.")
+        return FinalAnswer(
+            answer_text="Every connected object satisfies the temporary topology rule."
+        )
 
 
-def test_paused_datalog_confirmation_turn_resumes_and_executes_once() -> None:
+def test_temporary_datalog_turn_completes_automatically_without_confirmation() -> None:
+    """Released lifecycle: gate-passing temporary Datalog answers the turn
+    without a confirmation pause or review-required event."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
         holder: dict[str, str] = {}
@@ -643,40 +647,27 @@ def test_paused_datalog_confirmation_turn_resumes_and_executes_once() -> None:
         holder["answer_id"] = prepared.json()["topology_view"]["nodes"][0]["id"]
 
         turns_path = f"/api/review/sessions/{session_id}/turns"
-        paused = client.post(
+        completed = client.post(
             turns_path,
             json={
                 "request_id": "datalog-request",
                 "question": "Must every connected object satisfy the temporary topology rule?",
             },
         ).json()
-        assert paused["status"] == "paused"
-        assert paused["events"][-1]["type"] == "review-required"
-        confirmation = paused["result"]["datalog_confirmation"]
 
-        resume_path = f"{turns_path}/{paused['turn_id']}/datalog-review"
-        resumed = client.post(
-            resume_path,
-            json={
-                "decision": "confirm",
-                "proposal_result": confirmation["proposal_result"],
-            },
-        ).json()
-        duplicate = client.post(
-            resume_path,
-            json={
-                "decision": "confirm",
-                "proposal_result": confirmation["proposal_result"],
-            },
-        ).json()
-
-        assert duplicate == resumed
-        assert resumed["status"] == "completed"
-        assert [event["type"] for event in resumed["events"]].count("completion") == 1
-        assert resumed["result"]["evidence"]["items"][0]["id"] == holder["answer_id"]
+        assert completed["status"] == "completed"
+        assert "datalog_confirmation" not in completed.get("result", {})
+        assert [event["type"] for event in completed["events"]].count("completion") == 1
+        assert "review-required" not in {
+            event["type"] for event in completed["events"]
+        }
+        assert completed["result"]["status"] == "answered"
+        assert "temporary topology rule" in completed["result"]["answer_text"].lower()
 
 
-def test_paused_datalog_confirmation_turn_can_be_canceled() -> None:
+def test_temporary_datalog_completed_turn_cancel_is_idempotent() -> None:
+    """Canceling an already-completed automatic temporary-Datalog turn keeps
+    the turn terminal without inventing a confirmation pause."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
         holder: dict[str, str] = {}
@@ -700,27 +691,24 @@ def test_paused_datalog_confirmation_turn_can_be_canceled() -> None:
         holder["answer_id"] = prepared.json()["topology_view"]["nodes"][0]["id"]
 
         turns_path = f"/api/review/sessions/{session_id}/turns"
-        paused = client.post(
+        completed = client.post(
             turns_path,
             json={
                 "request_id": "datalog-cancel-request",
                 "question": "Must every connected object satisfy the temporary topology rule?",
             },
         ).json()
-        assert paused["status"] == "paused"
+        assert completed["status"] == "completed"
+        canceled = client.post(f"{turns_path}/{completed['turn_id']}/cancel").json()
+        assert canceled["status"] == "completed"
+        assert "datalog_confirmation" not in canceled.get("result", {})
 
-        canceled = client.post(f"{turns_path}/{paused['turn_id']}/cancel").json()
-        assert canceled["status"] == "canceled"
-        assert canceled["events"][-1]["type"] == "cancellation"
 
-
-def test_default_provider_rule_question_pauses_and_confirms_without_trust_escalation() -> (
+def test_default_provider_rule_question_executes_automatically_without_trust_escalation() -> (
     None
 ):
-    """The OSS default (scripted) provider reaches the confirmation gate live:
-    a rule-like chat question pauses with needs_datalog_confirmation, Run
-    resumes to a real executed answer, and a later proposal in the same
-    session pauses again -- there is no skip-confirmation mechanism."""
+    """Released default provider: a rule-like question completes with automatic
+    temporary Datalog execution and never grants reusable-rule trust."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
         client = TestClient(create_review_api_app(artifact_root=root))
@@ -738,38 +726,28 @@ def test_default_provider_rule_question_pauses_and_confirms_without_trust_escala
 
         turns_path = f"/api/review/sessions/{session_id}/turns"
         question = "Must every connected object satisfy the temporary topology rule?"
-        paused = client.post(
+        first = client.post(
             turns_path,
             json={"request_id": "gate-first", "question": question},
         ).json()
-        assert paused["status"] == "paused"
-        assert paused["events"][-1]["type"] == "review-required"
-        confirmation = paused["result"]["datalog_confirmation"]
-        assert confirmation["review_status"] == "pending"
-        assert confirmation["plain_language_meaning"]
-        assert confirmation["generated_datalog"]
-        assert confirmation["scope"]
-
-        resumed = client.post(
-            f"{turns_path}/{paused['turn_id']}/datalog-review",
-            json={
-                "decision": "confirm",
-                "proposal_result": confirmation["proposal_result"],
-            },
-        ).json()
-        assert resumed["status"] == "completed"
-        assert resumed["result"]["status"] == "answered"
-        assert resumed["result"]["evidence"]["items"]
+        assert first["status"] == "completed"
+        assert first["result"]["status"] == "answered"
+        assert "datalog_confirmation" not in first["result"]
+        route_artifact = first["result"].get("route_artifact")
+        if isinstance(route_artifact, dict):
+            assert route_artifact.get("trust") == {
+                "temporary": True,
+                "reusable_rule_trust": False,
+                "promotion": "separate_explicit_authoring_action",
+            }
 
         second = client.post(
             turns_path,
             json={"request_id": "gate-second", "question": question},
         ).json()
-        assert second["turn_id"] != paused["turn_id"]
-        assert second["status"] == "paused", (
-            "a later propose_temporary_datalog call must require its own "
-            "confirmation; no session-level skip may exist"
-        )
+        assert second["turn_id"] != first["turn_id"]
+        assert second["status"] == "completed"
+        assert "datalog_confirmation" not in second["result"]
 
 
 def test_cancel_during_active_execution_is_not_overwritten() -> None:

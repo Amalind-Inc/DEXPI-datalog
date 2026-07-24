@@ -10,9 +10,8 @@ deterministic intent and contract checks plus applicable counterfactual probes.
 A model verifier may veto or request repair, but cannot authorize execution by
 itself; unresolved or conflicting evidence fails closed.
 
-During implementation, the existing confirmation path may remain behind an
-internal, unreleased migration guard until safety validation, layered
-faithfulness verification, post-execution disclosure, Answer Now steering, and
-end-to-end tests are complete. The released hybrid workflow has no confirmation
-prompt for read-only template or generated-query execution, and the temporary
-legacy path is removed after cutover.
+The released hybrid workflow has no confirmation prompt for read-only template
+or generated-query execution. Automatic mode activates only when every
+mandatory safety and faithfulness validator is available; otherwise activation
+is refused. The temporary migration guard and legacy generated-query
+confirmation path have been removed after cutover.

@@ -1,19 +1,16 @@
-"""Automatic execution of faithful generated Datalog (bead 3qo.9.7).
+"""Automatic execution of faithful generated Datalog (bead 3qo.9.9).
 
 Behavior under test, through the public ``run_grounded_qa_turn`` /
 ``TopologyTools`` seams:
 
-- Behind the internal automatic-execution migration guard, a gate-passing
-  temporary Datalog proposal executes immediately through real Souffle and
+- A gate-passing temporary Datalog proposal executes immediately through real Souffle and
   the turn continues to a model-authored final answer -- no confirmation
   state is ever created.
 - The executed tool result discloses the restatement, source scope, route,
   validation outcomes, collapsed inspectable Datalog, deterministic result,
   and evidence, and carries a minimal audit record.
 - Generated logic stays temporary: nothing grants reusable-rule trust.
-- With the guard off (default), the existing confirmation workflow is
-  byte-for-byte preserved.
-- Gate failures never execute, guard or no guard.
+- Gate failures never execute.
 """
 
 from __future__ import annotations
@@ -93,11 +90,10 @@ MINIMAL_TOPOLOGY = {
 }
 
 
-def make_tools(*, automatic: bool) -> TopologyTools:
+def make_tools() -> TopologyTools:
     return TopologyTools(
         topology_view=MINIMAL_TOPOLOGY,
         session_id="automatic-datalog-test",
-        automatic_temporary_datalog=automatic,
     )
 
 
@@ -149,12 +145,12 @@ class GeneratedFallbackProvider:
 @pytest.mark.skipif(
     shutil.which("souffle") is None, reason="souffle engine not on PATH"
 )
-def test_gate_passing_proposal_executes_automatically_behind_guard() -> None:
+def test_gate_passing_proposal_executes_automatically() -> None:
     provider = GeneratedFallbackProvider()
 
     result = run_grounded_qa_turn(
         question=QUESTION,
-        topology_tools=make_tools(automatic=True),
+        topology_tools=make_tools(),
         provider=provider,
     )
 
@@ -235,7 +231,7 @@ def test_gate_passing_proposal_executes_automatically_behind_guard() -> None:
 def test_trace_events_disclose_the_automatic_generated_route() -> None:
     result = run_grounded_qa_turn(
         question=QUESTION,
-        topology_tools=make_tools(automatic=True),
+        topology_tools=make_tools(),
         provider=GeneratedFallbackProvider(),
     )
 
@@ -247,30 +243,9 @@ def test_trace_events_disclose_the_automatic_generated_route() -> None:
     ]
 
 
-def test_guard_off_preserves_confirmation_workflow() -> None:
-    """Default construction keeps the old confirmation pause untouched."""
-    result = run_grounded_qa_turn(
-        question=QUESTION,
-        topology_tools=TopologyTools(
-            topology_view=MINIMAL_TOPOLOGY,
-            session_id="automatic-datalog-guard-off",
-        ),
-        provider=GeneratedFallbackProvider(),
-    )
-
-    proposal_trace = next(
-        trace
-        for trace in result.tool_call_trace
-        if trace["tool_name"] == "propose_temporary_datalog"
-    )
-    assert proposal_trace["tool_result"]["status"] == "confirmation_required"
-    assert proposal_trace["tool_result"]["executed"] is False
-    assert "confirmation" in result.answer_text.lower()
-
-
 def test_gate_failure_never_executes_automatically() -> None:
-    """The guard authorizes execution only after every mandatory gate passes."""
-    tools = make_tools(automatic=True)
+    """Execution is authorized only after every mandatory gate passes."""
+    tools = make_tools()
     tools.begin_request(QUESTION)
     tools.execute(
         "report_template_no_fit",
@@ -310,8 +285,8 @@ def test_gate_failure_never_executes_automatically() -> None:
 
 
 def test_automatic_execution_requires_a_route_receipt() -> None:
-    """The guard never bypasses the backend receipt precondition."""
-    tools = make_tools(automatic=True)
+    """Automatic execution never bypasses the backend receipt precondition."""
+    tools = make_tools()
     tools.begin_request(QUESTION)
 
     result = tools.execute(

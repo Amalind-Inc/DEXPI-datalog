@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
+
+import pytest
 
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools as ProductTopologyTools
@@ -60,6 +63,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = (
     REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"
 )
+requires_souffle = pytest.mark.skipif(
+    shutil.which("souffle") is None, reason="souffle engine not on PATH"
+)
 
 
 TOPOLOGY = {
@@ -83,10 +89,11 @@ TOPOLOGY = {
 }
 
 
-def test_propose_temporary_datalog_returns_confirmation_without_execution() -> None:
+@requires_souffle
+def test_propose_temporary_datalog_executes_automatically() -> None:
     """
-    Behavior: the native Datalog escalation capability returns an exact temporary
-    query/restatement pair for user confirmation and does not execute it.
+    Behavior: a validated temporary query executes automatically and discloses
+    the exact query/restatement pair without creating confirmation state.
     """
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
 
@@ -100,25 +107,28 @@ def test_propose_temporary_datalog_returns_confirmation_without_execution() -> N
         },
     )
 
-    assert result["status"] == "confirmation_required"
-    assert result["executed"] is False
-    assert result["proposal"]["generated_datalog"] == encode_structured_intent_program(
+    assert result["status"] == "answered"
+    assert result["executed"] is True
+    assert result["execution_mode"] == "automatic"
+    assert result["confirmation"] == {"required": False}
+    assert result["disclosure"]["inspectable_datalog"][
+        "generated_datalog"
+    ] == encode_structured_intent_program(
         '.decl answer(x:symbol)\n.output answer\nanswer("node-pump-p101").',
         STRUCTURED_INTENT,
     )
     assert (
-        result["proposal"]["formal_restatement"]
+        result["disclosure"]["restatement"]
         == "Return the pump as the temporary check result."
     )
     assert result["validation"]["status"] == "safe_to_confirm"
-    assert result["confirmation"]["required"] is True
 
 
-def test_propose_temporary_datalog_describes_interpretation_scope_and_effect() -> None:
+@requires_souffle
+def test_propose_temporary_datalog_discloses_interpretation_scope_and_effect() -> None:
     """
-    Behavior: a proposal carries everything a reviewer needs for meaningful
-    consent — interpretation, scope, traversal assumptions, exact Datalog, and
-    a hardcoded read-only effect statement.
+    Behavior: automatic execution discloses its interpretation, scope, exact
+    Datalog, and read-only route.
     """
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
 
@@ -132,28 +142,18 @@ def test_propose_temporary_datalog_describes_interpretation_scope_and_effect() -
         },
     )
 
-    proposal = result["proposal"]
-    assert (
-        proposal["interpretation"] == "Return the pump as the temporary check result."
+    disclosure = result["disclosure"]
+    assert disclosure["restatement"] == (
+        "Return the pump as the temporary check result."
     )
-    assert proposal["exact_datalog"] == proposal["generated_datalog"]
-    assert (
-        proposal["effect"]
-        == "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack."
-    )
-
-    scope = proposal["scope"]
+    assert "answer(" in disclosure["inspectable_datalog"]["generated_datalog"]
+    scope = disclosure["source_scope"]
     assert scope["starting_object_ids"] == ["node-pump-p101"]
     assert scope["graph"]
     assert scope["direction"]
     assert scope["direction_basis"]
     assert scope["path_treatment"]
-
-    assumptions = proposal["assumptions"]
-    assert assumptions["included_edge_types"]
-    assert assumptions["excluded_edge_types"]
-    assert all(isinstance(item, str) for item in assumptions["included_edge_types"])
-    assert all(isinstance(item, str) for item in assumptions["excluded_edge_types"])
+    assert disclosure["route"] == "generated_temporary_datalog"
 
 
 def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:
@@ -181,9 +181,10 @@ def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:
     assert "Authoring contract" in result["message"]
 
 
-def test_execute_confirmed_temporary_datalog_returns_witnessed_answer() -> None:
+@requires_souffle
+def test_propose_temporary_datalog_returns_witnessed_answer() -> None:
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which objects violate the temporary check?",
@@ -193,11 +194,9 @@ def test_execute_confirmed_temporary_datalog_returns_witnessed_answer() -> None:
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
     assert answer["status"] == "answered"
     assert answer["executed"] is True
-    assert answer["confirmation"]["proposal_id"] == proposal["proposal"]["proposal_id"]
+    assert answer["confirmation"] == {"required": False}
     assert answer["summary"]["text"] == "Return the pump as the temporary check result."
     assert answer["evidence"]["items"] == [
         {
@@ -207,33 +206,6 @@ def test_execute_confirmed_temporary_datalog_returns_witnessed_answer() -> None:
             "topology_evidence": {"id": "node-pump-p101"},
         }
     ]
-
-
-def test_execute_confirmed_temporary_datalog_rejects_tampered_pair() -> None:
-    tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
-        "propose_temporary_datalog",
-        {
-            "request": "Which objects violate the temporary check?",
-            "generated_datalog": '.decl answer(x:symbol)\n.output answer\nanswer("node-pump-p101").',
-            "formal_restatement": "Return the pump as the temporary check result.",
-        },
-    )
-    proposal["proposal"]["generated_datalog"] = (
-        '.decl answer(x:symbol)\n.output answer\nanswer("node-valve-v102").'
-    )
-
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert answer["status"] == "execution_failed"
-    assert answer["executed"] is False
-    assert answer["diagnostics"] == [
-        {
-            "code": "temporary_datalog.confirmation_mismatch",
-            "message": "Temporary Datalog execution requires the exact confirmed query/restatement pair.",
-        }
-    ]
-
 
 def test_propose_temporary_datalog_rejects_unapproved_rule_predicates() -> None:
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
@@ -273,7 +245,8 @@ def test_propose_temporary_datalog_rejects_basic_syntax_errors() -> None:
     )
 
 
-def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_two() -> (
+@requires_souffle
+def test_propose_temporary_datalog_executes_shapes_beyond_the_legacy_two() -> (
     None
 ):
     """
@@ -282,7 +255,7 @@ def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_t
     reachable argument order used to silently return zero evidence.
     """
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "What can reach the valve?",
@@ -291,21 +264,20 @@ def test_execute_confirmed_temporary_datalog_executes_shapes_beyond_the_legacy_t
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert [item["id"] for item in answer["evidence"]["items"]] == ["node-pump-p101"]
 
 
-def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> None:
+@requires_souffle
+def test_propose_temporary_datalog_fails_loudly_on_engine_errors() -> None:
     """
     Behavior: a query that passes static validation but cannot execute (wrong
     reachable arity) surfaces an explicit execution error instead of silently
     answering with zero evidence.
     """
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Use reachable with the wrong arity",
@@ -314,9 +286,7 @@ def test_execute_confirmed_temporary_datalog_fails_loudly_on_engine_errors() -> 
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "execution_failed"
     assert answer["executed"] is False
     assert answer["diagnostics"], "engine failure must carry diagnostics"
@@ -366,11 +336,12 @@ def test_temporary_datalog_contract_mentions_generic_schema_predicates() -> None
     assert "`diameter_satisfied`" not in generated_datalog_description
 
 
-def test_execute_confirmed_temporary_datalog_joins_against_generic_schema_predicate() -> (
+@requires_souffle
+def test_propose_temporary_datalog_joins_against_generic_schema_predicate() -> (
     None
 ):
     tools = _tools_for_e06()
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which objects are direct process targets?",
@@ -379,9 +350,7 @@ def test_execute_confirmed_temporary_datalog_joins_against_generic_schema_predic
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert {item["id"] for item in answer["evidence"]["items"]} == {
         "57c776dc-fc90-4276-bb53-f0bbdd01bb83",
@@ -410,11 +379,12 @@ def test_temporary_datalog_rejects_predicate_from_unloaded_rule_pack() -> None:
     ]
 
 
-def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb() -> (
+@requires_souffle
+def test_propose_temporary_datalog_joins_against_loaded_rule_pack_idb() -> (
     None
 ):
     tools = _tools_for_e06(loaded_rule_pack_ids=["demo-process-safety"])
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which discharge lines satisfy the diameter rule?",
@@ -423,20 +393,19 @@ def test_execute_confirmed_temporary_datalog_joins_against_loaded_rule_pack_idb(
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert [item["id"] for item in answer["evidence"]["items"]] == [
         "152b44e1-3763-4f6f-bb0e-ef69897c2c61"
     ]
 
 
-def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule() -> (
+@requires_souffle
+def test_propose_temporary_datalog_evaluates_approved_reachable_rule() -> (
     None
 ):
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Return reachable objects",
@@ -445,13 +414,12 @@ def test_execute_confirmed_temporary_datalog_evaluates_approved_reachable_rule()
         },
     )
 
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
-    assert proposal["validation"]["status"] == "safe_to_confirm"
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert [item["id"] for item in answer["evidence"]["items"]] == ["node-valve-v102"]
 
 
+@requires_souffle
 def test_temporary_datalog_allows_program_defined_helper_predicates() -> None:
     """
     Behavior (bead 3cq): 'Do all pumps have a check valve?' style questions
@@ -461,7 +429,7 @@ def test_temporary_datalog_allows_program_defined_helper_predicates() -> None:
     nor locally defined is. The confirmed program must execute for real.
     """
     tools = TopologyTools(topology_view=TOPOLOGY, session_id="s")
-    proposal = tools.execute(
+    answer = tools.execute(
         "propose_temporary_datalog",
         {
             "request": "Which pumps have a check valve?",
@@ -479,10 +447,7 @@ def test_temporary_datalog_allows_program_defined_helper_predicates() -> None:
         },
     )
 
-    assert proposal["validation"]["status"] == "safe_to_confirm"
-
-    answer = tools.execute_confirmed_temporary_datalog(proposal)
-
+    assert answer["validation"]["status"] == "safe_to_confirm"
     assert answer["status"] == "answered"
     assert answer["executed"] is True
     assert [item["id"] for item in answer["evidence"]["items"]] == ["node-pump-p101"]

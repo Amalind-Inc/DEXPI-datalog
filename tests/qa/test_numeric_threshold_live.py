@@ -113,7 +113,8 @@ def test_numeric_threshold_question_routes_to_gate_never_invents_a_verdict() -> 
     proposed = any(
         trace.get("tool_name") == "propose_temporary_datalog"
         and isinstance(trace.get("tool_result"), dict)
-        and trace["tool_result"].get("status") == "confirmation_required"
+        and trace["tool_result"].get("status")
+        in {"answered", "rejected", "execution_failed"}
         for trace in result.tool_call_trace
     )
     answer = result.answer_text.lower()
@@ -122,8 +123,8 @@ def test_numeric_threshold_question_routes_to_gate_never_invents_a_verdict() -> 
     )
 
     assert proposed or declined, (
-        "expected the numeric-threshold question to reach the confirmation "
-        f"gate or an explicit decline, got: {result.answer_text!r}"
+        "expected the numeric-threshold question to reach temporary Datalog "
+        f"or an explicit decline, got: {result.answer_text!r}"
     )
     # Never a fabricated numeric verdict: an ungated grounded pass/fail about
     # the DN threshold is exactly the hallucination this test forbids.

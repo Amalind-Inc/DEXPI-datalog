@@ -2,19 +2,17 @@
 
 The incumbent is exercised at its existing public boundary — a fresh
 :class:`QATurnProvider` per episode drives ``run_grounded_qa_turn`` over
-``TopologyTools`` built from the drawing's canonical base fact layer.  The
-generated-Datalog confirmation gate stays in place: when the model proposes a
-temporary Datalog query the turn ends with ``confirmation_required`` and the
-adapter auto-confirms exactly once, so the gate's cost shows up in the
-episode's wall time and transcript instead of being edited out.
+``TopologyTools`` built from the drawing's canonical base fact layer. Validated
+temporary Datalog executes automatically, and the adapter maps that execution
+result directly without replaying it through the retired confirmation path.
 
 Mapping the pipeline's grounded outcome to the benchmark verdict vocabulary
 is deterministic and documented here, never narrated:
 
-- confirmed Datalog execution with matched objects -> ``violation_found``
+- automatic Datalog execution with matched objects -> ``violation_found``
   with the matches (translated stable -> raw node ids) as witnesses;
-- confirmed execution with no matches -> ``no_violation``;
-- failed confirmed execution -> ``unanswerable`` / ``source_data_unavailable``;
+- automatic execution with no matches -> ``no_violation``;
+- failed automatic execution -> ``unanswerable`` / ``source_data_unavailable``;
 - a non-gated ``source_grounded`` final answer -> ``violation_found`` when it
   carries validated evidence, else ``no_violation``;
 - refusal postures (``source_data_unavailable``, ``out_of_scope``,
@@ -128,14 +126,17 @@ def _raw_witnesses(
     return tuple(raw)
 
 
-def _pending_datalog_proposal(
+def _temporary_datalog_execution(
     trace: list[dict[str, object]],
 ) -> dict[str, object] | None:
     for entry in trace:
         if entry.get("tool_name") != "propose_temporary_datalog":
             continue
         result = entry.get("tool_result")
-        if isinstance(result, dict) and result.get("status") == "confirmation_required":
+        if isinstance(result, dict) and result.get("status") in {
+            "answered",
+            "execution_failed",
+        }:
             return result
     return None
 
@@ -178,10 +179,10 @@ class IncumbentArm:
                 usage=_provider_usage(provider),
             )
         trace = list(result.tool_call_trace)
-        proposal = _pending_datalog_proposal(trace)
-        if proposal is not None:
-            verdict, posture, witnesses, answer_text = self._confirm_and_map(
-                tools, topology_view, proposal, trace
+        execution = _temporary_datalog_execution(trace)
+        if execution is not None:
+            verdict, posture, witnesses, answer_text = self._map_datalog_execution(
+                topology_view, execution
             )
         else:
             verdict, posture, witnesses = self._map_final(result, topology_view)
@@ -195,30 +196,18 @@ class IncumbentArm:
             usage=_provider_usage(provider),
         )
 
-    def _confirm_and_map(
+    def _map_datalog_execution(
         self,
-        tools: TopologyTools,
         topology_view: Mapping[str, object],
-        proposal: dict[str, object],
-        trace: list[dict[str, object]],
+        execution: dict[str, object],
     ) -> tuple[str, str, tuple[str, ...], str]:
-        """Auto-confirm the proposed Datalog exactly once and map the executed
-        result.  The model is never consulted again after the gate."""
-        execution = tools.execute_confirmed_temporary_datalog(proposal)
-        trace.append(
-            {
-                "tool_call_id": "benchmark-auto-confirm",
-                "tool_name": "execute_confirmed_temporary_datalog",
-                "tool_input": {"proposal_id": proposal.get("proposal_id")},
-                "tool_result": execution,
-            }
-        )
+        """Map the result produced by automatic temporary-Datalog execution."""
         if execution.get("status") != "answered":
             return (
                 VERDICT_UNANSWERABLE,
                 POSTURE_SOURCE_DATA_UNAVAILABLE,
                 (),
-                "The confirmed Datalog query failed to execute.",
+                "The automatic Datalog query failed to execute.",
             )
         evidence = execution.get("evidence")
         items = evidence.get("items", []) if isinstance(evidence, dict) else []
@@ -229,13 +218,13 @@ class IncumbentArm:
                 VERDICT_VIOLATION_FOUND,
                 POSTURE_SOURCE_GROUNDED,
                 witnesses,
-                "Confirmed Datalog execution matched objects.",
+                "Automatic Datalog execution matched objects.",
             )
         return (
             VERDICT_NO_VIOLATION,
             POSTURE_SOURCE_GROUNDED,
             (),
-            "Confirmed Datalog execution matched no objects.",
+            "Automatic Datalog execution matched no objects.",
         )
 
     def _map_final(

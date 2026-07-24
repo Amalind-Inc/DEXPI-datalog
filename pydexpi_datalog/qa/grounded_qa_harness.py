@@ -219,7 +219,7 @@ def _classify_review_intent(question: str) -> ReviewIntent:
             intent_type="rule_evaluation",
             evidence_need="rule_result",
             suggested_next_tools=("propose_temporary_datalog",),
-            requires_confirmation=True,
+            requires_confirmation=False,
         )
     if _looks_like_topology_relationship(normalized):
         return ReviewIntent(
@@ -564,8 +564,8 @@ class ScriptedQATurnProvider:
             if _looks_like_rule_evaluation(self._question.lower()):
                 # Rule-like questions cannot be answered from sampled
                 # retrieval; sample reachability once, then escalate to the
-                # confirmation-gated temporary Datalog capability instead of
-                # dead-ending (37x.22.34.2). Prefer a piping/structural
+                # automatic temporary Datalog capability instead of
+                # dead-ending (37x.22.34.2 / 3qo.9.9). Prefer a piping/structural
                 # anchor: equipment nodes are frequently isolated in the
                 # structural view, and an empty sample demos nothing.
                 self._mode = "rule_evaluation"
@@ -578,6 +578,18 @@ class ScriptedQATurnProvider:
 
         if self._mode == "rule_evaluation":
             offered = {tool["function"]["name"] for tool in tools}
+            executed = self._latest_executed_temporary_datalog(messages)
+            if executed is not None:
+                evidence_ids = self._executed_evidence_ids(executed)
+                return FinalAnswer(
+                    answer_text=(
+                        "The temporary topology rule was evaluated automatically "
+                        f"against the loaded source ({len(evidence_ids)} matching "
+                        "object(s))."
+                    ),
+                    evidence_references=evidence_ids,
+                    grounding_posture=POSTURE_SOURCE_GROUNDED,
+                )
             if "propose_temporary_datalog" not in offered:
                 self._reachable_ids = self._read_reachable(messages)
                 return ToolCall(
@@ -665,7 +677,7 @@ class ScriptedQATurnProvider:
         }
 
     def _propose_temporary_datalog(self) -> ToolCall:
-        """Escalate a rule-like question to the confirmation-gated capability.
+        """Escalate a rule-like question to automatic temporary Datalog.
 
         The restatement states exactly what the temporary query computes --
         nothing more. If the sampled source has reachable objects, propose a
@@ -744,6 +756,44 @@ class ScriptedQATurnProvider:
                 return [
                     str(item["evidence_id"]) for item in result.get("reachable", [])
                 ]
+        return []
+
+    @staticmethod
+    def _latest_executed_temporary_datalog(
+        messages: list[dict[str, object]],
+    ) -> dict[str, object] | None:
+        for message in reversed(messages):
+            if message.get("role") != "tool":
+                continue
+            result = json.loads(str(message.get("content", "{}")))
+            if not isinstance(result, dict):
+                continue
+            if (
+                result.get("executed") is True
+                and result.get("status") == "answered"
+                and result.get("execution_mode") == "automatic"
+            ):
+                return result
+        return None
+
+    @staticmethod
+    def _executed_evidence_ids(executed: dict[str, object]) -> list[str]:
+        evidence = executed.get("evidence")
+        if isinstance(evidence, dict):
+            items = evidence.get("items")
+            if isinstance(items, list):
+                return [
+                    str(item["id"])
+                    for item in items
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                ]
+        deterministic = executed.get("disclosure")
+        if isinstance(deterministic, dict):
+            result = deterministic.get("deterministic_result")
+            if isinstance(result, dict):
+                matched = result.get("matched_object_ids")
+                if isinstance(matched, list):
+                    return [str(item) for item in matched if isinstance(item, str)]
         return []
 
     @staticmethod
@@ -1060,26 +1110,6 @@ def run_grounded_qa_turn(
                     :MAX_TRACE_REASONING_LENGTH
                 ]
             tool_call_trace.append(trace_entry)
-
-            if (
-                response.tool_name == "propose_temporary_datalog"
-                and _tool_result_status(tool_result) == "confirmation_required"
-            ):
-                # The proposal ends the turn deterministically (37x.22.34.2):
-                # execution consent belongs to the user, so the model never
-                # authors a final answer on top of an unconfirmed proposal.
-                # The caller detects the proposal in the trace and pauses the
-                # turn with needs_datalog_confirmation.
-                return _finalize(
-                    FinalAnswer(
-                        answer_text=(
-                            "A temporary Datalog query was proposed and is "
-                            "awaiting your confirmation before it can run."
-                        ),
-                    ),
-                    known_ids,
-                    tool_call_trace,
-                )
 
             messages.append(
                 {
