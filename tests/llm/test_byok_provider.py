@@ -379,7 +379,9 @@ class CreateByokProviderTests(unittest.TestCase):
         self.assertEqual(p.model, "gemini-2.5-pro")
 
     def test_unsupported_provider_raises(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unsupported byok provider"):
+        # Bedrock needs sigv4 signing, so it is deliberately outside the
+        # catalogue rather than offered and then failed at request time.
+        with self.assertRaisesRegex(ValueError, "unsupported model provider: bedrock"):
             create_byok_provider(provider="bedrock", model="claude", credential="key")
 
 

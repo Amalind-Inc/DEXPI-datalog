@@ -1,4 +1,4 @@
-import { providerSettingsFromRequest } from "@/lib/byok-keys";
+import { validateProviderSettings } from "@/lib/byok-catalog";
 import { startTurnOnBackend } from "@/lib/review-backend";
 
 export async function POST(req: Request, context: { params: Promise<{ sessionId: string }> }) {
@@ -13,7 +13,7 @@ export async function POST(req: Request, context: { params: Promise<{ sessionId:
   // BYOK keys live in the browser, so the client sends its active provider
   // with the turn. When it sends nothing usable, startTurnOnBackend falls
   // back to the server's own env/.env configuration.
-  const providerSettings = providerSettingsFromRequest(body.provider_settings);
+  const providerSettings = validateProviderSettings(body.provider_settings);
   return Response.json(
     await startTurnOnBackend(
       sessionId,

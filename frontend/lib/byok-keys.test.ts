@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BYOK_PROVIDERS,
-  byokProvider,
+  type ByokStore,
   clearByokKey,
   maskCredential,
-  providerSettingsFromRequest,
   providerSettingsFromStore,
   readByokStore,
   saveByokKey,
   selectActiveProvider,
-  type ByokStore,
+  setProviderModel,
 } from "./byok-keys.ts";
 
 function memoryStorage(): Storage {
@@ -27,19 +25,6 @@ function memoryStorage(): Storage {
   } as Storage;
 }
 
-test("the catalogue covers the four BYOK providers a user can bring keys for", () => {
-  assert.deepEqual(
-    BYOK_PROVIDERS.map((entry) => entry.id),
-    ["openrouter", "openai", "anthropic", "gemini"],
-  );
-  assert.equal(byokProvider("anthropic").label, "Anthropic (Claude)");
-  assert.ok(byokProvider("openrouter").models.length > 0);
-  // Every catalogue default must be one of that provider's offered models.
-  for (const entry of BYOK_PROVIDERS) {
-    assert.ok(entry.models.includes(entry.defaultModel), `${entry.id} default not in models`);
-  }
-});
-
 test("saving a key makes that provider the active one and records a masked preview", () => {
   const storage = memoryStorage();
   saveByokKey({ provider: "openai", credential: "sk-abcdefgh12345678", model: "gpt-4.1" }, storage);
@@ -51,20 +36,36 @@ test("saving a key makes that provider the active one and records a masked previ
   assert.equal(maskCredential("sk-abcdefgh12345678"), "sk-a…5678");
 });
 
+test("any catalogued provider id can hold a key, not just a fixed few", () => {
+  // The provider set comes from the models.dev catalogue at runtime, so the
+  // store must not gatekeep on a hardcoded list.
+  const storage = memoryStorage();
+  for (const provider of ["openrouter", "groq", "cerebras", "zhipuai", "ollama"]) {
+    saveByokKey({ provider, credential: `key-for-${provider}`, model: "some-model" }, storage);
+  }
+
+  assert.deepEqual(Object.keys(readByokStore(storage).keys).sort(), [
+    "cerebras",
+    "groq",
+    "ollama",
+    "openrouter",
+    "zhipuai",
+  ]);
+  assert.equal(readByokStore(storage).activeProvider, "openrouter");
+});
+
 test("a second key is stored alongside the first without stealing the active slot", () => {
   const storage = memoryStorage();
   saveByokKey({ provider: "openai", credential: "sk-openai-key-value", model: "gpt-4.1" }, storage);
   saveByokKey(
-    { provider: "gemini", credential: "gemini-key-value", model: "gemini-2.5-pro" },
+    { provider: "google", credential: "gemini-key-value", model: "gemini-2.5-pro" },
     storage,
   );
 
-  const store = readByokStore(storage);
-  assert.equal(store.activeProvider, "openai");
-  assert.deepEqual(Object.keys(store.keys).sort(), ["gemini", "openai"]);
+  assert.equal(readByokStore(storage).activeProvider, "openai");
 
-  selectActiveProvider("gemini", storage);
-  assert.equal(readByokStore(storage).activeProvider, "gemini");
+  selectActiveProvider("google", storage);
+  assert.equal(readByokStore(storage).activeProvider, "google");
 });
 
 test("selecting a provider with no stored key is refused", () => {
@@ -75,30 +76,47 @@ test("selecting a provider with no stored key is refused", () => {
   assert.equal(readByokStore(storage).activeProvider, "openai");
 });
 
+test("switching the model on a stored key keeps the credential", () => {
+  const storage = memoryStorage();
+  saveByokKey({ provider: "openai", credential: "sk-openai-key-value", model: "gpt-4.1" }, storage);
+
+  setProviderModel("openai", "gpt-5.1", storage);
+  const entry = readByokStore(storage).keys.openai;
+  assert.equal(entry?.model, "gpt-5.1");
+  assert.equal(entry?.credential, "sk-openai-key-value");
+});
+
 test("clearing the active key falls back to another stored provider", () => {
   const storage = memoryStorage();
   saveByokKey({ provider: "openai", credential: "sk-openai-key-value", model: "gpt-4.1" }, storage);
-  saveByokKey(
-    { provider: "openrouter", credential: "sk-or-key-value", model: "anthropic/claude-sonnet-4" },
-    storage,
-  );
+  saveByokKey({ provider: "groq", credential: "gsk-key-value", model: "llama-3.3" }, storage);
 
   clearByokKey("openai", storage);
   const store = readByokStore(storage);
-  assert.equal(store.activeProvider, "openrouter");
+  assert.equal(store.activeProvider, "groq");
   assert.equal(store.keys.openai, undefined);
 
-  clearByokKey("openrouter", storage);
+  clearByokKey("groq", storage);
   assert.equal(readByokStore(storage).activeProvider, null);
 });
 
-test("an empty credential is rejected rather than stored as a blank key", () => {
+test("a blank credential is accepted only for a local provider", () => {
   const storage = memoryStorage();
   assert.throws(
     () => saveByokKey({ provider: "openai", credential: "   ", model: "gpt-4.1" }, storage),
     /credential/i,
   );
-  assert.deepEqual(readByokStore(storage).keys, {});
+  // A local server authenticates by endpoint, not by key.
+  saveByokKey({ provider: "ollama", credential: "", model: "ornith:35b", isLocal: true }, storage);
+  assert.equal(readByokStore(storage).keys.ollama?.model, "ornith:35b");
+});
+
+test("a key with no model selected is refused", () => {
+  const storage = memoryStorage();
+  assert.throws(
+    () => saveByokKey({ provider: "openai", credential: "sk-key-value", model: "  " }, storage),
+    /model/i,
+  );
 });
 
 test("provider settings are derived from the active key for the backend call", () => {
@@ -106,12 +124,12 @@ test("provider settings are derived from the active key for the backend call", (
   assert.equal(providerSettingsFromStore(readByokStore(storage)), null);
 
   saveByokKey(
-    { provider: "anthropic", credential: "sk-ant-key-value", model: "claude-sonnet-4" },
+    { provider: "anthropic", credential: "sk-ant-key-value", model: "claude-sonnet-4-5" },
     storage,
   );
   assert.deepEqual(providerSettingsFromStore(readByokStore(storage)), {
     provider: "anthropic",
-    model: "claude-sonnet-4",
+    model: "claude-sonnet-4-5",
     credential: "sk-ant-key-value",
   });
 });
@@ -121,44 +139,16 @@ test("corrupt or foreign storage contents read back as an empty store", () => {
   storage.setItem("pydexpi.byok.v1", "{not json");
   assert.deepEqual(readByokStore(storage), { activeProvider: null, keys: {} } satisfies ByokStore);
 
-  storage.setItem("pydexpi.byok.v1", JSON.stringify({ activeProvider: "hotdog", keys: 7 }));
+  storage.setItem("pydexpi.byok.v1", JSON.stringify({ activeProvider: "openai", keys: 7 }));
   assert.deepEqual(readByokStore(storage), { activeProvider: null, keys: {} });
 });
 
-test("an unknown model for a known provider is rejected", () => {
+test("an active provider whose key was removed out of band does not stay active", () => {
   const storage = memoryStorage();
-  assert.throws(
-    () =>
-      saveByokKey({ provider: "openai", credential: "sk-x-key-value", model: "gpt-9" }, storage),
-    /model/i,
-  );
-});
-
-test("provider settings arriving from the browser are validated before use", () => {
-  assert.deepEqual(
-    providerSettingsFromRequest({
-      provider: "openrouter",
-      model: "deepseek/deepseek-v4-pro",
-      credential: "sk-or-key",
-    }),
-    { provider: "openrouter", model: "deepseek/deepseek-v4-pro", credential: "sk-or-key" },
+  storage.setItem(
+    "pydexpi.byok.v1",
+    JSON.stringify({ activeProvider: "openai", keys: { groq: { credential: "k", model: "m" } } }),
   );
 
-  // An unusable payload is dropped so the caller falls back to server config
-  // rather than sending the backend something it will reject.
-  assert.equal(providerSettingsFromRequest(undefined), null);
-  assert.equal(
-    providerSettingsFromRequest({ provider: "hotdog", model: "x", credential: "k" }),
-    null,
-  );
-  assert.equal(
-    providerSettingsFromRequest({ provider: "openai", model: "gpt-4.1", credential: "" }),
-    null,
-  );
-  // A model outside the provider's native-tool-capable set is not silently
-  // corrected; the backend would reject it, so the payload is refused.
-  assert.equal(
-    providerSettingsFromRequest({ provider: "openai", model: "gpt-9", credential: "sk-k" }),
-    null,
-  );
+  assert.equal(readByokStore(storage).activeProvider, null);
 });

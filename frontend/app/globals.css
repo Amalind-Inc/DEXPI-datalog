@@ -2412,3 +2412,39 @@
     animation: none;
   }
 }
+
+.byok-section {
+  margin-top: 26px;
+}
+
+.byok-section-title {
+  align-items: baseline;
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 8px;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.byok-section-count {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.byok-search {
+  margin-bottom: 12px;
+}
+
+.byok-card-meta {
+  align-items: center;
+  color: var(--calm-ink-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 10px;
+  margin-top: 3px;
+}

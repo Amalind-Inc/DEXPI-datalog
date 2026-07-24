@@ -7,21 +7,16 @@ from .model_access import (
     ModelProvider,
     native_tool_capability_diagnostic,
 )
+from .model_catalog import catalog_provider, load_catalog
 
 
-_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-_OPENAI_BASE_URL = "https://api.openai.com/v1"
-_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
-_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1"
-
-# Providers reachable through a plain OpenAI-compatible /chat/completions
-# endpoint (including native tool_calls). Anthropic and Gemini use different
-# request/response shapes and are not part of this family.
+# Base URLs and wire formats now come from the vendored models.dev catalogue
+# (model_catalog.py). This mapping remains only for the OpenAI-compatible
+# providers that review_api resolves by name; it is derived, not authored.
 OPENAI_COMPATIBLE_BASE_URLS = {
-    "openai": _OPENAI_BASE_URL,
-    "openrouter": _OPENROUTER_BASE_URL,
-    "ollama": _OLLAMA_DEFAULT_BASE_URL,
+    provider.id: provider.base_url
+    for provider in load_catalog().providers.values()
+    if provider.wire == "openai"
 }
 
 _NATIVE_TOOL_REJECTION_TOKENS = (
@@ -35,20 +30,25 @@ _NATIVE_TOOL_REJECTION_TOKENS = (
 
 
 def create_byok_provider(
-    *, provider: str, model: str, credential: str
+    *, provider: str, model: str, credential: str, base_url: str | None = None
 ) -> ModelProvider:
-    if provider in ("openai", "openrouter"):
-        base_url = (
-            _OPENROUTER_BASE_URL if provider == "openrouter" else _OPENAI_BASE_URL
-        )
+    """Build a provider client for any catalogued provider. The wire format and
+    endpoint come from the models.dev snapshot, so adding a provider is a
+    catalogue refresh rather than a code change (ADR 0015)."""
+
+    catalogued = catalog_provider(provider)
+    endpoint = base_url or catalogued.base_url
+    if catalogued.wire == "openai":
         return _OpenAICompatibleProvider(
-            provider=provider, model=model, credential=credential, base_url=base_url
+            provider=provider, model=model, credential=credential, base_url=endpoint
         )
-    if provider == "anthropic":
-        return _AnthropicProvider(model=model, credential=credential)
-    if provider == "gemini":
-        return _GeminiProvider(model=model, credential=credential)
-    raise ValueError(f"unsupported byok provider: {provider}")
+    if catalogued.wire == "anthropic":
+        return _AnthropicProvider(
+            model=model, credential=credential, base_url=endpoint
+        )
+    if catalogued.wire == "gemini":
+        return _GeminiProvider(model=model, credential=credential, base_url=endpoint)
+    raise ValueError(f"unsupported byok wire format: {catalogued.wire}")
 
 
 def build_system_prompt(context: dict[str, object]) -> str:
@@ -267,14 +267,15 @@ def _raise_native_tool_capability_error_if_present(
 class _AnthropicProvider:
     provider = "anthropic"
 
-    def __init__(self, *, model: str, credential: str) -> None:
+    def __init__(self, *, model: str, credential: str, base_url: str) -> None:
         self.model = model
         self._credential = credential
+        self._base_url = base_url
 
     def complete(self, *, request: str, context: dict[str, object]) -> str:
         system_prompt = build_system_prompt(context)
         response = httpx.post(
-            f"{_ANTHROPIC_BASE_URL}/messages",
+            f"{self._base_url}/messages",
             headers={
                 "x-api-key": self._credential,
                 "anthropic-version": "2023-06-01",
@@ -297,14 +298,15 @@ class _AnthropicProvider:
 class _GeminiProvider:
     provider = "gemini"
 
-    def __init__(self, *, model: str, credential: str) -> None:
+    def __init__(self, *, model: str, credential: str, base_url: str) -> None:
         self.model = model
         self._credential = credential
+        self._base_url = base_url
 
     def complete(self, *, request: str, context: dict[str, object]) -> str:
         system_prompt = build_system_prompt(context)
         response = httpx.post(
-            f"{_GEMINI_BASE_URL}/models/{self.model}:generateContent",
+            f"{self._base_url}/models/{self.model}:generateContent",
             params={"key": self._credential},
             json={
                 "system_instruction": {"parts": [{"text": system_prompt}]},

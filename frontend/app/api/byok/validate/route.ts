@@ -1,4 +1,4 @@
-import { isByokProviderId } from "@/lib/byok-keys";
+import { catalogProvider } from "@/lib/byok-catalog";
 import { verifyByokCredential } from "@/lib/byok-verify";
 
 // Proxies the "Test key" button. The credential is used for a single probe and
@@ -8,12 +8,9 @@ export async function POST(req: Request) {
     provider?: unknown;
     credential?: unknown;
   };
-  const provider = body.provider;
-  if (!isByokProviderId(provider)) {
-    return Response.json(
-      { ok: false, provider: String(provider ?? ""), message: "Unknown provider." },
-      { status: 400 },
-    );
+  const provider = typeof body.provider === "string" ? body.provider : "";
+  if (!provider || !catalogProvider(provider)) {
+    return Response.json({ ok: false, provider, message: "Unknown provider." }, { status: 400 });
   }
   const credential = typeof body.credential === "string" ? body.credential : "";
   return Response.json(await verifyByokCredential({ provider, credential }));

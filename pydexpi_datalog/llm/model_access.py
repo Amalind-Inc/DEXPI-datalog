@@ -5,43 +5,13 @@ import os
 from typing import Protocol
 
 from ..workflow.workflow_policy import OSS_POLICY, WorkflowPolicy
+from .model_catalog import catalog_provider, is_catalogued_model, load_catalog
 
 
-SUPPORTED_BYOK_PROVIDERS = {
-    "openai": {
-        "api_key_env_var": "OPENAI_API_KEY",
-        "default_model": "gpt-4.1",
-    },
-    "anthropic": {
-        "api_key_env_var": "ANTHROPIC_API_KEY",
-        "default_model": "claude-sonnet-4",
-    },
-    "gemini": {
-        "api_key_env_var": "GEMINI_API_KEY",
-        "default_model": "gemini-2.5-pro",
-    },
-    "openrouter": {
-        "api_key_env_var": "OPENROUTER_API_KEY",
-        "default_model": "anthropic/claude-sonnet-4",
-    },
-    "ollama": {
-        "api_key_env_var": "OLLAMA_BASE_URL",
-        "default_model": "ornith:35b",
-    },
-    "openrouter": {
-        "api_key_env_var": "OPENROUTER_API_KEY",
-        "default_model": "deepseek/deepseek-v4-pro",
-    },
-}
-
-NATIVE_TOOL_CAPABLE_MODELS = {
-    ("openai", "gpt-4.1"),
-    ("anthropic", "claude-sonnet-4"),
-    ("gemini", "gemini-2.5-pro"),
-    ("openrouter", "anthropic/claude-sonnet-4"),
-    ("openrouter", "deepseek/deepseek-v4-pro"),
-    ("ollama", "ornith:35b"),
-}
+# Provider and model support is no longer hand-maintained here: it comes from
+# the vendored models.dev snapshot (see model_catalog.py, ADR 0015). The
+# snapshot only contains models advertising native tool calls, so catalogue
+# membership is the capability gate grounded QA needs.
 
 
 class ModelCapabilityError(ValueError):
@@ -120,24 +90,32 @@ def resolve_model_access_config(
 
 
 def supported_byok_provider(provider: str) -> dict[str, str]:
-    provider_config = SUPPORTED_BYOK_PROVIDERS.get(provider)
-    if provider_config is None:
-        allowed = ", ".join(sorted(SUPPORTED_BYOK_PROVIDERS))
-        raise ValueError(
-            f"unsupported model provider: {provider}. Supported providers: {allowed}"
-        )
-    return provider_config
+    """Legacy shape retained for callers that only need the credential env var
+    and a sensible default model."""
+
+    catalogued = catalog_provider(provider)
+    default_model = next(iter(catalogued.models), "")
+    return {
+        "api_key_env_var": catalogued.env_var,
+        "default_model": default_model,
+    }
 
 
 def supported_native_tool_models() -> set[tuple[str, str]]:
     """Exact provider/model pairs whose metadata advertises native tool calls."""
 
-    return set(NATIVE_TOOL_CAPABLE_MODELS)
+    return {
+        (provider.id, model_id)
+        for provider in load_catalog().providers.values()
+        for model_id in provider.models
+    }
 
 
 def require_native_tool_capable_model(*, provider: str, model: str) -> None:
-    supported_byok_provider(provider)
-    if (provider, model) in NATIVE_TOOL_CAPABLE_MODELS:
+    # Raises UnknownProviderError (a ValueError) for a provider outside the
+    # catalogue, matching the previous contract.
+    catalog_provider(provider)
+    if is_catalogued_model(provider, model):
         return
     raise ModelCapabilityError(
         code="model_access.native_tools_unsupported",

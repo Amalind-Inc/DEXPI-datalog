@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadByokCatalog } from "./byok-catalog.ts";
 import { samplePidGraph } from "../components/pid/sample-graph.ts";
 import type {
   GeometryReport,
@@ -89,7 +90,9 @@ type PrepareBody = {
 
 type BackendFetch = typeof fetch;
 type BackendProviderSettings = {
-  provider: "openrouter" | "openai" | "anthropic" | "gemini" | "ollama";
+  // Open by construction: the provider set is the models.dev catalogue
+  // (ADR 0015), not a union maintained by hand.
+  provider: string;
   model: string;
   credential: string;
   base_url?: string;
@@ -680,7 +683,10 @@ function readPidView(data: Record<string, unknown>): PidView {
 
 function readSchematicScene(data: Record<string, unknown>): SchematicScene | null {
   const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
-  const raw = (source.schematic_scene ?? data.schematic_scene) as Record<string, unknown> | null | undefined;
+  const raw = (source.schematic_scene ?? data.schematic_scene) as
+    | Record<string, unknown>
+    | null
+    | undefined;
   if (!raw || typeof raw !== "object") return null;
 
   const extentRaw = raw.extent as Record<string, unknown> | null | undefined;
@@ -718,7 +724,10 @@ function readSchematicSceneKind(data: Record<string, unknown>): SchematicSceneKi
 
 function readGeometryReport(data: Record<string, unknown>): GeometryReport | null {
   const source = (data.topology_view ?? data.topology ?? data) as Record<string, unknown>;
-  const raw = (source.geometry_report ?? data.geometry_report) as Record<string, unknown> | null | undefined;
+  const raw = (source.geometry_report ?? data.geometry_report) as
+    | Record<string, unknown>
+    | null
+    | undefined;
   if (!raw || typeof raw !== "object") return null;
   const extent = (raw.extent ?? {}) as Record<string, unknown>;
   const pipeCoverage = (raw.pipe_coverage ?? {}) as Record<string, unknown>;
@@ -1134,7 +1143,7 @@ function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   if (anthropicKey) {
     return {
       provider: "anthropic",
-      model: readEnvValue("ANTHROPIC_MODEL") ?? "claude-sonnet-4",
+      model: readEnvValue("ANTHROPIC_MODEL") ?? "claude-sonnet-4-5",
       credential: anthropicKey,
     };
   }
@@ -1144,6 +1153,22 @@ function readProviderSettingsFromEnv(): BackendProviderSettings | null {
       model: readEnvValue("GEMINI_MODEL") ?? "gemini-2.5-pro",
       credential: geminiKey,
     };
+  }
+  return readCatalogProviderFromEnv();
+}
+
+/**
+ * Any catalogued provider can also be configured from the environment, e.g.
+ * GROQ_API_KEY + GROQ_MODEL. The model var is required rather than guessed:
+ * silently picking an arbitrary model for a review tool would be a footgun.
+ */
+function readCatalogProviderFromEnv(): BackendProviderSettings | null {
+  for (const [id, provider] of Object.entries(loadByokCatalog().providers)) {
+    const credential = readEnvValue(provider.env_var);
+    if (!credential) continue;
+    const model = readEnvValue(`${id.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}_MODEL`);
+    if (!model) continue;
+    return { provider: id, model, credential };
   }
   return null;
 }
@@ -1223,9 +1248,7 @@ export async function startTurnOnBackend(
   // Apply env-configured provider settings. Skip obviously-test credentials
   // (sk-test sentinel) so the backend uses its scripted provider, which
   // avoids real LLM API calls during automated testing.
-  const isTestCredential = providerSettings?.credential
-    .toLowerCase()
-    .startsWith("sk-test");
+  const isTestCredential = providerSettings?.credential.toLowerCase().startsWith("sk-test");
   if (providerSettings && !isTestCredential) {
     const providerResponse = await fetcher(
       `${baseUrl}/api/review/sessions/${sessionId}/provider-settings`,
@@ -1324,9 +1347,10 @@ export async function listRulePacks(
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
-export async function listAllRulePacks(
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
-): Promise<{ status: number; body: Record<string, unknown> }> {
+export async function listAllRulePacks({
+  baseUrl = backendBaseUrl(),
+  fetcher = fetch,
+}: BackendOptions = {}): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/rule-packs`);
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }

@@ -40,7 +40,7 @@ class ReviewApiTests(unittest.TestCase):
 
             for provider, model in [
                 ("openai", "gpt-4.1"),
-                ("anthropic", "claude-sonnet-4"),
+                ("anthropic", "claude-sonnet-4-5"),
                 ("gemini", "gemini-2.5-pro"),
                 ("openrouter", "anthropic/claude-sonnet-4"),
             ]:

@@ -1,45 +1,36 @@
 // Server-side probe for a BYOK credential. This runs in a route handler
-// rather than the browser on purpose: Anthropic and OpenAI reject cross-origin
+// rather than the browser on purpose: most providers reject cross-origin
 // browser calls, and probing from the server keeps the key out of the page's
 // network log.
+//
+// The endpoint and auth scheme come from the vendored catalogue's wire format,
+// so a newly-catalogued provider is testable without touching this file.
 
-import { type ByokProviderId, isByokProviderId } from "./byok-keys.ts";
+import { catalogProvider, resolveProviderId } from "./byok-catalog.ts";
 
 export type ByokVerifyResult =
-  | { ok: true; provider: ByokProviderId }
+  | { ok: true; provider: string }
   | { ok: false; provider: string; message: string };
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
+/** Cheapest authenticated GET each wire format offers. */
 function probeRequest(
-  provider: ByokProviderId,
+  wire: string,
+  baseUrl: string,
   credential: string,
 ): { url: string; headers: Record<string, string> } {
-  switch (provider) {
-    case "openrouter":
-      return {
-        url: "https://openrouter.ai/api/v1/key",
-        headers: { Authorization: `Bearer ${credential}` },
-      };
-    case "openai":
-      return {
-        url: "https://api.openai.com/v1/models",
-        headers: { Authorization: `Bearer ${credential}` },
-      };
-    case "anthropic":
-      return {
-        url: "https://api.anthropic.com/v1/models",
-        headers: { "x-api-key": credential, "anthropic-version": ANTHROPIC_VERSION },
-      };
-    case "gemini":
-      return {
-        // Gemini authenticates by query parameter, not a header.
-        url: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(
-          credential,
-        )}`,
-        headers: {},
-      };
+  if (wire === "anthropic") {
+    return {
+      url: `${baseUrl}/models`,
+      headers: { "x-api-key": credential, "anthropic-version": ANTHROPIC_VERSION },
+    };
   }
+  if (wire === "gemini") {
+    // Gemini authenticates by query parameter, not a header.
+    return { url: `${baseUrl}/models?key=${encodeURIComponent(credential)}`, headers: {} };
+  }
+  return { url: `${baseUrl}/models`, headers: { Authorization: `Bearer ${credential}` } };
 }
 
 /** Pull the provider's own words out of whatever error envelope it used. */
@@ -62,19 +53,20 @@ function providerErrorMessage(status: number, body: string): string {
 }
 
 export async function verifyByokCredential(
-  input: { provider: ByokProviderId; credential: string },
+  input: { provider: string; credential: string },
   fetcher: typeof fetch = fetch,
 ): Promise<ByokVerifyResult> {
-  const provider = input.provider;
-  if (!isByokProviderId(provider)) {
-    return { ok: false, provider: String(provider), message: "Unknown provider." };
+  const provider = resolveProviderId(input.provider);
+  const catalogued = catalogProvider(provider);
+  if (!catalogued) {
+    return { ok: false, provider, message: "Unknown provider." };
   }
   const credential = input.credential.trim();
-  if (!credential) {
+  if (!credential && !catalogued.is_local) {
     return { ok: false, provider, message: "Enter a key before testing it." };
   }
 
-  const { url, headers } = probeRequest(provider, credential);
+  const { url, headers } = probeRequest(catalogued.wire, catalogued.base_url, credential);
   try {
     const response = await fetcher(url, { method: "GET", headers });
     if (!response.ok) {
@@ -89,7 +81,10 @@ export async function verifyByokCredential(
     return {
       ok: false,
       provider,
-      message: error instanceof Error ? error.message : "The provider could not be reached.",
+      message:
+        error instanceof Error
+          ? `${catalogued.name} could not be reached: ${error.message}`
+          : "The provider could not be reached.",
     };
   }
 }
