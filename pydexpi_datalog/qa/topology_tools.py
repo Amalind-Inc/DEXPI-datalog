@@ -29,6 +29,7 @@ from pydexpi_datalog.qa.route_receipts import (
 from pydexpi_datalog.qa.structured_intent import (
     compare_structured_intents,
     compare_program_structured_intent,
+    encode_structured_intent_program,
     normalize_structured_intent,
 )
 from pydexpi_datalog.qa.trusted_templates import (
@@ -336,6 +337,10 @@ class TopologyTools:
                     int(tool_input.get("max_hops", 6)),
                     claim_type=str(tool_input.get("claim_type", "existential")),
                 )
+            )
+        if tool_name == "census_outgoing_edge_cardinality":
+            return self._timed_retrieval(
+                lambda: self._census_outgoing_edge_cardinality(tool_input)
             )
         if tool_name == "execute_bundled_query_template":
             return self._timed_retrieval(
@@ -710,26 +715,20 @@ class TopologyTools:
                 for item in diagnostics
                 if isinstance(item, dict)
             )
-            return {
-                "status": "rejected",
-                "code": "tool.proposal_rejected",
-                "tool_name": "propose_temporary_datalog",
-                "executed": False,
-                "validation": validation,
-                "counterfactual_validation": counterfactual_validation,
-                "faithfulness_gate": faithfulness_gate,
-                "faithfulness_probe_attempts": [probe_attempt],
-                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
-                "diagnostics": diagnostics,
-                "message": (
+            return self._reject_temporary_proposal(
+                code="tool.proposal_rejected",
+                message=(
                     f"Temporary Datalog proposal rejected: {reasons} "
                     "Revise the program and call propose_temporary_datalog "
                     "again. Authoring contract: "
                     + self._temporary_datalog_contract_description()
                 ),
-                "matches": [],
-                "reachable": [],
-            }
+                diagnostics=diagnostics,
+                validation=validation,
+                counterfactual_validation=counterfactual_validation,
+                faithfulness_gate=faithfulness_gate,
+                probe_attempt=probe_attempt,
+            )
 
         if counterfactual_validation.get("status") not in {
             "passed",
@@ -753,24 +752,18 @@ class TopologyTools:
                 for item in diagnostics
                 if isinstance(item, dict)
             )
-            return {
-                "status": "rejected",
-                "code": "faithfulness.counterfactual_failed",
-                "tool_name": "propose_temporary_datalog",
-                "executed": False,
-                "validation": validation,
-                "counterfactual_validation": counterfactual_validation,
-                "faithfulness_gate": faithfulness_gate,
-                "faithfulness_probe_attempts": [probe_attempt],
-                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
-                "diagnostics": diagnostics,
-                "message": (
+            return self._reject_temporary_proposal(
+                code="faithfulness.counterfactual_failed",
+                message=(
                     f"Mandatory counterfactual replay failed: {reasons} "
                     "Revise the program and call propose_temporary_datalog again."
                 ),
-                "matches": [],
-                "reachable": [],
-            }
+                diagnostics=diagnostics,
+                validation=validation,
+                counterfactual_validation=counterfactual_validation,
+                faithfulness_gate=faithfulness_gate,
+                probe_attempt=probe_attempt,
+            )
         if faithfulness_gate["status"] != "passed":
             diagnostics = list(
                 faithfulness_gate["layers"]["model_review"]["diagnostics"]  # type: ignore[index]
@@ -780,25 +773,19 @@ class TopologyTools:
                 for item in diagnostics
                 if isinstance(item, dict)
             )
-            return {
-                "status": "rejected",
-                "code": "faithfulness.model_veto",
-                "tool_name": "propose_temporary_datalog",
-                "executed": False,
-                "validation": validation,
-                "counterfactual_validation": counterfactual_validation,
-                "faithfulness_gate": faithfulness_gate,
-                "faithfulness_probe_attempts": [probe_attempt],
-                "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
-                "diagnostics": diagnostics,
-                "message": (
+            return self._reject_temporary_proposal(
+                code="faithfulness.model_veto",
+                message=(
                     f"Layered faithfulness gate rejected the model review: {reasons} "
                     "Revise the program and its back-translation, then call "
                     "propose_temporary_datalog again."
                 ),
-                "matches": [],
-                "reachable": [],
-            }
+                diagnostics=diagnostics,
+                validation=validation,
+                counterfactual_validation=counterfactual_validation,
+                faithfulness_gate=faithfulness_gate,
+                probe_attempt=probe_attempt,
+            )
 
         proposal_id = self._temporary_datalog_proposal_id(
             request=request,
@@ -816,6 +803,89 @@ class TopologyTools:
             counterfactual_validation=counterfactual_validation,
             faithfulness_gate=faithfulness_gate,
         )
+
+    def _reject_temporary_proposal(
+        self,
+        *,
+        code: str,
+        message: str,
+        diagnostics: list[dict[str, object]],
+        validation: dict[str, object],
+        counterfactual_validation: dict[str, object],
+        faithfulness_gate: dict[str, object],
+        probe_attempt: dict[str, object],
+    ) -> dict[str, object]:
+        """Fail closed on a proposal while returning a machine-usable repair kit."""
+        return {
+            "status": "rejected",
+            "code": code,
+            "tool_name": "propose_temporary_datalog",
+            "executed": False,
+            "validation": validation,
+            "counterfactual_validation": counterfactual_validation,
+            "faithfulness_gate": faithfulness_gate,
+            "faithfulness_probe_attempts": [probe_attempt],
+            "faithfulness_gate_attempts": [self._faithfulness_gate_attempts[-1]],
+            "diagnostics": diagnostics,
+            "authoring_scaffold": self._authoring_scaffold(diagnostics),
+            "message": message,
+            "matches": [],
+            "reachable": [],
+        }
+
+    def _authoring_scaffold(
+        self, diagnostics: list[dict[str, object]]
+    ) -> dict[str, object]:
+        """Backend-owned repair kit for the next propose_temporary_datalog call."""
+        approved = sorted(self._temporary_datalog_approved_predicates())
+        stub = (
+            ".decl answer(x:symbol)\n"
+            ".output answer\n"
+            'answer(x) :- node_attribute(x, "label", "__AUTHORING_STUB__").\n'
+        )
+        intent = self._active_structured_intent
+        if intent is not None:
+            try:
+                skeleton = encode_structured_intent_program(stub, intent)
+            except ValueError:
+                skeleton = stub
+        else:
+            skeleton = stub
+        diagnostic_codes = [
+            str(item.get("code"))
+            for item in diagnostics
+            if isinstance(item, dict) and item.get("code")
+        ]
+        return {
+            "approved_predicates": approved,
+            "program_skeleton": skeleton,
+            "diagnostic_codes": diagnostic_codes,
+            "instructions": (
+                "Revise generated_datalog by editing only the answer-rule body of "
+                "program_skeleton. Keep `.decl answer(x:symbol)`, `.output answer`, "
+                "and every query_intent_contract guard unchanged. Use only "
+                "approved_predicates (plus program-local helpers you declare). "
+                "Do not invent schema predicates. Then call propose_temporary_datalog "
+                "again with the revised program and the same structured intent."
+            ),
+            "examples": [
+                {
+                    "shape": "cardinality_or_ownership",
+                    "hint": (
+                        "Universal ownership/cardinality: find sources missing the "
+                        "required relation; return those source evidence IDs as answer."
+                    ),
+                },
+                {
+                    "shape": "reachability",
+                    "hint": (
+                        "Reachability: use engine-supplied reachable(source, target) "
+                        "or piping connectivity predicates from approved_predicates."
+                    ),
+                },
+            ],
+            "contract": self._temporary_datalog_contract_description(),
+        }
 
     def _execute_automatic_temporary_datalog(
         self,
@@ -1504,6 +1574,152 @@ class TopologyTools:
             },
             "limitations": limitations,
         }
+
+    def _census_outgoing_edge_cardinality(
+        self, tool_input: dict[str, object]
+    ) -> dict[str, object]:
+        """Exhaustive outgoing-edge cardinality census for a source node class."""
+        source_label = str(tool_input.get("source_node_label", "")).strip()
+        edge_label = str(tool_input.get("edge_label", "")).strip()
+        attr_name = str(tool_input.get("attr_name", "")).strip()
+        expected_count = int(tool_input.get("expected_count", 1))
+        if not source_label or not attr_name:
+            return {
+                "status": "rejected",
+                "code": "census.invalid_bindings",
+                "tool_name": "census_outgoing_edge_cardinality",
+                "message": (
+                    "census_outgoing_edge_cardinality requires source_node_label "
+                    "and attr_name."
+                ),
+                "rows": [],
+                "violators": [],
+                "coverage": {"complete": False},
+                "truncated": True,
+            }
+
+        sources = [
+            node
+            for node in self._nodes
+            if source_label
+            in {
+                str(node.get("label") or ""),
+                str(node.get("class_name") or ""),
+            }
+        ]
+        examined = sources[: self._retrieval_budgets.max_rows]
+        rows: list[dict[str, object]] = []
+        violators: list[dict[str, object]] = []
+        for node in examined:
+            node_id = str(node["id"])
+            matched_edges = [
+                edge
+                for edge in self._edges
+                if str(edge.get("source_id")) == node_id
+                and self._edge_matches_census(edge, edge_label=edge_label, attr_name=attr_name)
+            ]
+            count = len(matched_edges)
+            row = {
+                "evidence_id": node_id,
+                "label": str(
+                    node.get("display_name")
+                    or node.get("tag_name")
+                    or node.get("label")
+                    or node_id
+                ),
+                "node_class": str(node.get("class_name") or node.get("label") or ""),
+                "count": count,
+                "expected_count": expected_count,
+                "targets": [
+                    {
+                        "evidence_id": str(edge.get("target_id")),
+                        "edge_id": str(edge.get("id") or ""),
+                    }
+                    for edge in matched_edges
+                ],
+            }
+            rows.append(row)
+            if count != expected_count:
+                violators.append(row)
+
+        result_limit = min(
+            self._retrieval_budgets.max_rows,
+            self._retrieval_budgets.max_evidence_objects,
+        )
+        bounded_rows = rows[:result_limit]
+        bounded_violators = [
+            row for row in violators if row["evidence_id"]
+            in {item["evidence_id"] for item in bounded_rows}
+        ]
+        limitations: list[dict[str, object]] = []
+        if len(sources) > self._retrieval_budgets.max_rows:
+            limitations.append(
+                {
+                    "code": "retrieval.row_limit",
+                    "message": "Census stopped at the configured row limit.",
+                    "limit": self._retrieval_budgets.max_rows,
+                }
+            )
+        if len(rows) > result_limit:
+            limitations.append(
+                {
+                    "code": "retrieval.evidence_object_limit",
+                    "message": "Census stopped at the configured evidence-object limit.",
+                    "limit": self._retrieval_budgets.max_evidence_objects,
+                }
+            )
+        complete = (
+            not limitations
+            and len(examined) == len(sources)
+            and len(bounded_rows) == len(rows)
+        )
+        if self._payload_too_large(bounded_rows):
+            bounded_rows = []
+            bounded_violators = []
+            complete = False
+            limitations.insert(
+                0,
+                self._limitation(
+                    "payload_size_limit", self._retrieval_budgets.max_payload_bytes
+                ),
+            )
+        return {
+            "status": "answered",
+            "tool_name": "census_outgoing_edge_cardinality",
+            "source_node_label": source_label,
+            "edge_label": edge_label,
+            "attr_name": attr_name,
+            "expected_count": expected_count,
+            "source_count": len(sources),
+            "rows": bounded_rows,
+            "violators": bounded_violators,
+            "violator_ids": [str(row["evidence_id"]) for row in bounded_violators],
+            "truncated": not complete,
+            "coverage": {
+                "complete": complete,
+                "examined_rows": len(examined),
+                "total_rows": len(sources),
+                "returned_evidence_objects": len(bounded_rows),
+            },
+            "limitations": limitations,
+            "matches": bounded_violators,
+        }
+
+    @staticmethod
+    def _edge_matches_census(
+        edge: dict[str, object], *, edge_label: str, attr_name: str
+    ) -> bool:
+        relationship = str(edge.get("relationship") or "")
+        family = str(edge.get("edge_family") or "")
+        attributes = edge.get("attributes")
+        attr_map = attributes if isinstance(attributes, dict) else {}
+        edge_attr = str(attr_map.get("attr_name") or relationship)
+        edge_family = str(attr_map.get("label") or family)
+        if edge_attr != attr_name:
+            return False
+        if not edge_label:
+            return True
+        return edge_label in {edge_family, family, relationship}
 
     def _get_reachable_equipment(
         self, equipment_id: str, max_hops: int, *, claim_type: str

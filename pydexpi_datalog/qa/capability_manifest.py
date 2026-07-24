@@ -138,7 +138,11 @@ def default_grounded_qa_manifest(
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
                     "Use before answering when the user mentions a tag, equipment, "
-                    "line, nozzle, or ambiguous object reference."
+                    "line, nozzle, or ambiguous object reference. Do not use for "
+                    "universal or compliance questions (every / exactly one / must "
+                    "every); those require a bundled template or "
+                    "propose_temporary_datalog because retrieval cannot prove "
+                    "universal coverage."
                 ),
                 evidence_kind="topology_object_candidates",
                 source_grounding_posture="loaded_source",
@@ -172,7 +176,10 @@ def default_grounded_qa_manifest(
                 ),
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
-                    "Use for loaded-source connectivity, structural reachability, upstream/downstream, and path-witness questions."
+                    "Use for connectivity, structural reachability, upstream/"
+                    "downstream, and path-witness questions on loaded-source "
+                    "objects. Do not use to prove universal or exactly-one "
+                    "compliance over a class of objects."
                 ),
                 evidence_kind="structural_path_witness",
                 source_grounding_posture="loaded_source",
@@ -199,6 +206,72 @@ def default_grounded_qa_manifest(
                         },
                     },
                     "required": ["equipment_id"],
+                },
+            ),
+            GroundedQACapability(
+                tool_name="census_outgoing_edge_cardinality",
+                description=(
+                    "Exhaustively census every loaded-source node of a given class/"
+                    "label and count its outgoing edges matching a relationship "
+                    "label and attribute name. Returns per-node counts, violators "
+                    "where the count differs from expected_count, and an explicit "
+                    "completeness flag."
+                ),
+                permission_class=PERMISSION_ALLOWED_READ_ONLY,
+                when_to_use=(
+                    "Use for finite universal or exactly-one / cardinality "
+                    "compliance on the loaded drawing (every X has exactly N "
+                    "outgoing Y references). Prefer this over generated Datalog "
+                    "when the source set is fully enumerable. Do not treat a "
+                    "truncated census as proof of universal coverage."
+                ),
+                evidence_kind="exhaustive_edge_cardinality_census",
+                source_grounding_posture="loaded_source",
+                limitations=(
+                    "Truncated or incomplete censuses cannot prove universal or "
+                    "exactly-one claims.",
+                    "Only outgoing edges on the loaded topology/graph facts are counted.",
+                ),
+                citation_metadata={
+                    "primary_id_field": "evidence_id",
+                    "witness_field": "violators",
+                    "citation_role": "cardinality_census",
+                },
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "source_node_label": {
+                            "type": "string",
+                            "description": (
+                                "Exact node label/class to census "
+                                "(e.g. PipingNetworkSegment)."
+                            ),
+                        },
+                        "edge_label": {
+                            "type": "string",
+                            "description": (
+                                "Edge family/label filter (e.g. reference). "
+                                "Empty string matches any family."
+                            ),
+                            "default": "",
+                        },
+                        "attr_name": {
+                            "type": "string",
+                            "description": (
+                                "Outgoing edge attribute/role to count "
+                                "(e.g. sourceItem)."
+                            ),
+                        },
+                        "expected_count": {
+                            "type": "integer",
+                            "description": (
+                                "Required outgoing edge count per source node. "
+                                "Nodes whose count differs are violators."
+                            ),
+                            "default": 1,
+                        },
+                    },
+                    "required": ["source_node_label", "attr_name"],
                 },
             ),
             GroundedQACapability(
@@ -336,10 +409,12 @@ def default_grounded_qa_manifest(
                 ),
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,
                 when_to_use=(
-                    "Use when bounded retrieval is insufficient and the question "
-                    "requires recursion, formal constraints, or predicate contract "
-                    "reasoning. Always available for read-only generated queries; "
-                    "backend safety and faithfulness gates authorize execution."
+                    "Use for universal or compliance constraints (every / exactly "
+                    "one / must), recursion, formal constraints, or predicate "
+                    "contract reasoning when no bundled template fits. Topology "
+                    "retrieval cannot prove universal coverage. Always available "
+                    "for read-only generated queries; backend safety and "
+                    "faithfulness gates authorize execution."
                 ),
                 evidence_kind="datalog_query_pair",
                 source_grounding_posture="predicate_contract_and_resolved_identities",

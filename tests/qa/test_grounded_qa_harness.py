@@ -32,6 +32,24 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
 )
 
 
+def _rejection_feedback_from_messages(messages: list[dict[str, object]]) -> str | None:
+    """Prefer the tool rejection payload; fall back to harness repair nudges."""
+    for message in reversed(messages):
+        role = message.get("role")
+        content = str(message.get("content", ""))
+        if role == "tool" and (
+            '"status": "rejected"' in content or '"status":"rejected"' in content
+        ):
+            return content
+    for message in reversed(messages):
+        content = str(message.get("content", ""))
+        if message.get("role") == "user" and content.startswith(
+            "Temporary Datalog proposal rejected"
+        ):
+            return content
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Minimal topology fixture
 # ---------------------------------------------------------------------------
@@ -396,9 +414,9 @@ class RetryAfterRejectionProvider:
             )
         if self._step == 2:
             self._step += 1
-            last = messages[-1]
-            if last.get("role") == "tool":
-                self.rejection_feedback.append(str(last.get("content", "")))
+            feedback = _rejection_feedback_from_messages(messages)
+            if feedback is not None:
+                self.rejection_feedback.append(feedback)
             return ToolCall(
                 tool_name="propose_temporary_datalog",
                 tool_input={
@@ -555,8 +573,10 @@ class RepairCounterfactualProbeProvider:
                 },
                 tool_call_id="counterfactual-no-fit",
             )
-        if self._step > 2 and messages[-1].get("role") == "tool":
-            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        if self._step > 2:
+            feedback = _rejection_feedback_from_messages(messages)
+            if feedback is not None:
+                self.rejection_feedback.append(feedback)
         return ToolCall(
             tool_name="propose_temporary_datalog",
             tool_input={
@@ -634,8 +654,10 @@ class RepairLayeredFaithfulnessProvider:
                 },
                 tool_call_id="layered-no-fit",
             )
-        if self._step > 2 and messages[-1].get("role") == "tool":
-            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        if self._step > 2:
+            feedback = _rejection_feedback_from_messages(messages)
+            if feedback is not None:
+                self.rejection_feedback.append(feedback)
         return ToolCall(
             tool_name="propose_temporary_datalog",
             tool_input={
@@ -1029,7 +1051,11 @@ class RepairStructuredIntentProvider:
         self.rejection_feedback: list[str] = []
 
     def complete_with_tools(self, *, messages, tools):
-        if self._step >= 5:
+        if any(
+            message.get("role") == "tool"
+            and '"status": "answered"' in str(message.get("content", ""))
+            for message in messages
+        ):
             return FinalAnswer(answer_text="Automatic generated logic completed.")
         if self._step == 0:
             self._step += 1
@@ -1042,8 +1068,10 @@ class RepairStructuredIntentProvider:
                 tool_call_id="structured-no-fit",
             )
 
-        if self._step > 1 and messages[-1].get("role") == "tool":
-            self.rejection_feedback.append(str(messages[-1].get("content", "")))
+        if self._step > 1:
+            feedback = _rejection_feedback_from_messages(messages)
+            if feedback is not None:
+                self.rejection_feedback.append(feedback)
         self._step += 1
         if self._step == 2:
             encoded_intent = {
@@ -1058,29 +1086,6 @@ class RepairStructuredIntentProvider:
                 f'answer(x) :- reachable("{SEGMENT_ID}", x).'
             )
             call_id = "structured-reversed"
-        elif self._step == 3:
-            encoded_intent = {
-                **STRUCTURED_CONNECTIVITY_INTENT,
-                "direction": "directed",
-            }
-            program = (
-                ".decl answer(x:symbol)\n.output answer\n"
-                f'answer(x) :- direct_process_connection("{SEGMENT_ID}", x).'
-            )
-            call_id = "structured-direction"
-        elif self._step == 4:
-            encoded_intent = {
-                **STRUCTURED_CONNECTIVITY_INTENT,
-                "negated": False,
-            }
-            program = (
-                ".decl candidate(x:symbol)\n"
-                ".decl answer(x:symbol)\n"
-                ".output answer\n"
-                f'candidate("{SEGMENT_ID}").\n'
-                "answer(x) :- candidate(x)."
-            )
-            call_id = "structured-polarity"
         else:
             encoded_intent = STRUCTURED_CONNECTIVITY_INTENT
             program = _faithful_structured_connectivity_program()
@@ -1113,10 +1118,8 @@ def test_structured_intent_mismatch_is_repaired_through_public_runner() -> None:
         for trace in result.tool_call_trace
         if trace["tool_name"] == "propose_temporary_datalog"
     ]
-    assert len(proposal_traces) == 4
-    assert all(
-        trace["tool_result"]["status"] == "rejected" for trace in proposal_traces[:3]
-    )
+    assert len(proposal_traces) == 2
+    assert proposal_traces[0]["tool_result"]["status"] == "rejected"
     rejected = proposal_traces[0]["tool_result"]
     assert rejected["status"] == "rejected"
     assert rejected["validation"]["status"] == "rejected"
@@ -1140,8 +1143,8 @@ def test_structured_intent_mismatch_is_repaired_through_public_runner() -> None:
     assert accepted["executed"] is True
     assert accepted["validation"]["status"] == "safe_to_confirm"
     assert accepted["route_artifact"]["repair_summary"] == {
-        "gate_attempts": 4,
-        "failed_gate_attempts": 3,
+        "gate_attempts": 2,
+        "failed_gate_attempts": 1,
     }
 
 

@@ -4,7 +4,7 @@ import inspect
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Protocol, runtime_checkable
+from typing import Callable, Mapping, Protocol, runtime_checkable
 
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
@@ -176,9 +176,22 @@ _EQUIPMENT_TOKENS = (
 
 
 def _latest_user_question(messages: list[dict[str, object]]) -> str:
+    """Return the latest real user question, skipping harness-injected nudges."""
     for message in reversed(messages):
-        if message.get("role") == "user":
-            return str(message.get("content", ""))
+        if message.get("role") != "user":
+            continue
+        content = str(message.get("content", ""))
+        if content.startswith(
+            (
+                "Backend routing:",
+                "Backend evidence sufficiency check failed:",
+                "Temporary Datalog proposal rejected",
+                "Topology retrieval cannot prove",
+                "The capability '",
+            )
+        ):
+            continue
+        return content
     return ""
 
 
@@ -238,7 +251,10 @@ def _classify_review_intent(question: str) -> ReviewIntent:
         return ReviewIntent(
             intent_type="rule_evaluation",
             evidence_need="rule_result",
-            suggested_next_tools=("propose_temporary_datalog",),
+            suggested_next_tools=(
+                "census_outgoing_edge_cardinality",
+                "propose_temporary_datalog",
+            ),
             requires_confirmation=False,
         )
     if _looks_like_topology_relationship(normalized):
@@ -387,9 +403,26 @@ def _tool_trace_satisfies_intent(
                 and _tool_result_status(trace.get("tool_result"))
                 in {"confirmation_required", "executed", "answered"}
             )
+            or (
+                trace.get("tool_name") == "census_outgoing_edge_cardinality"
+                and _has_complete_cardinality_census(trace.get("tool_result"))
+            )
             for trace in tool_call_trace
         )
     return True
+
+
+def _has_complete_cardinality_census(tool_result: object) -> bool:
+    if not isinstance(tool_result, dict):
+        return False
+    if tool_result.get("status") != "answered":
+        return False
+    coverage = tool_result.get("coverage")
+    if not isinstance(coverage, dict) or coverage.get("complete") is not True:
+        return False
+    return isinstance(tool_result.get("rows"), list) and isinstance(
+        tool_result.get("violators"), list
+    )
 
 
 def _has_structural_witness_result(tool_result: object) -> bool:
@@ -452,11 +485,193 @@ def _faithfulness_repair_nudge(diagnostics: list[dict[str, object]]) -> str:
     )
 
 
+# After this many topology-retrieval attempts on a rule_result path with no
+# template/propose/no-fit attempt, force the next turn to call a tool (bead
+# 3qo.9.15). Retrieval tools are already withheld from the offer list; this
+# covers models that still emit them.
+MAX_TOPOLOGY_RETRIEVALS_BEFORE_RULE_ESCALATE = 2
+
+RULE_EVALUATION_CAPABILITIES = frozenset(
+    {
+        "census_outgoing_edge_cardinality",
+        "execute_bundled_query_template",
+        "report_template_no_fit",
+        "propose_temporary_datalog",
+    }
+)
+TOPOLOGY_RETRIEVAL_TOOLS = frozenset(
+    {
+        "find_equipment",
+        "get_reachable_equipment",
+    }
+)
+
+RULE_EVALUATION_STEERING = (
+    "Backend routing: this request is rule_evaluation. "
+    "Bounded topology search cannot prove every/exactly-one claims. "
+    "Prefer census_outgoing_edge_cardinality when the source class is finite "
+    "and fully enumerable on the loaded drawing; use execute_bundled_query_template "
+    "when a bundled template fits exactly; otherwise report_template_no_fit "
+    "and/or propose_temporary_datalog."
+)
+
+
+def _topology_retrieval_count(tool_call_trace: list[dict[str, object]]) -> int:
+    return sum(
+        1
+        for entry in tool_call_trace
+        if entry.get("tool_name") in TOPOLOGY_RETRIEVAL_TOOLS
+    )
+
+
+def _rule_path_has_logic_attempt(tool_call_trace: list[dict[str, object]]) -> bool:
+    return any(
+        entry.get("tool_name") in RULE_EVALUATION_CAPABILITIES
+        for entry in tool_call_trace
+    )
+
+
+def _should_force_rule_escalate(
+    intent: ReviewIntent, tool_call_trace: list[dict[str, object]]
+) -> bool:
+    if intent.evidence_need != "rule_result":
+        return False
+    if _rule_path_has_logic_attempt(tool_call_trace):
+        return False
+    return (
+        _topology_retrieval_count(tool_call_trace)
+        >= MAX_TOPOLOGY_RETRIEVALS_BEFORE_RULE_ESCALATE
+    )
+
+
+def _effective_capabilities_for_turn(
+    intent: ReviewIntent,
+    allowed_capabilities: frozenset[str] | None,
+) -> frozenset[str] | None:
+    """Intersect user constraints with the specialist surface for this intent.
+
+    rule_evaluation uses a handoff-lite tool set (template / no-fit / propose)
+    so the model cannot burn the budget on topology search (bead 3qo.9.15).
+    """
+    if intent.intent_type != "rule_evaluation":
+        return allowed_capabilities
+    if allowed_capabilities is None:
+        return RULE_EVALUATION_CAPABILITIES
+    return allowed_capabilities & RULE_EVALUATION_CAPABILITIES
+
+
+def _capability_unavailable_result(
+    *, tool_name: str, intent: ReviewIntent
+) -> dict[str, object]:
+    if (
+        intent.intent_type == "rule_evaluation"
+        and tool_name in TOPOLOGY_RETRIEVAL_TOOLS
+    ):
+        return {
+            "status": "capability_unavailable",
+            "code": "capability.rule_path_retrieval_deferred",
+            "tool_name": tool_name,
+            "message": (
+                "Topology retrieval cannot prove universal/compliance claims. "
+                "Use execute_bundled_query_template, report_template_no_fit, or "
+                "propose_temporary_datalog."
+            ),
+        }
+    return {
+        "status": "capability_unavailable",
+        "code": "capability.constrained_out",
+        "tool_name": tool_name,
+        "message": (
+            "This capability is unavailable under the current answer constraints."
+        ),
+    }
+
+
 # A failed gate with repair guidance must be retried at least once before the
 # turn may end in faithfulness.no_faithful_program (bead 3qo.9.11): a total of
 # two gate attempts = the original proposal plus one mandatory repair.
 MIN_FAITHFULNESS_GATE_ATTEMPTS_BEFORE_GIVING_UP = 2
 
+# Mechanical/faithfulness proposal rejects include an authoring scaffold. Cap
+# how many times we let the model burn proposes before failing closed (bead imdi).
+MAX_PROPOSE_REJECT_ATTEMPTS = 3
+
+
+def _propose_reject_results(
+    tool_call_trace: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    for trace in tool_call_trace:
+        if trace.get("tool_name") != "propose_temporary_datalog":
+            continue
+        result = trace.get("tool_result")
+        if isinstance(result, dict) and result.get("status") == "rejected":
+            results.append(result)
+    return results
+
+
+def _authoring_scaffold_nudge(
+    scaffold: Mapping[str, object],
+    diagnostics: list[dict[str, object]],
+) -> str:
+    blockers = "; ".join(
+        str(item.get("message", "")) for item in diagnostics if item.get("message")
+    )
+    instructions = str(scaffold.get("instructions") or "")
+    skeleton = str(scaffold.get("program_skeleton") or "")
+    predicates = scaffold.get("approved_predicates")
+    predicate_text = (
+        ", ".join(str(item) for item in predicates)
+        if isinstance(predicates, list)
+        else ""
+    )
+    return (
+        "Temporary Datalog proposal rejected. "
+        f"Blocking diagnostics: {blockers} "
+        f"{instructions} "
+        f"Approved predicates: {predicate_text}. "
+        "Start from this program_skeleton and revise only the answer body:\n"
+        f"{skeleton}"
+    )
+
+
+def _exhausted_propose_repairs(
+    tool_call_trace: list[dict[str, object]],
+) -> QATurnResult | None:
+    rejects = _propose_reject_results(tool_call_trace)
+    if len(rejects) < MAX_PROPOSE_REJECT_ATTEMPTS:
+        return None
+    latest = rejects[-1]
+    diagnostics = latest.get("diagnostics")
+    diagnostic_items = (
+        [dict(item) for item in diagnostics if isinstance(item, dict)]
+        if isinstance(diagnostics, list)
+        else []
+    )
+    blockers = "; ".join(
+        str(item.get("message", ""))
+        for item in diagnostic_items
+        if item.get("message")
+    )
+    return QATurnResult(
+        answer_text=(
+            "I could not produce a faithful generated program, so no engineering "
+            f"verdict was returned. Blocking diagnostics: {blockers}"
+        ),
+        evidence_references=[],
+        rejected_references=[],
+        interpreted_object_ids=[],
+        tool_call_trace=tool_call_trace,
+        grounding_posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
+        source_grounded=False,
+        trace_events=[
+            {
+                "event": "propose_repair_exhausted",
+                "attempts": len(rejects),
+                "code": latest.get("code"),
+            }
+        ],
+    )
 
 def _faithfulness_gate_diagnostics(
     tool_call_trace: list[dict[str, object]],
@@ -579,6 +794,23 @@ class ScriptedQATurnProvider:
                     tool_input={"equipment_id": self._candidates[0]},
                     tool_call_id="scripted-followup-reachable",
                 )
+            offered = {
+                str(tool.get("function", {}).get("name", ""))
+                for tool in tools
+                if isinstance(tool, dict)
+            }
+            # Specialist rule branch (bead 3qo.9.15): when retrieval is not
+            # offered, escalate directly to generated Datalog instead of
+            # dead-ending on blocked find_equipment calls.
+            if (
+                "find_equipment" not in offered
+                or _looks_like_rule_evaluation(self._question.lower())
+            ) and "propose_temporary_datalog" in offered:
+                self._mode = "rule_evaluation"
+                self._candidates = []
+                self._reachable_ids = []
+                self._anchor = ""
+                return self._propose_temporary_datalog()
             return ToolCall(
                 tool_name="find_equipment",
                 tool_input={"pattern": ""},
@@ -765,6 +997,10 @@ class ScriptedQATurnProvider:
                 tool_call_id="scripted-propose-datalog",
             )
         facts = "\n".join(f'answer("{cid}").' for cid in self._candidates)
+        if not facts:
+            # Direct rule-branch escalate with no prior retrieval sample: emit a
+            # valid empty-check body rather than a decl-only stub.
+            facts = 'answer(x) :- node_attribute(x, "label", x), x = "__no_sample__".'
         return ToolCall(
             tool_name="propose_temporary_datalog",
             tool_input={
@@ -778,6 +1014,11 @@ class ScriptedQATurnProvider:
                     f"{self._describe(self._candidates)} as the temporary "
                     "check result; no further objects were structurally "
                     "reachable from the sampled anchor."
+                    if self._candidates
+                    else (
+                        "Evaluate the temporary topology rule with no prior "
+                        "retrieval sample; return matching answer IDs."
+                    )
                 ),
                 "faithfulness_review": {
                     "status": "faithful",
@@ -1014,6 +1255,8 @@ def run_grounded_qa_turn(
             }
         )
     messages.append({"role": "user", "content": question})
+    if intent.intent_type == "rule_evaluation":
+        messages.append({"role": "user", "content": RULE_EVALUATION_STEERING})
     last_insufficient_answer: FinalAnswer | None = None
     tool_call_trace: list[dict[str, object]] = []
 
@@ -1030,7 +1273,9 @@ def run_grounded_qa_turn(
     duration_limit = constraints.max_duration_seconds if constraints else None
     cost_limit = constraints.max_provider_cost if constraints else None
     allowed_capabilities = _resolve_allowed_capabilities(constraints, topology_tools)
-    require_tool_next = False
+    # Specialist branch: force one tool call on the first rule_evaluation turn,
+    # then reset to auto after the tool result (OpenAI reset_tool_choice pattern).
+    require_tool_next = intent.intent_type == "rule_evaluation"
     consecutive_insufficient_answers = 0
 
     def _poll_steering() -> str | None:
@@ -1054,12 +1299,15 @@ def run_grounded_qa_turn(
             return _steered_result(
                 steer, known_ids=known_ids, tool_call_trace=tool_call_trace
             )
+        if _should_force_rule_escalate(intent, tool_call_trace):
+            require_tool_next = True
+        turn_allowed = _effective_capabilities_for_turn(intent, allowed_capabilities)
         tool_choice = "required" if require_tool_next else "auto"
         response = _complete_with_tools(
             provider,
             messages=messages,
             tools=_narrow_tool_definitions(
-                topology_tools.tool_definitions(), allowed_capabilities
+                topology_tools.tool_definitions(), turn_allowed
             ),
             tool_choice=tool_choice,
         )
@@ -1138,23 +1386,13 @@ def run_grounded_qa_turn(
         if isinstance(response, ToolCall):
             consecutive_insufficient_answers = 0
             require_tool_next = False
-            if (
-                allowed_capabilities is not None
-                and response.tool_name not in allowed_capabilities
-            ):
-                # A user capability narrowing blocks this tool. The backend
-                # refuses execution rather than only hiding the tool in the
-                # prompt (bead 3qo.9.8); validators are not model-facing tools
-                # and so are never disabled by narrowing.
-                blocked = {
-                    "status": "capability_unavailable",
-                    "code": "capability.constrained_out",
-                    "tool_name": response.tool_name,
-                    "message": (
-                        "This capability is unavailable under the current answer "
-                        "constraints."
-                    ),
-                }
+            if turn_allowed is not None and response.tool_name not in turn_allowed:
+                # Intent specialist surface or user capability narrowing blocks
+                # this tool. The backend refuses execution rather than only
+                # hiding the tool in the prompt (beads 3qo.9.8 / 3qo.9.15).
+                blocked = _capability_unavailable_result(
+                    tool_name=response.tool_name, intent=intent
+                )
                 tool_call_trace.append(
                     {
                         "tool_call_id": response.tool_call_id,
@@ -1167,12 +1405,13 @@ def run_grounded_qa_turn(
                     {
                         "role": "user",
                         "content": (
-                            f"The capability '{response.tool_name}' is unavailable "
-                            "under the active answer constraints. Use an available "
-                            "capability or answer from the evidence already gathered."
+                            f"{blocked['message']} Suggested next tools: "
+                            f"{', '.join(sorted(turn_allowed))}."
                         ),
                     }
                 )
+                if _should_force_rule_escalate(intent, tool_call_trace):
+                    require_tool_next = True
                 continue
             tool_result = topology_tools.execute(
                 response.tool_name, response.tool_input
@@ -1213,6 +1452,30 @@ def run_grounded_qa_turn(
                     "content": tool_result_json,
                 }
             )
+            if (
+                response.tool_name == "propose_temporary_datalog"
+                and isinstance(tool_result, dict)
+                and tool_result.get("status") == "rejected"
+            ):
+                scaffold = tool_result.get("authoring_scaffold")
+                diagnostics = tool_result.get("diagnostics")
+                diagnostic_items = (
+                    [dict(item) for item in diagnostics if isinstance(item, dict)]
+                    if isinstance(diagnostics, list)
+                    else []
+                )
+                if isinstance(scaffold, dict):
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": _authoring_scaffold_nudge(
+                                scaffold, diagnostic_items
+                            ),
+                        }
+                    )
+                exhausted = _exhausted_propose_repairs(tool_call_trace)
+                if exhausted is not None:
+                    return exhausted
             continue
 
         raise TypeError(f"Unexpected provider response type: {type(response)}")
