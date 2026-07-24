@@ -1,11 +1,24 @@
 "use client";
 
-import { ChevronRight, FolderKanban, Layers, MessageSquare, PanelLeftClose, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  FolderKanban,
+  KeyRound,
+  Layers,
+  MessageSquare,
+  PanelLeftClose,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { DEFAULT_WIDTH, MAX_WIDTH, MIN_WIDTH, WIDTH_STORAGE_KEY } from "@/components/chat/app-sidebar-constants";
+import {
+  DEFAULT_WIDTH,
+  MAX_WIDTH,
+  MIN_WIDTH,
+  WIDTH_STORAGE_KEY,
+} from "@/components/chat/app-sidebar-constants";
 import { startNewSession } from "@/components/chat/pid-runtime-provider";
 import { usePidGraph } from "@/components/pid/graph-context";
 
@@ -123,65 +136,81 @@ export function AppSidebar({
 
   return (
     <>
-    <aside
-      className={cn(
-        "app-sidebar",
-        collapsed && "app-sidebar--collapsed",
-        isDragging && !isSnapping && "app-sidebar--dragging",
-      )}
-      aria-label="Sidebar navigation"
-      aria-hidden={collapsed}
-      inert={collapsed || undefined}
-    >
-      <div className="app-sidebar-header">
-        <span className="calm-rail-mark" aria-hidden="true">
-          A
-        </span>
+      <aside
+        className={cn(
+          "app-sidebar",
+          collapsed && "app-sidebar--collapsed",
+          isDragging && !isSnapping && "app-sidebar--dragging",
+        )}
+        aria-label="Sidebar navigation"
+        aria-hidden={collapsed}
+        inert={collapsed || undefined}
+      >
+        <div className="app-sidebar-header">
+          <span className="calm-rail-mark" aria-hidden="true">
+            A
+          </span>
+          <button
+            type="button"
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+            onClick={() => onCollapsedChange(true)}
+            className="app-sidebar-collapse-btn"
+          >
+            <PanelLeftClose size={15} />
+          </button>
+        </div>
+
         <button
           type="button"
-          aria-label="Hide sidebar"
-          title="Hide sidebar"
-          onClick={() => onCollapsedChange(true)}
-          className="app-sidebar-collapse-btn"
+          aria-label="New chat"
+          title="New chat"
+          className="app-sidebar-item app-sidebar-new-chat"
+          onClick={startNewSession}
         >
-          <PanelLeftClose size={15} />
+          <Plus size={15} aria-hidden="true" />
+          <span className="app-sidebar-label">New chat</span>
         </button>
-      </div>
 
-      <button
-        type="button"
-        aria-label="New chat"
-        title="New chat"
-        className="app-sidebar-item app-sidebar-new-chat"
-        onClick={startNewSession}
-      >
-        <Plus size={15} aria-hidden="true" />
-        <span className="app-sidebar-label">New chat</span>
-      </button>
+        <div className="calm-rail-divider" aria-hidden="true" />
 
-      <div className="calm-rail-divider" aria-hidden="true" />
+        <nav className="app-sidebar-nav" aria-label="Primary">
+          {NAV_ITEMS.map((item) => (
+            <SidebarLink key={item.href} {...item} active={pathname === item.href} />
+          ))}
+        </nav>
 
-      <nav className="app-sidebar-nav" aria-label="Primary">
-        {NAV_ITEMS.map((item) => (
-          <SidebarLink key={item.href} {...item} active={pathname === item.href} />
-        ))}
-      </nav>
+        <div className="app-sidebar-sections">
+          <RecentProjectsSection />
+          <AssistantHistorySection />
+        </div>
 
-      <div className="app-sidebar-sections">
-        <RecentProjectsSection />
-        <AssistantHistorySection />
-      </div>
-    </aside>
-    <div
-      className={cn("app-sidebar-resize-handle", isDragging && "app-sidebar-resize-handle--active")}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-    />
+        {/* Account settings sit at the foot of the rail rather than in the
+          primary nav: BYOK key management is configuration you visit once,
+          not a place you work (bead pydexpi-datalog-1-37e2). */}
+        <div className="app-sidebar-footer">
+          <div className="calm-rail-divider" aria-hidden="true" />
+          <SidebarLink
+            href="/account/api-keys"
+            label="API keys"
+            icon={KeyRound}
+            active={pathname === "/account/api-keys"}
+          />
+        </div>
+      </aside>
+      <div
+        className={cn(
+          "app-sidebar-resize-handle",
+          isDragging && "app-sidebar-resize-handle--active",
+        )}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      />
     </>
   );
 }
@@ -237,9 +266,7 @@ function AccordionSection({
           className={cn("app-sidebar-section-chevron", open && "app-sidebar-section-chevron--open")}
         />
       </button>
-      <div
-        className={cn("app-sidebar-section-panel", open && "app-sidebar-section-panel--open")}
-      >
+      <div className={cn("app-sidebar-section-panel", open && "app-sidebar-section-panel--open")}>
         <div className="app-sidebar-section-panel-inner">{children}</div>
       </div>
     </div>

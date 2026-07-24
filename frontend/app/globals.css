@@ -288,6 +288,14 @@
   flex-direction: column;
 }
 
+.app-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
 .app-sidebar-section-header {
   align-items: center;
   background: none;
@@ -2008,6 +2016,7 @@
   }
 
   .app-sidebar-sections,
+  .app-sidebar-footer,
   .app-sidebar-resize-handle {
     display: none;
   }
@@ -2216,4 +2225,190 @@
   margin: 0;
   overflow-x: auto;
   padding: 12px 14px;
+}
+
+/* --------------------------------------------------------------------------
+   BYOK API keys page (bead pydexpi-datalog-1-37e2). One card per provider:
+   status on the right, credential/model controls below, result line last.
+   -------------------------------------------------------------------------- */
+
+.byok-privacy-note {
+  align-items: center;
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.82rem;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.byok-provider-list {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.byok-card {
+  background: #ffffff;
+  border: 1px solid var(--calm-line);
+  border-radius: 0.85rem;
+  padding: 16px 18px;
+}
+
+.byok-card-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.byok-card-title {
+  font-family: var(--calm-display-font), Georgia, serif;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.byok-card-console {
+  align-items: center;
+  color: var(--calm-ink-muted);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 4px;
+  margin-top: 3px;
+  text-decoration: none;
+}
+
+.byok-card-console:hover {
+  text-decoration: underline;
+}
+
+.byok-active-badge {
+  align-items: center;
+  background: var(--calm-paper);
+  border: 1px solid var(--calm-line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 5px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.byok-empty-badge {
+  color: var(--calm-ink-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.byok-card-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.byok-key-summary {
+  display: flex;
+  gap: 28px;
+  margin: 0;
+}
+
+.byok-key-summary dt {
+  color: var(--calm-ink-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.byok-key-summary dd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  margin: 3px 0 0;
+}
+
+.byok-field {
+  display: grid;
+  gap: 5px;
+  max-width: 420px;
+}
+
+.byok-field-label {
+  color: var(--calm-ink-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.byok-input,
+.byok-select {
+  background: var(--background, #fff);
+  border: 1px solid var(--border, #d4d4d8);
+  border-radius: 0.5rem;
+  color: inherit;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.byok-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.byok-card-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.byok-remove-btn {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--calm-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 5px;
+  padding: 4px 2px;
+}
+
+.byok-remove-btn:hover {
+  color: var(--destructive, #b3261e);
+}
+
+.byok-message {
+  align-items: center;
+  display: flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.byok-message--good {
+  color: #1a7f4b;
+}
+
+.byok-message--bad {
+  color: var(--destructive, #b3261e);
+}
+
+.byok-fallback-note {
+  color: var(--calm-ink-muted);
+  font-size: 0.82rem;
+  margin: 18px 0 0;
+}
+
+.byok-spin {
+  animation: byok-spin 1s linear infinite;
+}
+
+@keyframes byok-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .byok-spin {
+    animation: none;
+  }
 }

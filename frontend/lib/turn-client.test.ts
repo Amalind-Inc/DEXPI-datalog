@@ -129,6 +129,46 @@ test("startTurn POSTs to correct path with request_id and returns TurnState", as
   ]);
 });
 
+test("startTurn attaches the browser's active BYOK provider to the turn body", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = async (_url: string | URL | Request, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json(mockTurn());
+  };
+
+  await startTurn(
+    "session-1",
+    { question: "What changed?", requestId: "request-1" },
+    {
+      baseUrl: "http://frontend.test",
+      fetcher: fetcher as typeof fetch,
+      providerSettings: { provider: "openai", model: "gpt-4.1", credential: "sk-user-key" },
+    },
+  );
+
+  assert.deepEqual(bodies[0].provider_settings, {
+    provider: "openai",
+    model: "gpt-4.1",
+    credential: "sk-user-key",
+  });
+});
+
+test("startTurn omits provider_settings entirely when the browser has no key", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = async (_url: string | URL | Request, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json(mockTurn());
+  };
+
+  await startTurn(
+    "session-1",
+    { question: "What changed?", requestId: "request-1" },
+    { baseUrl: "http://frontend.test", fetcher: fetcher as typeof fetch, providerSettings: null },
+  );
+
+  assert.equal("provider_settings" in bodies[0], false);
+});
+
 test("cancelTurn POSTs to cancel path", async () => {
   const returned = mockTurn({ status: "canceled" });
   const calls: Array<{ path: string; method: string | undefined }> = [];

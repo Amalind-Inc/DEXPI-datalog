@@ -1,3 +1,8 @@
+import {
+  type BackendProviderSettings,
+  providerSettingsFromStore,
+  readByokStore,
+} from "./byok-keys.ts";
 import { serializeGroundedQAAnswer } from "./grounded-qa-answer.ts";
 import { serializeDirectionReview } from "./direction-review.ts";
 import {
@@ -34,6 +39,11 @@ export type ReducedTurn =
 type TurnClientOptions = {
   baseUrl?: string;
   fetcher?: typeof fetch;
+  /**
+   * BYOK settings to run this turn with. Defaults to the browser's active
+   * stored key; pass `null` to force the server's own configuration.
+   */
+  providerSettings?: BackendProviderSettings | null;
 };
 
 export function reduceTurn(turn: TurnState): ReducedTurn {
@@ -101,6 +111,13 @@ export async function startTurn(
   body: { question: string; requestId: string; conversation?: unknown; selectedNodeId?: string },
   options: TurnClientOptions = {},
 ): Promise<TurnState> {
+  // The user's key never reaches the server as configuration -- it rides along
+  // with the turn that needs it, read fresh so an API-keys edit takes effect
+  // on the very next question without a reload.
+  const providerSettings =
+    options.providerSettings === undefined
+      ? providerSettingsFromStore(readByokStore())
+      : options.providerSettings;
   return postTurnJson(
     turnUrl(options.baseUrl, sessionId),
     {
@@ -108,6 +125,7 @@ export async function startTurn(
       request_id: body.requestId,
       conversation: body.conversation,
       selected_node_id: body.selectedNodeId,
+      provider_settings: providerSettings ?? undefined,
     },
     options.fetcher,
   );
@@ -156,14 +174,15 @@ export async function resumeDirectionReview(
     | { directionReviews: Array<{ decision: string; reviewKey: string }> },
   options: TurnClientOptions = {},
 ): Promise<TurnState> {
-  const payload = "directionReviews" in body
-    ? {
-        direction_reviews: body.directionReviews.map((item) => ({
-          decision: item.decision,
-          review_key: item.reviewKey,
-        })),
-      }
-    : { decision: body.decision, review_key: body.reviewKey };
+  const payload =
+    "directionReviews" in body
+      ? {
+          direction_reviews: body.directionReviews.map((item) => ({
+            decision: item.decision,
+            review_key: item.reviewKey,
+          })),
+        }
+      : { decision: body.decision, review_key: body.reviewKey };
   return postTurnJson(
     turnUrl(options.baseUrl, sessionId, turnId, "direction-review"),
     payload,
@@ -257,7 +276,9 @@ function readPathIds(value: unknown) {
 }
 
 function readStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -279,7 +300,10 @@ export type TurnMessage = {
 };
 
 /** Merge turn identity into a review dict so a card can resume the right turn. */
-function withTurnIdentity(review: Record<string, unknown>, turn: TurnState): Record<string, unknown> {
+function withTurnIdentity(
+  review: Record<string, unknown>,
+  turn: TurnState,
+): Record<string, unknown> {
   return { ...review, __turn_id: turn.turn_id, __session_id: turn.session_id };
 }
 
@@ -342,8 +366,7 @@ export function turnToMessage(turn: TurnState): TurnMessage {
         proposedDirection:
           typeof item.proposed_direction === "string" ? item.proposed_direction : "",
         directionBasis: typeof item.direction_basis === "string" ? item.direction_basis : "",
-        basisExplanation:
-          typeof item.basis_explanation === "string" ? item.basis_explanation : "",
+        basisExplanation: typeof item.basis_explanation === "string" ? item.basis_explanation : "",
         evidenceHighlight: readEvidenceHighlight(item.evidence_highlight),
         raw: item,
       }));
@@ -352,13 +375,16 @@ export function turnToMessage(turn: TurnState): TurnMessage {
         status: "needs_direction_review",
         message: serializeDirectionReview({
           question: typeof review.question === "string" ? review.question : turn.question,
-          reviewKey: typeof directionReview.review_key === "string" ? directionReview.review_key : "",
+          reviewKey:
+            typeof directionReview.review_key === "string" ? directionReview.review_key : "",
           proposedDirection:
             typeof directionReview.proposed_direction === "string"
               ? directionReview.proposed_direction
               : "",
           directionBasis:
-            typeof directionReview.direction_basis === "string" ? directionReview.direction_basis : "",
+            typeof directionReview.direction_basis === "string"
+              ? directionReview.direction_basis
+              : "",
           basisExplanation:
             typeof directionReview.basis_explanation === "string"
               ? directionReview.basis_explanation
@@ -369,7 +395,9 @@ export function turnToMessage(turn: TurnState): TurnMessage {
           items,
           steps,
         }),
-        highlightedNodeIds: readEvidenceHighlightIds(review.direction_reviews ?? directionReview.evidence_highlight),
+        highlightedNodeIds: readEvidenceHighlightIds(
+          review.direction_reviews ?? directionReview.evidence_highlight,
+        ),
       };
     }
     const confirmation = isRecord(review.datalog_confirmation) ? review.datalog_confirmation : {};
