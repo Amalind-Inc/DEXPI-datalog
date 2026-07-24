@@ -6,7 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { RulePackRule, RulePackSummary } from "@/lib/rule-packs";
-import { ruleRunResultFromApi, serializeRulePackRun } from "@/lib/rule-pack-run";
+import {
+  advisoryWalkthroughFromApi,
+  ruleRunResultFromApi,
+  serializeRulePackRun,
+} from "@/lib/rule-pack-run";
 
 type LoadState = "idle" | "loading" | "loaded" | "error";
 type RunState = "idle" | "running" | "error";
@@ -104,6 +108,8 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
       });
       const body = (await res.json()) as {
         results?: Record<string, unknown>[];
+        mode?: string;
+        walkthrough?: Record<string, unknown>;
         error?: { message?: string };
       };
       if (!res.ok) {
@@ -113,6 +119,9 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
       const results = (body.results ?? []).map((raw) =>
         ruleRunResultFromApi(raw, ruleTitleById.get(String(raw.rule_id)) ?? String(raw.rule_id)),
       );
+      const walkthrough = body.walkthrough
+        ? advisoryWalkthroughFromApi(body.walkthrough)
+        : null;
       aui.thread().append({
         role: "assistant",
         content: [
@@ -125,6 +134,11 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
               authoritative: pack.authoritative,
               trustNotice: pack.trust_notice,
               results,
+              mode:
+                body.mode === "advisory_walkthrough"
+                  ? "advisory_walkthrough"
+                  : "rule_evaluation",
+              walkthrough: walkthrough ?? undefined,
             }),
           },
         ],
@@ -338,7 +352,11 @@ function RulePackDetail({
           disabled={runState === "running"}
           onClick={onRunAll}
         >
-          {runState === "running" ? "Running…" : "Run all checks"}
+          {runState === "running"
+            ? "Running…"
+            : pack.rules.length === 0
+              ? "Run advisory walkthrough"
+              : "Run all checks"}
         </button>
       </div>
     </div>

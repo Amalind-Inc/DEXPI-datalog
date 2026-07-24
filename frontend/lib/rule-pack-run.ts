@@ -31,6 +31,22 @@ export type RulePackRunState = {
   authoritative: boolean;
   trustNotice: string;
   results: RuleRunResult[];
+  mode?: "rule_evaluation" | "advisory_walkthrough";
+  walkthrough?: AdvisoryWalkthrough;
+};
+
+export type AdvisoryWalkthroughStep = {
+  kind: "advisory_checklist_step";
+  title: string;
+  body: string;
+};
+
+export type AdvisoryWalkthrough = {
+  kind: "advisory_pack_walkthrough";
+  packId: string;
+  title: string;
+  disclaimer: string;
+  steps: AdvisoryWalkthroughStep[];
 };
 
 export function serializeRulePackRun(state: RulePackRunState): string {
@@ -75,17 +91,57 @@ export function parseRulePackRunMessage(text: string): RulePackRunState | null {
       authoritative: parsed.authoritative,
       trustNotice: parsed.trustNotice,
       results,
+      mode:
+        parsed.mode === "advisory_walkthrough" || parsed.mode === "rule_evaluation"
+          ? parsed.mode
+          : undefined,
+      walkthrough: readWalkthrough(parsed.walkthrough),
     };
   } catch {
     return null;
   }
 }
 
-/** Convert one raw backend `results[i]` object (from the run-all or single-rule
- * routes) into a RuleRunResult, extracting evidence the same way turn-client.ts
- * does for other message types. The backend result only carries `rule_id`, not
- * a human title, so the caller (which has the pack listing) supplies it. */
-export function ruleRunResultFromApi(
+function readWalkthrough(value: unknown): AdvisoryWalkthrough | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.kind !== "advisory_pack_walkthrough") return undefined;
+  if (typeof value.packId !== "string" && typeof value.pack_id !== "string") {
+    return undefined;
+  }
+  if (typeof value.title !== "string") return undefined;
+  if (typeof value.disclaimer !== "string") return undefined;
+  if (!Array.isArray(value.steps)) return undefined;
+  const steps: AdvisoryWalkthroughStep[] = [];
+  for (const step of value.steps) {
+    if (!isRecord(step)) return undefined;
+    if (step.kind !== "advisory_checklist_step") return undefined;
+    if (typeof step.title !== "string") return undefined;
+    if (typeof step.body !== "string") return undefined;
+    steps.push({
+      kind: "advisory_checklist_step",
+      title: step.title,
+      body: step.body,
+    });
+  }
+  return {
+    kind: "advisory_pack_walkthrough",
+    packId:
+      typeof value.packId === "string"
+        ? value.packId
+        : String(value.pack_id),
+    title: value.title,
+    disclaimer: value.disclaimer,
+    steps,
+  };
+}
+
+/** Convert backend walkthrough payload into frontend state. */
+export function advisoryWalkthroughFromApi(
+  raw: Record<string, unknown>,
+): AdvisoryWalkthrough | null {
+  return readWalkthrough(raw) ?? null;
+}
+
   raw: Record<string, unknown>,
   ruleTitle: string,
 ): RuleRunResult {

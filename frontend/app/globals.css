@@ -581,6 +581,32 @@
   width: 560px;
 }
 
+.rule-pack-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.rule-pack-page-header .shell-page-title {
+  margin-bottom: 0.35rem;
+}
+
+.rule-pack-create-textarea {
+  width: 100%;
+  min-height: 16rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #d4d4d8);
+  border-radius: 0.5rem;
+  background: var(--background, #fff);
+  color: inherit;
+}
+
 .rule-pack-search-row {
   display: grid;
   gap: 8px;

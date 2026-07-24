@@ -1331,6 +1331,44 @@ export async function listAllRulePacks(
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
+export async function createRulePack(
+  markdown: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/rule-packs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function promoteAdvisoryClause(
+  packId: string,
+  advisoryTitle: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/rule-packs/${packId}/promote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ advisory_title: advisoryTitle }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function confirmPromotedRule(
+  packId: string,
+  draft: Record<string, unknown>,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(`${baseUrl}/api/rule-packs/${packId}/promote/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ draft }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
 export async function loadRulePack(
   sessionId: string,
   packId: string,
@@ -1338,6 +1376,18 @@ export async function loadRulePack(
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(
     `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/load`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+export async function unloadRulePack(
+  sessionId: string,
+  packId: string,
+  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetcher(
+    `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/unload`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
   );
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };

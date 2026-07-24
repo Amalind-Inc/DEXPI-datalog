@@ -43,8 +43,11 @@ from ..workflow.review_session import (
 )
 from ..verification.bundled_rule_pack import (
     bundled_rule_packs,
-    evaluate_bundled_rule,
-    pack_metadata,
+    evaluate_pack_rule,
+)
+from ..verification.pack_skill_context import (
+    build_advisory_walkthrough,
+    skill_context_entries,
 )
 
 
@@ -174,6 +177,9 @@ class ChainlitReviewFlow:
         self._credentials_by_session: dict[str, str] = {}
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
         self._loaded_rule_packs_by_session: dict[str, set[str]] = {}
+        self._loaded_rule_pack_data_by_session: dict[str, dict[str, dict[str, object]]] = (
+            {}
+        )
         self._missing_capabilities_by_session: dict[str, list[dict[str, object]]] = {}
         self._direction_annotations_by_session: dict[
             str, dict[str, dict[str, object]]
@@ -669,15 +675,21 @@ class ChainlitReviewFlow:
         )
 
     def _execute_bundled_rule(
-        self, *, session_id: str, pack_id: str, rule_id: str
+        self,
+        *,
+        session_id: str,
+        pack_id: str,
+        rule_id: str,
+        authored_packs: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
         graph_facts_path = Path(
             str(self._artifacts_by_session[session_id]["graph_facts_json"])
         )
         graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
-        rule_result = evaluate_bundled_rule(
+        pack = self._resolve_pack(pack_id, authored_packs=authored_packs)
+        rule_result = evaluate_pack_rule(
             graph_facts,
-            pack_id=pack_id,
+            pack=pack,
             rule_id=rule_id,
         )
         evidence_items = self._rule_pack_evidence_items(
@@ -736,16 +748,47 @@ class ChainlitReviewFlow:
         return result
 
     def list_bundled_rule_packs(self, *, session_id: str) -> dict[str, object]:
+        return self.list_rule_packs(session_id=session_id, authored_packs=[])
+
+    def list_rule_packs(
+        self,
+        *,
+        session_id: str,
+        authored_packs: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
         loaded = self._loaded_rule_packs_by_session.get(session_id, set())
-        return {
-            "session_id": session_id,
-            "packs": [
+        packs = [
+            {
+                "pack_id": pack["pack_id"],
+                "version": pack["version"],
+                "title": pack["title"],
+                "authoritative": pack["authoritative"],
+                "trust_notice": pack["trust_notice"],
+                "source": "system",
+                "loaded": pack["pack_id"] in loaded,
+                "advisory_guidance": pack.get("advisory_guidance", []),
+                "rules": [
+                    {
+                        "rule_id": rule["rule_id"],
+                        "title": rule["title"],
+                        "outcomes": rule["outcomes"],
+                        "restatement": rule["restatement"],
+                        "executable_logic": rule["executable_logic"],
+                    }
+                    for rule in pack["rules"]
+                ],
+            }
+            for pack in bundled_rule_packs()
+        ]
+        for pack in authored_packs or []:
+            packs.append(
                 {
                     "pack_id": pack["pack_id"],
                     "version": pack["version"],
                     "title": pack["title"],
-                    "authoritative": pack["authoritative"],
+                    "authoritative": False,
                     "trust_notice": pack["trust_notice"],
+                    "source": "user",
                     "loaded": pack["pack_id"] in loaded,
                     "advisory_guidance": pack.get("advisory_guidance", []),
                     "rules": [
@@ -759,14 +802,20 @@ class ChainlitReviewFlow:
                         for rule in pack["rules"]
                     ],
                 }
-                for pack in bundled_rule_packs()
-            ],
-        }
+            )
+        return {"session_id": session_id, "packs": packs}
 
-    def load_rule_pack(self, *, session_id: str, pack_id: str) -> dict[str, object]:
+    def load_rule_pack(
+        self,
+        *,
+        session_id: str,
+        pack_id: str,
+        authored_packs: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
         self._topology_for_session(session_id)
-        pack = pack_metadata(pack_id)
+        pack = self._resolve_pack(pack_id, authored_packs=authored_packs)
         self._loaded_rule_packs_by_session.setdefault(session_id, set()).add(pack_id)
+        self._loaded_rule_pack_data_by_session.setdefault(session_id, {})[pack_id] = pack
         return {
             "session_id": session_id,
             "pack_id": pack_id,
@@ -777,29 +826,117 @@ class ChainlitReviewFlow:
                 "title": pack["title"],
                 "authoritative": pack["authoritative"],
                 "trust_notice": pack["trust_notice"],
+                "source": pack.get("source", "system"),
             },
+            "skill_context": self.attached_pack_skill_context(session_id=session_id),
         }
 
-    def run_rule_pack(
-        self, *, session_id: str, pack_id: str = "demo-process-safety"
+    def unload_rule_pack(
+        self,
+        *,
+        session_id: str,
+        pack_id: str,
+        authored_packs: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
-        pack = pack_metadata(pack_id)
+        # Validate the pack exists even when detaching an already-unloaded id.
+        self._resolve_pack(pack_id, authored_packs=authored_packs)
+        loaded = self._loaded_rule_packs_by_session.setdefault(session_id, set())
+        loaded.discard(pack_id)
+        self._loaded_rule_pack_data_by_session.get(session_id, {}).pop(pack_id, None)
+        return {
+            "session_id": session_id,
+            "pack_id": pack_id,
+            "loaded": False,
+            "skill_context": self.attached_pack_skill_context(session_id=session_id),
+        }
+
+    def attached_pack_skill_context(
+        self,
+        *,
+        session_id: str,
+        authored_packs: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, object]]:
+        loaded_ids = self._loaded_rule_packs_by_session.get(session_id, set())
+        cached = self._loaded_rule_pack_data_by_session.get(session_id, {})
+        packs: list[dict[str, object]] = []
+        for pack_id in sorted(loaded_ids):
+            if pack_id in cached:
+                packs.append(cached[pack_id])
+            else:
+                packs.append(
+                    self._resolve_pack(pack_id, authored_packs=authored_packs)
+                )
+        return skill_context_entries(packs)
+
+    def run_rule_pack(
+        self,
+        *,
+        session_id: str,
+        pack_id: str = "demo-process-safety",
+        authored_packs: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        self._topology_for_session(session_id)
+        pack = self._resolve_pack(pack_id, authored_packs=authored_packs)
+        # Ensure the pack is attached so skill context stays aligned with run.
+        self._loaded_rule_packs_by_session.setdefault(session_id, set()).add(pack_id)
+        self._loaded_rule_pack_data_by_session.setdefault(session_id, {})[pack_id] = pack
+
+        rules = list(pack.get("rules") or [])
+        if not rules:
+            walkthrough = build_advisory_walkthrough(pack)
+            return {
+                "status": "answered",
+                "session_id": session_id,
+                "pack_id": pack_id,
+                "mode": "advisory_walkthrough",
+                "confirmation": {"required": False},
+                "results": [],
+                "walkthrough": walkthrough,
+                "skill_context": self.attached_pack_skill_context(
+                    session_id=session_id, authored_packs=authored_packs
+                ),
+            }
+
         results = [
             self._execute_bundled_rule(
                 session_id=session_id,
                 pack_id=pack_id,
                 rule_id=str(rule["rule_id"]),
+                authored_packs=authored_packs,
             )
-            for rule in pack["rules"]
+            for rule in rules
         ]
-        return {
+        response: dict[str, object] = {
             "status": "answered",
             "session_id": session_id,
             "pack_id": pack_id,
+            "mode": "rule_evaluation",
             "confirmation": {"required": False},
             "results": results,
         }
+        if pack.get("advisory_guidance"):
+            response["walkthrough"] = build_advisory_walkthrough(pack)
+        return response
+
+    def _resolve_pack(
+        self,
+        pack_id: str,
+        *,
+        authored_packs: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        for pack in bundled_rule_packs():
+            if pack["pack_id"] == pack_id:
+                resolved = dict(pack)
+                resolved["source"] = "system"
+                return resolved
+        for pack in authored_packs or []:
+            if pack["pack_id"] == pack_id:
+                resolved = dict(pack)
+                resolved["authoritative"] = False
+                resolved["source"] = "user"
+                return resolved
+        raise ValueError(f"unknown rule pack: {pack_id}")
 
     def configure_provider_settings(
         self,
@@ -1144,6 +1281,9 @@ class ChainlitReviewFlow:
             loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
                 session_id, set()
             ),
+            attached_pack_skill_context=self.attached_pack_skill_context(
+                session_id=session_id
+            ),
         )
         execution = tools.execute_confirmed_temporary_datalog(stored_result)
         executed = execution.get("status") == "answered"
@@ -1362,6 +1502,9 @@ class ChainlitReviewFlow:
             graph_facts=graph_facts,
             loaded_rule_pack_ids=self._loaded_rule_packs_by_session.get(
                 session_id, set()
+            ),
+            attached_pack_skill_context=self.attached_pack_skill_context(
+                session_id=session_id
             ),
         )
         prior_turns = [
@@ -1699,6 +1842,7 @@ class ChainlitReviewFlow:
             self._visible_source_scope_by_session[str(result["session_id"])] = []
             self._rule_pack_results_by_session[str(result["session_id"])] = []
             self._loaded_rule_packs_by_session[str(result["session_id"])] = set()
+            self._loaded_rule_pack_data_by_session[str(result["session_id"])] = {}
             self._missing_capabilities_by_session[str(result["session_id"])] = []
 
         disabled_reason = None

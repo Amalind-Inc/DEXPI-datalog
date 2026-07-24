@@ -32,17 +32,33 @@ def evaluate_bundled_rule(
     direction_basis: str = "explicit",
     direction_review_status: str | None = None,
 ) -> dict[str, object]:
-    pack = _pack(pack_id)
+    return evaluate_pack_rule(
+        graph_facts,
+        pack=_pack(pack_id),
+        rule_id=rule_id,
+        direction_basis=direction_basis,
+        direction_review_status=direction_review_status,
+    )
+
+
+def evaluate_pack_rule(
+    graph_facts: dict[str, object],
+    *,
+    pack: dict[str, object],
+    rule_id: str,
+    direction_basis: str = "explicit",
+    direction_review_status: str | None = None,
+) -> dict[str, object]:
     rule = next(
         (
             candidate
-            for candidate in pack["rules"]
+            for candidate in pack["rules"]  # type: ignore[union-attr]
             if str(candidate["rule_id"]) == rule_id
         ),
         None,
     )
     if rule is None:
-        raise ValueError(f"unknown bundled rule: {pack_id}/{rule_id}")
+        raise ValueError(f"unknown rule: {pack['pack_id']}/{rule_id}")
 
     fence = str(rule["executable_logic"]["content"])
     legacy = evaluate_rule_fence(graph_facts, rule_id=rule_id, fence=fence)

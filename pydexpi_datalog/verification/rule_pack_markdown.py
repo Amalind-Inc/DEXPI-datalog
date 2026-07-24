@@ -34,6 +34,9 @@ _FENCE = re.compile(r"^```(?P<language>[A-Za-z0-9_-]*)\s*$")
 _FENCE_LANGUAGES = {
     "souffle-datalog": "souffle_datalog",
 }
+_RULE_TRUST_COMMENT = re.compile(
+    r"<!--\s*rule_trust:\s*(?P<trust>[A-Za-z0-9_-]+)\s*-->"
+)
 
 
 def parse_rule_pack_markdown(text: str) -> dict[str, object]:
@@ -105,9 +108,18 @@ def _parse_body(body: str) -> tuple[list[dict[str, object]], list[dict[str, obje
             raise ValueError(
                 f"rule '{current_rule['rule_id']}' has no fenced souffle-datalog block"
             )
+        trust = "unspecified"
+        cleaned_prose: list[str] = []
+        for line in prose_lines:
+            match = _RULE_TRUST_COMMENT.search(line)
+            if match is not None:
+                trust = match.group("trust")
+                continue
+            cleaned_prose.append(line)
+        current_rule["trust"] = trust
         current_rule["restatement"] = {
             "kind": "engineer_readable_rule_restatement",
-            "plain_language_meaning": _unwrap_paragraphs(prose_lines),
+            "plain_language_meaning": _unwrap_paragraphs(cleaned_prose),
         }
         rules.append(current_rule)
         current_rule = None

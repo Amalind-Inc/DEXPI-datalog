@@ -6,7 +6,11 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { packDocumentMarkdown, type RulePackBrowseSummary } from "@/lib/rule-packs";
+import {
+  packDocumentMarkdown,
+  packSourceLabel,
+  type RulePackBrowseSummary,
+} from "@/lib/rule-packs";
 
 // Rule-pack document page (bead pydexpi-datalog-1-2c5.3). A rule pack IS a
 // markdown document (bead pydexpi-datalog-1-1vd): this page renders its
@@ -69,7 +73,7 @@ export default function RulePackDetailPage() {
           <dl className="rule-pack-meta-strip" data-testid="rule-pack-meta">
             <div>
               <dt>Source</dt>
-              <dd>System</dd>
+              <dd data-testid="rule-pack-source">{packSourceLabel(pack)}</dd>
             </div>
             <div>
               <dt>Language</dt>
@@ -91,7 +95,13 @@ export default function RulePackDetailPage() {
             </div>
             <div>
               <dt>Standing</dt>
-              <dd>{pack.authoritative ? "Authoritative" : "Demonstration"}</dd>
+              <dd>
+                {pack.authoritative
+                  ? "Authoritative"
+                  : pack.source === "user"
+                    ? "Authored"
+                    : "Demonstration"}
+              </dd>
             </div>
           </dl>
           <p className="rule-pack-trust-notice">{pack.trust_notice}</p>

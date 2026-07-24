@@ -4,6 +4,7 @@ import {
   filterRulePacks,
   packContentsLabel,
   packDocumentMarkdown,
+  packSourceLabel,
   stripFrontmatter,
   type RulePackBrowseSummary,
 } from "./rule-packs.ts";
@@ -138,4 +139,10 @@ test("stripFrontmatter: returns text unchanged when no frontmatter exists", () =
 test("packDocumentMarkdown: strips frontmatter and heading id anchors", () => {
   const markdown = "---\npack_id: demo\n---\n\n# Title\n\n## Rule One {#rule_one}\n\nProse.\n";
   assert.equal(packDocumentMarkdown(markdown), "# Title\n\n## Rule One\n\nProse.\n");
+});
+
+test("packSourceLabel: maps source provenance", () => {
+  assert.equal(packSourceLabel({}), "System");
+  assert.equal(packSourceLabel({ source: "system" }), "System");
+  assert.equal(packSourceLabel({ source: "user" }), "User");
 });

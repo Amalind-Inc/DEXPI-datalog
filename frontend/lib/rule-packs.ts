@@ -33,9 +33,14 @@ export type RulePackSummary = {
   authoritative: boolean;
   trust_notice: string;
   loaded: boolean;
+  source?: "system" | "user";
   advisory_guidance: AdvisoryPackGuidance[];
   rules: RulePackRule[];
 };
+
+export function packSourceLabel(pack: { source?: "system" | "user" }): "System" | "User" {
+  return pack.source === "user" ? "User" : "System";
+}
 
 export type RulePackListResponse = {
   session_id: string;

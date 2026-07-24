@@ -19,6 +19,7 @@ from ..qa.grounded_qa_harness import (
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
+from ..verification.authored_rule_pack import AuthoredRulePackError, AuthoredRulePackStore
 from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
@@ -104,6 +105,7 @@ def create_review_api_app(
         max_conversation_turns=max_conversation_turns,
     )
     turns = TurnLifecycleStore(artifact_root)
+    authored_packs = AuthoredRulePackStore(artifact_root / "authored_rule_packs")
 
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
@@ -255,45 +257,112 @@ def create_review_api_app(
 
     @app.get("/api/review/sessions/{session_id}/rule-packs")
     def list_rule_packs(session_id: str) -> dict[str, object]:
-        return flow.list_bundled_rule_packs(session_id=session_id)
+        return flow.list_rule_packs(
+            session_id=session_id, authored_packs=authored_packs.list_packs()
+        )
 
     @app.get("/api/rule-packs")
     def list_all_rule_packs() -> dict[str, object]:
         return {
             "packs": [
-                {
-                    "pack_id": pack["pack_id"],
-                    "version": pack["version"],
-                    "title": pack["title"],
-                    "authoritative": pack["authoritative"],
-                    "trust_notice": pack["trust_notice"],
-                    "markdown": pack["markdown"],
-                    "advisory_guidance": pack.get("advisory_guidance", []),
-                    "rules": [
-                        {
-                            "rule_id": rule["rule_id"],
-                            "title": rule["title"],
-                            "outcomes": rule["outcomes"],
-                            "restatement": rule["restatement"],
-                            "executable_logic": rule["executable_logic"],
-                        }
-                        for rule in pack["rules"]
-                    ],
-                }
-                for pack in bundled_rule_packs()
+                *[_serialize_pack(pack, source="system") for pack in bundled_rule_packs()],
+                *[
+                    _serialize_pack(pack, source="user")
+                    for pack in authored_packs.list_packs()
+                ],
             ]
         }
+
+    @app.post("/api/rule-packs")
+    def create_rule_pack(body: dict[str, object]) -> dict[str, object]:
+        markdown = _required_string(body, "markdown")
+        try:
+            pack = authored_packs.ingest(markdown)
+        except AuthoredRulePackError as error:
+            status = 409 if error.code.endswith("collision") or error.code.endswith(
+                "already_exists"
+            ) else 400
+            raise HTTPException(
+                status_code=status,
+                detail={"error": {"code": error.code, "message": error.message}},
+            ) from error
+        return {"pack": _serialize_pack(pack, source="user")}
+
+    @app.post("/api/rule-packs/{pack_id}/promote")
+    def promote_advisory_clause(
+        pack_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        advisory_title = _required_string(body, "advisory_title")
+        try:
+            proposal = authored_packs.propose_promotion(
+                pack_id=pack_id, advisory_title=advisory_title
+            )
+        except AuthoredRulePackError as error:
+            status = 404 if error.code.endswith("not_found") else 400
+            raise HTTPException(
+                status_code=status,
+                detail={"error": {"code": error.code, "message": error.message}},
+            ) from error
+        except ValueError as error:
+            raise _bad_request(str(error)) from error
+        return proposal
+
+    @app.post("/api/rule-packs/{pack_id}/promote/confirm")
+    def confirm_promoted_rule(
+        pack_id: str, body: dict[str, object]
+    ) -> dict[str, object]:
+        draft = body.get("draft")
+        if not isinstance(draft, dict):
+            raise _bad_request("request body must include a draft object")
+        try:
+            pack = authored_packs.confirm_promotion(pack_id=pack_id, draft=draft)
+        except AuthoredRulePackError as error:
+            if error.code.endswith("not_found"):
+                status = 404
+            elif error.code.endswith("already_exists"):
+                status = 409
+            else:
+                status = 400
+            raise HTTPException(
+                status_code=status,
+                detail={"error": {"code": error.code, "message": error.message}},
+            ) from error
+        return {"pack": _serialize_pack(pack, source="user")}
 
     @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/load")
     def load_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.load_rule_pack(session_id=session_id, pack_id=pack_id)
+            lambda: flow.load_rule_pack(
+                session_id=session_id,
+                pack_id=pack_id,
+                authored_packs=authored_packs.list_packs(),
+            )
+        )
+
+    @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/unload")
+    def unload_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+        return _call_ready(
+            lambda: flow.unload_rule_pack(
+                session_id=session_id,
+                pack_id=pack_id,
+                authored_packs=authored_packs.list_packs(),
+            )
+        )
+
+    @app.get("/api/review/sessions/{session_id}/rule-pack-results")
+    def list_rule_pack_results(session_id: str) -> dict[str, object]:
+        return _call_ready(
+            lambda: flow.rule_pack_results_state(session_id=session_id)
         )
 
     @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/run")
     def run_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.run_rule_pack(session_id=session_id, pack_id=pack_id)
+            lambda: flow.run_rule_pack(
+                session_id=session_id,
+                pack_id=pack_id,
+                authored_packs=authored_packs.list_packs(),
+            )
         )
 
     @app.post("/api/review/sessions/{session_id}/qa-turns")
@@ -548,6 +617,33 @@ def create_review_api_app(
         )
 
     return app
+
+
+def _serialize_pack(pack: dict[str, object], *, source: str) -> dict[str, object]:
+    return {
+        "pack_id": pack["pack_id"],
+        "version": pack["version"],
+        "title": pack["title"],
+        "authoritative": bool(pack["authoritative"]) and source == "system",
+        "trust_notice": pack["trust_notice"],
+        "source": source,
+        "markdown": pack["markdown"],
+        "advisory_guidance": pack.get("advisory_guidance", []),
+        "rules": [
+            {
+                "rule_id": rule["rule_id"],
+                "title": rule["title"],
+                "outcomes": rule["outcomes"],
+                "restatement": rule["restatement"],
+                "executable_logic": rule["executable_logic"],
+                "trust": rule.get(
+                    "trust",
+                    "author_confirmed" if source == "user" else "bundled",
+                ),
+            }
+            for rule in pack["rules"]  # type: ignore[union-attr]
+        ],
+    }
 
 
 def _call_ready(action: Callable[[], dict[str, object]]) -> dict[str, object]:

@@ -48,6 +48,7 @@ from pydexpi_datalog.semantics.souffle_runner import (
 )
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 from pydexpi_datalog.verification.bundled_rule_pack import pack_metadata
+from pydexpi_datalog.verification.pack_skill_context import render_skill_context_prompt
 
 MANDATORY_TEMPORARY_DATALOG_VALIDATORS = (
     "mechanical_safety",
@@ -145,6 +146,7 @@ class TopologyTools:
         graph_facts: dict[str, object] | None = None,
         retrieval_budgets: RetrievalBudgets | None = None,
         loaded_rule_pack_ids: list[str] | tuple[str, ...] | set[str] | None = None,
+        attached_pack_skill_context: list[dict[str, object]] | None = None,
         validators: TemporaryDatalogValidatorBundle | None = None,
     ) -> None:
         self._topology = topology_view
@@ -182,6 +184,7 @@ class TopologyTools:
         self._loaded_rule_pack_ids = tuple(
             sorted(str(pack_id) for pack_id in (loaded_rule_pack_ids or ()))
         )
+        self._attached_pack_skill_context = list(attached_pack_skill_context or [])
         self._capability_manifest = default_grounded_qa_manifest(
             temporary_datalog_contract=self._temporary_datalog_contract_description()
         )
@@ -261,7 +264,11 @@ class TopologyTools:
 
     def system_prompt(self) -> str:
         """Model-facing system prompt derived from the capability manifest."""
-        return self._capability_manifest.system_prompt()
+        prompt = self._capability_manifest.system_prompt()
+        skill_prompt = render_skill_context_prompt(self._attached_pack_skill_context)
+        if not skill_prompt:
+            return prompt
+        return f"{prompt}\n\n{skill_prompt}"
 
     def execute(
         self, tool_name: str, tool_input: dict[str, object]
