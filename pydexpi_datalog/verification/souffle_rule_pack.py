@@ -10,27 +10,21 @@ from .verify_suite import build_evaluation_diagnostic
 
 RULE_PACKS_DIR = Path(__file__).resolve().parent / "rule_packs"
 DEMO_PACK_MARKDOWN_PATH = RULE_PACKS_DIR / "demo_process_safety.md"
-DIAMETER_RULE_MIN_DN = 25
 
-_MESSAGES = {
-    "matched_required_component": (
-        "Required downstream check valve was found before the first branch or "
-        "terminal boundary."
-    ),
-    "off_page_connector": (
-        "No downstream check valve was found before the discharge path "
-        "terminated at an off-page connector."
-    ),
-    "terminal_object": (
-        "No downstream check valve was found before the first terminal boundary."
-    ),
-}
-
-_RESULT_TYPES = {
-    "matched_required_component": "pass",
-    "off_page_connector": "bounded_failure_off_page",
-    "terminal_object": "hard_violation",
-}
+# Fixed Souffle relation schema every executable fence must emit so one runner
+# can interpret outcomes without a per-rule Python adapter.
+RULE_RESULT = "rule_result"
+RULE_MESSAGE = "rule_message"
+RULE_SUBJECT_ATTR = "rule_subject_attr"
+RULE_BOUNDARY = "rule_boundary"
+RULE_MATCHED_OBJECT = "rule_matched_object"
+RULE_WALK_OBJECT = "rule_walk_object"
+RULE_WALK_EDGE = "rule_walk_edge"
+RULE_NUMERIC_READING = "rule_numeric_reading"
+RULE_THRESHOLD = "rule_threshold"
+RULE_LIMITATION = "rule_limitation"
+RULE_ENGINE_ATTR = "rule_engine_attr"
+RULE_UNCERTAINTY = "rule_uncertainty"
 
 
 def load_rule_datalog() -> str:
@@ -52,241 +46,289 @@ def _demo_pack_rule_datalog(rule_id: str) -> str:
     raise ValueError(f"demo pack markdown declares no rule '{rule_id}'")
 
 
-def evaluate_discharge_line_min_diameter_rule(
-    graph_facts: dict[str, object], *, rule_id: str
+def evaluate_rule_fence(
+    graph_facts: dict[str, object],
+    *,
+    rule_id: str,
+    fence: str,
 ) -> dict[str, object]:
-    """Evaluate the numeric-threshold diameter rule as a real Souffle program.
+    """Evaluate a Souffle fence that emits the rule outcome convention.
 
-    Compares the source-provided nominal diameter on the pump's discharge
-    line (segment or its composing piping system) against a fixed DN
-    threshold via the typed ``node_numeric_attribute`` predicate. A missing
-    numeric diameter is an explicit ``source_data_unavailable`` outcome,
-    never an invented value.
+    The fence text is concatenated with the shared EDB/IDB and executed as-is
+    (displayed == executed). Outcomes and evidence are assembled only from the
+    fixed convention relations — no per-rule_id Python adapter is consulted.
     """
-    if rule_id != "discharge_line_min_diameter":
-        raise ValueError(f"unsupported souffle rule: {rule_id}")
-
-    nodes = {node["node_id"]: node for node in graph_facts["facts"]["nodes"]}
-    pump = next(
-        node
-        for node in graph_facts["facts"]["nodes"]
-        if node["attributes"].get("label") == "CentrifugalPump"
-    )
-    pump_id = pump["node_id"]
-    semantic_evidence = {
-        "numeric_predicate": "node_numeric_attribute",
-        "engine": "souffle",
-    }
-
     program = (
         build_graph_facts_datalog(graph_facts)
         + "\n"
         + load_graph_topology_idb()
         + "\n"
-        + load_diameter_rule_datalog()
+        + fence
     )
     relations = run_souffle_program(program)
+    return _result_from_convention(
+        graph_facts,
+        rule_id=rule_id,
+        relations=relations,
+    )
 
-    unresolved = {row[0] for row in relations.get("rule_unresolved", [])}
-    segments = [
-        row[1] for row in relations.get("discharge_segment", []) if row[0] == pump_id
-    ]
-    if pump_id in unresolved or not segments:
-        return build_evaluation_diagnostic(
-            pump_id=pump_id, rule_id=rule_id, semantic_evidence=semantic_evidence
-        )
 
-    nozzle_rows = [
-        row[1] for row in relations.get("discharge_nozzle", []) if row[0] == pump_id
-    ]
-    subject = {
-        "pump_id": pump_id,
-        "discharge_nozzle_id": nozzle_rows[0] if nozzle_rows else "unknown",
-    }
-
-    def _readings(relation: str) -> list[dict[str, object]]:
-        return sorted(
-            (
-                {
-                    "object_id": object_id,
-                    "class": nodes[object_id]["attributes"]["label"],
-                    "nominal_diameter_dn": int(dn),
-                }
-                for rule_pump, object_id, dn in relations.get(relation, [])
-                if rule_pump == pump_id
-            ),
-            key=lambda item: str(item["object_id"]),
-        )
-
-    violated = _readings("diameter_violated")
-    satisfied = _readings("diameter_satisfied")
-    unavailable = pump_id in {
-        row[0] for row in relations.get("diameter_unavailable", [])
-    }
-
-    evidence: dict[str, object] = {
-        "derived_graph_semantics": semantic_evidence,
-        "threshold": {
-            "attr_name": "nominalDiameterNumericalValueRepresentation",
-            "min_diameter_dn": DIAMETER_RULE_MIN_DN,
-        },
-        "diameter_readings": violated + satisfied,
-        "matched_objects": violated or satisfied,
-        "scope_completeness": {
-            "complete": not unavailable,
-            "basis": (
-                "source_data_unavailable"
-                if unavailable
-                else "numeric_attribute_read"
-            ),
-            "boundary_kind": "numeric_attribute",
-        },
-    }
-
-    if violated:
-        worst = min(int(item["nominal_diameter_dn"]) for item in violated)
-        return {
-            "schema_version": 1,
-            "result_type": "hard_violation",
-            "rule_id": rule_id,
-            "message": (
-                f"The discharge line declares nominal diameter DN {worst}, below "
-                f"the required minimum DN {DIAMETER_RULE_MIN_DN}."
-            ),
-            "subject": subject,
-            "evidence": evidence,
-        }
-    if satisfied:
-        best = max(int(item["nominal_diameter_dn"]) for item in satisfied)
-        return {
-            "schema_version": 1,
-            "result_type": "pass",
-            "rule_id": rule_id,
-            "message": (
-                f"The discharge line declares nominal diameter DN {best}, meeting "
-                f"the required minimum DN {DIAMETER_RULE_MIN_DN}."
-            ),
-            "subject": subject,
-            "evidence": evidence,
-        }
-
-    evidence["limitation"] = {
-        "code": "source_data_unavailable",
-        "message": (
-            "No source-provided numeric nominal diameter exists on the "
-            "discharge line; the source does not carry the data this "
-            "threshold needs."
-        ),
-    }
-    return {
-        "schema_version": 1,
-        "result_type": "source_data_unavailable",
-        "rule_id": rule_id,
-        "message": (
-            "The discharge line carries no source-provided numeric nominal "
-            f"diameter, so the DN {DIAMETER_RULE_MIN_DN} minimum cannot be "
-            "evaluated from the loaded source."
-        ),
-        "subject": subject,
-        "evidence": evidence,
-    }
+def evaluate_discharge_line_min_diameter_rule(
+    graph_facts: dict[str, object], *, rule_id: str
+) -> dict[str, object]:
+    """Evaluate the diameter rule via the generic convention runner."""
+    if rule_id != "discharge_line_min_diameter":
+        raise ValueError(f"unsupported souffle rule: {rule_id}")
+    return evaluate_rule_fence(
+        graph_facts, rule_id=rule_id, fence=load_diameter_rule_datalog()
+    )
 
 
 def evaluate_pump_discharge_rule(
     graph_facts: dict[str, object], *, rule_id: str
 ) -> dict[str, object]:
-    """Evaluate the pump discharge check-valve rule as a real Souffle program.
-
-    Preserves the legacy result contract of
-    ``verify_suite.evaluate_graph_fixture`` (result_type, message, subject,
-    evidence shape), with the execution engine recorded in
-    ``evidence.derived_graph_semantics.engine``.
-    """
+    """Evaluate the pump discharge rule via the generic convention runner."""
     if rule_id != "pump_discharge_check_valve":
         raise ValueError(f"unsupported souffle rule: {rule_id}")
-
-    nodes = {node["node_id"]: node for node in graph_facts["facts"]["nodes"]}
-    pump = next(
-        node
-        for node in graph_facts["facts"]["nodes"]
-        if node["attributes"].get("label") == "CentrifugalPump"
+    return evaluate_rule_fence(
+        graph_facts, rule_id=rule_id, fence=load_rule_datalog()
     )
-    pump_id = pump["node_id"]
-    semantic_evidence = {
-        "traversal_predicate": "downstream_reference",
-        "reachability_predicate": "reachable",
-        "engine": "souffle",
+
+
+def _result_from_convention(
+    graph_facts: dict[str, object],
+    *,
+    rule_id: str,
+    relations: dict[str, list[tuple[str, ...]]],
+) -> dict[str, object]:
+    nodes = {
+        str(node["node_id"]): node
+        for node in graph_facts["facts"]["nodes"]  # type: ignore[index]
     }
-
-    program = (
-        build_graph_facts_datalog(graph_facts)
-        + "\n"
-        + load_graph_topology_idb()
-        + "\n"
-        + load_rule_datalog()
-    )
-    relations = run_souffle_program(program)
-
-    unresolved = {row[0] for row in relations.get("rule_unresolved", [])}
-    boundaries = [
-        (int(step), object_id, kind)
-        for walked_pump, step, object_id, kind in relations.get("walk_boundary", [])
-        if walked_pump == pump_id
-    ]
-    if pump_id in unresolved or not boundaries:
+    results = list(relations.get(RULE_RESULT, []))
+    if not results:
+        # No convention rows — fall back to unresolved pump diagnostic when a
+        # centrifugal pump exists (preserves prior demo behavior).
+        pump = next(
+            (
+                node
+                for node in graph_facts["facts"]["nodes"]  # type: ignore[index]
+                if node["attributes"].get("label") == "CentrifugalPump"
+            ),
+            None,
+        )
+        if pump is None:
+            raise ValueError("rule fence emitted no rule_result rows")
         return build_evaluation_diagnostic(
-            pump_id=pump_id, rule_id=rule_id, semantic_evidence=semantic_evidence
+            pump_id=str(pump["node_id"]),
+            rule_id=rule_id,
+            semantic_evidence={"engine": "souffle"},
         )
 
-    boundary_step, boundary_id, boundary_kind = min(boundaries)
-    walk_steps = sorted(
-        (int(step), object_id)
-        for walked_pump, step, object_id in relations.get("walk", [])
-        if walked_pump == pump_id and int(step) <= boundary_step
+    subject_id = _select_subject_id(graph_facts, results)
+    result_type = next(
+        str(row[1]) for row in results if str(row[0]) == subject_id
     )
-    discharge_nozzle_id = walk_steps[0][1]
-    traversed_objects = [
-        {"object_id": object_id, "class": nodes[object_id]["attributes"]["label"]}
-        for _, object_id in walk_steps
-    ]
-    traversed_edges = [
-        {
-            "source_id": walk_steps[index][1],
-            "target_id": walk_steps[index + 1][1],
-            "edge_key": 0,
-        }
-        for index in range(len(walk_steps) - 1)
-    ]
+    message = next(
+        (
+            str(row[1])
+            for row in relations.get(RULE_MESSAGE, [])
+            if str(row[0]) == subject_id
+        ),
+        "",
+    )
+    subject_attrs = {
+        str(attr): str(value)
+        for sid, attr, value in relations.get(RULE_SUBJECT_ATTR, [])
+        if str(sid) == subject_id
+    }
+    subject = {
+        "pump_id": subject_attrs.get("pump_id", subject_id),
+        "discharge_nozzle_id": subject_attrs.get("discharge_nozzle_id", "unknown"),
+    }
+
+    engine_attrs = {
+        str(key): str(value)
+        for sid, key, value in relations.get(RULE_ENGINE_ATTR, [])
+        if str(sid) == subject_id
+    }
+    if "engine" not in engine_attrs:
+        engine_attrs["engine"] = "souffle"
 
     evidence: dict[str, object] = {
-        "derived_graph_semantics": semantic_evidence,
-        "traversed_objects": traversed_objects,
-        "traversed_edges": traversed_edges,
-        "matched_objects": (
-            [
-                {
-                    "object_id": boundary_id,
-                    "class": nodes[boundary_id]["attributes"]["label"],
-                }
-            ]
-            if boundary_kind == "matched_required_component"
-            else []
-        ),
-        "boundary": {"kind": boundary_kind, "object_id": boundary_id},
+        "derived_graph_semantics": engine_attrs,
     }
-    if boundary_kind == "off_page_connector":
-        evidence["uncertainty_text"] = (
-            "The discharge path may continue beyond the page edge."
+
+    boundaries = [
+        (str(kind), str(object_id))
+        for sid, kind, object_id in relations.get(RULE_BOUNDARY, [])
+        if str(sid) == subject_id
+    ]
+    if boundaries:
+        kind, object_id = boundaries[0]
+        evidence["boundary"] = {"kind": kind, "object_id": object_id}
+
+    matched = [
+        {
+            "object_id": str(object_id),
+            "class": str(klass)
+            if klass
+            else str(nodes.get(str(object_id), {}).get("attributes", {}).get("label", "")),
+        }
+        for sid, object_id, *rest in relations.get(RULE_MATCHED_OBJECT, [])
+        if str(sid) == subject_id
+        for klass in [rest[0] if rest else ""]
+    ]
+    evidence["matched_objects"] = matched
+
+    walk_objects = sorted(
+        (
+            (int(step), str(object_id), str(klass) if klass else _node_class(nodes, object_id))
+            for sid, step, object_id, *rest in relations.get(RULE_WALK_OBJECT, [])
+            if str(sid) == subject_id
+            for klass in [rest[0] if rest else ""]
+        ),
+        key=lambda item: item[0],
+    )
+    evidence["traversed_objects"] = [
+        {"object_id": object_id, "class": klass}
+        for _, object_id, klass in walk_objects
+    ]
+
+    walk_edges = [
+        {
+            "source_id": str(source_id),
+            "target_id": str(target_id),
+            "edge_key": 0,
+        }
+        for sid, source_id, target_id in relations.get(RULE_WALK_EDGE, [])
+        if str(sid) == subject_id
+    ]
+    evidence["traversed_edges"] = walk_edges
+
+    readings = sorted(
+        (
+            {
+                "object_id": str(object_id),
+                "class": str(klass)
+                if klass
+                else _node_class(nodes, object_id),
+                "nominal_diameter_dn": int(float(value)),
+            }
+            for sid, object_id, klass, value in relations.get(RULE_NUMERIC_READING, [])
+            if str(sid) == subject_id
+        ),
+        key=lambda item: str(item["object_id"]),
+    )
+    thresholds = [
+        (str(attr_name), int(float(min_value)))
+        for sid, attr_name, min_value in relations.get(RULE_THRESHOLD, [])
+        if str(sid) == subject_id
+    ]
+    if thresholds or readings or result_type == "source_data_unavailable":
+        evidence["diameter_readings"] = readings
+        if readings:
+            evidence["matched_objects"] = list(readings)
+
+    if thresholds:
+        attr_name, min_value = thresholds[0]
+        evidence["threshold"] = {
+            "attr_name": attr_name,
+            "min_diameter_dn": min_value,
+        }
+        if readings and result_type == "hard_violation":
+            worst = min(int(item["nominal_diameter_dn"]) for item in readings)
+            message = (
+                f"The discharge line declares nominal diameter DN {worst}, below "
+                f"the required minimum DN {min_value}."
+            )
+        elif readings and result_type == "pass":
+            best = max(int(item["nominal_diameter_dn"]) for item in readings)
+            message = (
+                f"The discharge line declares nominal diameter DN {best}, meeting "
+                f"the required minimum DN {min_value}."
+            )
+
+    limitations = [
+        (str(code), str(text))
+        for sid, code, text in relations.get(RULE_LIMITATION, [])
+        if str(sid) == subject_id
+    ]
+    if limitations:
+        code, text = limitations[0]
+        evidence["limitation"] = {"code": code, "message": text}
+
+    uncertainties = [
+        str(text)
+        for sid, text in relations.get(RULE_UNCERTAINTY, [])
+        if str(sid) == subject_id
+    ]
+    if uncertainties:
+        evidence["uncertainty_text"] = uncertainties[0]
+
+    if result_type == "source_data_unavailable":
+        evidence["scope_completeness"] = {
+            "complete": False,
+            "basis": "source_data_unavailable",
+            "boundary_kind": "numeric_attribute",
+        }
+        evidence["matched_objects"] = []
+        evidence["diameter_readings"] = []
+    elif thresholds or readings:
+        evidence["scope_completeness"] = {
+            "complete": True,
+            "basis": "numeric_attribute_read",
+            "boundary_kind": "numeric_attribute",
+        }
+
+    # Preserve diagnostic evidence shape for unresolved discharge nozzles.
+    if result_type == "evaluation_diagnostic":
+        diagnostic = build_evaluation_diagnostic(
+            pump_id=str(subject["pump_id"]),
+            rule_id=rule_id,
+            semantic_evidence={str(k): str(v) for k, v in engine_attrs.items()},
         )
+        diagnostic["message"] = message or diagnostic["message"]
+        diagnostic["subject"] = subject
+        # Keep fence-emitted boundary/engine attrs when present.
+        diagnostic_evidence = dict(diagnostic["evidence"])
+        diagnostic_evidence["derived_graph_semantics"] = engine_attrs
+        if "boundary" in evidence:
+            diagnostic_evidence["boundary"] = evidence["boundary"]
+        diagnostic["evidence"] = diagnostic_evidence
+        return diagnostic
 
     return {
         "schema_version": 1,
-        "result_type": _RESULT_TYPES[boundary_kind],
+        "result_type": result_type,
         "rule_id": rule_id,
-        "message": _MESSAGES[boundary_kind],
-        "subject": {
-            "pump_id": pump_id,
-            "discharge_nozzle_id": discharge_nozzle_id,
-        },
+        "message": message,
+        "subject": subject,
         "evidence": evidence,
     }
+
+
+def _select_subject_id(
+    graph_facts: dict[str, object],
+    results: list[tuple[str, ...]],
+) -> str:
+    subject_ids = [str(row[0]) for row in results]
+    pump_ids = {
+        str(node["node_id"])
+        for node in graph_facts["facts"]["nodes"]  # type: ignore[index]
+        if node["attributes"].get("label") == "CentrifugalPump"
+    }
+    for subject_id in subject_ids:
+        if subject_id in pump_ids:
+            return subject_id
+    return sorted(subject_ids)[0]
+
+
+def _node_class(nodes: dict[str, object], object_id: object) -> str:
+    node = nodes.get(str(object_id), {})
+    if not isinstance(node, dict):
+        return ""
+    attributes = node.get("attributes", {})
+    if not isinstance(attributes, dict):
+        return ""
+    return str(attributes.get("label", ""))

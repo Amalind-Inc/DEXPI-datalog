@@ -3,11 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from .rule_pack_markdown import parse_rule_pack_markdown
-from .souffle_rule_pack import (
-    RULE_PACKS_DIR,
-    evaluate_discharge_line_min_diameter_rule,
-    evaluate_pump_discharge_rule,
-)
+from .souffle_rule_pack import RULE_PACKS_DIR, evaluate_rule_fence
 
 
 def bundled_rule_packs() -> list[dict[str, object]]:
@@ -37,14 +33,19 @@ def evaluate_bundled_rule(
     direction_review_status: str | None = None,
 ) -> dict[str, object]:
     pack = _pack(pack_id)
-    if rule_id not in {str(rule["rule_id"]) for rule in pack["rules"]}:
+    rule = next(
+        (
+            candidate
+            for candidate in pack["rules"]
+            if str(candidate["rule_id"]) == rule_id
+        ),
+        None,
+    )
+    if rule is None:
         raise ValueError(f"unknown bundled rule: {pack_id}/{rule_id}")
 
-    evaluator = {
-        "pump_discharge_check_valve": evaluate_pump_discharge_rule,
-        "discharge_line_min_diameter": evaluate_discharge_line_min_diameter_rule,
-    }[rule_id]
-    legacy = evaluator(graph_facts, rule_id=rule_id)
+    fence = str(rule["executable_logic"]["content"])
+    legacy = evaluate_rule_fence(graph_facts, rule_id=rule_id, fence=fence)
     outcome = {
         "pass": "satisfied",
         "hard_violation": "violated",

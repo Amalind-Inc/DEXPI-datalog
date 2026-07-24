@@ -134,10 +134,87 @@ walk_boundary(pump, step, object, "terminal_object") :-
 rule_unresolved(pump) :- pump(pump), discharge_candidate_count(pump, n), n != 1.
 rule_unresolved(pump) :- walk_blocked(pump, _, _).
 
-.output walk
-.output walk_boundary
-.output rule_unresolved
-.output discharge_nozzle
+// --- rule outcome convention (generic runner inputs) ---
+.decl primary_boundary_step(pump:symbol, step:number)
+primary_boundary_step(pump, min_s) :-
+    walk_boundary(pump, _, _, _),
+    min_s = min s : { walk_boundary(pump, s, _, _) }.
+
+.decl primary_boundary(pump:symbol, step:number, object:symbol, kind:symbol)
+primary_boundary(pump, step, object, kind) :-
+    primary_boundary_step(pump, step),
+    walk_boundary(pump, step, object, kind).
+
+.decl rule_result(subject_id:symbol, result_type:symbol)
+rule_result(pump, "evaluation_diagnostic") :- rule_unresolved(pump).
+rule_result(pump, "pass") :-
+    primary_boundary(pump, _, _, "matched_required_component").
+rule_result(pump, "bounded_failure_off_page") :-
+    primary_boundary(pump, _, _, "off_page_connector").
+rule_result(pump, "hard_violation") :-
+    primary_boundary(pump, _, _, "terminal_object").
+
+.decl rule_message(subject_id:symbol, message:symbol)
+rule_message(pump, "The verifier could not determine a unique discharge nozzle from the available graph evidence.") :-
+    rule_unresolved(pump).
+rule_message(pump, "Required downstream check valve was found before the first branch or terminal boundary.") :-
+    primary_boundary(pump, _, _, "matched_required_component").
+rule_message(pump, "No downstream check valve was found before the discharge path terminated at an off-page connector.") :-
+    primary_boundary(pump, _, _, "off_page_connector").
+rule_message(pump, "No downstream check valve was found before the first terminal boundary.") :-
+    primary_boundary(pump, _, _, "terminal_object").
+
+.decl rule_subject_attr(subject_id:symbol, attr:symbol, value:symbol)
+rule_subject_attr(pump, "pump_id", pump) :- rule_result(pump, _).
+rule_subject_attr(pump, "discharge_nozzle_id", nozzle) :-
+    discharge_nozzle(pump, nozzle),
+    rule_result(pump, _),
+    !rule_unresolved(pump).
+rule_subject_attr(pump, "discharge_nozzle_id", "unknown") :-
+    rule_unresolved(pump).
+
+.decl rule_boundary(subject_id:symbol, kind:symbol, object_id:symbol)
+rule_boundary(pump, kind, object) :- primary_boundary(pump, _, object, kind).
+rule_boundary(pump, "unresolved_discharge_nozzle", pump) :- rule_unresolved(pump).
+
+.decl rule_matched_object(subject_id:symbol, object_id:symbol, class:symbol)
+rule_matched_object(pump, object, label) :-
+    primary_boundary(pump, _, object, "matched_required_component"),
+    node_label(object, label).
+
+.decl rule_walk_object(subject_id:symbol, step:number, object_id:symbol, class:symbol)
+rule_walk_object(pump, step, object, label) :-
+    primary_boundary(pump, bound_step, _, _),
+    walk(pump, step, object),
+    step <= bound_step,
+    node_label(object, label).
+
+.decl rule_walk_edge(subject_id:symbol, source_id:symbol, target_id:symbol)
+rule_walk_edge(pump, a, b) :-
+    primary_boundary(pump, bound_step, _, _),
+    walk(pump, step, a),
+    walk(pump, next_step, b),
+    next_step = step + 1,
+    next_step <= bound_step.
+
+.decl rule_engine_attr(subject_id:symbol, key:symbol, value:symbol)
+rule_engine_attr(pump, "traversal_predicate", "downstream_reference") :- rule_result(pump, _).
+rule_engine_attr(pump, "reachability_predicate", "reachable") :- rule_result(pump, _).
+rule_engine_attr(pump, "engine", "souffle") :- rule_result(pump, _).
+
+.decl rule_uncertainty(subject_id:symbol, text:symbol)
+rule_uncertainty(pump, "The discharge path may continue beyond the page edge.") :-
+    primary_boundary(pump, _, _, "off_page_connector").
+
+.output rule_result
+.output rule_message
+.output rule_subject_attr
+.output rule_boundary
+.output rule_matched_object
+.output rule_walk_object
+.output rule_walk_edge
+.output rule_engine_attr
+.output rule_uncertainty
 ```
 
 ## Discharge line minimum nominal diameter {#discharge_line_min_diameter}
@@ -235,11 +312,75 @@ diameter_unavailable(pump) :-
 .decl rule_unresolved(pump:symbol)
 rule_unresolved(pump) :- pump(pump), discharge_candidate_count(pump, n), n != 1.
 
-.output discharge_nozzle
-.output discharge_segment
-.output discharge_line_diameter
-.output diameter_satisfied
-.output diameter_violated
-.output diameter_unavailable
-.output rule_unresolved
+// --- rule outcome convention (generic runner inputs) ---
+.decl rule_result(subject_id:symbol, result_type:symbol)
+rule_result(pump, "evaluation_diagnostic") :- rule_unresolved(pump).
+rule_result(pump, "hard_violation") :-
+    diameter_violated(pump, _, _),
+    !rule_unresolved(pump).
+rule_result(pump, "pass") :-
+    diameter_satisfied(pump, _, _),
+    !diameter_violated(pump, _, _),
+    !rule_unresolved(pump).
+rule_result(pump, "source_data_unavailable") :-
+    diameter_unavailable(pump),
+    !rule_unresolved(pump).
+
+.decl rule_message(subject_id:symbol, message:symbol)
+rule_message(pump, "The verifier could not determine a unique discharge nozzle from the available graph evidence.") :-
+    rule_unresolved(pump).
+rule_message(pump, "The discharge line declares a nominal diameter below the required minimum DN 25.") :-
+    rule_result(pump, "hard_violation").
+rule_message(pump, "The discharge line declares a nominal diameter meeting the required minimum DN 25.") :-
+    rule_result(pump, "pass").
+rule_message(pump, "The discharge line carries no source-provided numeric nominal diameter, so the DN 25 minimum cannot be evaluated from the loaded source.") :-
+    rule_result(pump, "source_data_unavailable").
+
+.decl rule_subject_attr(subject_id:symbol, attr:symbol, value:symbol)
+rule_subject_attr(pump, "pump_id", pump) :- rule_result(pump, _).
+rule_subject_attr(pump, "discharge_nozzle_id", nozzle) :-
+    discharge_nozzle(pump, nozzle),
+    rule_result(pump, _),
+    !rule_unresolved(pump).
+rule_subject_attr(pump, "discharge_nozzle_id", "unknown") :-
+    rule_unresolved(pump).
+
+.decl rule_numeric_reading(subject_id:symbol, object_id:symbol, class:symbol, value:number)
+rule_numeric_reading(pump, object, label, dn) :-
+    diameter_violated(pump, object, dn),
+    node_label(object, label).
+rule_numeric_reading(pump, object, label, dn) :-
+    diameter_satisfied(pump, object, dn),
+    !diameter_violated(pump, _, _),
+    node_label(object, label).
+
+.decl rule_threshold(subject_id:symbol, attr_name:symbol, min_value:number)
+rule_threshold(pump, attr, threshold) :-
+    rule_result(pump, _),
+    !rule_unresolved(pump),
+    diameter_attr_name(attr),
+    min_diameter_dn(threshold).
+
+.decl rule_limitation(subject_id:symbol, code:symbol, message:symbol)
+rule_limitation(pump, "source_data_unavailable", "No source-provided numeric nominal diameter exists on the discharge line; the source does not carry the data this threshold needs.") :-
+    rule_result(pump, "source_data_unavailable").
+
+.decl rule_boundary(subject_id:symbol, kind:symbol, object_id:symbol)
+rule_boundary(pump, "unresolved_discharge_nozzle", pump) :- rule_unresolved(pump).
+rule_boundary(pump, "numeric_attribute", pump) :-
+    rule_result(pump, _),
+    !rule_unresolved(pump).
+
+.decl rule_engine_attr(subject_id:symbol, key:symbol, value:symbol)
+rule_engine_attr(pump, "numeric_predicate", "node_numeric_attribute") :- rule_result(pump, _).
+rule_engine_attr(pump, "engine", "souffle") :- rule_result(pump, _).
+
+.output rule_result
+.output rule_message
+.output rule_subject_attr
+.output rule_numeric_reading
+.output rule_threshold
+.output rule_limitation
+.output rule_boundary
+.output rule_engine_attr
 ```
