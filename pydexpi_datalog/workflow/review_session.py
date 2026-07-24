@@ -203,13 +203,7 @@ class ReviewSessionService:
                 encoding="utf-8",
             )
 
-            artifacts = {
-                "graph_facts_json": str(graph_facts_json_path),
-                "graph_facts_datalog": str(graph_facts_datalog_path),
-                "derived_graph_semantics_datalog": str(derived_graph_semantics_path),
-                "readiness_metadata": str(readiness_path),
-                "topology_view_model": str(topology_view_path),
-            }
+            artifacts = session_artifact_paths(session_dir, session_id)
 
             elapsed_seconds = self._clock() - started_at
             time_limit_diagnostics = check_preparation_time_limit(
@@ -687,3 +681,21 @@ def diagnostic(
 
 def stage(status: str, text: str) -> dict[str, str]:
     return {"status": status, "text": text}
+
+
+def session_artifact_paths(session_dir: Path, session_id: str) -> dict[str, str]:
+    """The artifacts a ready session leaves on disk, keyed by their role.
+
+    This is the single definition of that layout, so a session reloaded from
+    disk after a restart resolves exactly the artifacts its preparation wrote.
+    """
+
+    return {
+        "graph_facts_json": str(session_dir / session_id / "graph_facts.json"),
+        "graph_facts_datalog": str(session_dir / "graph_facts.dl"),
+        "derived_graph_semantics_datalog": str(
+            session_dir / "derived_graph_semantics.dl"
+        ),
+        "readiness_metadata": str(session_dir / "readiness.json"),
+        "topology_view_model": str(session_dir / "topology_view.json"),
+    }

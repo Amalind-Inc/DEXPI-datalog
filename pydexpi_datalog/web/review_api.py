@@ -23,6 +23,7 @@ from ..verification.authored_rule_pack import AuthoredRulePackError, AuthoredRul
 from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.review_session import PreparationLimits
+from ..workflow.session_catalog import CATALOG_FILENAME, SessionCatalog
 from .chainlit_review_flow import ChainlitReviewFlow
 from .turn_lifecycle import TurnLifecycleStore, compute_turn_id
 
@@ -117,7 +118,9 @@ def create_review_api_app(
     )
     turns = TurnLifecycleStore(workspace_root)
     authored_packs = AuthoredRulePackStore(workspace_root / "authored_rule_packs")
-
+    # One catalog for every workspace, scoped by column: the shape the hosted
+    # profile needs, kept identical locally so there is one schema to migrate.
+    catalog = SessionCatalog(artifact_root / CATALOG_FILENAME)
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,
@@ -172,6 +175,17 @@ def create_review_api_app(
             content = {"error": {"code": "request.invalid", "message": str(content)}}
         return JSONResponse(status_code=exception.status_code, content=content)
 
+    @app.get("/api/review/sessions")
+    def list_sessions() -> dict[str, object]:
+        return {
+            "sessions": [
+                record.as_dict()
+                for record in catalog.list_sessions(
+                    workspace=active_principal.workspace
+                )
+            ]
+        }
+
     @app.post("/api/review/sessions/{session_id}/prepare")
     def prepare_session(
         session_id: str, body: dict[str, object]
@@ -182,7 +196,19 @@ def create_review_api_app(
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_path = upload_dir / filename
         upload_path.write_text(content, encoding="utf-8")
-        return flow.prepare_upload(dexpi_xml_path=upload_path, session_id=session_id)
+        state = flow.prepare_upload(
+            dexpi_xml_path=upload_path, session_id=session_id
+        )
+        # Only a session that became ready is reopenable, so only that one is
+        # worth offering back to the reviewer.
+        if state.get("status") == "ready":
+            catalog.record_preparation(
+                workspace=active_principal.workspace,
+                session_id=session_id,
+                source_filename=filename,
+                artifact_prefix=f"{active_principal.workspace}/{session_id}",
+            )
+        return state
 
     @app.get("/api/review/sessions/{session_id}/topology")
     def topology(session_id: str) -> dict[str, object]:

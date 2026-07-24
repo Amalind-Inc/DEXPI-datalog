@@ -40,6 +40,7 @@ from ..workflow.review_session import (
     PreparationLimits,
     ReviewSessionService,
     build_evidence_highlight_payload,
+    session_artifact_paths,
 )
 from ..verification.bundled_rule_pack import (
     bundled_rule_packs,
@@ -1832,18 +1833,11 @@ class ChainlitReviewFlow:
         }
         if is_ready:
             self._timing_records.append(timing)
-            self._topology_by_session[str(result["session_id"])] = result["topology_view"]
-            self._artifacts_by_session[str(result["session_id"])] = dict(
-                result["artifacts"]
+            self._activate_ready_session(
+                session_id=str(result["session_id"]),
+                topology_view=result["topology_view"],
+                artifacts=dict(result["artifacts"]),
             )
-            self._evidence_highlight_by_session[str(result["session_id"])] = dict(
-                result["topology_view"]["evidence_highlight"]
-            )
-            self._visible_source_scope_by_session[str(result["session_id"])] = []
-            self._rule_pack_results_by_session[str(result["session_id"])] = []
-            self._loaded_rule_packs_by_session[str(result["session_id"])] = set()
-            self._loaded_rule_pack_data_by_session[str(result["session_id"])] = {}
-            self._missing_capabilities_by_session[str(result["session_id"])] = []
 
         disabled_reason = None
         if not is_ready:
@@ -1868,11 +1862,74 @@ class ChainlitReviewFlow:
             "topology_view": result["topology_view"],
         }
 
+    def _activate_ready_session(
+        self,
+        *,
+        session_id: str,
+        topology_view: dict[str, object],
+        artifacts: dict[str, object],
+    ) -> None:
+        """Make a ready session answerable in this process."""
+
+        self._topology_by_session[session_id] = topology_view
+        self._artifacts_by_session[session_id] = artifacts
+        self._evidence_highlight_by_session[session_id] = dict(
+            topology_view["evidence_highlight"]
+        )
+        self._visible_source_scope_by_session[session_id] = []
+        self._rule_pack_results_by_session[session_id] = []
+        self._loaded_rule_packs_by_session[session_id] = set()
+        self._loaded_rule_pack_data_by_session[session_id] = {}
+        self._missing_capabilities_by_session[session_id] = []
+
     def _topology_for_session(self, session_id: str) -> dict[str, object]:
         topology = self._topology_by_session.get(session_id)
         if topology is None:
+            # A session prepared before this process started is still on disk.
+            # Reload it rather than telling the reviewer their review is gone.
+            topology = self._rehydrate_ready_session(session_id)
+        if topology is None:
             raise ValueError(f"No ready topology is known for session: {session_id}")
         return topology
+
+    def _rehydrate_ready_session(
+        self, session_id: str
+    ) -> dict[str, object] | None:
+        """Reload a previously ready session from its persisted artifacts.
+
+        Returns None when the session was never prepared, never became ready,
+        or its artifacts are unreadable: callers then report it as unknown.
+        """
+
+        root = self._service.artifact_root.resolve()
+        session_dir = (self._service.artifact_root / session_id).resolve()
+        # session_id arrives from the request path, so a traversal attempt must
+        # not be able to read outside this workspace's artifact root.
+        if not session_dir.is_relative_to(root):
+            return None
+
+        readiness_path = session_dir / "readiness.json"
+        topology_view_path = session_dir / "topology_view.json"
+        if not readiness_path.is_file() or not topology_view_path.is_file():
+            return None
+        try:
+            readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+            topology_view = json.loads(
+                topology_view_path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            return None
+        if not isinstance(readiness, dict) or readiness.get("state") != "ready":
+            return None
+        if not isinstance(topology_view, dict):
+            return None
+
+        self._activate_ready_session(
+            session_id=session_id,
+            topology_view=topology_view,
+            artifacts=dict(session_artifact_paths(session_dir, session_id)),
+        )
+        return topology_view
 
     def _ensure_known_topology_id(self, *, session_id: str, topology_id: str) -> None:
         topology = self._topology_for_session(session_id)

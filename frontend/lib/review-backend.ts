@@ -1355,6 +1355,25 @@ export async function listAllRulePacks({
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
+export interface ReviewSessionSummary {
+  session_id: string;
+  source_filename: string;
+  created_at: string;
+  artifact_prefix: string;
+}
+
+export async function listReviewSessions({
+  baseUrl = backendBaseUrl(),
+  fetcher = fetch,
+}: BackendOptions = {}): Promise<{
+  status: number;
+  sessions: ReviewSessionSummary[];
+}> {
+  const res = await fetcher(`${baseUrl}/api/review/sessions`);
+  const body = (await res.json()) as { sessions?: ReviewSessionSummary[] };
+  return { status: res.status, sessions: body.sessions ?? [] };
+}
+
 export async function createRulePack(
   markdown: string,
   { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},

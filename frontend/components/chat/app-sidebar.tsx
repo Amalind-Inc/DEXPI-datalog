@@ -20,7 +20,8 @@ import {
   WIDTH_STORAGE_KEY,
 } from "@/components/chat/app-sidebar-constants";
 import { startNewSession } from "@/components/chat/pid-runtime-provider";
-import { usePidGraph } from "@/components/pid/graph-context";
+import { SESSION_KEY } from "@/lib/session-id";
+import type { ReviewSessionSummary } from "@/lib/review-backend";
 
 const NAV_ITEMS = [
   { href: "/assistant", label: "Assistant", icon: MessageSquare },
@@ -287,22 +288,49 @@ function RecentProjectsSection() {
 
 // Replaces the old flat "Sessions" nav item -- per ADR 0006, recent sessions
 // become reachable via an expanded nav tree rather than a standalone
-// destination. Multi-chat history doesn't exist yet (bead 2yr/2c5.5), so this
-// reflects only the single active session for now.
+// destination. Lists every prepared session from the durable catalog (bead
+// 2afe.3); selecting one reopens it. Project grouping arrives with 2c5.5.
+function reopenSession(sessionId: string) {
+  if (typeof window === "undefined") return;
+  // Point the browser's active-session pointer at the chosen session and land
+  // on the assistant; the backend rehydrates it from disk (bead 2afe.3).
+  window.localStorage.setItem(SESSION_KEY, sessionId);
+  window.location.assign("/assistant");
+}
+
 function AssistantHistorySection() {
-  const { loadedFileName } = usePidGraph();
   const [open, setOpen] = useState(false);
-  const entries = loadedFileName ? [{ id: "current", title: loadedFileName }] : [];
+  const [sessions, setSessions] = useState<ReviewSessionSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/review/sessions")
+      .then((res) => (res.ok ? res.json() : { sessions: [] }))
+      .then((body: { sessions?: ReviewSessionSummary[] }) => {
+        if (!cancelled) setSessions(body.sessions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSessions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AccordionSection title="Assistant History" open={open} onToggle={() => setOpen((v) => !v)}>
-      {entries.length === 0 ? (
+      {sessions.length === 0 ? (
         <p className="app-sidebar-section-empty">No past chats yet</p>
       ) : (
-        entries.map((entry) => (
-          <Link key={entry.id} href="/assistant" className="app-sidebar-history-row">
-            {entry.title}
-          </Link>
+        sessions.map((entry) => (
+          <button
+            key={entry.session_id}
+            type="button"
+            className="app-sidebar-history-row"
+            onClick={() => reopenSession(entry.session_id)}
+          >
+            {entry.source_filename}
+          </button>
         ))
       )}
     </AccordionSection>
