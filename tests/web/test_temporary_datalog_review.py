@@ -17,6 +17,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
 )
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
+from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
 STRUCTURED_INTENT = {
     "source_classes": ["TopologyObject"],
@@ -288,7 +289,12 @@ class AutomaticTemporaryDatalogTests(unittest.TestCase):
 
             # A durable audit record captures the automatic decision with
             # provider attribution, latency, and cost.
-            audit_path = artifact_root / session_id / "datalog_audit.jsonl"
+            audit_path = (
+                artifact_root
+                / LOCAL_PRINCIPAL.workspace
+                / session_id
+                / "datalog_audit.jsonl"
+            )
             self.assertTrue(audit_path.exists(), "automatic execution must audit")
             records = [
                 json.loads(line)

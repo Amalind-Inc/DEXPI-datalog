@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from pydexpi_datalog.qa.grounded_qa_harness import ToolCall
 from pydexpi_datalog.web.review_api import create_review_api_app
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
+from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (
@@ -55,7 +56,9 @@ class SteersMidRunProvider:
         directive: str,
         steer_on_call: int = 1,
     ):
-        self._store = TurnLifecycleStore(root)
+        # The API scopes storage by the default local workspace, so a store
+        # built directly here must write where the running turn will read.
+        self._store = TurnLifecycleStore(root / LOCAL_PRINCIPAL.workspace)
         self._session_id = session_id
         self._turn_id = turn_id
         self._directive = directive

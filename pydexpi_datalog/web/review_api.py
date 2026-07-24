@@ -21,6 +21,7 @@ from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
 from ..verification.authored_rule_pack import AuthoredRulePackError, AuthoredRulePackStore
 from ..verification.bundled_rule_pack import bundled_rule_packs
+from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
 from .turn_lifecycle import TurnLifecycleStore, compute_turn_id
@@ -91,21 +92,31 @@ class TopologyAwareFakeModelProvider:
 def create_review_api_app(
     *,
     artifact_root: Path,
+    principal: Principal | None = None,
     model_provider_factory: Callable[[], ModelProvider] | None = None,
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
 ) -> FastAPI:
-    """Create the OSS v1 review workflow API."""
+    """Create the OSS v1 review workflow API.
+
+    Every artifact this app writes is scoped to ``principal``'s workspace, so
+    two workspaces sharing one ``artifact_root`` never observe each other's
+    sessions or authored rule packs. Callers that pass no principal get the
+    single local operator (ADR 0016).
+    """
+
+    active_principal = LOCAL_PRINCIPAL if principal is None else principal
+    workspace_root = artifact_root / active_principal.workspace
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     flow = ChainlitReviewFlow(
-        artifact_root=artifact_root,
+        artifact_root=workspace_root,
         limits=preparation_limits,
         max_conversation_turns=max_conversation_turns,
     )
-    turns = TurnLifecycleStore(artifact_root)
-    authored_packs = AuthoredRulePackStore(artifact_root / "authored_rule_packs")
+    turns = TurnLifecycleStore(workspace_root)
+    authored_packs = AuthoredRulePackStore(workspace_root / "authored_rule_packs")
 
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
@@ -167,7 +178,7 @@ def create_review_api_app(
     ) -> dict[str, object]:
         filename = _filename(body, "filename")
         content = _required_string(body, "content")
-        upload_dir = artifact_root / "_uploads" / session_id
+        upload_dir = workspace_root / "_uploads" / session_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_path = upload_dir / filename
         upload_path.write_text(content, encoding="utf-8")
@@ -607,7 +618,7 @@ def create_review_api_app(
     @app.post("/api/review/sessions/{session_id}/exports")
     def export_session(session_id: str) -> dict[str, object]:
         export_dir = (
-            artifact_root / "_exports" / session_id / f"export-{time.time_ns()}"
+            workspace_root / "_exports" / session_id / f"export-{time.time_ns()}"
         )
         return _call_ready(
             lambda: flow.export_session_artifacts(

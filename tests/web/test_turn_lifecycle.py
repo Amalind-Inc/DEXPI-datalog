@@ -9,6 +9,7 @@ from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
+from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
 
 STRUCTURED_INTENT = {
@@ -65,7 +66,10 @@ def test_review_required_event_preserves_batched_direction_review_items() -> Non
 def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        store = TurnLifecycleStore(root)
+        # The API scopes storage by the default local workspace, so a store
+        # built directly here must write where the API will read.
+        workspace_root = root / LOCAL_PRINCIPAL.workspace
+        store = TurnLifecycleStore(workspace_root)
 
         turn = store.start(
             session_id="trace-session",
@@ -115,7 +119,7 @@ def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
         assert trace[-1]["evidence_references"] == ["tank-t101"]
         assert all(event["detail"]["artifact"]["path"] for event in trace)
         for event in trace:
-            artifact = root / "trace-session" / event["detail"]["artifact"]["path"]
+            artifact = workspace_root / "trace-session" / event["detail"]["artifact"]["path"]
             assert artifact.is_file()
         client = TestClient(create_review_api_app(artifact_root=root))
         detail_response = client.get(
