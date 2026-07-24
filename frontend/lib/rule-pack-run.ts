@@ -142,6 +142,11 @@ export function advisoryWalkthroughFromApi(
   return readWalkthrough(raw) ?? null;
 }
 
+/** Convert one raw backend `results[i]` object (from the run-all or single-rule
+ * routes) into a RuleRunResult, extracting evidence the same way turn-client.ts
+ * does for other message types. The backend result only carries `rule_id`, not
+ * a human title, so the caller (which has the pack listing) supplies it. */
+export function ruleRunResultFromApi(
   raw: Record<string, unknown>,
   ruleTitle: string,
 ): RuleRunResult {
