@@ -26,6 +26,8 @@ test can see, rather than a convention a reviewer has to remember.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -33,6 +35,11 @@ from pathlib import Path
 
 from ..workflow.artifact_store import ArtifactStore, LocalArtifactStore
 from ..workflow.principal import Principal
+from ..workflow.provider_keys import (
+    SECRET_BYTES,
+    ProviderKeyStore,
+    libsql_provider_keys,
+)
 from ..workflow.s3_artifact_store import (
     HOSTED_STORAGE_ENV_VARS,
     S3ArtifactStore,
@@ -130,6 +137,53 @@ def hosted_storage_settings_from_env(env: Mapping[str, str]) -> S3Settings:
     )
 
 
+BYOK_SECRET_ENV_VAR = "PYDEXPI_BYOK_SECRET"
+
+
+class HostedProviderKeysNotConfigured(ValueError):
+    """The hosted profile was selected without a secret to encrypt keys with."""
+
+
+def hosted_provider_key_secret_from_env(env: Mapping[str, str]) -> bytes:
+    """The key-encryption secret for a hosted deployment, or refuse to start.
+
+    Required, with no fallback. Storing credentials in the clear is the
+    obvious wrong answer; generating a secret per instance is the subtle one,
+    because it looks like it works -- a user's key decrypts on the instance
+    that stored it and nowhere else, so the bug appears only behind a load
+    balancer, or only after a redeploy.
+
+    The message never quotes the value. This raises at boot, boot errors are
+    logged, and this particular value is the one thing in the deployment
+    that must never reach a log.
+    """
+
+    raw = env.get(BYOK_SECRET_ENV_VAR, "").strip()
+    advice = (
+        f"Generate one with `openssl rand -base64 {SECRET_BYTES}` and set it "
+        f"identically on every instance: a key saved by one instance must "
+        f"decrypt on the next."
+    )
+    if not raw:
+        raise HostedProviderKeysNotConfigured(
+            f"the hosted deployment profile stores each user's model "
+            f"credentials encrypted, so it cannot start without a secret to "
+            f"encrypt them with. Missing: {BYOK_SECRET_ENV_VAR}. {advice}"
+        )
+    try:
+        secret = base64.b64decode(raw, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise HostedProviderKeysNotConfigured(
+            f"{BYOK_SECRET_ENV_VAR} is not valid base64. {advice}"
+        ) from error
+    if len(secret) != SECRET_BYTES:
+        raise HostedProviderKeysNotConfigured(
+            f"{BYOK_SECRET_ENV_VAR} must decode to exactly {SECRET_BYTES} "
+            f"bytes, got {len(secret)}. {advice}"
+        )
+    return secret
+
+
 class DeploymentProfile(StrEnum):
     """The deployment profiles this codebase ships."""
 
@@ -192,6 +246,14 @@ class ProfileBundle:
     profile: DeploymentProfile
     build_store: Callable[[Path, Principal, Mapping[str, str]], ArtifactStore]
     build_catalog: Callable[[Path, Mapping[str, str]], SessionCatalog]
+    build_key_store: Callable[[Path, Mapping[str, str]], ProviderKeyStore | None]
+    """Where users' model credentials live, or None when nowhere.
+
+    The local profile answers None, which is the answer ADR 0014 gives: a
+    single operator's keys stay in their browser. That is a real profile
+    difference rather than an unbuilt seam, so it is stated here with the
+    others instead of being discovered at a call site.
+    """
 
 
 def _local_store(
@@ -254,21 +316,53 @@ def _hosted_catalog(
     return libsql_catalog(url=settings.url, auth_token=settings.auth_token)
 
 
+def _no_key_store(
+    artifact_root: Path, env: Mapping[str, str] | None = None
+) -> ProviderKeyStore | None:
+    """The local profile keeps no server-side credentials (ADR 0014).
+
+    Not an omission. A key table on the operator's own machine would be
+    protecting their key from themselves, while adding a secret to manage
+    and a file to back up. The browser already holds it.
+    """
+
+    del artifact_root, env
+    return None
+
+
+def _hosted_key_store(
+    artifact_root: Path, env: Mapping[str, str] | None = None
+) -> ProviderKeyStore:
+    """Encrypted per-user credentials in the shared libSQL database.
+
+    Shares the catalog's database and its settings, because a deployment
+    that has one has the other and a second connection string would be a
+    second thing to get wrong. The artifact root is ignored for the reason
+    it is everywhere else in this profile: nothing lands on the instance.
+    """
+
+    del artifact_root
+    environment = env or {}
+    settings = hosted_catalog_settings_from_env(environment)
+    return libsql_provider_keys(
+        url=settings.url,
+        auth_token=settings.auth_token,
+        secret=hosted_provider_key_secret_from_env(environment),
+    )
+
+
 _BUNDLES: dict[DeploymentProfile, ProfileBundle] = {
     DeploymentProfile.LOCAL: ProfileBundle(
         profile=DeploymentProfile.LOCAL,
         build_store=_local_store,
         build_catalog=_local_catalog,
+        build_key_store=_no_key_store,
     ),
-    # The hosted profile's catalog is its own now (bead 2afe.7); its
-    # object-store artifacts (2afe.8) are not built yet, so it still names the
-    # local store. That remaining line is what a hosted deployment on more
-    # than one instance still has to fix, and replacing it is what puts an
-    # object store under the whole suite.
     DeploymentProfile.HOSTED: ProfileBundle(
         profile=DeploymentProfile.HOSTED,
         build_store=_hosted_store,
         build_catalog=_hosted_catalog,
+        build_key_store=_hosted_key_store,
     ),
 }
 

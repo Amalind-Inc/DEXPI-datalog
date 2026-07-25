@@ -161,6 +161,11 @@ jobs:
         # libSQL and no object store reachable at all, which is the condition
         # a standalone user installs into.
         #
+        # `PYDEXPI_BYOK_SECRET` is deliberately absent: it is configuration
+        # rather than a service, and tests/conftest.py supplies a fixed one so
+        # a developer needs no extra setup. That the hosted profile refuses to
+        # boot without it is asserted directly, in test_provider_key_profiles.
+        #
         # `CI` is set by Actions, which stops tests/conftest.py from turning a
         # missing backend into a skip. A broken service has to look different
         # from a passing run.

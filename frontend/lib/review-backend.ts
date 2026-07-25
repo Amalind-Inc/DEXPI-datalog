@@ -1174,7 +1174,7 @@ function readCatalogProviderFromEnv(): BackendProviderSettings | null {
   return null;
 }
 
-function backendBaseUrl() {
+export function backendBaseUrl() {
   return readEnvValue("PYDEXPI_REVIEW_API_URL") ?? "http://127.0.0.1:8000";
 }
 

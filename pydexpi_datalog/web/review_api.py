@@ -13,7 +13,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..llm.byok_provider import OPENAI_COMPATIBLE_BASE_URLS, create_byok_provider
-from ..llm.model_access import ModelProvider
+from ..llm.model_access import (
+    ModelCapabilityError,
+    ModelProvider,
+    require_native_tool_capable_model,
+)
 from ..qa.grounded_qa_harness import (
     DEFAULT_MAX_CONVERSATION_TURNS,
     QATurnProvider,
@@ -29,6 +33,7 @@ from ..verification.authored_rule_pack import (
 from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.artifact_store import ArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
+from ..workflow.provider_keys import ProviderKeyStore
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
 from .deployment import (
@@ -231,6 +236,10 @@ def create_review_api_app(
     # profile needs, kept identical locally so there is one schema to migrate.
     # The environment carries the hosted profile's database; local ignores it.
     catalog = bundle.build_catalog(artifact_root, environment)
+    # Where users' model credentials live: a shared, encrypted table when
+    # hosted, and nowhere at all locally, where ADR 0014 leaves them in the
+    # browser. `None` is a profile's answer, not an unbuilt seam.
+    key_store = bundle.build_key_store(artifact_root, environment)
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,
@@ -246,28 +255,64 @@ def create_review_api_app(
         else force_scripted_provider
     )
 
-    def _resolve_provider(flow: ChainlitReviewFlow, session_id: str) -> ModelProvider:
+    def _effective_settings(ws: WorkspaceServices, session_id: str) -> dict[str, object]:
+        """What provider to call and with which key, for this caller.
+
+        A credential configured on this session wins: the browser sent it for
+        this conversation, and ADR 0014's rule that a browser-supplied key
+        beats an ambient one still holds. Otherwise a hosted user's saved key
+        answers, which is the whole feature -- sign in on a second device and
+        ask a question without re-entering anything.
+        """
+
+        settings = dict(ws.flow.provider_settings_state(session_id))
+        credential = ws.flow.local_credential_for_test(session_id)
+        if credential and settings.get("configured"):
+            settings["credential"] = credential
+            return settings
+        if key_store is None:
+            return settings
+        saved = key_store.list_saved(user_id=ws.principal.user_id)
+        if not saved:
+            return settings
+        # The session's own provider choice still steers which saved key is
+        # used, so a user with several keys can switch provider mid-session
+        # without re-entering one.
+        wanted = str(settings.get("provider", ""))
+        chosen = next((s for s in saved if s.provider == wanted), saved[0])
+        stored = key_store.credential(user_id=ws.principal.user_id, provider=chosen.provider)
+        if not stored:
+            return settings
+        return {
+            "provider": chosen.provider,
+            "model": settings["model"] if chosen.provider == wanted else chosen.model,
+            "configured": True,
+            "credential": stored,
+            **({"base_url": settings["base_url"]} if "base_url" in settings else {}),
+        }
+
+    def _resolve_provider(ws: WorkspaceServices, session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
             return model_provider_factory()
         if force_scripted:
             return TopologyAwareFakeModelProvider()
-        settings = flow.provider_settings_state(session_id)
-        credential = flow.local_credential_for_test(session_id)
+        settings = _effective_settings(ws, session_id)
+        credential = settings.get("credential")
         if credential and settings.get("configured"):
             return create_byok_provider(
                 provider=str(settings["provider"]),
                 model=str(settings["model"]),
-                credential=credential,
+                credential=str(credential),
             )
         return TopologyAwareFakeModelProvider()
 
-    def _resolve_qa_provider(flow: ChainlitReviewFlow, session_id: str) -> QATurnProvider:
+    def _resolve_qa_provider(ws: WorkspaceServices, session_id: str) -> QATurnProvider:
         if qa_provider_factory is not None:
             return qa_provider_factory()
         if force_scripted:
             step_delay_ms = float(os.environ.get("PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS", "0"))
             return ScriptedQATurnProvider(step_delay_seconds=step_delay_ms / 1000)
-        settings = flow.provider_settings_state(session_id)
+        settings = _effective_settings(ws, session_id)
         provider = str(settings.get("provider", ""))
         if not settings.get("configured") or provider not in OPENAI_COMPATIBLE_BASE_URLS:
             # Providers outside the OpenAI-compatible tool-calling family (e.g.
@@ -282,7 +327,7 @@ def create_review_api_app(
             provider=provider,
             model=str(settings["model"]),
             base_url=base_url,
-            credential=flow.local_credential_for_test(session_id),
+            credential=settings.get("credential"),
         )
 
     @app.exception_handler(HTTPException)
@@ -364,6 +409,91 @@ def create_review_api_app(
             )
         )
 
+    def _require_key_store() -> ProviderKeyStore:
+        """The store, or the refusal a local deployment owes its caller.
+
+        A 404 rather than a 501: on this deployment the resource genuinely
+        does not exist. The message says where the keys are instead, because
+        the reader is someone whose settings page just failed and who needs
+        to know nothing is broken.
+        """
+
+        if key_store is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "provider_keys.not_in_this_profile",
+                        "message": (
+                            "This deployment keeps model credentials in your "
+                            "browser, not on the server. Set your key in the "
+                            "app's settings; it never leaves this machine."
+                        ),
+                    }
+                },
+            )
+        return key_store
+
+    @app.get("/api/provider-keys")
+    def list_provider_keys(
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        """Which providers this user has a key for. Never the keys."""
+
+        store = _require_key_store()
+        return {
+            "keys": [
+                saved.as_dict() for saved in store.list_saved(user_id=ws.principal.user_id)
+            ]
+        }
+
+    @app.put("/api/provider-keys/{provider}")
+    def save_provider_key(
+        provider: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        """Store a credential for this user, replacing any earlier one.
+
+        The provider and model are re-validated against the catalogue before
+        anything is written, for the same reason the turn route re-validates
+        a browser-supplied pair: a client-held value is a request, not a fact.
+        """
+
+        store = _require_key_store()
+        credential = _required_string(body, "credential").strip()
+        if not credential:
+            raise _bad_request("request body must include a credential")
+        model = _required_string(body, "model")
+        try:
+            require_native_tool_capable_model(provider=provider, model=model)
+        except (ModelCapabilityError, ValueError) as error:
+            raise _bad_request(str(error)) from None
+        saved = store.save(
+            user_id=ws.principal.user_id,
+            provider=provider,
+            model=model,
+            credential=credential,
+        )
+        return saved.as_dict()
+
+    @app.delete("/api/provider-keys/{provider}")
+    def delete_provider_key(
+        provider: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        store = _require_key_store()
+        if not store.delete(user_id=ws.principal.user_id, provider=provider):
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "provider_keys.not_found",
+                        "message": f"No saved credential for {provider}.",
+                    }
+                },
+            )
+        return {"provider": provider, "deleted": True}
+
     @app.post("/api/review/sessions/{session_id}/logic-requests/improve")
     def improve_logic_request(
         session_id: str, body: dict[str, object],
@@ -388,7 +518,7 @@ def create_review_api_app(
             lambda: ws.flow.accept_logic_request_refinement(
                 session_id=session_id,
                 improvement=improvement,
-                provider=_resolve_provider(ws.flow, session_id),
+                provider=_resolve_provider(ws, session_id),
             )
         )
 
@@ -404,7 +534,7 @@ def create_review_api_app(
             lambda: ws.flow.execute_confirmed_logic_request(
                 session_id=session_id,
                 confirmation=confirmation,
-                provider=_resolve_provider(ws.flow, session_id),
+                provider=_resolve_provider(ws, session_id),
             )
         )
 
@@ -573,7 +703,7 @@ def create_review_api_app(
             lambda: ws.flow.run_qa_turn(
                 session_id=session_id,
                 question=question,
-                qa_provider=_resolve_qa_provider(ws.flow, session_id),
+                qa_provider=_resolve_qa_provider(ws, session_id),
                 conversation=conversation_turns,
             )
         )
@@ -631,7 +761,7 @@ def create_review_api_app(
             return ws.flow.run_qa_turn(
                 session_id=session_id,
                 question=question,
-                qa_provider=_resolve_qa_provider(ws.flow, session_id),
+                qa_provider=_resolve_qa_provider(ws, session_id),
                 conversation=conversation_turns,
                 on_round=_report_round,
                 steering=_steering,
@@ -744,7 +874,7 @@ def create_review_api_app(
                 decision=decision,
                 review_key=review_key,
                 decisions=decisions,
-                qa_provider=_resolve_qa_provider(ws.flow, session_id),
+                qa_provider=_resolve_qa_provider(ws, session_id),
             ),
         )
         assert resumed is not None
@@ -797,7 +927,7 @@ def create_review_api_app(
                 decision=decision,
                 review_key=review_key,
                 decisions=decisions,
-                qa_provider=_resolve_qa_provider(ws.flow, session_id),
+                qa_provider=_resolve_qa_provider(ws, session_id),
                 conversation=conversation_turns,
             )
         )

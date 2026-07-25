@@ -54,11 +54,19 @@ should not need an environment; only a served deployment must be explicit.
 That default is also what lets CI re-run the entire existing suite under the
 other profile by setting one variable rather than by every test opting in.
 
-All three hosted seams are now built: the verified-token principal, the
-libSQL catalog, and object-store artifacts. A hosted instance keeps nothing
-on its own disk, which was the point of the epic. The bundle stays the one
-place a profile's implementations are named, so a fourth seam is still a
-line there rather than a branch in the flow.
+Four hosted seams are now built: the verified-token principal, the libSQL
+catalog, object-store artifacts, and the encrypted provider-key store. A
+hosted instance keeps nothing on its own disk, which was the point of the
+epic. The bundle stays the one place a profile's implementations are named,
+and the fourth seam was indeed one line there rather than a branch in the
+flow -- which is the claim the first three were making.
+
+That fourth seam is also the first where the local profile's answer is
+"nothing": `build_key_store` returns `None` locally, because ADR 0014's
+reasoning still holds for a single operator on their own machine. A profile
+difference that is an absence is worth stating in the bundle rather than
+discovering at a call site, so the field is typed `ProviderKeyStore | None`
+and the endpoints answer 404 rather than pretending to have a store.
 
 Artifacts go to S3-compatible object storage, reached through the same
 `ArtifactStore` interface the filesystem implements. The interface was
@@ -96,16 +104,22 @@ a standalone local install cost a Rust toolchain. CI installs the extra only
 on the hosted leg, which leaves the local leg a standing proof that nothing
 reachable from the local profile imports it.
 
-A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL` or
-`PYDEXPI_S3_BUCKET`, for the same reason it refuses to start without identity
-settings. The failure being avoided is silent: a hosted instance that fell
-back to the container's disk would look completely healthy, serve correctly,
-and lose every session index and artifact the next time the container was
-replaced. So neither hosted factory has a code path that can write locally --
-each ignores the artifact root outright. Both service credentials are
-optional, because Turso issues tokens while a `libsql-server` on a private
-network need not, and a deployment with an instance role has no S3 keys to
-give. The service is the authority on its own access control.
+A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL`,
+`PYDEXPI_S3_BUCKET`, or `PYDEXPI_BYOK_SECRET`, for the same reason it refuses
+to start without identity settings. The failure being avoided is silent: a
+hosted instance that fell back to the container's disk would look completely
+healthy, serve correctly, and lose every session index and artifact the next
+time the container was replaced. So neither hosted factory has a code path
+that can write locally -- each ignores the artifact root outright. The key
+secret is on that list for a sharper version of the same reason: a generated
+per-instance secret would work on one machine and fail behind a load
+balancer, so the wrong answer would pass every single-instance test.
+
+The two *service* credentials stay optional, because Turso issues tokens
+while a `libsql-server` on a private network need not, and a deployment with
+an instance role has no S3 keys to give. The service is the authority on its
+own access control. The key secret is not a service credential and has no
+such authority to defer to, which is why it alone is mandatory.
 
 Running the suite twice under the hosted profile is a test in itself, and it
 failed the first time. Tests had been taking their isolation from a

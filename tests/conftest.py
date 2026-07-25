@@ -30,12 +30,15 @@ ADR 0016 set out to prevent: a profile that reads green without running.
 
 from __future__ import annotations
 
+import base64
 import os
 
 import pytest
 
 _PROFILE_ENV_VAR = "PYDEXPI_DEPLOYMENT_PROFILE"
 _REQUIRED_HOSTED_ENV_VARS = ("PYDEXPI_LIBSQL_URL", "PYDEXPI_S3_BUCKET")
+_BYOK_SECRET_ENV_VAR = "PYDEXPI_BYOK_SECRET"
+_TEST_BYOK_SECRET = base64.b64encode(b"pydexpi-test-secret-32-bytes!!!!").decode("ascii")
 
 _MISSING_BACKENDS = (
     "The hosted profile needs a libSQL database and an object store, and at "
@@ -54,6 +57,24 @@ _MISSING_BACKENDS = (
     "Or run the suite under the local profile, which needs no service:\n"
     "    PYDEXPI_DEPLOYMENT_PROFILE=local pytest -m 'not slow'"
 )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Give the ambient hosted profile a key-encryption secret.
+
+    A hosted app refuses to construct without `PYDEXPI_BYOK_SECRET` (bead
+    2afe.9), and unlike the databases it is configuration rather than a
+    service: asking a developer to invent one before they can run the suite
+    would be ceremony, and inventing a *different* one per run would make a
+    saved credential unreadable on the next.
+
+    Supplied, never defaulted in product code. That the refusal happens is
+    itself under test, in `tests/web/test_provider_key_profiles.py`, so
+    filling it in here cannot hide it.
+    """
+
+    del config
+    os.environ.setdefault(_BYOK_SECRET_ENV_VAR, _TEST_BYOK_SECRET)
 
 
 def pytest_collection_modifyitems(

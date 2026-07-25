@@ -11,6 +11,7 @@ See `tests/conftest.py` for how to start both.
 
 from __future__ import annotations
 
+import base64
 import os
 import unittest
 import uuid
@@ -24,13 +25,23 @@ LIBSQL_URL_ENV_VAR = "PYDEXPI_LIBSQL_URL"
 LIBSQL_TOKEN_ENV_VAR = "PYDEXPI_LIBSQL_AUTH_TOKEN"
 S3_ENDPOINT_ENV_VAR = "PYDEXPI_S3_ENDPOINT_URL"
 S3_BUCKET_ENV_VAR = "PYDEXPI_S3_BUCKET"
+BYOK_SECRET_ENV_VAR = "PYDEXPI_BYOK_SECRET"
+
+TEST_BYOK_SECRET = base64.b64encode(b"pydexpi-test-secret-32-bytes!!!!").decode("ascii")
+"""A fixed secret, because these tests are about the store, not the secret.
+
+Unlike the services, this needs no container and has no reason to vary per
+run: a test that wants to prove a wrong secret fails supplies its own.
+"""
 
 
 def hosted_catalog_env() -> dict[str, str]:
     """Everything a hosted app reads from the environment, or skip.
 
     Both backing services or neither: a test that got one and not the other
-    would fail somewhere unrelated to what it is checking.
+    would fail somewhere unrelated to what it is checking. The key-encryption
+    secret is included because a hosted app refuses to construct without one
+    (bead 2afe.9), and it is configuration rather than a service.
     """
 
     url = os.environ.get(LIBSQL_URL_ENV_VAR, "").strip()
@@ -50,6 +61,7 @@ def hosted_catalog_env() -> dict[str, str]:
             "PYDEXPI_S3_SECRET_ACCESS_KEY", ""
         ),
         "PYDEXPI_S3_REGION": os.environ.get("PYDEXPI_S3_REGION", ""),
+        BYOK_SECRET_ENV_VAR: os.environ.get(BYOK_SECRET_ENV_VAR, TEST_BYOK_SECRET),
     }
 
 

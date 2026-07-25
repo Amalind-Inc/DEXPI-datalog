@@ -174,6 +174,7 @@ pip install -e ".[hosted]"      # libsql + boto3; the local profile needs neithe
 export PYDEXPI_DEPLOYMENT_PROFILE=hosted
 export BETTER_AUTH_URL=http://localhost:3000
 export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"   # required in hosted
+export PYDEXPI_BYOK_SECRET="$(openssl rand -base64 32)"  # encrypts saved keys
 
 (cd frontend && node scripts/migrate-auth.mjs)
 
@@ -208,19 +209,39 @@ decides whether it needs authenticating.
 
 | Setting | Required | Meaning |
 | --- | --- | --- |
-| `PYDEXPI_LIBSQL_URL` | yes | Session catalog database |
+| `PYDEXPI_LIBSQL_URL` | yes | Session catalog and provider-key database |
 | `PYDEXPI_LIBSQL_AUTH_TOKEN` | no | Token, when the database wants one |
 | `PYDEXPI_S3_BUCKET` | yes | Bucket holding review artifacts |
 | `PYDEXPI_S3_ENDPOINT_URL` | no | Unset means AWS S3 itself |
 | `PYDEXPI_S3_ACCESS_KEY_ID` | no | Unset uses boto3's credential chain |
 | `PYDEXPI_S3_SECRET_ACCESS_KEY` | no | As above |
 | `PYDEXPI_S3_REGION` | no | Defaults to `us-east-1` |
+| `PYDEXPI_BYOK_SECRET` | yes | Encrypts saved model credentials |
 
-The backend refuses to start if the OIDC settings, `PYDEXPI_LIBSQL_URL`, or
-`PYDEXPI_S3_BUCKET` are missing, rather than coming up unauthenticated, or
-writing sessions and artifacts onto a disk the next redeploy throws away.
+The backend refuses to start if the OIDC settings, `PYDEXPI_LIBSQL_URL`,
+`PYDEXPI_S3_BUCKET`, or `PYDEXPI_BYOK_SECRET` are missing, rather than coming
+up unauthenticated, writing sessions and artifacts onto a disk the next
+redeploy throws away, or storing a user's model credential in the clear.
 Artifact downloads are handed out as presigned URLs, so bytes travel from the
 bucket to the browser without passing through the API.
+
+### Saved model credentials
+
+The hosted profile stores each signed-in user's model provider key encrypted
+in the shared database, so a key entered on one device is there on the next
+(ADR 0014). Generate the secret once and set it identically on every
+instance -- a key saved by one instance must decrypt on the others:
+
+```bash
+export PYDEXPI_BYOK_SECRET="$(openssl rand -base64 32)"
+```
+
+Losing it is not a data-loss event: every user simply re-enters their key.
+Rotating it has the same effect, and saved credentials report that they no
+longer decrypt rather than failing quietly.
+
+The local profile stores no credentials at all. Keys stay in the browser, as
+ADR 0014 describes, and `/api/provider-keys` answers 404 there on purpose.
 
 To check a hosted deployment really does isolate two accounts:
 
