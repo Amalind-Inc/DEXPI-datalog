@@ -16,6 +16,12 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     ToolCall,
 )
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
+
+# This test reads the audit artifact straight off disk, which makes it a test
+# of the local implementation; the hosted store keeps the same record in a
+# bucket and its append behaviour is covered by the shared ArtifactStore
+# contract. Pinning the profile keeps the test meaning one thing (bead 2afe.8).
+from pydexpi_datalog.web.deployment import DeploymentProfile
 from pydexpi_datalog.web.review_api import create_review_api_app
 from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
@@ -88,7 +94,8 @@ class TemporaryDatalogProposalProvider:
 class TemporaryDatalogReviewTests(unittest.TestCase):
     def test_cancel_temporary_datalog_confirmation_does_not_execute(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             session_id = "cancel-temp-datalog"
             prepared = client.post(
@@ -110,7 +117,8 @@ class TemporaryDatalogReviewTests(unittest.TestCase):
         review.  A client-fabricated proposal_result — even one whose hash is
         self-consistent and whose pair passes validation — must be refused."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             session_id = "forged-temp-datalog"
             prepared = client.post(
@@ -196,6 +204,7 @@ class AutomaticTemporaryDatalogTests(unittest.TestCase):
                 return AutomaticExecutionProvider(answer_id_holder["answer_id"])
 
             app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=artifact_root,
                 qa_provider_factory=provider_factory,
             )

@@ -7,6 +7,14 @@ from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
+
+# These tests reach past the API into a hand-built `LocalArtifactStore` --
+# a steering directive written directly to storage, a trace artifact read
+# back off disk. That makes them tests of the local implementation, so the
+# app is pinned to the local profile rather than following the ambient one:
+# under hosted the app reads a bucket and would never see what the test
+# wrote (bead 2afe.8).
+from pydexpi_datalog.web.deployment import DeploymentProfile
 from pydexpi_datalog.web.review_api import create_review_api_app
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
@@ -121,7 +129,8 @@ def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
         for event in trace:
             artifact = workspace_root / "trace-session" / event["detail"]["artifact"]["path"]
             assert artifact.is_file()
-        client = TestClient(create_review_api_app(artifact_root=root))
+        client = TestClient(create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=root))
         detail_response = client.get(
             "/api/review/sessions/trace-session/turns/"
             f"{turn['turn_id']}/trace/{trace[-1]['event_id']}"
@@ -392,6 +401,7 @@ def test_duplicate_turn_request_executes_once_and_reconnect_replays_events() -> 
         root = Path(tmp_dir) / "sessions"
         provider = CountingProvider()
         app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
             artifact_root=root, qa_provider_factory=lambda: provider
         )
         client = TestClient(app)
@@ -425,7 +435,8 @@ def test_duplicate_turn_request_executes_once_and_reconnect_replays_events() -> 
 
         # A fresh app instance represents browser/server reconnect. Turn state is
         # loaded from disk without re-running the provider.
-        reconnected = TestClient(create_review_api_app(artifact_root=root))
+        reconnected = TestClient(create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=root))
         replay = reconnected.get(
             f"/api/review/sessions/{session_id}/turns/{first['turn_id']}"
         )
@@ -529,7 +540,8 @@ def test_execution_failed_result_surfaces_diagnostics_in_failure_message() -> No
 def test_paused_review_can_reconnect_resume_once_or_cancel() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        client = TestClient(create_review_api_app(artifact_root=root))
+        client = TestClient(create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=root))
         session_id = "paused-session"
         assert (
             client.post(
@@ -633,6 +645,7 @@ def test_temporary_datalog_turn_completes_automatically_without_confirmation() -
         holder: dict[str, str] = {}
         client = TestClient(
             create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=root,
                 qa_provider_factory=lambda: _DatalogProposalProvider(
                     holder["answer_id"]
@@ -677,6 +690,7 @@ def test_temporary_datalog_completed_turn_cancel_is_idempotent() -> None:
         holder: dict[str, str] = {}
         client = TestClient(
             create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=root,
                 qa_provider_factory=lambda: _DatalogProposalProvider(
                     holder["answer_id"]
@@ -715,7 +729,8 @@ def test_default_provider_rule_question_executes_automatically_without_trust_esc
     temporary Datalog execution and never grants reusable-rule trust."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        client = TestClient(create_review_api_app(artifact_root=root))
+        client = TestClient(create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=root))
         session_id = "default-gate-session"
         assert (
             client.post(
@@ -912,6 +927,7 @@ def test_bundled_pump_check_command_runs_rule_pack_inside_turn() -> None:
         root = Path(tmp_dir) / "sessions"
         provider = CountingProvider()
         app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
             artifact_root=root, qa_provider_factory=lambda: provider
         )
         client = TestClient(app)
@@ -971,6 +987,7 @@ def test_multi_round_turn_persists_live_round_progress_events() -> None:
         root = Path(tmp_dir) / "sessions"
         provider = _MultiRoundProvider()
         app = create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
             artifact_root=root, qa_provider_factory=lambda: provider
         )
         client = TestClient(app)

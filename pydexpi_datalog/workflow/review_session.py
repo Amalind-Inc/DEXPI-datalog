@@ -690,17 +690,19 @@ def session_artifact_keys(session_id: str) -> dict[str, str]:
 
 
 def session_artifact_paths(store: ArtifactStore, session_id: str) -> dict[str, str]:
-    """The same artifacts as absolute local paths, for the preparation result.
+    """Where each of a session's artifacts can be fetched from.
 
-    Preparation advertises absolute paths to its caller, which only a local
-    store can honour. This is the one place that projection happens; bead
-    2afe.8 (hosted artifacts on object storage) has to revisit what the
-    result advertises rather than chase the assumption through the flow.
+    A URL, not a path, and the same shape in both deployment profiles: a
+    `file://` URL locally, a presigned object-store URL when hosted
+    (bead 2afe.8). Before that, this read `store.root` and raised for any
+    store that had no directory behind it, which made a hosted deployment
+    fail at the end of a successful preparation.
+
+    The wire field names still say `path`. Renaming them is a client-visible
+    change worth making deliberately rather than folding into this one.
     """
 
-    root = getattr(store, "root", None)
-    if root is None:
-        raise TypeError("absolute artifact paths need a local-backed store")
     return {
-        role: str(root / key) for role, key in session_artifact_keys(session_id).items()
+        role: store.download_url(key)
+        for role, key in session_artifact_keys(session_id).items()
     }

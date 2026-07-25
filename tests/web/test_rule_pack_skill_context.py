@@ -7,6 +7,12 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+# Every app here gets a fresh workspace. The hosted profile keeps authored
+# packs and artifacts in a bucket that outlives the run, so a fixed
+# workspace would meet the previous run's packs on the second pass
+# (bead 2afe.8). Locally the temporary artifact root already isolates.
+from hosted_env import fresh_principal
+
 from pydexpi_datalog.web.review_api import create_review_api_app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -59,7 +65,7 @@ ADVISORY_B = textwrap.dedent(
 class AttachSkillContextTests(unittest.TestCase):
     def test_attach_injects_advisory_skill_context_without_rule_outcomes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
 
             for markdown in (ADVISORY_A, ADVISORY_B):

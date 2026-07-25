@@ -12,8 +12,13 @@ on-disk layout, which is a promise the local implementation alone makes.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
+import time
 import unittest
+import urllib.error
+import urllib.request
+import uuid
 from pathlib import Path
 
 from pydexpi_datalog.workflow.artifact_store import (
@@ -23,13 +28,76 @@ from pydexpi_datalog.workflow.artifact_store import (
     LocalArtifactStore,
 )
 
+S3_ENDPOINT_ENV_VAR = "PYDEXPI_S3_TEST_ENDPOINT"
+
+
+def _fetch(url: str) -> str:
+    """Read a download URL the way a browser would: no application involved."""
+
+    with urllib.request.urlopen(url, timeout=30) as response:  # noqa: S310
+        return response.read().decode("utf-8")
+
+
+def _status(url: str) -> int:
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:  # noqa: S310
+            return int(response.status)
+    except urllib.error.HTTPError as error:
+        return int(error.code)
+
+
+def s3_test_store(case: unittest.TestCase, *, workspace: str) -> ArtifactStore:
+    """A store on the real object server, in a bucket created for this run.
+
+    Skips when no server is configured. In CI the endpoint is always set, so
+    a skip there would mean the service container is broken -- see
+    `tests/conftest.py`, which refuses to convert that into a skip.
+    """
+
+    endpoint = os.environ.get(S3_ENDPOINT_ENV_VAR, "").strip()
+    if not endpoint:
+        raise unittest.SkipTest(
+            f"no object store: set {S3_ENDPOINT_ENV_VAR} to run this leg"
+        )
+
+    from pydexpi_datalog.workflow.s3_artifact_store import (
+        S3ArtifactStore,
+        S3Settings,
+        build_s3_client,
+    )
+
+    settings = S3Settings(
+        endpoint_url=endpoint,
+        bucket=os.environ.get("PYDEXPI_S3_TEST_BUCKET", "pydexpi-test"),
+        access_key_id=os.environ.get("PYDEXPI_S3_ACCESS_KEY_ID", "minioadmin"),
+        secret_access_key=os.environ.get("PYDEXPI_S3_SECRET_ACCESS_KEY", "minioadmin"),
+        region=os.environ.get("PYDEXPI_S3_REGION", "us-east-1"),
+    )
+    client = build_s3_client(settings)
+    try:
+        client.create_bucket(Bucket=settings.bucket)
+    except Exception:  # noqa: BLE001 - already exists is the common case
+        pass
+    del case
+    return S3ArtifactStore(client=client, bucket=settings.bucket, prefix=workspace)
+
 
 class ArtifactStoreContractTests(unittest.TestCase):
-    def setUp(self) -> None:
+    """Behaviour every store owes, whatever it writes to.
+
+    Subclassed once per implementation. The hosted object store inherits all
+    of it, so a bucket that cannot honour some corner of the contract fails
+    here rather than in the profile nobody runs locally.
+    """
+
+    def _make_store(self) -> ArtifactStore:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name) / "workspace"
-        self.store = LocalArtifactStore(self.root)
+        return LocalArtifactStore(self.root)
+
+    def setUp(self) -> None:
+        self.store = self._make_store()
 
     def test_text_roundtrips(self) -> None:
         self.store.write_text("session-1/graph_facts.dl", "node(\"a\").\n")
@@ -122,6 +190,38 @@ class ArtifactStoreContractTests(unittest.TestCase):
         self.store.append_line("s1/audit.jsonl", "already\n")
         self.assertEqual(self.store.read_text("s1/audit.jsonl"), "already\n")
 
+    def test_local_path_exposes_a_real_readable_file(self) -> None:
+        """Third-party tools (pyDEXPI, Souffle) need a genuine filesystem path."""
+        self.store.write_text("s1/drawing.xml", "<xml/>")
+        with self.store.local_path("s1/drawing.xml") as path:
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.read_text(encoding="utf-8"), "<xml/>")
+
+    def test_open_bytes_streams_without_reading_the_whole_artifact(self) -> None:
+        self.store.write_text("s1/graph_facts.dl", "0123456789")
+        with self.store.open_bytes("s1/graph_facts.dl") as stream:
+            self.assertEqual(stream.read(4), b"0123")
+
+    def test_local_dir_yields_a_real_directory_writers_can_populate(self) -> None:
+        """The DEXPI export pipeline writes into a directory it is handed."""
+        with self.store.local_dir("s1/export") as directory:
+            self.assertTrue(directory.is_dir())
+            (directory / "graph_facts.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(self.store.read_text("s1/export/graph_facts.json"), "{}")
+
+    def test_a_download_url_serves_the_bytes_without_the_application(self) -> None:
+        """Artifact bytes must be fetchable without proxying through the app.
+
+        Local answers with a `file://` URL because that is what a local
+        artifact honestly is; the hosted store answers with a presigned HTTPS
+        URL. Callers get one field that always resolves to the bytes.
+        """
+
+        self.store.write_text("s1/report.json", '{"ok": true}')
+        url = self.store.download_url("s1/report.json")
+        self.assertTrue(url, "every store must offer a download URL")
+        self.assertEqual('{"ok": true}', _fetch(url))
+
 
 class ArtifactKeyContainmentTests(unittest.TestCase):
     """A key is request-supplied data; it must never escape the workspace."""
@@ -166,31 +266,97 @@ class LocalLayoutTests(unittest.TestCase):
         self.assertTrue(on_disk.is_file())
         self.assertEqual(json.loads(on_disk.read_text(encoding="utf-8")), {"ok": True})
 
-    def test_local_path_exposes_a_real_readable_file(self) -> None:
-        """Third-party tools (pyDEXPI, Souffle) need a genuine filesystem path."""
-        self.store.write_text("s1/drawing.xml", "<xml/>")
-        with self.store.local_path("s1/drawing.xml") as path:
-            self.assertTrue(path.is_file())
-            self.assertEqual(path.read_text(encoding="utf-8"), "<xml/>")
 
-    def test_open_bytes_streams_without_reading_the_whole_artifact(self) -> None:
-        self.store.write_text("s1/graph_facts.dl", "0123456789")
-        with self.store.open_bytes("s1/graph_facts.dl") as stream:
-            self.assertEqual(stream.read(4), b"0123")
+class S3ArtifactStoreContractTests(ArtifactStoreContractTests):
+    """The same contract, against a real S3-compatible server.
 
-    def test_local_dir_yields_a_real_directory_writers_can_populate(self) -> None:
-        """The DEXPI export pipeline writes into a directory it is handed."""
-        with self.store.local_dir("s1/export") as directory:
-            self.assertTrue(directory.is_dir())
-            (directory / "graph_facts.json").write_text("{}", encoding="utf-8")
-        self.assertEqual(self.store.read_text("s1/export/graph_facts.json"), "{}")
+    Inherited wholesale rather than restated: a bucket that cannot honour
+    some corner of the interface -- append, streaming reads, a real directory
+    for the DEXPI exporter -- fails on the shared test, not on a hosted-only
+    variant written to accommodate it.
+
+    Needs a server; there is no in-process S3:
+
+        docker run -d -p 9100:9000 -e MINIO_ROOT_USER=minioadmin \\
+            -e MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio:latest \\
+            server /data
+        export PYDEXPI_S3_TEST_ENDPOINT=http://127.0.0.1:9100
+    """
+
+    def _make_store(self) -> ArtifactStore:
+        return s3_test_store(self, workspace=f"ws-{uuid.uuid4().hex[:12]}")
+
+
+class S3WorkspaceIsolationTests(unittest.TestCase):
+    """One workspace's prefix is a boundary, not a naming convention."""
+
+    def setUp(self) -> None:
+        self.mine = s3_test_store(self, workspace=f"mine-{uuid.uuid4().hex[:8]}")
+        self.theirs = s3_test_store(self, workspace=f"theirs-{uuid.uuid4().hex[:8]}")
+
+    def test_an_identical_key_in_two_workspaces_holds_different_bytes(self) -> None:
+        self.mine.write_text("s1/secret.json", '{"owner": "mine"}')
+        self.theirs.write_text("s1/secret.json", '{"owner": "theirs"}')
+        self.assertEqual('{"owner": "mine"}', self.mine.read_text("s1/secret.json"))
+        self.assertEqual('{"owner": "theirs"}', self.theirs.read_text("s1/secret.json"))
+
+    def test_a_workspace_cannot_read_a_key_it_does_not_hold(self) -> None:
+        self.theirs.write_text("s1/private.json", '{"owner": "theirs"}')
+        with self.assertRaises(ArtifactNotFound):
+            self.mine.read_text("s1/private.json")
+
+    def test_listing_never_reaches_another_workspace(self) -> None:
+        self.theirs.write_text("s1/theirs.json", "{}")
+        self.mine.write_text("s1/mine.json", "{}")
+        self.assertEqual(["s1/mine.json"], self.mine.list("s1"))
+
+    def test_a_traversing_key_cannot_climb_out_of_the_prefix(self) -> None:
+        """The prefix is the whole isolation, so escaping it is escaping the user."""
+
+        for key in ("../other/x.json", "s1/../../other/x.json", "/absolute.json"):
+            with self.subTest(key=key), self.assertRaises(InvalidArtifactKey):
+                self.mine.write_text(key, "nope")
+
+
+class S3PresignedDownloadTests(unittest.TestCase):
+    """Bytes leave via the object store, not through the application."""
+
+    def setUp(self) -> None:
+        self.store = s3_test_store(self, workspace=f"dl-{uuid.uuid4().hex[:8]}")
+
+    def test_the_download_url_points_at_the_object_store(self) -> None:
+        self.store.write_text("s1/big-export.json", '{"rows": 1}')
+        url = self.store.download_url("s1/big-export.json")
+        self.assertTrue(url.startswith("http"), url)
+        self.assertIn("X-Amz-Signature", url, "must be presigned, not a bare URL")
+
+    def test_the_url_is_scoped_to_one_key(self) -> None:
+        """A presigned URL is a capability; it must not open the workspace."""
+
+        self.store.write_text("s1/allowed.json", '{"ok": true}')
+        self.store.write_text("s1/forbidden.json", '{"secret": true}')
+        url = self.store.download_url("s1/allowed.json")
+        swapped = url.replace("allowed.json", "forbidden.json")
+        self.assertNotEqual(200, _status(swapped))
+
+    def test_an_expired_url_stops_working(self) -> None:
+        self.store.write_text("s1/ephemeral.json", "{}")
+        url = self.store.download_url("s1/ephemeral.json", expires_in=1)
+        self.assertEqual(200, _status(url))
+        time.sleep(2)
+        self.assertNotEqual(200, _status(url))
 
 
 class ProtocolConformanceTests(unittest.TestCase):
     def test_local_store_satisfies_the_artifact_store_protocol(self) -> None:
-        """The guard for the hosted implementation bead 2afe.8 adds."""
         with tempfile.TemporaryDirectory() as tmp:
             self.assertIsInstance(LocalArtifactStore(Path(tmp)), ArtifactStore)
+
+    def test_the_object_store_satisfies_the_same_protocol(self) -> None:
+        self.assertIsInstance(
+            s3_test_store(self, workspace=f"proto-{uuid.uuid4().hex[:8]}"),
+            ArtifactStore,
+        )
 
 
 if __name__ == "__main__":

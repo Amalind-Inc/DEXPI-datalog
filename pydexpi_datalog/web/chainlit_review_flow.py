@@ -2040,7 +2040,7 @@ class ChainlitReviewFlow:
         *,
         session_id: str,
         result_artifact: dict[str, object],
-    ) -> Path:
+    ) -> str:
         return self._write_result_artifact(
             session_id=session_id,
             result_artifact=result_artifact,
@@ -2103,26 +2103,23 @@ class ChainlitReviewFlow:
         result_artifact: dict[str, object],
         dirname: str,
         filename_prefix: str,
-    ) -> Path:
+    ) -> str:
         prefix = f"{session_id}/{dirname}"
         result_index = len(self._store.list(prefix, suffix=".json")) + 1
         key = f"{prefix}/{filename_prefix}_{result_index}.json"
         self._store.write_json(key, result_artifact)
         return self._local_path_for(key)
 
-    def _local_path_for(self, key: str) -> Path:
-        """Project a key to an absolute local path for the API contract.
+    def _local_path_for(self, key: str) -> str:
+        """Where an artifact can be fetched from, in either profile.
 
-        Preparation results and export manifests advertise absolute paths,
-        which only a local store can honour. Bead 2afe.8 (hosted artifacts on
-        object storage) has to revisit what those responses advertise; this is
-        the one place in the flow that assumes a local backing.
+        A `file://` URL locally and a presigned object-store URL when hosted
+        (bead 2afe.8). This used to reach for `store.root` and raise for any
+        store without a directory behind it, which is what made export the
+        last thing to break under the hosted profile.
         """
 
-        root = getattr(self._store, "root", None)
-        if root is None:
-            raise TypeError("absolute artifact paths need a local-backed store")
-        return root / key
+        return self._store.download_url(key)
 
     def _copy_prepared_artifacts(
         self, *, session_id: str, export_prefix: str

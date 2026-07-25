@@ -45,11 +45,11 @@ jobs:
       matrix:
         profile: [local, hosted]
     services:
-      # The hosted profile indexes sessions in a shared libSQL database, so
-      # the hosted leg needs a real one; there is no in-process libSQL. The
-      # local leg ignores it. Running one server for both legs is cheaper
-      # than a conditional service and keeps the two jobs identical apart
-      # from the profile itself.
+      # There is no in-process libSQL, so the hosted leg needs a real server.
+      # The local leg ignores it. Object storage is started as a step below
+      # rather than here: the MinIO image needs `server /data` as arguments,
+      # which a service container cannot pass, and the bucket has to be
+      # created before the suite runs.
       libsql:
         image: ghcr.io/tursodatabase/libsql-server:latest
         ports:
@@ -96,16 +96,53 @@ jobs:
           souffle --version
 
       - name: Install project
-        # The hosted extra (libsql) is installed only on the hosted leg. That
-        # makes the local leg a standing proof of the OSS promise in ADR 0016:
-        # a standalone install is standard-library only, and no import path
-        # reachable from the local profile may reach for libsql.
+        # The hosted extras (libsql, boto3) are installed only on the hosted
+        # leg. That makes the local leg a standing proof of the OSS promise in
+        # ADR 0016: a standalone install is standard-library only, and no
+        # import path reachable from the local profile may reach for either.
         env:
           EXTRAS: ${{ matrix.profile == 'hosted' && 'dev,hosted' || 'dev' }}
         run: |
           set -euo pipefail
           pip install -e ./pyDEXPI
           pip install -e ".[${EXTRAS}]"
+
+      - name: Start object storage
+        # Hosted only: the local leg must run with no object store reachable,
+        # which is what a standalone install looks like. A step rather than a
+        # service because the image takes `server /data` as arguments and the
+        # bucket has to exist before the suite starts.
+        if: matrix.profile == 'hosted'
+        run: |
+          set -euo pipefail
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
+          python - <<'PY'
+          import boto3
+          from botocore.config import Config
+
+          client = boto3.client(
+              "s3",
+              endpoint_url="http://127.0.0.1:9000",
+              aws_access_key_id="minioadmin",
+              aws_secret_access_key="minioadmin",
+              region_name="us-east-1",
+              config=Config(
+                  signature_version="s3v4", s3={"addressing_style": "path"}
+              ),
+          )
+          client.create_bucket(Bucket="pydexpi-ci")
+          print("bucket created")
+          PY
 
       - name: Run the suite under the ${{ matrix.profile }} profile
         # PYDEXPI_QA_PROVIDER=scripted is the existing hermeticity switch: it
@@ -119,19 +156,25 @@ jobs:
         # while it is red would train everyone to ignore this badge. Bead
         # pydexpi-datalog-1-hawf adds it once plz7 is fixed.
         #
-        # The libSQL variables are set only on the hosted leg, matching where
-        # the package is installed. The local leg therefore runs with no
-        # libSQL available at all, which is the condition a standalone user
-        # installs into.
+        # The backend variables are set only on the hosted leg, matching where
+        # the packages are installed. The local leg therefore runs with no
+        # libSQL and no object store reachable at all, which is the condition
+        # a standalone user installs into.
         #
         # `CI` is set by Actions, which stops tests/conftest.py from turning a
-        # missing database into a skip. A broken service container has to look
-        # different from a passing run.
+        # missing backend into a skip. A broken service has to look different
+        # from a passing run.
         env:
           PYDEXPI_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
           PYDEXPI_QA_PROVIDER: scripted
           PYDEXPI_LIBSQL_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
           PYDEXPI_LIBSQL_TEST_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
+          PYDEXPI_S3_BUCKET: ${{ matrix.profile == 'hosted' && 'pydexpi-ci' || '' }}
+          PYDEXPI_S3_TEST_BUCKET: ${{ matrix.profile == 'hosted' && 'pydexpi-ci' || '' }}
+          PYDEXPI_S3_ENDPOINT_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
+          PYDEXPI_S3_TEST_ENDPOINT: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
+          PYDEXPI_S3_ACCESS_KEY_ID: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
+          PYDEXPI_S3_SECRET_ACCESS_KEY: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
         run: pytest -m "not slow"
 
   frontend:

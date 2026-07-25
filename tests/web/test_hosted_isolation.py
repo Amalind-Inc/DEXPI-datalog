@@ -14,6 +14,7 @@ from __future__ import annotations
 import tempfile
 import time
 import unittest
+import uuid
 from pathlib import Path
 
 import jwt
@@ -62,10 +63,22 @@ class HostedIsolationTests(unittest.TestCase):
         cls.key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         cls.fixture = E06_FIXTURE.read_text(encoding="utf-8")
 
+    def setUp(self) -> None:
+        """Namespace this run's users.
+
+        A workspace is a digest of issuer and subject, so a fixed subject is
+        a fixed workspace -- and the hosted backends are shared and outlive
+        the run. Reusing "alice" would meet the artifacts the last run left
+        behind, which is exactly what a hosted deployment does to a test that
+        assumed a clean slate.
+        """
+
+        self.run_id = uuid.uuid4().hex[:12]
+
     def _token(self, subject: str) -> str:
         return jwt.encode(
             {
-                "sub": subject,
+                "sub": f"{subject}-{self.run_id}",
                 "iss": ISSUER,
                 "aud": AUDIENCE,
                 "iat": int(time.time()) - 5,

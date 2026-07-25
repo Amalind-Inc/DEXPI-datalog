@@ -108,6 +108,16 @@ class ArtifactStore(Protocol):
     def local_dir(self, prefix: str) -> AbstractContextManager[Path]:
         """Yield a real directory for third-party tools that write into one."""
 
+    def download_url(self, key: str, *, expires_in: int = 3600) -> str:
+        """A URL that serves the artifact's bytes without the application.
+
+        Artifacts can be large, and proxying them through the API turns a
+        download into application load. A hosted store answers with a
+        presigned object-store URL that expires; the local store answers with
+        a `file://` URL, because that is what a local artifact honestly is.
+        Callers get one field that always resolves to the bytes.
+        """
+
 
 class LocalArtifactStore:
     """An `ArtifactStore` over a directory tree.
@@ -247,3 +257,18 @@ class LocalArtifactStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line if line.endswith("\n") else line + "\n")
+
+    def download_url(self, key: str, *, expires_in: int = 3600) -> str:
+        """A `file://` URL for the artifact.
+
+        There is nothing to presign and nothing to expire: a local artifact
+        is already reachable by anyone who can reach the machine, so the
+        expiry is accepted and ignored rather than pretended at.
+
+        Like the object-store implementation this does not check existence,
+        so callers can advertise where an artifact will live before writing
+        it.
+        """
+
+        del expires_in
+        return (self._root / validate_key(key)).absolute().as_uri()

@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hosted_env import path_from_download_url
+
 from pydexpi_datalog import FakeModelProvider
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
@@ -638,7 +640,11 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                                 answer["result_artifact"]["kind"],
                                 "deterministic_logic_request_result",
                             )
-                            self.assertTrue(Path(answer["result_artifact"]["path"]).exists())
+                            self.assertTrue(
+                                path_from_download_url(
+                                    answer["result_artifact"]["path"]
+                                ).exists()
+                            )
                             self.assertEqual(
                                 answer["evidence"]["display"],
                                 "expandable",
@@ -894,7 +900,11 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     self.assertIn(result["outcome"], result["summary"]["text"])
                     self.assertEqual(result["evidence"]["display"], "expandable")
                     self.assertTrue(result["evidence"]["items"])
-                    self.assertTrue(Path(result["result_artifact"]["path"]).exists())
+                    self.assertTrue(
+                        path_from_download_url(
+                            result["result_artifact"]["path"]
+                        ).exists()
+                    )
                     self.assertEqual(
                         result["evidence_highlight"],
                         panel["evidence_highlight"],
@@ -1190,8 +1200,8 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             )
 
             self.assertEqual(export["status"], "exported")
-            self.assertTrue(Path(str(export["export_dir"])).is_dir())
-            self.assertTrue(Path(str(export["manifest_path"])).exists())
+            self.assertTrue(path_from_download_url(str(export["export_dir"])).is_dir())
+            self.assertTrue(path_from_download_url(str(export["manifest_path"])).exists())
             manifest = export["manifest"]
             self.assertEqual(manifest["session_id"], "explicit-export-session")
             self.assertEqual(
@@ -1223,13 +1233,17 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 "rule_pack_results",
                 "missing_capabilities",
             ]:
-                exported_paths.extend(Path(item["path"]) for item in manifest[group])
+                exported_paths.extend(
+                    path_from_download_url(item["path"]) for item in manifest[group]
+                )
             self.assertTrue(exported_paths)
             for path in exported_paths:
                 self.assertTrue(path.exists())
 
             exported_text = json.dumps(export, sort_keys=True)
-            exported_text += Path(str(export["manifest_path"])).read_text(encoding="utf-8")
+            exported_text += path_from_download_url(
+                str(export["manifest_path"])
+            ).read_text(encoding="utf-8")
             for path in exported_paths:
                 exported_text += path.read_text(encoding="utf-8")
             self.assertEqual(exported_text.count(sentinel), 0)

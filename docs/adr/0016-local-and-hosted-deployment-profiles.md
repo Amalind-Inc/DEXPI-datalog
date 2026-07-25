@@ -54,12 +54,34 @@ should not need an environment; only a served deployment must be explicit.
 That default is also what lets CI re-run the entire existing suite under the
 other profile by setting one variable rather than by every test opting in.
 
-The hosted seams arrive one at a time, and the bundle names the local
-implementation until each one exists. The verified-token principal and the
-libSQL catalog are built; object-store artifacts are not, so hosted still
-writes artifact trees to the local filesystem. Replacing one line in the
-hosted bundle is what puts a hosted implementation under the whole suite, and
-no hosted slice can land without both CI legs staying green.
+All three hosted seams are now built: the verified-token principal, the
+libSQL catalog, and object-store artifacts. A hosted instance keeps nothing
+on its own disk, which was the point of the epic. The bundle stays the one
+place a profile's implementations are named, so a fourth seam is still a
+line there rather than a branch in the flow.
+
+Artifacts go to S3-compatible object storage, reached through the same
+`ArtifactStore` interface the filesystem implements. The interface was
+designed for this and mostly survived contact, but two operations had to be
+bought rather than found. Object storage has no append, so `append_line` is
+read-modify-write -- acceptable because the audit artifacts it serves are
+small and written once per turn, and it promises exactly what the local
+implementation promises: ordering and durability for a completed append, not
+safety against concurrent writers. And third-party tools take directories,
+so `local_dir` downloads the prefix, yields a real directory, and uploads
+what is in it on exit. Neither is free; both are cheaper than teaching the
+DEXPI exporter and Souffle about buckets.
+
+Downloads are presigned URLs rather than bytes proxied through the API,
+which keeps artifact size off the application's critical path. That made
+`ArtifactStore.download_url` a universal operation instead of a hosted-only
+one: the local store answers with a `file://` URL. Preparation results and
+export manifests used to advertise absolute filesystem paths, reached by
+`getattr(store, "root")` and raising for any store without a directory
+behind it. They now advertise a URL in both profiles. That is a client-
+visible change to those fields, taken deliberately: the alternative was one
+field meaning a path here and a URL there, which is the profile skew this
+ADR exists to prevent.
 
 The catalog is reached through an injected connection factory rather than two
 catalog classes. There is exactly one copy of the schema and of every
@@ -74,13 +96,34 @@ a standalone local install cost a Rust toolchain. CI installs the extra only
 on the hosted leg, which leaves the local leg a standing proof that nothing
 reachable from the local profile imports it.
 
-A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL`, for the
-same reason it refuses to start without identity settings. The failure being
-avoided is silent: a hosted instance that fell back to a SQLite file on the
-container's disk would look completely healthy, serve correctly, and lose
-every session index the next time the container was replaced. The auth token
-is optional, because Turso issues tokens while a `libsql-server` on a private
-network need not -- the database is the authority on its own access control.
+A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL` or
+`PYDEXPI_S3_BUCKET`, for the same reason it refuses to start without identity
+settings. The failure being avoided is silent: a hosted instance that fell
+back to the container's disk would look completely healthy, serve correctly,
+and lose every session index and artifact the next time the container was
+replaced. So neither hosted factory has a code path that can write locally --
+each ignores the artifact root outright. Both service credentials are
+optional, because Turso issues tokens while a `libsql-server` on a private
+network need not, and a deployment with an instance role has no S3 keys to
+give. The service is the authority on its own access control.
+
+Running the suite twice under the hosted profile is a test in itself, and it
+failed the first time. Tests had been taking their isolation from a
+per-test temporary directory, which the hosted profile ignores by design;
+against long-lived shared backends they met the previous run's authored packs
+and sessions. They now scope by workspace, which is the isolation the product
+actually provides. This is not test bookkeeping: a hosted deployment's
+storage always has a history, and a suite that only passes against empty
+backends is not testing the hosted profile.
+
+One thing deserves recording because it nearly shipped. When the object store
+first landed, the entire hosted suite passed with the bundle edited to name
+the *local* filesystem store -- the exact regression this seam removes. Every
+test asked whether the review flow worked, and it works on a disk; none asked
+where the bytes went. `tests/web/test_hosted_storage.py` exists to ask that,
+and the same question is asked of the catalog. A guard nobody can fail is not
+a guard, and the way to find out is to break the thing on purpose and watch
+for red.
 
 Hosted sign-in is Better Auth running inside the Next app, with its JWT
 plugin publishing a JWKS that the Python backend verifies against. Better Auth

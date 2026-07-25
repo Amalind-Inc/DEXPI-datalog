@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from hosted_env import fetch_download_url, fresh_principal
 
 from pydexpi_datalog.web.review_api import (
     TopologyAwareFakeModelProvider,
@@ -28,7 +29,7 @@ class ReviewApiTests(unittest.TestCase):
     def test_provider_settings_endpoint_accepts_explicit_byok_providers(self) -> None:
         sentinel = "sk-sentinel-secret-should-never-leak"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             session_id = "api-provider-session"
             prepared = client.post(
@@ -71,7 +72,7 @@ class ReviewApiTests(unittest.TestCase):
     def test_provider_settings_endpoint_rejects_non_tool_capable_model(self) -> None:
         sentinel = "sk-sentinel-secret-should-never-leak"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             session_id = "api-provider-tool-gate"
             prepared = client.post(
@@ -102,7 +103,7 @@ class ReviewApiTests(unittest.TestCase):
         sentinel = "sk-sentinel-secret-should-never-leak"
         session_id = "api-e06-session"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp_dir) / "sessions",
                 model_provider_factory=TopologyAwareFakeModelProvider,
             )
@@ -269,7 +270,11 @@ class ReviewApiTests(unittest.TestCase):
             )
             self.assertEqual(export_status, 200)
             self.assertEqual(export["status"], "exported")
-            self.assertTrue(Path(str(export["manifest_path"])).exists())
+            # Fetched through the advertised URL, which is a `file://` URL
+            # locally and a presigned object-store URL when hosted -- in
+            # neither case do the bytes pass through the API (bead 2afe.8).
+            manifest = json.loads(fetch_download_url(str(export["manifest_path"])))
+            self.assertTrue(manifest)
             self.assertEqual(len(export["manifest"]["logic_request_results"]), 1)
             self.assertEqual(len(export["manifest"]["rule_pack_results"]), 3)
 
@@ -300,7 +305,7 @@ class ReviewApiTests(unittest.TestCase):
             / "E03V01-VER.EX01.xml"
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
 
             first = client.post(
@@ -338,7 +343,7 @@ class ReviewApiTests(unittest.TestCase):
     def test_configured_preparation_limit_is_enforced_through_http(self) -> None:
         session_id = "api-limit"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp_dir) / "sessions",
                 preparation_limits=PreparationLimits(max_upload_bytes=64),
             )
@@ -358,7 +363,7 @@ class ReviewApiTests(unittest.TestCase):
     def test_prepare_response_exposes_source_id_for_provenance(self) -> None:
         session_id = "api-source-id"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             prepared = client.post(
                 f"/api/review/sessions/{session_id}/prepare",

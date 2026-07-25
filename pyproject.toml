@@ -37,14 +37,16 @@ benchmark = [
     "numpy==2.4.6",
     "openpyxl==3.1.5",
 ]
-# The hosted profile keeps its session catalog in a shared libSQL database
-# (ADR 0016). Deliberately not a base dependency: it is a native extension,
-# and platforms without a published wheel compile it from Rust source. A
-# standalone local install stays standard-library only, and
-# `session_catalog.libsql_catalog` imports this inside the function so a
-# local run never touches it.
+# What the hosted profile needs beyond the local one (ADR 0016): a shared
+# libSQL catalog and S3-compatible object storage. Deliberately not base
+# dependencies. `libsql` is a native extension that platforms without a
+# published wheel compile from Rust source, and `boto3` is large; a
+# standalone local install should pay for neither. Both are imported inside
+# the factory that needs them (`session_catalog.libsql_catalog`,
+# `s3_artifact_store.build_s3_client`), so a local run never touches them.
 hosted = [
     "libsql==0.1.11",
+    "boto3==1.43.56",
 ]
 
 [build-system]

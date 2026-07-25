@@ -187,7 +187,7 @@ def create_review_api_app(
             existing = graphs.get(owner.workspace)
             if existing is not None:
                 return existing
-            store = bundle.build_store(artifact_root, owner)
+            store = bundle.build_store(artifact_root, owner, environment)
             services = WorkspaceServices(
                 principal=owner,
                 store=store,

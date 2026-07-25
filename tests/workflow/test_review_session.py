@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hosted_env import path_from_download_url
+
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
     ReviewSessionService,
@@ -97,15 +99,17 @@ class ReviewSessionServiceTests(unittest.TestCase):
                     self.assertEqual(result["job"]["status"], "succeeded")
                     self.assertEqual(result["readiness"]["state"], "ready")
                     self.assertTrue(result["topology_view"]["nodes"])
-                    self.assertTrue(Path(result["artifacts"]["graph_facts_json"]).exists())
-                    self.assertTrue(
-                        Path(result["artifacts"]["graph_facts_datalog"]).exists()
-                    )
-                    self.assertTrue(
-                        Path(
-                            result["artifacts"]["derived_graph_semantics_datalog"]
-                        ).exists()
-                    )
+                    for artifact_name in (
+                        "graph_facts_json",
+                        "graph_facts_datalog",
+                        "derived_graph_semantics_datalog",
+                    ):
+                        self.assertTrue(
+                            path_from_download_url(
+                                result["artifacts"][artifact_name]
+                            ).exists(),
+                            artifact_name,
+                        )
 
     def test_topology_view_contract_resolves_all_ids_for_evidence_highlighting(
         self,
@@ -239,7 +243,10 @@ class ReviewSessionServiceTests(unittest.TestCase):
                 "readiness_metadata",
                 "topology_view_model",
             ):
-                self.assertTrue(Path(artifact_paths[artifact_name]).exists(), artifact_name)
+                self.assertTrue(
+                    path_from_download_url(artifact_paths[artifact_name]).exists(),
+                    artifact_name,
+                )
 
             topology = result["topology_view"]
             self.assertEqual(topology["session_id"], "session-e06")
@@ -251,7 +258,9 @@ class ReviewSessionServiceTests(unittest.TestCase):
                 self.assertIn(edge["target_id"], topology_node_ids)
 
             persisted_topology = json.loads(
-                Path(artifact_paths["topology_view_model"]).read_text(encoding="utf-8")
+                path_from_download_url(artifact_paths["topology_view_model"]).read_text(
+                    encoding="utf-8"
+                )
             )
             self.assertEqual(persisted_topology, topology)
 

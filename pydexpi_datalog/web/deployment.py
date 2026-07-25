@@ -33,6 +33,12 @@ from pathlib import Path
 
 from ..workflow.artifact_store import ArtifactStore, LocalArtifactStore
 from ..workflow.principal import Principal
+from ..workflow.s3_artifact_store import (
+    HOSTED_STORAGE_ENV_VARS,
+    S3ArtifactStore,
+    S3Settings,
+    build_s3_client,
+)
 from ..workflow.session_catalog import (
     CATALOG_FILENAME,
     SessionCatalog,
@@ -90,6 +96,37 @@ def hosted_catalog_settings_from_env(
     return HostedCatalogSettings(
         url=values["PYDEXPI_LIBSQL_URL"],
         auth_token=values["PYDEXPI_LIBSQL_AUTH_TOKEN"],
+    )
+
+
+class HostedStorageNotConfigured(ValueError):
+    """The hosted profile was selected without a bucket to write artifacts to."""
+
+
+def hosted_storage_settings_from_env(env: Mapping[str, str]) -> S3Settings:
+    """Object-storage settings for a hosted deployment, or refuse to start.
+
+    Only the bucket is required. The endpoint is optional because an empty
+    one means AWS S3 itself, and the credentials are optional because a
+    deployment running with an instance role or IRSA has none to give --
+    boto3's own credential chain is better at finding them than a
+    reimplementation here would be.
+    """
+
+    values = {name: env.get(name, "").strip() for name in HOSTED_STORAGE_ENV_VARS}
+    if not values["PYDEXPI_S3_BUCKET"]:
+        raise HostedStorageNotConfigured(
+            "the hosted deployment profile keeps review artifacts in object "
+            "storage, so it cannot start without a bucket: an instance disk "
+            "is lost the next time the instance is replaced. "
+            "Missing: PYDEXPI_S3_BUCKET."
+        )
+    return S3Settings(
+        bucket=values["PYDEXPI_S3_BUCKET"],
+        endpoint_url=values["PYDEXPI_S3_ENDPOINT_URL"] or None,
+        access_key_id=values["PYDEXPI_S3_ACCESS_KEY_ID"] or None,
+        secret_access_key=values["PYDEXPI_S3_SECRET_ACCESS_KEY"] or None,
+        region=values["PYDEXPI_S3_REGION"] or "us-east-1",
     )
 
 
@@ -153,14 +190,40 @@ class ProfileBundle:
     """
 
     profile: DeploymentProfile
-    build_store: Callable[[Path, Principal], ArtifactStore]
+    build_store: Callable[[Path, Principal, Mapping[str, str]], ArtifactStore]
     build_catalog: Callable[[Path, Mapping[str, str]], SessionCatalog]
 
 
-def _local_store(artifact_root: Path, principal: Principal) -> ArtifactStore:
+def _local_store(
+    artifact_root: Path,
+    principal: Principal,
+    env: Mapping[str, str] | None = None,
+) -> ArtifactStore:
     """A directory tree under the principal's workspace."""
 
+    del env
     return LocalArtifactStore(artifact_root / principal.workspace)
+
+
+def _hosted_store(
+    artifact_root: Path,
+    principal: Principal,
+    env: Mapping[str, str] | None = None,
+) -> ArtifactStore:
+    """A bucket prefix owned by the principal's workspace.
+
+    The artifact root is ignored, for the reason the hosted catalog ignores
+    it: an instance that fell back to its own disk would look healthy and
+    lose every artifact at the next redeploy.
+    """
+
+    del artifact_root
+    settings = hosted_storage_settings_from_env(env or {})
+    return S3ArtifactStore(
+        client=build_s3_client(settings),
+        bucket=settings.bucket,
+        prefix=principal.workspace,
+    )
 
 
 def _local_catalog(
@@ -204,7 +267,7 @@ _BUNDLES: dict[DeploymentProfile, ProfileBundle] = {
     # object store under the whole suite.
     DeploymentProfile.HOSTED: ProfileBundle(
         profile=DeploymentProfile.HOSTED,
-        build_store=_local_store,
+        build_store=_hosted_store,
         build_catalog=_hosted_catalog,
     ),
 }

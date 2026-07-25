@@ -16,6 +16,12 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
+# Every app here gets a fresh workspace. The hosted profile keeps authored
+# packs and artifacts in a bucket that outlives the run, so a fixed
+# workspace would meet the previous run's packs on the second pass
+# (bead 2afe.8). Locally the temporary artifact root already isolates.
+from hosted_env import fresh_principal
+
 from pydexpi_datalog.qa.grounded_qa_harness import (
     FinalAnswer,
     ToolCall,
@@ -35,7 +41,7 @@ E06_FIXTURE = (
 
 def _make_client(qa_provider_factory=None) -> tuple[TestClient, str]:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        app = create_review_api_app(
+        app = create_review_api_app(principal=fresh_principal(), 
             artifact_root=Path(tmp_dir) / "sessions",
             qa_provider_factory=qa_provider_factory,
         )
@@ -56,7 +62,7 @@ class QATurnsApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp_dir) / "sessions",
             )
             cls.client = TestClient(app)
@@ -65,7 +71,7 @@ class QATurnsApiTests(unittest.TestCase):
 
         # Fresh client with persistent tmp dir
         cls.tmp_path = Path(tempfile.mkdtemp())
-        app = create_review_api_app(artifact_root=cls.tmp_path / "sessions")
+        app = create_review_api_app(principal=fresh_principal(), artifact_root=cls.tmp_path / "sessions")
         cls.client = TestClient(app)
         prepared = cls.client.post(
             f"/api/review/sessions/{cls.session_id}/prepare",
@@ -225,7 +231,7 @@ class QATurnsApiTests(unittest.TestCase):
                 )
 
         with tempfile.TemporaryDirectory() as tmp:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp) / "sessions",
                 qa_provider_factory=DirectAnswerProvider,
             )
@@ -284,7 +290,7 @@ class QATurnsApiTests(unittest.TestCase):
                 return FinalAnswer(answer_text="All equipment reaches a pump.")
 
         with tempfile.TemporaryDirectory() as tmp:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp) / "sessions",
                 qa_provider_factory=TemplateProvider,
             )
@@ -381,7 +387,7 @@ class QATurnsApiTests(unittest.TestCase):
                 )
 
         with tempfile.TemporaryDirectory() as tmp:
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp) / "sessions",
                 qa_provider_factory=ProseCitingProvider,
             )
@@ -411,7 +417,7 @@ class QAConversationCompactionTests(unittest.TestCase):
 
     def _prepare(self, max_conversation_turns: int) -> tuple[TestClient, str]:
         tmp_path = Path(tempfile.mkdtemp())
-        app = create_review_api_app(
+        app = create_review_api_app(principal=fresh_principal(), 
             artifact_root=tmp_path / "sessions",
             max_conversation_turns=max_conversation_turns,
         )
@@ -473,7 +479,7 @@ class ForceScriptedProviderTests(unittest.TestCase):
             "pydexpi_datalog.web.review_api.OllamaQATurnProvider",
             side_effect=AssertionError("ollama provider must not be constructed"),
         ):
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = TestClient(app)
             session_id = "force-scripted-session"
             prepared = client.post(
@@ -548,7 +554,7 @@ class OpenRouterProviderRoutingTests(unittest.TestCase):
 
             # Routing is this test's subject, so it opts out of the scripted
             # hermeticity switch. httpx.post is mocked above: no real call.
-            app = create_review_api_app(
+            app = create_review_api_app(principal=fresh_principal(), 
                 artifact_root=Path(tmp_dir) / "sessions",
                 force_scripted_provider=False,
             )
@@ -625,7 +631,7 @@ class ScriptedHermeticitySwitchTests(unittest.TestCase):
         ) as mock_post, mock.patch.dict(
             os.environ, {"PYDEXPI_QA_PROVIDER": "scripted"}
         ):
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = self._configured_session(app)
             turn = client.post(
                 "/api/review/sessions/hermeticity-session/turns",

@@ -159,16 +159,17 @@ and authored rule pack to the signed-in account. Sign-in is
 is a resource server that verifies the JWT against the JWKS Next publishes, so
 no account data or password ever reaches Python.
 
-The session index lives in a shared [libSQL](https://turso.tech/libsql)
-database rather than a file on the instance, so it survives a redeploy and is
-the same index for every instance. libSQL is SQLite's own dialect over a
-network: one schema and one migration set serve both profiles, which is why
-the local path cannot rot into a demo while hosted grows features.
+A hosted deployment keeps nothing on the instance. The session index lives in
+a shared [libSQL](https://turso.tech/libsql) database and review artifacts
+live in an S3-compatible bucket, so both survive a redeploy and are the same
+for every instance. libSQL is SQLite's own dialect over a network: one schema
+and one migration set serve both profiles, which is why the local path cannot
+rot into a demo while hosted grows features.
 
-Install the extra, create the account tables once, then start both processes:
+Install the extras, create the account tables once, then start both processes:
 
 ```bash
-pip install -e ".[hosted]"      # libsql; the local profile never needs it
+pip install -e ".[hosted]"      # libsql + boto3; the local profile needs neither
 
 export PYDEXPI_DEPLOYMENT_PROFILE=hosted
 export BETTER_AUTH_URL=http://localhost:3000
@@ -179,31 +180,56 @@ export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"   # required in hosted
 # A libSQL database. Turso hosts them; this runs one locally.
 docker run -d -p 8080:8080 ghcr.io/tursodatabase/libsql-server:latest
 
+# An S3-compatible bucket. Any provider works; this runs MinIO locally.
+docker run -d -p 9000:9000 \
+  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio:latest server /data
+# ...then create the bucket once, with `mc`, the console, or your provider.
+
 # Backend: the three OIDC settings must agree with BETTER_AUTH_URL above.
 PYTHONPATH=. \
   PYDEXPI_OIDC_ISSUER=$BETTER_AUTH_URL \
   PYDEXPI_OIDC_AUDIENCE=$BETTER_AUTH_URL \
   PYDEXPI_OIDC_JWKS_URL=$BETTER_AUTH_URL/api/auth/jwks \
   PYDEXPI_LIBSQL_URL=http://127.0.0.1:8080 \
+  PYDEXPI_S3_BUCKET=pydexpi \
+  PYDEXPI_S3_ENDPOINT_URL=http://127.0.0.1:9000 \
+  PYDEXPI_S3_ACCESS_KEY_ID=minioadmin \
+  PYDEXPI_S3_SECRET_ACCESS_KEY=minioadmin \
   .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --port 8000
 ```
 
-Against Turso, set `PYDEXPI_LIBSQL_URL` to the database URL and
-`PYDEXPI_LIBSQL_AUTH_TOKEN` to its token. The token is optional because a
-`libsql-server` on a private network may not want one; the database, not this
-code, decides whether it needs authenticating.
+Against managed services, set `PYDEXPI_LIBSQL_URL` to the Turso database URL
+with `PYDEXPI_LIBSQL_AUTH_TOKEN`, and point the `PYDEXPI_S3_*` settings at
+AWS, Cloudflare R2, or Backblaze B2. Both credentials are optional: a
+`libsql-server` on a private network may not want a token, and a deployment
+with an instance role has no S3 keys to give. The service, not this code,
+decides whether it needs authenticating.
 
-The backend refuses to start if the OIDC settings or `PYDEXPI_LIBSQL_URL` are
-missing, rather than coming up unauthenticated, or indexing sessions onto a
-disk that the next redeploy throws away. To check a hosted deployment really
-does isolate two accounts:
+| Setting | Required | Meaning |
+| --- | --- | --- |
+| `PYDEXPI_LIBSQL_URL` | yes | Session catalog database |
+| `PYDEXPI_LIBSQL_AUTH_TOKEN` | no | Token, when the database wants one |
+| `PYDEXPI_S3_BUCKET` | yes | Bucket holding review artifacts |
+| `PYDEXPI_S3_ENDPOINT_URL` | no | Unset means AWS S3 itself |
+| `PYDEXPI_S3_ACCESS_KEY_ID` | no | Unset uses boto3's credential chain |
+| `PYDEXPI_S3_SECRET_ACCESS_KEY` | no | As above |
+| `PYDEXPI_S3_REGION` | no | Defaults to `us-east-1` |
+
+The backend refuses to start if the OIDC settings, `PYDEXPI_LIBSQL_URL`, or
+`PYDEXPI_S3_BUCKET` are missing, rather than coming up unauthenticated, or
+writing sessions and artifacts onto a disk the next redeploy throws away.
+Artifact downloads are handed out as presigned URLs, so bytes travel from the
+bucket to the browser without passing through the API.
+
+To check a hosted deployment really does isolate two accounts:
 
 ```bash
 .venv/bin/python scripts/hosted_auth_smoke.py
 ```
 
-Running the test suite under the hosted profile needs a libSQL server too;
-`tests/conftest.py` prints the command if one is missing.
+Running the test suite under the hosted profile needs both services;
+`tests/conftest.py` prints the commands if either is missing.
 
 ## End-to-end screenshot test
 

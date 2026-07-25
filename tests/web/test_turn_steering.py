@@ -16,6 +16,14 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import ToolCall
+
+# These tests reach past the API into a hand-built `LocalArtifactStore` --
+# a steering directive written directly to storage, a trace artifact read
+# back off disk. That makes them tests of the local implementation, so the
+# app is pinned to the local profile rather than following the ambient one:
+# under hosted the app reads a bucket and would never see what the test
+# wrote (bead 2afe.8).
+from pydexpi_datalog.web.deployment import DeploymentProfile
 from pydexpi_datalog.web.review_api import create_review_api_app
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
@@ -96,6 +104,7 @@ def test_answer_now_endpoint_returns_completed_synthesized_answer() -> None:
         )
         client = TestClient(
             create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=root, qa_provider_factory=lambda: provider
             )
         )
@@ -117,7 +126,8 @@ def test_answer_now_endpoint_returns_completed_synthesized_answer() -> None:
 def test_answer_now_endpoint_reports_404_for_a_missing_turn() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        client = TestClient(create_review_api_app(artifact_root=root))
+        client = TestClient(create_review_api_app(
+            profile=DeploymentProfile.LOCAL,artifact_root=root))
         _prepare(client, "missing-turn-session")
         response = client.post(
             "/api/review/sessions/missing-turn-session/turns/"
@@ -164,6 +174,7 @@ def test_stop_via_cancel_interrupts_exploration_and_preserves_trace() -> None:
         )
         client = TestClient(
             create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=root, qa_provider_factory=lambda: provider
             )
         )
@@ -207,6 +218,7 @@ def test_user_turn_constraint_from_body_clamps_the_run() -> None:
         provider = RepeatedExplorerProvider()
         client = TestClient(
             create_review_api_app(
+            profile=DeploymentProfile.LOCAL,
                 artifact_root=root, qa_provider_factory=lambda: provider
             )
         )

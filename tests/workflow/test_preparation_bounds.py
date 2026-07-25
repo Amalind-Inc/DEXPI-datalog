@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hosted_env import path_from_download_url
+
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
     PreparationLimits,
@@ -257,7 +259,7 @@ class SourceIdProvenanceTests(unittest.TestCase):
             import json
 
             readiness_on_disk = json.loads(
-                Path(result["artifacts"]["readiness_metadata"]).read_text(
+                path_from_download_url(result["artifacts"]["readiness_metadata"]).read_text(
                     encoding="utf-8"
                 )
             )
