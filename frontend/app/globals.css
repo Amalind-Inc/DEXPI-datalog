@@ -2448,3 +2448,104 @@
   gap: 10px;
   margin-top: 3px;
 }
+
+/* Hosted-profile account controls and sign-in (bead 2afe.6).
+   The local profile renders none of this: AccountPanel returns null and the
+   sign-in route is never linked. */
+
+.account-panel {
+  position: fixed;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+}
+
+.account-panel-email {
+  color: var(--muted-foreground, #6b7280);
+}
+
+.account-panel-action {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.625rem;
+  background: var(--background, #fff);
+  cursor: pointer;
+}
+
+.account-panel-action:hover {
+  background: var(--muted, #f3f4f6);
+}
+
+.sign-in-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.sign-in-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(24rem, 100%);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1.75rem;
+}
+
+.sign-in-title {
+  font-family: var(--calm-display-font), serif;
+  font-size: 1.5rem;
+}
+
+.sign-in-subtitle {
+  color: var(--muted-foreground, #6b7280);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.sign-in-label {
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.sign-in-input {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  font: inherit;
+}
+
+.sign-in-error {
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.sign-in-submit {
+  margin-top: 1rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--foreground, #111827);
+  color: var(--background, #fff);
+  cursor: pointer;
+}
+
+.sign-in-submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.sign-in-toggle {
+  margin-top: 0.25rem;
+  background: none;
+  border: none;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground, #6b7280);
+  cursor: pointer;
+  text-decoration: underline;
+}

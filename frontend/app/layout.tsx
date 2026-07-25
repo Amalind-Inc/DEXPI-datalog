@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces } from "next/font/google";
+import { AccountPanel } from "@/components/auth/account-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { isHostedProfile } from "@/lib/deployment";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -22,7 +24,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={fraunces.variable}>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          {/* Server-resolved: the client bundle is never told the profile, and
+              in the local profile this renders nothing at all. */}
+          <AccountPanel hosted={isHostedProfile()} />
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   );

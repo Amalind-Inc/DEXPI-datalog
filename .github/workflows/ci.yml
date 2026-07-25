@@ -56,6 +56,20 @@ jobs:
           python-version: "3.14"
           cache: pip
 
+      - uses: actions/setup-node@v4
+        # Not for the frontend, which has its own job below. The Better Auth
+        # contract test drives the real issuer to check that the tokens it
+        # mints verify in Python, and it skips without node -- a skip nobody
+        # would notice, on the one test covering a cross-language boundary.
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
       - name: Install Souffle
         # Souffle is a native binary the verification layer shells out to, so
         # it cannot come from pip. The PPA is unmaintained upstream; the
@@ -92,3 +106,25 @@ jobs:
           PYDEXPI_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
           PYDEXPI_QA_PROVIDER: scripted
         run: pytest -m "not slow"
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      # `oxlint` is enforced; `oxfmt --check` is not run. It currently fails on
+      # 53 pre-existing files, and a step that cannot fail would be worse than
+      # no step: it reads green while checking nothing. Reformatting the tree
+      # and enforcing the formatter is its own change, tracked separately.
+      - run: npx oxlint
+        working-directory: frontend

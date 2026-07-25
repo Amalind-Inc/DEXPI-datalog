@@ -54,12 +54,32 @@ should not need an environment; only a served deployment must be explicit.
 That default is also what lets CI re-run the entire existing suite under the
 other profile by setting one variable rather than by every test opting in.
 
-Until the hosted seams are built (verified-token principal, libSQL catalog,
-object-store artifacts) the hosted profile names the local implementations,
-so the two CI legs are near-identical and the hosted leg guards little today.
-The harness is still what lands first: replacing one line in the hosted
-bundle is what puts a hosted implementation under the whole suite, and no
-hosted slice can land without both legs staying green.
+The hosted seams arrive one at a time, and the bundle names the local
+implementation until each one exists. The verified-token principal is built;
+the libSQL catalog and object-store artifacts are not, so hosted still writes
+the local filesystem and the local SQLite catalog. Replacing one line in the
+hosted bundle is what puts a hosted implementation under the whole suite, and
+no hosted slice can land without both CI legs staying green.
+
+Hosted sign-in is Better Auth running inside the Next app, with its JWT
+plugin publishing a JWKS that the Python backend verifies against. Better Auth
+is the issuer and the backend is a resource server, so authorization still
+lives entirely in this repository's own code: the token answers who the caller
+is and nothing else. Rejected alternatives: (1) a hosted identity SaaS, which
+would put an external paid dependency in the middle of a repository that
+promises a standalone story; and (2) a self-hosted OIDC server such as Logto
+or Zitadel, which is a better fit at scale but adds a service and a second
+database to run, and could not have been verified here without provisioning
+one. Better Auth needs no external service and stores accounts in the same
+SQLite dialect the catalog already uses, so the whole sign-in path can be run
+and checked locally -- `scripts/hosted_auth_smoke.py` does exactly that.
+
+The verifier is deliberately not written against Better Auth. It accepts any
+asymmetric JWKS signature, which is what every OIDC provider offers, so
+swapping in Logto or Zitadel later is configuration rather than a rewrite.
+The workspace is derived as a digest of issuer and subject rather than taken
+from the token, because the workspace is a storage path segment and a subject
+is chosen by the identity provider.
 
 `AuthoredRulePackStore(artifact_root / "authored_rule_packs")` is a single
 global directory shared by every session. It already violates the authored

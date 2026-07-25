@@ -139,8 +139,8 @@ PYDEXPI_DEPLOYMENT_PROFILE=local PYTHONPATH=. PYDEXPI_REVIEW_ARTIFACT_ROOT=.tmp/
 ```
 
 `PYDEXPI_DEPLOYMENT_PROFILE` has no default and the server will not start
-without it. `local` keeps every artifact on this machine with no accounts;
-`hosted` is wired but not yet distinct from it (ADR 0016).
+without it. `local` keeps every artifact on this machine with no accounts and
+no sign-in surface at all (ADR 0016).
 
 **Start the frontend** (separate terminal):
 
@@ -150,6 +150,40 @@ npm run dev
 ```
 
 Then open `http://localhost:3000` in a browser.
+
+### Running the hosted profile
+
+The hosted profile signs users in and scopes every review session, artifact,
+and authored rule pack to the signed-in account. Sign-in is
+[Better Auth](https://better-auth.com) inside the Next app; the Python backend
+is a resource server that verifies the JWT against the JWKS Next publishes, so
+no account data or password ever reaches Python.
+
+Create the account tables once, then start both processes with a shared
+identity configuration:
+
+```bash
+export PYDEXPI_DEPLOYMENT_PROFILE=hosted
+export BETTER_AUTH_URL=http://localhost:3000
+export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"   # required in hosted
+
+(cd frontend && node scripts/migrate-auth.mjs)
+
+# Backend: these three must agree with BETTER_AUTH_URL above.
+PYTHONPATH=. \
+  PYDEXPI_OIDC_ISSUER=$BETTER_AUTH_URL \
+  PYDEXPI_OIDC_AUDIENCE=$BETTER_AUTH_URL \
+  PYDEXPI_OIDC_JWKS_URL=$BETTER_AUTH_URL/api/auth/jwks \
+  .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --port 8000
+```
+
+The backend refuses to start if any of the three `PYDEXPI_OIDC_*` settings is
+missing, rather than coming up unauthenticated and serving every user from one
+workspace. To check a hosted deployment really does isolate two accounts:
+
+```bash
+.venv/bin/python scripts/hosted_auth_smoke.py
+```
 
 ## End-to-end screenshot test
 

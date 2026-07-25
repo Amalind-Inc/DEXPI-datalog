@@ -30,6 +30,7 @@ import {
   type EvidenceHighlight,
 } from "./grounded-qa-answer.ts";
 import { serializeDirectionReview } from "./direction-review.ts";
+import { backendFetch } from "./backend-auth.ts";
 
 type QAConversationTurn = {
   question: string;
@@ -167,7 +168,7 @@ function isBundledPumpCheckCommand(prompt: string) {
 
 async function runBundledPumpCheck(
   sessionId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions,
 ): Promise<ChatResult | null> {
   if (!baseUrl) return null;
   const result = await postJson(fetcher, {
@@ -225,7 +226,7 @@ export async function executeConfirmedDatalog(
 async function prepareWithPythonBackend(
   sessionId: string,
   body: PrepareBody,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<PrepareResult | null> {
   if (!baseUrl) return null;
 
@@ -259,7 +260,7 @@ async function runBackendLogicRequest(
   conversation: QAConversationTurn[],
   {
     baseUrl = backendBaseUrl(),
-    fetcher = fetch,
+    fetcher = backendFetch,
     providerSettings = readProviderSettingsFromEnv(),
   }: BackendOptions = {},
 ): Promise<ChatResult | null> {
@@ -424,7 +425,7 @@ export async function submitTemporaryDatalogReview(
     decision: "confirm" | "cancel";
     proposalResult: Record<string, unknown>;
   },
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<ExecuteConfirmedDatalogResult> {
   const result = await postJson(fetcher, {
     url: `${baseUrl}/api/review/sessions/${sessionId}/temporary-datalog-reviews`,
@@ -487,7 +488,7 @@ export async function submitDirectionReview(
     reviewKey: string;
     conversation?: QAConversationTurn[];
   },
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<DirectionReviewResult> {
   const body: Record<string, unknown> = {
     question: params.question,
@@ -551,7 +552,7 @@ function buildQAConversation(
 async function runBackendExecute(
   sessionId: string,
   confirmation: Record<string, unknown>,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<Record<string, unknown> | null> {
   if (!baseUrl || !sessionId) return null;
   try {
@@ -1227,7 +1228,7 @@ export async function startTurnOnBackend(
   },
   {
     baseUrl = backendBaseUrl(),
-    fetcher = fetch,
+    fetcher = backendFetch,
     providerSettings = readProviderSettingsFromEnv(),
   }: BackendOptions = {},
 ): Promise<Record<string, unknown>> {
@@ -1275,7 +1276,7 @@ export async function startTurnOnBackend(
 export async function getTurnFromBackend(
   sessionId: string,
   turnId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ turn: Record<string, unknown> | null; status: number }> {
   const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}`);
   if (!res.ok) return { turn: null, status: res.status };
@@ -1286,7 +1287,7 @@ export async function getTurnTraceDetailFromBackend(
   sessionId: string,
   turnId: string,
   eventId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ detail: Record<string, unknown> | null; status: number }> {
   const res = await fetcher(
     `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/trace/${encodeURIComponent(eventId)}`,
@@ -1301,7 +1302,7 @@ export async function getTurnTraceDetailFromBackend(
 export async function cancelTurnOnBackend(
   sessionId: string,
   turnId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<Record<string, unknown>> {
   const result = await postJson(fetcher, {
     url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/cancel`,
@@ -1315,7 +1316,7 @@ export async function resumeDirectionReviewOnBackend(
   sessionId: string,
   turnId: string,
   body: { decision: string; review_key: string },
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<Record<string, unknown>> {
   const result = await postJson(fetcher, {
     url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/direction-review`,
@@ -1329,7 +1330,7 @@ export async function resumeDatalogReviewOnBackend(
   sessionId: string,
   turnId: string,
   body: { decision: string; proposal_result: unknown },
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<Record<string, unknown>> {
   const result = await postJson(fetcher, {
     url: `${baseUrl}/api/review/sessions/${sessionId}/turns/${turnId}/datalog-review`,
@@ -1341,7 +1342,7 @@ export async function resumeDatalogReviewOnBackend(
 
 export async function listRulePacks(
   sessionId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/rule-packs`);
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -1349,7 +1350,7 @@ export async function listRulePacks(
 
 export async function listAllRulePacks({
   baseUrl = backendBaseUrl(),
-  fetcher = fetch,
+  fetcher = backendFetch,
 }: BackendOptions = {}): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/rule-packs`);
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -1364,7 +1365,7 @@ export interface ReviewSessionSummary {
 
 export async function listReviewSessions({
   baseUrl = backendBaseUrl(),
-  fetcher = fetch,
+  fetcher = backendFetch,
 }: BackendOptions = {}): Promise<{
   status: number;
   sessions: ReviewSessionSummary[];
@@ -1376,7 +1377,7 @@ export async function listReviewSessions({
 
 export async function createRulePack(
   markdown: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/rule-packs`, {
     method: "POST",
@@ -1389,7 +1390,7 @@ export async function createRulePack(
 export async function promoteAdvisoryClause(
   packId: string,
   advisoryTitle: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/rule-packs/${packId}/promote`, {
     method: "POST",
@@ -1402,7 +1403,7 @@ export async function promoteAdvisoryClause(
 export async function confirmPromotedRule(
   packId: string,
   draft: Record<string, unknown>,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/rule-packs/${packId}/promote/confirm`, {
     method: "POST",
@@ -1415,7 +1416,7 @@ export async function confirmPromotedRule(
 export async function loadRulePack(
   sessionId: string,
   packId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(
     `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/load`,
@@ -1427,7 +1428,7 @@ export async function loadRulePack(
 export async function unloadRulePack(
   sessionId: string,
   packId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(
     `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/unload`,
@@ -1439,7 +1440,7 @@ export async function unloadRulePack(
 export async function runRulePack(
   sessionId: string,
   packId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(
     `${baseUrl}/api/review/sessions/${sessionId}/rule-packs/${packId}/run`,
@@ -1452,7 +1453,7 @@ export async function runSingleRule(
   sessionId: string,
   packId: string,
   ruleId: string,
-  { baseUrl = backendBaseUrl(), fetcher = fetch }: BackendOptions = {},
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/rule-pack-results`, {
     method: "POST",
