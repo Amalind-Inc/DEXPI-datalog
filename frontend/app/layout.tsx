@@ -9,11 +9,15 @@ const fraunces = Fraunces({
   subsets: ["latin"],
   variable: "--calm-display-font",
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
-  title: "P&ID QA Assistant",
-  description: "assistant-ui powered P&ID QA chat and graph workspace",
+  title: {
+    default: "Amalind",
+    template: "%s · Amalind",
+  },
+  description: "Neurosymbolic engineering intelligence grounded in inspectable evidence.",
 };
 
 export default function RootLayout({
