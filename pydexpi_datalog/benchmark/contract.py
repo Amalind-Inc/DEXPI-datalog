@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 # Verdicts: the graded conclusion of one benchmark question.
 VERDICT_VIOLATION_FOUND = "violation_found"
 VERDICT_NO_VIOLATION = "no_violation"

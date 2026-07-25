@@ -1,17 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from pydexpi_datalog.benchmark import GroundTruth
 from pydexpi_datalog.benchmark.agentic_arm import EpisodeBudgets, EpisodeResult
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
+from pydexpi_datalog.benchmark.rmso_eval import (
+    materialize_preregistered_rmso_manifest,
+)
+from pydexpi_datalog.benchmark.rmso_kira import (
+    CHECKPOINT_FIELD,
+    CHECKPOINT_VALUE,
+    _accepted_checkpoint,
+)
 from pydexpi_datalog.benchmark.rmso_live import (
     apply_episode_cost_accounting,
     create_rmso_live_arms,
@@ -20,16 +28,7 @@ from pydexpi_datalog.benchmark.rmso_live import (
     run_rmso_live,
     validate_redesigned_live_manifest,
 )
-from pydexpi_datalog.benchmark.rmso_kira import (
-    CHECKPOINT_FIELD,
-    CHECKPOINT_VALUE,
-    _accepted_checkpoint,
-)
-from pydexpi_datalog.benchmark.rmso_eval import (
-    materialize_preregistered_rmso_manifest,
-)
 from pydexpi_datalog.benchmark.souffle_arm import build_rmso_souffle_harbor_task
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_BUNDLE = (

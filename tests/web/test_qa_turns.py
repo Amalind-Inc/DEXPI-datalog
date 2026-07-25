@@ -7,22 +7,20 @@ not tool call counts or internal message formats.
 """
 from __future__ import annotations
 
-import tempfile
-import shutil
-from pathlib import Path
-import unittest
-from unittest import mock
 import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
     FinalAnswer,
-    ScriptedQATurnProvider,
     ToolCall,
 )
 from pydexpi_datalog.web.review_api import create_review_api_app
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (

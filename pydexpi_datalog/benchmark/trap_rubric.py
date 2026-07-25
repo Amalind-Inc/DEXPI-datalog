@@ -6,10 +6,11 @@ use :class:`ScriptedTrapJudge` so CI never makes model calls.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pydexpi_datalog.benchmark.contract import (
     StructuredAnswer,

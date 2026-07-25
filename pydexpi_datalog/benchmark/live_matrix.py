@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 from pydexpi_datalog.benchmark.agentic_arm import (
     BUNDLE_FILES,
@@ -287,7 +287,7 @@ def run_live_matrix(
     report = generate_results_report(runs=runs, output_dir=output_dir)
     combined_payload = json.loads(combined_manifest.read_text(encoding="utf-8"))
     report["execution"] = {
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
         "combined_manifest": str(combined_manifest.relative_to(output_dir)),
         "episode_budgets": asdict(budgets),
         "agentic_budget_evidence": {

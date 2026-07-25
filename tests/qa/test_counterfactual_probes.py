@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 
 from pydexpi_datalog.qa import counterfactual_probes
 from pydexpi_datalog.qa.counterfactual_probes import (
     run_mandatory_counterfactual_probes,
 )
-from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.qa.datalog_audit import (
     append_datalog_audit_record,
     build_datalog_audit_record,
 )
 from pydexpi_datalog.semantics.souffle_runner import SouffleExecutionError
-
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 
 CONNECTIVITY_INTENT = {
     "source_classes": ["Tank"],

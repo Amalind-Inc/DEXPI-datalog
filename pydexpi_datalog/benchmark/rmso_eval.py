@@ -9,7 +9,6 @@ from typing import Any
 
 from pydexpi_datalog.benchmark.dataset import DATASET_SCHEMA_VERSION
 
-
 RMSO_EVAL_LOCK_SCHEMA_VERSION = 1
 RMSO_REDESIGNED_LOCK_SCHEMA_VERSION = 2
 RMSO_PROTOCOL_BEAD = "pydexpi-datalog-1-rmso.4"

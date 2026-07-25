@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 from pydexpi_datalog import FakeModelProvider
-from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
-
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (

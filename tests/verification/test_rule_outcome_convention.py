@@ -8,7 +8,6 @@ from pathlib import Path
 from pydexpi_datalog.verification.bundled_rule_pack import evaluate_bundled_rule
 from pydexpi_datalog.verification.souffle_rule_pack import evaluate_rule_fence
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Minimal fence that only speaks the rule outcome convention — no custom

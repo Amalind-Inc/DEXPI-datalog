@@ -19,8 +19,8 @@ from pydexpi_datalog.benchmark.contract import (
     POSTURE_UNSPECIFIED,
     POSTURES,
     TRAP_EXPECTED_POSTURES,
-    StructuredAnswer,
     VERDICTS,
+    StructuredAnswer,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.llm.byok_provider import create_byok_provider

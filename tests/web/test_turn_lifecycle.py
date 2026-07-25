@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
-from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
-
 
 STRUCTURED_INTENT = {
     "source_classes": ["TopologyObject"],
@@ -770,7 +769,7 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
     session_id = "race-session"
     request_id = "race-request"
     # Pre-compute the turn_id using the same formula as TurnLifecycleStore.start()
-    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
+    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode()).hexdigest()[
         :20
     ]
 
@@ -841,7 +840,7 @@ def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
 
     session_id = "resume-race-session"
     request_id = "resume-race-request"
-    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
+    turn_id = hashlib.sha256(f"{session_id}\n{request_id}".encode()).hexdigest()[
         :20
     ]
 

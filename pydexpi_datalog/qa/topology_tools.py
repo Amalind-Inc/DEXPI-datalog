@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import monotonic
-from typing import Callable
 
 from pydexpi_datalog.qa.capability_manifest import (
     PERMISSION_ALLOWED_READ_ONLY,
@@ -27,8 +27,8 @@ from pydexpi_datalog.qa.route_receipts import (
     source_snapshot_identity,
 )
 from pydexpi_datalog.qa.structured_intent import (
-    compare_structured_intents,
     compare_program_structured_intent,
+    compare_structured_intents,
     encode_structured_intent_program,
     normalize_structured_intent,
 )
@@ -36,7 +36,6 @@ from pydexpi_datalog.qa.trusted_templates import (
     TRUSTED_TEMPLATE_CATALOG_VERSION,
     execute_bundled_query_template,
 )
-
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
     build_graph_facts_datalog,

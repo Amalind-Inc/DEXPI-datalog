@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRAINING_ROOT = REPO_ROOT / "TrainingTestCases" / "dexpi 1.3" / "example pids"

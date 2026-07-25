@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import secrets
 import re
+import secrets
 from collections.abc import Mapping
 
 from pydexpi_datalog.qa.structured_intent import without_datalog_comments

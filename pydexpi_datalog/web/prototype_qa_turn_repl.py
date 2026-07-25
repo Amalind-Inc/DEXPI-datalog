@@ -362,8 +362,15 @@ def main() -> None:
 
             result_holder: dict[str, object] = {}
 
-            def _run_turn() -> None:
-                result_holder["response"] = client.post(
+            # Bound as defaults, not captured: the worker is joined before the
+            # next iteration today, so this is about keeping that safe if the
+            # loop ever starts more than one turn.
+            def _run_turn(
+                holder: dict[str, object] = result_holder,
+                question: str = question,
+                request_id: str = request_id,
+            ) -> None:
+                holder["response"] = client.post(
                     f"/api/review/sessions/{session_id}/turns",
                     json={"question": question, "request_id": request_id},
                 )

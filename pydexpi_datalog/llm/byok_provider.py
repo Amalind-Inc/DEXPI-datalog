@@ -9,7 +9,6 @@ from .model_access import (
 )
 from .model_catalog import catalog_provider, load_catalog
 
-
 # Base URLs and wire formats now come from the vendored models.dev catalogue
 # (model_catalog.py). This mapping remains only for the OpenAI-compatible
 # providers that review_api resolves by name; it is derived, not authored.

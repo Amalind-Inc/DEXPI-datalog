@@ -13,7 +13,6 @@ from ..workflow.artifact_store import (
     InvalidArtifactKey,
     validate_key,
 )
-
 from .bundled_rule_pack import bundled_rule_packs
 from .promote_advisory import (
     append_confirmed_rule_to_pack_markdown,

@@ -19,8 +19,8 @@ across sources sharing an artifact root (1.2 exports reuse raw ids like
 from __future__ import annotations
 
 import math
-from pathlib import Path
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from .bundled_symbols import BUNDLED_SYMBOLS, GENERIC_PLACEHOLDER
 
@@ -662,7 +662,7 @@ def _presentation_style(el: ET.Element) -> dict[str, object]:
     if presentation is None:
         return {"stroke": "#333333", "width": 0.25, "dash": None}
     r, g, b = (_fnum(presentation.attrib.get(k)) for k in ("R", "G", "B"))
-    color = "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    color = f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
     line_type = presentation.attrib.get("LineType", "0")
     return {
         "stroke": color,

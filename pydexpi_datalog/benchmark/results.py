@@ -26,17 +26,17 @@ fails any gate, regardless of episode volume.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
 
 from pydexpi_datalog.benchmark.dataset import (
     CATEGORY_COMPLIANCE_UNIVERSAL,
     CATEGORY_RETRIEVAL_LOCAL,
     QUESTION_CATEGORIES,
-    SLICES,
     SLICE_TRAP,
+    SLICES,
 )
 from pydexpi_datalog.benchmark.runner import BENCHMARK_REPORT_SCHEMA_VERSION
 
@@ -583,7 +583,7 @@ def _gating_counts(run: BenchmarkRun) -> dict[str, tuple[int, int]]:
         category = str(episode.get("category"))
         counts[category][1] += 1
         counts[category][0] += int(_exact_verdict_with_witnesses(episode))
-    for category, (passed, total) in counts.items():
+    for category, (_passed, total) in counts.items():
         if total == 0:
             raise ResultsReportError(
                 f"Decision run {run.arm_id!r} for model {run.model!r} has no "

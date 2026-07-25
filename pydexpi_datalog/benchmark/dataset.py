@@ -7,19 +7,18 @@ layer, and rejects invalid ground truth before an arm can run.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydexpi_datalog.benchmark.contract import (
-    GroundTruth,
     TRAP_EXPECTED_POSTURES,
-    TrapRubric,
     VERDICT_UNANSWERABLE,
     VERDICTS,
+    GroundTruth,
+    TrapRubric,
 )
 from pydexpi_datalog.benchmark.grader import known_node_ids
-
 
 # Version 2: every gating (non-trap) question requires a decision category.
 DATASET_SCHEMA_VERSION = 2

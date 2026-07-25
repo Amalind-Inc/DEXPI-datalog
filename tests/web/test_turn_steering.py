@@ -17,8 +17,8 @@ from fastapi.testclient import TestClient
 
 from pydexpi_datalog.qa.grounded_qa_harness import ToolCall
 from pydexpi_datalog.web.review_api import create_review_api_app
-from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

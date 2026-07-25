@@ -24,9 +24,9 @@ from pydexpi_datalog.benchmark import (
     VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
     GroundTruth,
-    run_benchmark,
     ScriptedTrapJudge,
     TrapJudgment,
+    run_benchmark,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.incumbent_arm import (
@@ -36,7 +36,11 @@ from pydexpi_datalog.benchmark.incumbent_arm import (
 )
 from pydexpi_datalog.qa.grounded_qa_harness import (
     POSTURE_OUT_OF_SCOPE as HARNESS_OUT_OF_SCOPE,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
     POSTURE_SOURCE_DATA_UNAVAILABLE as HARNESS_SOURCE_DATA_UNAVAILABLE,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
     FinalAnswer,
     ToolCall,
 )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from pathlib import Path
 
@@ -10,7 +9,6 @@ from pydexpi_datalog.verification.bundled_rule_pack import (
     bundled_rule_packs,
     evaluate_bundled_rule,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_GRAPH_FACTS = REPO_ROOT / "testdata" / "graph_contract" / "e06-pump-hex" / "graph_facts.json"

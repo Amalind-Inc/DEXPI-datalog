@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from networkx.readwrite import json_graph
 
 import pydexpi_datalog
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E03_FIXTURE = (

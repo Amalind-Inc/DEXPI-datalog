@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..semantics.derive_graph_semantics import build_graph_facts_datalog, load_graph_topology_idb
+from ..semantics.derive_graph_semantics import (
+    build_graph_facts_datalog,
+    load_graph_topology_idb,
+)
 from ..semantics.souffle_runner import run_souffle_program
 from .rule_pack_markdown import parse_rule_pack_markdown
 from .verify_suite import build_evaluation_diagnostic
-
 
 RULE_PACKS_DIR = Path(__file__).resolve().parent / "rule_packs"
 DEMO_PACK_MARKDOWN_PATH = RULE_PACKS_DIR / "demo_process_safety.md"

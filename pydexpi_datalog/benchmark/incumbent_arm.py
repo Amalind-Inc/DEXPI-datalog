@@ -25,38 +25,44 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping
 
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_GENERAL_KNOWLEDGE,
-    POSTURE_OUT_OF_SCOPE,
     POSTURE_NEEDS_CLARIFICATION,
+    POSTURE_OUT_OF_SCOPE,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
+    VERDICT_NO_VIOLATION,
+    VERDICT_UNANSWERABLE,
+    VERDICT_VIOLATION_FOUND,
     StructuredAnswer,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.direct_arm import DEGRADED_VERDICT, DIRECT_ARM_MODELS
-from pydexpi_datalog.benchmark.contract import (
-    VERDICT_NO_VIOLATION,
-    VERDICT_UNANSWERABLE,
-    VERDICT_VIOLATION_FOUND,
-)
 from pydexpi_datalog.llm.byok_provider import OPENAI_COMPATIBLE_BASE_URLS
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_GENERAL_KNOWLEDGE as HARNESS_GENERAL_KNOWLEDGE,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_NEEDS_CLARIFICATION as HARNESS_NEEDS_CLARIFICATION,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_OUT_OF_SCOPE as HARNESS_OUT_OF_SCOPE,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_SOURCE_DATA_UNAVAILABLE as HARNESS_SOURCE_DATA_UNAVAILABLE,
+)
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    POSTURE_SOURCE_GROUNDED as HARNESS_SOURCE_GROUNDED,
+)
 from pydexpi_datalog.qa.grounded_qa_harness import (
     QATurnProvider,
     QATurnResult,
     run_grounded_qa_turn,
-)
-from pydexpi_datalog.qa.grounded_qa_harness import (
-    POSTURE_GENERAL_KNOWLEDGE as HARNESS_GENERAL_KNOWLEDGE,
-    POSTURE_OUT_OF_SCOPE as HARNESS_OUT_OF_SCOPE,
-    POSTURE_NEEDS_CLARIFICATION as HARNESS_NEEDS_CLARIFICATION,
-    POSTURE_SOURCE_DATA_UNAVAILABLE as HARNESS_SOURCE_DATA_UNAVAILABLE,
-    POSTURE_SOURCE_GROUNDED as HARNESS_SOURCE_GROUNDED,
 )
 from pydexpi_datalog.qa.openai_compatible_qa_provider import (
     OpenAICompatibleQATurnProvider,

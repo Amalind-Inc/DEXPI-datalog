@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pydexpi_datalog.benchmark.contract import (
     POSTURES,

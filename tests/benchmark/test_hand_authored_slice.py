@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections import Counter
 import json
+from collections import Counter
 from pathlib import Path
 
 from pydexpi_datalog.benchmark.dataset import (
@@ -13,7 +13,6 @@ from pydexpi_datalog.benchmark.dataset import (
     load_question_manifest,
 )
 from pydexpi_datalog.benchmark.hand_authored import verify_hand_authored_manifest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "testdata" / "benchmark" / "hand_authored_manifest.json"

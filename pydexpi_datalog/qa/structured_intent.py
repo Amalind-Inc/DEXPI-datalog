@@ -1,13 +1,12 @@
 """Mechanical validation for generated-query semantic intent contracts."""
 
 from __future__ import annotations
+
 import base64
 import binascii
 import json
 import re
-
 from collections.abc import Mapping
-
 
 _INTENT_FIELDS = (
     "source_classes",

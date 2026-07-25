@@ -15,7 +15,6 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
 )
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QUESTION_ID = "hq-equipment-pump-connectivity-small"
 GRAPH_FACTS_PATH = (

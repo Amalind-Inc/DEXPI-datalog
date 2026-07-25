@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..semantics.derive_graph_semantics import derive_edge_families
 from ..artifacts.result_schemas import validate_result_schema
-
+from ..semantics.derive_graph_semantics import derive_edge_families
 
 ALLOWED_INTERMEDIATE_CLASSES = {"Pipe", "PipeReducer"}
 CHECK_VALVE_CLASSES = {"CheckValve", "SwingCheckValve"}

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from threading import RLock
-from typing import Callable
 
 from pydexpi_datalog.web.execution_trace import (
     TRACE_EVENT_ID_LENGTH,
@@ -25,7 +25,7 @@ _TRACE_EVENT_ID_PATTERN = re.compile(rf"[0-9a-f]{{{TRACE_EVENT_ID_LENGTH}}}")
 def compute_turn_id(session_id: str, request_id: str) -> str:
     """Deterministic turn_id, matching the frontend's computeTurnId() formula
     (frontend/lib/turn-client.ts) so the client can know a turn's id up front."""
-    return hashlib.sha256(f"{session_id}\n{request_id}".encode("utf-8")).hexdigest()[
+    return hashlib.sha256(f"{session_id}\n{request_id}".encode()).hexdigest()[
         :TURN_ID_LENGTH
     ]
 
@@ -91,7 +91,7 @@ class TurnLifecycleStore:
         self, *, session_id: str, request_id: str, question: str
     ) -> dict[str, object]:
         turn_id = hashlib.sha256(
-            f"{session_id}\n{request_id}".encode("utf-8")
+            f"{session_id}\n{request_id}".encode()
         ).hexdigest()[:20]
         with self._lock:
             existing = self.get(session_id=session_id, turn_id=turn_id)

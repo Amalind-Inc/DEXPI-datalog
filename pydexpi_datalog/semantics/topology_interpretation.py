@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
 import hashlib
 import json
-from typing import Iterable
+from collections import deque
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .derive_graph_semantics import TOPOLOGY_ATTR_NAMES
 

@@ -7,17 +7,16 @@ reproduced from the canonical base fact layer before SME sign-off.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from pydexpi_datalog.benchmark.contract import (
-    GroundTruth,
     VERDICT_NO_VIOLATION,
     VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
+    GroundTruth,
 )
-
 
 _MATCH_NODES = "match_nodes"
 _OUTGOING_COUNT = "outgoing_edge_count_not_equal"

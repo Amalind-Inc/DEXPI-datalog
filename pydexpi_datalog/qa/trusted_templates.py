@@ -7,7 +7,7 @@ production dependency.
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     build_graph_facts_datalog,
@@ -18,7 +18,6 @@ from pydexpi_datalog.semantics.souffle_runner import (
     SouffleExecutionError,
     run_souffle_program,
 )
-
 
 TRUSTED_TEMPLATE_CATALOG_VERSION = "1.0.0"
 EQUIPMENT_WITHOUT_PUMP_PATH_TEMPLATE_ID = "equipment_without_pump_path"

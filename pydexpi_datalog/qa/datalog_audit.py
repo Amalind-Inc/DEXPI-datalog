@@ -8,7 +8,8 @@ process restarts and is readable without the application.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from ..workflow.artifact_store import ArtifactStore
 
 AUDIT_FILENAME = "datalog_audit.jsonl"
@@ -59,7 +60,7 @@ def build_datalog_audit_record(
         "faithfulness_gate_attempts": faithfulness_gate_attempts,
         "decision": decision,
         "decided_at": decided_at
-        or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        or datetime.now(UTC).isoformat(timespec="seconds"),
         "executed": executed,
         "execution_status": execution_status,
     }

@@ -7,9 +7,9 @@ single-source lock, retryability, and source-id provenance — not internal call
 """
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
@@ -18,7 +18,6 @@ from pydexpi_datalog.workflow.review_session import (
     compute_source_id,
     validate_upload_input,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_PIDS = REPO_ROOT / "TrainingTestCases" / "dexpi 1.3" / "example pids"

@@ -7,10 +7,10 @@ selectable identity.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 

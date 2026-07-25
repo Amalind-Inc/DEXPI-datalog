@@ -7,17 +7,16 @@ They assert what a caller observes: answer text, evidence references, witnesses.
 """
 
 import re
-import pytest
 import shutil
 
+import pytest
+
 from pydexpi_datalog.qa import counterfactual_probes
-from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
-from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.qa.grounded_qa_harness import (
     DEFAULT_MAX_ROUNDS,
     POSTURE_GENERAL_KNOWLEDGE,
-    POSTURE_OUT_OF_SCOPE,
     POSTURE_NEEDS_CLARIFICATION,
+    POSTURE_OUT_OF_SCOPE,
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
     POSTURE_UNSPECIFIED,
@@ -30,6 +29,8 @@ from pydexpi_datalog.qa.grounded_qa_harness import (
     compact_conversation,
     run_grounded_qa_turn,
 )
+from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
+from pydexpi_datalog.qa.topology_tools import TopologyTools
 
 
 def _rejection_feedback_from_messages(messages: list[dict[str, object]]) -> str | None:

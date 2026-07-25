@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..workflow.workflow_policy import OSS_POLICY, WorkflowPolicy
 from .model_catalog import catalog_provider, is_catalogued_model, load_catalog
-
 
 # Provider and model support is no longer hand-maintained here: it comes from
 # the vendored models.dev snapshot (see model_catalog.py, ADR 0015). The

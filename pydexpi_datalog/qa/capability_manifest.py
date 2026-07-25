@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
 from pydexpi_datalog.qa.structured_intent import STRUCTURED_INTENT_JSON_SCHEMA
 
 PERMISSION_ALLOWED_READ_ONLY = "allowed_read_only"

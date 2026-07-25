@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -26,7 +26,6 @@ from pydexpi_datalog.benchmark.agentic_arm import (
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
-    SOURCE_CONCLUSION_VERDICTS,
     VERDICT_UNANSWERABLE,
 )
 from pydexpi_datalog.benchmark.dataset import load_question_manifest
@@ -45,7 +44,6 @@ from pydexpi_datalog.benchmark.souffle_arm import (
     validate_faithfulness_program,
     verify_souffle_answer_trace,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock_v2.json"

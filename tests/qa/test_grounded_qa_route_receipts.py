@@ -4,20 +4,19 @@ import shutil
 
 import pytest
 
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    FinalAnswer,
+    ToolCall,
+    run_grounded_qa_turn,
+)
 from pydexpi_datalog.qa.route_receipts import (
     ROUTE_REASONING_ENGINE_UNAVAILABLE,
     ROUTE_TEMPLATE_FAITHFULNESS_FAILURE,
     ROUTE_TEMPLATE_NO_FIT,
     RouteReceiptAuthority,
 )
-from pydexpi_datalog.qa.grounded_qa_harness import (
-    FinalAnswer,
-    ToolCall,
-    run_grounded_qa_turn,
-)
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
-
 
 QUESTION = "Must every CentrifugalPump have a reachable BallValve?"
 GENERATED_DATALOG = """\

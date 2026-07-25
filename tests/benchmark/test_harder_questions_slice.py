@@ -7,8 +7,8 @@ permission/defeasible negative control that expects abstention.
 
 from __future__ import annotations
 
-from collections import Counter
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,6 @@ from pydexpi_datalog.benchmark.hand_authored import (
     derive_ground_truth,
     verify_hand_authored_manifest,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "testdata" / "benchmark" / "harder_questions_manifest.json"

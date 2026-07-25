@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 OUTSIDE_ISLAND_MARKERS = (
     "adequate",
     "adequacy",

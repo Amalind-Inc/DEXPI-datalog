@@ -21,7 +21,6 @@ from pydexpi_datalog.benchmark.rmso_eval import (
 )
 from pydexpi_datalog.benchmark.runner import ScriptedArm, run_benchmark
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "rmso_eval_lock.json"
 REDESIGNED_LOCK_PATH = (

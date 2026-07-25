@@ -6,7 +6,6 @@ from pydexpi_datalog.qa.faithfulness_gate import (
     evaluate_layered_faithfulness_gate,
 )
 
-
 INTENT = {
     "source_classes": ["Tank"],
     "target_classes": ["CentrifugalPump"],

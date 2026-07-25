@@ -3,7 +3,6 @@ from __future__ import annotations
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 from pydexpi_datalog.workflow.review_session import build_topology_view_model
 
-
 GRAPH_FACTS: dict[str, object] = {
     "fixture_id": "minimal-pump-valve",
     "source_path": "minimal.xml",

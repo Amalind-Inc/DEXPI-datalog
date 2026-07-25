@@ -3,8 +3,9 @@ from __future__ import annotations
 import inspect
 import json
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools

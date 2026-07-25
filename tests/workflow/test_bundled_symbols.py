@@ -6,11 +6,14 @@ whenever the source itself carries no shape for it.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-from pydexpi_datalog.export.pipeline import export_graph_facts_artifact, fixture_id_from_path
+from pydexpi_datalog.export.pipeline import (
+    export_graph_facts_artifact,
+    fixture_id_from_path,
+)
 from pydexpi_datalog.workflow.bundled_symbols import BUNDLED_SYMBOLS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

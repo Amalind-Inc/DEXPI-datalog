@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
-import hashlib
 import os
 import re
 import secrets
@@ -13,7 +13,6 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 from pydexpi_datalog.qa.structured_intent import normalize_structured_intent
-
 
 ROUTE_POLICY_VERSION = "grounded-qa-route-policy/1"
 

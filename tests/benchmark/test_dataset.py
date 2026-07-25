@@ -6,11 +6,10 @@ from pathlib import Path
 import pytest
 
 from pydexpi_datalog.benchmark import (
-    DatasetManifestError,
     VERDICT_UNANSWERABLE,
+    DatasetManifestError,
     load_question_manifest,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_MANIFEST = REPO_ROOT / "testdata" / "benchmark" / "sample_training_manifest.json"

@@ -10,7 +10,11 @@ import shutil
 
 import pytest
 
-from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall, run_grounded_qa_turn
+from pydexpi_datalog.qa.grounded_qa_harness import (
+    FinalAnswer,
+    ToolCall,
+    run_grounded_qa_turn,
+)
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from pydexpi_datalog.web.review_api import TopologyAwareFakeModelProvider, create_review_api_app
+from pydexpi_datalog.web.review_api import (
+    TopologyAwareFakeModelProvider,
+    create_review_api_app,
+)
 from pydexpi_datalog.workflow.review_session import PreparationLimits
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (

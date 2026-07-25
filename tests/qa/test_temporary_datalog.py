@@ -9,7 +9,6 @@ import pytest
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools as ProductTopologyTools
 
-
 STRUCTURED_INTENT = {
     "source_classes": ["TopologyObject"],
     "target_classes": ["TopologyObject"],

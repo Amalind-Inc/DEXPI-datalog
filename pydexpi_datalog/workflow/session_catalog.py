@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-
 
 CATALOG_FILENAME = "catalog.sqlite3"
 
@@ -136,4 +135,4 @@ class SessionCatalog:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GRAPH_TOPOLOGY_IDB_PATH = (
     Path(__file__).resolve().parent / "datalog" / "idb" / "graph_topology_semantics.dl"

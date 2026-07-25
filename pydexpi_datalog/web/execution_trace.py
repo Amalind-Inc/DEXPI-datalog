@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
-import re
 
 from pydexpi_datalog.qa.grounded_qa_harness import MAX_TRACE_REASONING_LENGTH
 from pydexpi_datalog.workflow.artifact_store import ArtifactStore
@@ -216,7 +216,7 @@ def _render_group(
     template_id = str(group["template_id"])
     outcome = str(group["outcome"])
     event_id = hashlib.sha256(
-        f"{turn_id}\n{kind}\n{template_id}\n{outcome}".encode("utf-8")
+        f"{turn_id}\n{kind}\n{template_id}\n{outcome}".encode()
     ).hexdigest()[:TRACE_EVENT_ID_LENGTH]
     relative_path = Path("turns") / f"{turn_id}.trace" / f"{event_id}.json"
     occurrences = group["occurrences"]

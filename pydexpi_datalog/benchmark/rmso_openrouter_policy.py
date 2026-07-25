@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
-from typing import Mapping
-
 
 MODEL = "deepseek/deepseek-v4-flash"
 MAX_OUTPUT_TOKENS = 8192

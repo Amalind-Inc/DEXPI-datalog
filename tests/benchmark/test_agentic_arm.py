@@ -13,13 +13,13 @@ calls and no Docker in CI.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-import json
 import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 

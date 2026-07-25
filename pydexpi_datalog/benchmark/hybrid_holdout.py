@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from pydexpi_datalog.benchmark.dataset import DATASET_SCHEMA_VERSION
 from pydexpi_datalog.benchmark.runner import ArmAdapter, run_benchmark
-
 
 HYBRID_HOLDOUT_SCHEMA_VERSION = 1
 HYBRID_HOLDOUT_PROTOCOL_BEAD = "pydexpi-datalog-1-3qo.9.10"

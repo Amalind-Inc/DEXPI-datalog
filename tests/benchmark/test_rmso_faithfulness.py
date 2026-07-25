@@ -12,7 +12,6 @@ from pydexpi_datalog.benchmark.rmso_faithfulness import (
     load_faithfulness_suite,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROBES = REPO_ROOT / "testdata" / "benchmark" / "rmso_faithfulness_probes.json"
 

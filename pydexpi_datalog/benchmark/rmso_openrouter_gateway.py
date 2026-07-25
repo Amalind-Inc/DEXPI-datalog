@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Any, Iterator
+from typing import Any
 
 import httpx
 
@@ -51,7 +52,7 @@ class LockedOpenRouterGateway:
         self._server: ThreadingHTTPServer | None = None
         self._thread: Thread | None = None
 
-    def __enter__(self) -> "LockedOpenRouterGateway":
+    def __enter__(self) -> LockedOpenRouterGateway:
         if self._server is not None:
             raise RuntimeError("OpenRouter gateway is already running.")
         self.artifact_dir.mkdir(parents=True, exist_ok=True)

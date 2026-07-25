@@ -9,21 +9,21 @@ execute end-to-end on the real engine.
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import pydexpi_datalog.benchmark.template_arm as template_arm_module
 from pydexpi_datalog.benchmark.template_arm import (
     TEMPLATE_PACK,
     render_program,
     routing_vocabulary,
     validate_routing,
 )
-import pydexpi_datalog.benchmark.template_arm as template_arm_module
 from pydexpi_datalog.benchmark.template_arm_task import (
     RMSO_ROUTE_QUERY_HELPER,
     ROUTE_TRACE_FILENAME,

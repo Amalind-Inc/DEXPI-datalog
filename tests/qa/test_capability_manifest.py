@@ -12,7 +12,6 @@ from pydexpi_datalog.qa.capability_manifest import (
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 
-
 STRUCTURED_INTENT = {
     "source_classes": ["Pump"],
     "target_classes": ["TopologyObject"],

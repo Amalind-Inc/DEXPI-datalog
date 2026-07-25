@@ -334,8 +334,8 @@ def build_checkpoint_kira_class(
 def __getattr__(name: str) -> Any:
     if name != "CheckpointTerminusKira":
         raise AttributeError(name)
-    from harbor.llms.base import LLMResponse
     from harbor.agents.terminus_2.terminus_2 import Command
+    from harbor.llms.base import LLMResponse
     from terminus_kira.terminus_kira import TerminusKira
 
     return build_checkpoint_kira_class(TerminusKira, LLMResponse, Command)

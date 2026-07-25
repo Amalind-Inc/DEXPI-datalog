@@ -4,39 +4,6 @@ The seam every benchmark arm plugs into: the StructuredAnswer contract,
 pre-committed GroundTruth, and the pure-function grader.
 """
 
-from pydexpi_datalog.benchmark.contract import (
-    POSTURE_GENERAL_KNOWLEDGE,
-    POSTURE_OUT_OF_SCOPE,
-    POSTURE_NEEDS_CLARIFICATION,
-    POSTURE_SOURCE_DATA_UNAVAILABLE,
-    POSTURE_SOURCE_GROUNDED,
-    POSTURE_UNSPECIFIED,
-    POSTURES,
-    TRAP_EXPECTED_POSTURES,
-    SOURCE_CONCLUSION_VERDICTS,
-    VERDICT_NO_VIOLATION,
-    VERDICT_UNANSWERABLE,
-    VERDICT_VIOLATION_FOUND,
-    VERDICTS,
-    GroundTruth,
-    StructuredAnswer,
-    TrapJudgment,
-    TrapRubric,
-)
-from pydexpi_datalog.benchmark.grader import Grade, grade, known_node_ids
-from pydexpi_datalog.benchmark.direct_arm import (
-    DEGRADED_VERDICT,
-    DIRECT_ARM_MODELS,
-    DirectArm,
-    build_direct_prompt,
-    create_direct_arm,
-    parse_structured_answer,
-)
-from pydexpi_datalog.benchmark.incumbent_arm import (
-    INCUMBENT_ARM_MODELS,
-    IncumbentArm,
-    create_incumbent_arm,
-)
 from pydexpi_datalog.benchmark.agentic_arm import (
     AGENTIC_ARM_MODELS,
     AgenticArm,
@@ -48,46 +15,58 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     create_agentic_arm,
     load_episode_budgets,
 )
-from pydexpi_datalog.benchmark.souffle_arm import (
-    PROGRAM_FILENAME,
-    SOUFFLE_ARM_MODELS,
-    build_rmso_souffle_harbor_task,
-    build_souffle_harbor_task,
-    create_souffle_arm,
-)
-from pydexpi_datalog.benchmark.rmso_faithfulness import (
-    DEFAULT_FAITHFULNESS_PROBES_PATH,
-    FAITHFULNESS_SUITE_SCHEMA_VERSION,
-    FaithfulnessCase,
-    FaithfulnessCaseResult,
-    FaithfulnessFamily,
-    FaithfulnessReport,
-    FaithfulnessSuite,
-    FaithfulnessSuiteError,
-    evaluate_faithfulness_program,
-    load_faithfulness_suite,
-    run_preregistered_faithfulness_gate,
-    replay_result_witness,
-)
 from pydexpi_datalog.benchmark.audit_trace import (
     AuditTraceReport,
     verify_audit_trace,
     verify_souffle_audit_trace,
+)
+from pydexpi_datalog.benchmark.contract import (
+    POSTURE_GENERAL_KNOWLEDGE,
+    POSTURE_NEEDS_CLARIFICATION,
+    POSTURE_OUT_OF_SCOPE,
+    POSTURE_SOURCE_DATA_UNAVAILABLE,
+    POSTURE_SOURCE_GROUNDED,
+    POSTURE_UNSPECIFIED,
+    POSTURES,
+    SOURCE_CONCLUSION_VERDICTS,
+    TRAP_EXPECTED_POSTURES,
+    VERDICT_NO_VIOLATION,
+    VERDICT_UNANSWERABLE,
+    VERDICT_VIOLATION_FOUND,
+    VERDICTS,
+    GroundTruth,
+    StructuredAnswer,
+    TrapJudgment,
+    TrapRubric,
 )
 from pydexpi_datalog.benchmark.dataset import (
     CATEGORY_COMPLIANCE_UNIVERSAL,
     CATEGORY_RETRIEVAL_LOCAL,
     DATASET_SCHEMA_VERSION,
     QUESTION_CATEGORIES,
-    SLICES,
     SLICE_HAND_AUTHORED,
     SLICE_SYNTHETIC,
     SLICE_TRAP,
+    SLICES,
     BenchmarkDataset,
     BenchmarkQuestion,
     DatasetManifestError,
     FidelityNote,
     load_question_manifest,
+)
+from pydexpi_datalog.benchmark.direct_arm import (
+    DEGRADED_VERDICT,
+    DIRECT_ARM_MODELS,
+    DirectArm,
+    build_direct_prompt,
+    create_direct_arm,
+    parse_structured_answer,
+)
+from pydexpi_datalog.benchmark.grader import Grade, grade, known_node_ids
+from pydexpi_datalog.benchmark.incumbent_arm import (
+    INCUMBENT_ARM_MODELS,
+    IncumbentArm,
+    create_incumbent_arm,
 )
 from pydexpi_datalog.benchmark.results import (
     ARM_FAMILIES,
@@ -108,12 +87,25 @@ from pydexpi_datalog.benchmark.results import (
     load_run_index,
     run_results_report,
 )
-from pydexpi_datalog.benchmark.synthetic import (
-    SIZE_BUCKETS,
-    SYNTHETIC_FIDELITY_LIMIT,
-    SYNTHETIC_FIDELITY_MODE,
-    SYNTHETIC_MANIFEST_FILENAME,
-    generate_synthetic_slice,
+from pydexpi_datalog.benchmark.rmso_eval import (
+    RMSO_EVAL_ENTRIES,
+    RMSO_EVAL_LOCK_SCHEMA_VERSION,
+    RMSOEvalLockError,
+    materialize_preregistered_rmso_manifest,
+)
+from pydexpi_datalog.benchmark.rmso_faithfulness import (
+    DEFAULT_FAITHFULNESS_PROBES_PATH,
+    FAITHFULNESS_SUITE_SCHEMA_VERSION,
+    FaithfulnessCase,
+    FaithfulnessCaseResult,
+    FaithfulnessFamily,
+    FaithfulnessReport,
+    FaithfulnessSuite,
+    FaithfulnessSuiteError,
+    evaluate_faithfulness_program,
+    load_faithfulness_suite,
+    replay_result_witness,
+    run_preregistered_faithfulness_gate,
 )
 from pydexpi_datalog.benchmark.runner import (
     BENCHMARK_REPORT_FILENAME,
@@ -124,11 +116,19 @@ from pydexpi_datalog.benchmark.runner import (
     run_benchmark,
     run_scripted_benchmark,
 )
-from pydexpi_datalog.benchmark.rmso_eval import (
-    RMSO_EVAL_ENTRIES,
-    RMSO_EVAL_LOCK_SCHEMA_VERSION,
-    RMSOEvalLockError,
-    materialize_preregistered_rmso_manifest,
+from pydexpi_datalog.benchmark.souffle_arm import (
+    PROGRAM_FILENAME,
+    SOUFFLE_ARM_MODELS,
+    build_rmso_souffle_harbor_task,
+    build_souffle_harbor_task,
+    create_souffle_arm,
+)
+from pydexpi_datalog.benchmark.synthetic import (
+    SIZE_BUCKETS,
+    SYNTHETIC_FIDELITY_LIMIT,
+    SYNTHETIC_FIDELITY_MODE,
+    SYNTHETIC_MANIFEST_FILENAME,
+    generate_synthetic_slice,
 )
 from pydexpi_datalog.benchmark.trap_rubric import (
     ModelTrapJudge,
@@ -136,7 +136,6 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     TrapJudge,
     load_scripted_trap_judgments,
 )
-
 
 __all__ = [
     "AGENTIC_ARM_MODELS",

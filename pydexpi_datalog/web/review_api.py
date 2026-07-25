@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import time
-from typing import Callable
+from collections.abc import Callable
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -19,7 +19,10 @@ from ..qa.grounded_qa_harness import (
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
-from ..verification.authored_rule_pack import AuthoredRulePackError, AuthoredRulePackStore
+from ..verification.authored_rule_pack import (
+    AuthoredRulePackError,
+    AuthoredRulePackStore,
+)
 from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.artifact_store import LocalArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal

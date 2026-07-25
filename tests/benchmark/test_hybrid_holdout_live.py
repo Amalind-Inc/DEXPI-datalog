@@ -16,7 +16,6 @@ from pydexpi_datalog.benchmark.hybrid_holdout import (
     run_hybrid_holdout,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "hybrid_holdout_lock.json"
 

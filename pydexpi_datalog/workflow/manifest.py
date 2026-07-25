@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-import json
 
 from .workflow_policy import OSS_POLICY, count_manifest_source_files
-
 
 SCHEMA_VERSION = 1
 ALLOWED_EXECUTION_MODES = {"dry-run", "normal"}

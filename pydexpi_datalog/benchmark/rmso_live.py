@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, replace
-from datetime import datetime, timezone
 import json
 import os
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, replace
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
 
 import httpx
 
@@ -32,7 +32,6 @@ from pydexpi_datalog.benchmark.rmso_openrouter_policy import (
 from pydexpi_datalog.benchmark.runner import run_benchmark
 from pydexpi_datalog.benchmark.souffle_arm import create_souffle_arm
 from pydexpi_datalog.benchmark.template_arm_task import create_template_arm
-
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 PROMPT_PRICE_PER_MILLION = 0.098
@@ -236,7 +235,7 @@ def run_rmso_live(
         prompt_price_per_million=PROMPT_PRICE_PER_MILLION,
         completion_price_per_million=COMPLETION_PRICE_PER_MILLION,
     )
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     summary: dict[str, object] = {
         "schema_version": 1,
         "status": "running",
@@ -301,7 +300,7 @@ def run_rmso_live(
                 )
             summary.update(
                 {
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": datetime.now(UTC).isoformat(),
                     "reports": reports,
                 }
             )
@@ -314,7 +313,7 @@ def run_rmso_live(
                 {
                     "status": "failed",
                     "formal_status": "INCOMPLETE",
-                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                    "failed_at": datetime.now(UTC).isoformat(),
                     "invalid_reasons": invalid_reasons,
                     "error_type": type(error).__name__,
                     "error": str(error),

@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-from pathlib import Path
 import re
 import shutil
 import tempfile
+from pathlib import Path
 
 import networkx as nx
 from networkx.readwrite import json_graph
-from pydexpi import __file__ as pydexpi_file
 from pydexpi.loaders import GraphLoader, ProteusSerializer
+
+from pydexpi import __file__ as pydexpi_file
 
 
 def run_export_facts(

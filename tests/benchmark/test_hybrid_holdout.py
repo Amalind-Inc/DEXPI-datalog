@@ -24,7 +24,6 @@ from pydexpi_datalog.benchmark.hybrid_holdout import (
 )
 from pydexpi_datalog.benchmark.runner import ScriptedArm
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "testdata" / "benchmark" / "hybrid_holdout_lock.json"
 
@@ -132,15 +131,6 @@ def test_gate_fails_when_grounded_credit_below_threshold(tmp_path: Path) -> None
         LOCK_PATH, tmp_path / "hybrid_manifest.json"
     )
     dataset = load_question_manifest(manifest_path)
-    answers = {
-        question.question_id: StructuredAnswer(
-            verdict="unanswerable",
-            witness_ids=(),
-            posture=POSTURE_SOURCE_DATA_UNAVAILABLE,
-            usage={"cost_usd": 0.0},
-        )
-        for question in dataset.questions
-    }
     benchmark_report = {
         "arm_id": "failing",
         "episodes": [

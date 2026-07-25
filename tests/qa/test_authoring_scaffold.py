@@ -7,7 +7,6 @@ import shutil
 import pytest
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
-    FinalAnswer,
     ToolCall,
     run_grounded_qa_turn,
 )

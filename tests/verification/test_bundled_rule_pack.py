@@ -8,7 +8,6 @@ from pydexpi_datalog.verification.bundled_rule_pack import (
     evaluate_bundled_rule,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "testdata" / "verifier_suite" / "inputs"
 

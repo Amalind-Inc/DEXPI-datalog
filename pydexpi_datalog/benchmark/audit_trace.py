@@ -7,10 +7,9 @@ from dataclasses import dataclass
 
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_SOURCE_DATA_UNAVAILABLE,
-    StructuredAnswer,
     VERDICT_UNANSWERABLE,
+    StructuredAnswer,
 )
-
 
 POLICY_ABSTENTION_OPERATION = (
     "permission_or_defeasible_not_decidable_from_monotone_drawing"

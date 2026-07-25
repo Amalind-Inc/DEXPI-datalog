@@ -6,14 +6,15 @@ import copy
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from pydexpi_datalog.benchmark.contract import (
-    GroundTruth,
     VERDICT_NO_VIOLATION,
     VERDICT_VIOLATION_FOUND,
+    GroundTruth,
 )
 from pydexpi_datalog.benchmark.hand_authored import derive_ground_truth
 from pydexpi_datalog.benchmark.souffle_arm import validate_faithfulness_program
@@ -25,7 +26,6 @@ from pydexpi_datalog.semantics.souffle_runner import (
     SouffleExecutionError,
     run_souffle_program,
 )
-
 
 FAITHFULNESS_SUITE_SCHEMA_VERSION = 1
 _EXPECTED_FAMILIES = (

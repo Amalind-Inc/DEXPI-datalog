@@ -45,9 +45,9 @@ from pydexpi_datalog.benchmark.rmso_kira import (
     build_checkpoint_kira_class,
 )
 from pydexpi_datalog.benchmark.souffle_arm import (
-    FaithfulnessProgramError,
     PROGRAM_FILENAME,
     SOUFFLE_ARM_MODELS,
+    FaithfulnessProgramError,
     build_rmso_souffle_harbor_task,
     build_souffle_harbor_task,
     create_souffle_arm,

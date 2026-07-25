@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
+from pydexpi_datalog.benchmark import template_arm as _template_arm
 from pydexpi_datalog.benchmark.agentic_arm import (
     PROGRAM_FILENAME,
     AgenticArm,
@@ -56,7 +57,6 @@ from pydexpi_datalog.benchmark.souffle_arm import (
     validate_faithfulness_program,
     verify_souffle_answer_trace,
 )
-from pydexpi_datalog.benchmark import template_arm as _template_arm
 from pydexpi_datalog.benchmark.template_arm import (
     ATTACHMENT_MODES,
     ATTACHMENT_ROLES,

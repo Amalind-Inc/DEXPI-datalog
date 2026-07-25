@@ -23,7 +23,6 @@ import re
 
 import yaml
 
-
 DEFAULT_OUTCOMES = ["satisfied", "violated", "indeterminate"]
 
 _RULE_HEADING = re.compile(r"^##\s+(?P<title>.+?)\s*\{#(?P<rule_id>[A-Za-z0-9_.-]+)\}\s*$")

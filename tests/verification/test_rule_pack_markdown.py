@@ -9,7 +9,6 @@ from pydexpi_datalog.verification.souffle_rule_pack import (
     load_rule_datalog,
 )
 
-
 SAMPLE_PACK_MARKDOWN = textwrap.dedent(
     """\
     ---

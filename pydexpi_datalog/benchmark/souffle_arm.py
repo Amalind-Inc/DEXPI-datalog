@@ -29,30 +29,30 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
-from typing import Mapping
+from collections.abc import Mapping
+from pathlib import Path
 
 from pydexpi_datalog.benchmark.agentic_arm import (
     AGENTIC_ARM_MODELS,
     ANSWER_FILENAME,
+    PERMISSION_CONTROL_IDS,
     PROGRAM_FILENAME,
     AgenticArm,
     EpisodeBudgets,
     HarborKiraEpisodeRunner,
-    PERMISSION_CONTROL_IDS,
     build_task,
     validate_bundle,
 )
 from pydexpi_datalog.benchmark.contract import POSTURES, VERDICTS, StructuredAnswer
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.graph_inspection import build_graph_inspection_index
-from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
-    LockedOpenRouterGateway,
-)
 from pydexpi_datalog.benchmark.rmso_kira import (
     CHECKPOINT_FIELD,
     CHECKPOINT_VALUE,
+)
+from pydexpi_datalog.benchmark.rmso_openrouter_gateway import (
+    LockedOpenRouterGateway,
 )
 from pydexpi_datalog.semantics.derive_graph_semantics import (
     build_graph_facts_datalog,

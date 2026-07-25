@@ -10,8 +10,8 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from pydexpi_datalog.qa.ollama_qa_provider import OllamaQATurnProvider
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
+from pydexpi_datalog.qa.ollama_qa_provider import OllamaQATurnProvider
 
 
 def _tool_call_response(

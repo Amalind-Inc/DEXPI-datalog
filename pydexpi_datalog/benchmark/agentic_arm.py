@@ -32,14 +32,15 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Callable, Mapping, Sequence, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pydexpi_datalog.benchmark.contract import (
     POSTURES,
-    StructuredAnswer,
     VERDICTS,
+    StructuredAnswer,
 )
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.direct_arm import (

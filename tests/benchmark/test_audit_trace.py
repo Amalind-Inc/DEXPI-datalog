@@ -6,10 +6,10 @@ from pydexpi_datalog.benchmark.audit_trace import verify_audit_trace
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_SOURCE_DATA_UNAVAILABLE,
     POSTURE_SOURCE_GROUNDED,
-    StructuredAnswer,
+    VERDICT_NO_VIOLATION,
     VERDICT_UNANSWERABLE,
     VERDICT_VIOLATION_FOUND,
-    VERDICT_NO_VIOLATION,
+    StructuredAnswer,
 )
 
 

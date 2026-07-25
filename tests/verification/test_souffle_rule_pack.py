@@ -14,7 +14,6 @@ from pydexpi_datalog.verification.souffle_rule_pack import (
 )
 from pydexpi_datalog.verification.verify_suite import evaluate_graph_fixture
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 FIXTURE_PATHS = [

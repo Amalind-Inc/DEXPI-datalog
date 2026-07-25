@@ -1,25 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-import json
-from pathlib import Path
 import hashlib
+import json
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 
 from ..export.pipeline import export_graph_facts_artifact
-from .artifact_store import ArtifactStore
 from ..semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
     build_derived_graph_semantics_datalog,
     build_graph_facts_datalog,
 )
-from .topology_naming import derive_display_names
+from .artifact_store import ArtifactStore
+from .geometry_gate import evaluate_geometry_gate
 from .pid_view import build_pid_view
 from .schematic_scene import build_schematic_scene_report, has_drawable_geometry
-from .geometry_gate import evaluate_geometry_gate
+from .topology_naming import derive_display_names
 
 
 @dataclass(frozen=True)

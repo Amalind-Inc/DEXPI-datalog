@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E03_FIXTURE = (

@@ -8,11 +8,14 @@ object and its topology counterpart are the same identity.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-from pydexpi_datalog.workflow.schematic_scene import build_schematic_scene, build_schematic_scene_report
+from pydexpi_datalog.workflow.schematic_scene import (
+    build_schematic_scene,
+    build_schematic_scene_report,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 C01_FIXTURE = (

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from pathlib import Path
 import re
 import time
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 
 from ..llm.logic_requests import (
     parse_model_draft_response,
@@ -35,14 +35,6 @@ from ..qa.grounded_qa_harness import (
     run_grounded_qa_turn,
 )
 from ..qa.topology_tools import TopologyTools
-from ..workflow.artifact_store import ArtifactStore, ArtifactStoreError
-from ..workflow.review_session import (
-    PreparationLimits,
-    ReviewSessionService,
-    build_evidence_highlight_payload,
-    session_artifact_keys,
-    session_artifact_paths,
-)
 from ..verification.bundled_rule_pack import (
     bundled_rule_packs,
     evaluate_pack_rule,
@@ -51,7 +43,14 @@ from ..verification.pack_skill_context import (
     build_advisory_walkthrough,
     skill_context_entries,
 )
-
+from ..workflow.artifact_store import ArtifactStore, ArtifactStoreError
+from ..workflow.review_session import (
+    PreparationLimits,
+    ReviewSessionService,
+    build_evidence_highlight_payload,
+    session_artifact_keys,
+    session_artifact_paths,
+)
 
 ANSWER_FACT_RE = re.compile(r'^\s*answer\s*\(\s*"([^"]+)"\s*\)\s*\.\s*$')
 
@@ -1401,7 +1400,7 @@ class ChainlitReviewFlow:
                 **audit_record,
                 "provider_attribution": provider_attribution,
                 "provider_usage": provider_usage,
-                "decided_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "decided_at": datetime.now(UTC).isoformat(timespec="seconds"),
             }
             append_datalog_audit_record(self._store, session_id, record)
 

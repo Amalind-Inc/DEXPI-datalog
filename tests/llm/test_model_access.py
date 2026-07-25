@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import pydexpi_datalog
 from pydexpi_datalog.llm.model_access import (
@@ -14,7 +14,6 @@ from pydexpi_datalog.llm.model_access import (
     require_native_tool_capable_model,
     supported_native_tool_models,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_DERIVED_GRAPH_SEMANTICS = (

@@ -8,13 +8,12 @@ review actions, annotation reuse, and invalidation — observable payloads only.
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from pydexpi_datalog.web.review_api import create_review_api_app
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (

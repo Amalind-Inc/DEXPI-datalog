@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pydexpi_datalog.qa.topology_tools import RetrievalBudgets, TopologyTools
 
-
 TOPOLOGY = {
     "nodes": [
         {"id": "pump-1", "label": "Pump", "tag_name": "P-101"},

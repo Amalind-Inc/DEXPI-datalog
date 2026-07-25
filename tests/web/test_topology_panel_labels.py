@@ -7,13 +7,12 @@ bare class names ("PipingNode").
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 
-from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
-
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E06_FIXTURE = (

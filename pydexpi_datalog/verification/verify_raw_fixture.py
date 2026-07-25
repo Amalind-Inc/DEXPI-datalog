@@ -5,9 +5,9 @@ from pathlib import Path
 
 from pydexpi.loaders import GraphLoader, ProteusSerializer
 
-from ..semantics.derive_graph_semantics import build_derived_graph_semantics_datalog
-from ..export.pipeline import build_graph_facts_artifact
 from ..artifacts.result_schemas import validate_result_schema
+from ..export.pipeline import build_graph_facts_artifact
+from ..semantics.derive_graph_semantics import build_derived_graph_semantics_datalog
 from .verify_suite import evaluate_graph_fixture
 
 
