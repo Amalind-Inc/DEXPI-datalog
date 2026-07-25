@@ -84,17 +84,45 @@ command module:
 Tests mirror the same seams under `tests/`: `workflow/`, `export/`,
 `semantics/`, `verification/`, `llm/`, and `artifacts/`.
 
+## Setup
+
+Requires Python 3.12+ (developed and tested on 3.14) and
+[Souffle](https://souffle-lang.github.io/) on `PATH` for rule evaluation.
+
+```bash
+git submodule update --init --recursive   # pyDEXPI + DEXPI TrainingTestCases
+python3 -m venv .venv
+.venv/bin/pip install -e ./pyDEXPI         # not on PyPI; vendored as a submodule
+.venv/bin/pip install -e ".[dev]"
+```
+
 ## Current command
 
 ```bash
 python3 -m pydexpi_datalog dry-run path/to/manifest.json
 ```
 
-## Current test command
+## Validation
 
 ```bash
-python3 -m unittest discover -s tests
+.venv/bin/ruff check .                                    # lint
+PYDEXPI_QA_PROVIDER=scripted .venv/bin/python -m pytest   # every test
 ```
+
+`pytest` runs the whole suite, benchmark included, which takes about ten
+minutes. For the edit loop, deselect the slow half explicitly:
+
+```bash
+PYDEXPI_QA_PROVIDER=scripted .venv/bin/python -m pytest -m "not slow"
+```
+
+That reports how many tests it deselected, so the slow suite is skipped by
+choice rather than by accident. `PYDEXPI_QA_PROVIDER=scripted` pins the
+deterministic zero-LLM provider so no test reaches a real model.
+
+Configuration lives in `pyproject.toml`; no `PYTHONPATH` is needed. Do not
+use `python -m unittest discover`: it collects only `unittest`-style tests
+and silently ignores the pytest-style ones.
 
 ## Running the web UI
 

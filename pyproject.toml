@@ -1,0 +1,89 @@
+[project]
+name = "pydexpi-datalog"
+version = "0.1.0"
+description = "Deterministic P&ID QA over DEXPI 1.3 source files"
+readme = "README.md"
+license = { file = "LICENSE" }
+# Every source file compiles on 3.12, 3.13 and 3.14, but only 3.14 has ever
+# run the suite. Treat the floor as believed-not-proven until CI runs a
+# matrix; 3.14 is the version to reproduce a failure against.
+requires-python = ">=3.12"
+
+# pyDEXPI is deliberately absent: it is a git submodule installed editable
+# from ./pyDEXPI, not a PyPI release. See "Setup" in README.md.
+dependencies = [
+    "fastapi==0.138.0",
+    "httpx==0.28.1",
+    "uvicorn==0.49.0",
+    "networkx==3.6.1",
+    "PyYAML==6.0.3",
+]
+
+[project.optional-dependencies]
+# Pinned, not floating: ruff's default rule set widened between releases, so
+# an unpinned ruff turns an unrelated commit into a lint failure.
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.16.0",
+]
+# Live benchmark arms import these lazily inside the function that needs
+# them, so the suite runs without them installed.
+benchmark = [
+    "pandas==3.0.3",
+    "numpy==2.4.6",
+    "openpyxl==3.1.5",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pydexpi_datalog*"]
+
+[tool.pytest.ini_options]
+# The repo is importable without PYTHONPATH=. and without an editable
+# install, so one command works the same locally and in CI.
+pythonpath = ["."]
+testpaths = ["tests"]
+# No default deselection. A suite that hides its slow half by default is how
+# a real failure sat unnoticed in tests/benchmark (bead pydexpi-datalog-1-plz7):
+# bare `pytest` runs everything, and the fast loop opts out explicitly with
+# `-m "not slow"`, which reports what it skipped.
+addopts = "-ra"
+markers = [
+    "slow: minutes-long test; deselect with -m 'not slow' (auto-applied to tests/benchmark)",
+]
+
+[tool.ruff]
+# Vendored submodules are not ours to lint, and .artifacts/ holds generated
+# benchmark episode output. artifacts/ and logs/ are already gitignored,
+# which ruff honours.
+extend-exclude = [
+    "pyDEXPI",
+    "TrainingTestCases",
+    ".artifacts",
+    "prototypes",
+    "spikes",
+]
+
+[tool.ruff.lint]
+# Deliberately narrow and enforced at zero, rather than wide and advisory.
+# Ruff 0.16's default set reports 248 findings here, 369 of them TRY003 alone
+# once TRY is added -- a house style this codebase rejects on purpose, since
+# its diagnostics carry the operator-facing message. These seven groups are
+# the ones that catch defects rather than taste:
+#   E4/E7/E9  import, statement and syntax errors
+#   F         pyflakes: undefined names, unused imports and variables
+#   B         bugbear: mutable defaults, loop-variable capture
+#   I         import ordering, so diffs stay about behaviour
+#   UP        syntax made obsolete by the declared requires-python
+# Widening the set is a deliberate act with its own cleanup, not a side
+# effect of upgrading ruff.
+select = ["E4", "E7", "E9", "F", "B", "I", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+# EpisodeBudgets is a frozen dataclass, so calling it in a default argument
+# cannot leak state between calls.
+extend-immutable-calls = ["pydexpi_datalog.benchmark.agentic_arm.EpisodeBudgets"]
