@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from pathlib import Path
 import re
 from threading import RLock
 from typing import Callable
@@ -12,6 +10,11 @@ from pydexpi_datalog.web.execution_trace import (
     bound_reasoning_text,
     render_execution_trace,
     sanitize_progress_tool_input,
+)
+from pydexpi_datalog.workflow.artifact_store import (
+    ArtifactNotFound,
+    ArtifactStore,
+    InvalidArtifactKey,
 )
 
 TURN_ID_LENGTH = 20
@@ -30,8 +33,8 @@ def compute_turn_id(session_id: str, request_id: str) -> str:
 class TurnLifecycleStore:
     """Disk-backed, replayable lifecycle for one server-owned QA turn."""
 
-    def __init__(self, artifact_root: Path) -> None:
-        self._artifact_root = artifact_root
+    def __init__(self, store: ArtifactStore) -> None:
+        self._store = store
         self._lock = RLock()
 
     def start(
@@ -151,10 +154,10 @@ class TurnLifecycleStore:
             self._save(turn)
 
     def get(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
-        path = self._path(session_id, turn_id)
-        if not path.is_file():
+        try:
+            value = self._store.read_json(self._key(session_id, turn_id))
+        except (ArtifactNotFound, InvalidArtifactKey):
             return None
-        value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else None
 
     def get_trace_detail(
@@ -164,17 +167,14 @@ class TurnLifecycleStore:
             turn_id
         ) or not _TRACE_EVENT_ID_PATTERN.fullmatch(event_id):
             return None
-        root = self._artifact_root.resolve()
-        path = (
-            self._artifact_root
-            / session_id
-            / "turns"
-            / f"{turn_id}.trace"
-            / f"{event_id}.json"
-        ).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
+        # turn_id and event_id are hex-constrained above, but session_id is
+        # request-supplied and unconstrained: the store refuses a key that
+        # would leave the workspace, and an unreadable key is a 404 here.
+        key = f"{session_id}/turns/{turn_id}.trace/{event_id}.json"
+        try:
+            value = self._store.read_json(key)
+        except (ArtifactNotFound, InvalidArtifactKey):
             return None
-        value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else None
 
     def cancel(self, *, session_id: str, turn_id: str) -> dict[str, object] | None:
@@ -262,7 +262,7 @@ class TurnLifecycleStore:
     ) -> None:
         status = str(result.get("status", "answered"))
         trace_events = render_execution_trace(
-            artifact_root=self._artifact_root,
+            store=self._store,
             session_id=str(turn["session_id"]),
             turn_id=str(turn["turn_id"]),
             raw_events=result.get("trace_events"),
@@ -320,14 +320,11 @@ class TurnLifecycleStore:
         assert isinstance(events, list)
         events.append(self._event(len(events), event_type, data))
 
-    def _path(self, session_id: str, turn_id: str) -> Path:
-        return self._artifact_root / session_id / "turns" / f"{turn_id}.json"
+    @staticmethod
+    def _key(session_id: str, turn_id: str) -> str:
+        return f"{session_id}/turns/{turn_id}.json"
 
     def _save(self, turn: dict[str, object]) -> None:
-        path = self._path(str(turn["session_id"]), str(turn["turn_id"]))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(
-            json.dumps(turn, indent=2, sort_keys=True), encoding="utf-8"
+        self._store.write_json(
+            self._key(str(turn["session_id"]), str(turn["turn_id"])), turn
         )
-        temporary.replace(path)

@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from typing import Callable
 
 from ..export.pipeline import export_graph_facts_artifact
+from .artifact_store import ArtifactStore
 from ..semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
     build_derived_graph_semantics_datalog,
@@ -49,11 +50,11 @@ class ReviewSessionService:
     def __init__(
         self,
         *,
-        artifact_root: Path,
+        store: ArtifactStore,
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
-        self.artifact_root = artifact_root
+        self.store = store
         self._limits = limits or PreparationLimits()
         self._clock = clock
         self._requests_by_session: dict[str, Path] = {}
@@ -136,9 +137,6 @@ class ReviewSessionService:
                 diagnostics=validation_diagnostics,
             )
 
-        session_dir = self.artifact_root / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-
         stage_history = [
             stage("queued", "queued"),
             stage("running", "validating upload"),
@@ -146,12 +144,14 @@ class ReviewSessionService:
         ]
         try:
             started_at = self._clock()
-            graph_facts = export_graph_facts_artifact(
-                dexpi_xml_path=dexpi_xml_path,
-                fixture_id=session_id,
-                output_dir=session_dir,
-            )
-            graph_facts_json_path = session_dir / session_id / "graph_facts.json"
+            # The export pipeline writes graph_facts.json into a directory it
+            # is handed, so preparation borrows a real one from the store.
+            with self.store.local_dir(session_id) as session_dir:
+                graph_facts = export_graph_facts_artifact(
+                    dexpi_xml_path=dexpi_xml_path,
+                    fixture_id=session_id,
+                    output_dir=session_dir,
+                )
 
             graph_limit_diagnostics = check_graph_size_limits(
                 graph=graph_facts["graph"], limits=self._limits
@@ -166,14 +166,14 @@ class ReviewSessionService:
 
             stage_history.append(stage("running", "deriving graph facts datalog"))
             graph_facts_datalog = build_graph_facts_datalog(graph_facts)
-            graph_facts_datalog_path = session_dir / "graph_facts.dl"
-            graph_facts_datalog_path.write_text(graph_facts_datalog, encoding="utf-8")
+            self.store.write_text(
+                f"{session_id}/graph_facts.dl", graph_facts_datalog
+            )
 
             stage_history.append(stage("running", "deriving graph semantics"))
             derived_graph_semantics = build_derived_graph_semantics_datalog(graph_facts)
-            derived_graph_semantics_path = session_dir / "derived_graph_semantics.dl"
-            derived_graph_semantics_path.write_text(
-                derived_graph_semantics, encoding="utf-8"
+            self.store.write_text(
+                f"{session_id}/derived_graph_semantics.dl", derived_graph_semantics
             )
 
             stage_history.append(stage("running", "building topology view model"))
@@ -183,11 +183,8 @@ class ReviewSessionService:
                 source_id=source_id,
                 dexpi_xml_path=dexpi_xml_path,
             )
-            topology_view_path = session_dir / "topology_view.json"
-            topology_view_path.write_text(
-                json.dumps(topology_view, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            artifact_paths = session_artifact_paths(self.store, session_id)
+            self.store.write_json(f"{session_id}/topology_view.json", topology_view)
 
             readiness = {
                 "state": "ready",
@@ -195,15 +192,11 @@ class ReviewSessionService:
                 "source_id": source_id,
                 "graph": graph_facts["graph"],
                 "diagnostics": [],
-                "topology_view_model_path": str(topology_view_path),
+                "topology_view_model_path": artifact_paths["topology_view_model"],
             }
-            readiness_path = session_dir / "readiness.json"
-            readiness_path.write_text(
-                json.dumps(readiness, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            self.store.write_json(f"{session_id}/readiness.json", readiness)
 
-            artifacts = session_artifact_paths(session_dir, session_id)
+            artifacts = artifact_paths
 
             elapsed_seconds = self._clock() - started_at
             time_limit_diagnostics = check_preparation_time_limit(
@@ -218,7 +211,7 @@ class ReviewSessionService:
                 )
 
             artifact_limit_diagnostics = check_artifact_size_limits(
-                artifacts=artifacts, limits=self._limits
+                store=self.store, session_id=session_id, limits=self._limits
             )
             if artifact_limit_diagnostics:
                 return self._failed_result(
@@ -269,18 +262,16 @@ class ReviewSessionService:
         diagnostics: list[dict[str, object]],
         source_id: str | None = None,
     ) -> dict[str, object]:
-        session_dir = self.artifact_root / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
         readiness = {
             "state": "failed",
             "session_id": session_id,
             "source_id": source_id,
             "diagnostics": diagnostics,
         }
-        readiness_path = session_dir / "readiness.json"
-        readiness_path.write_text(
-            json.dumps(readiness, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        self.store.write_json(f"{session_id}/readiness.json", readiness)
+        readiness_path = session_artifact_paths(self.store, session_id)[
+            "readiness_metadata"
+        ]
         return {
             "session_id": session_id,
             "source_id": source_id,
@@ -435,13 +426,12 @@ def check_preparation_time_limit(
 
 
 def check_artifact_size_limits(
-    *, artifacts: dict[str, str], limits: PreparationLimits
+    *, store: ArtifactStore, session_id: str, limits: PreparationLimits
 ) -> list[dict[str, object]]:
-    for kind, artifact_path in sorted(artifacts.items()):
-        path = Path(artifact_path)
-        if not path.is_file():
+    for kind, key in sorted(session_artifact_keys(session_id).items()):
+        if not store.exists(key):
             continue
-        artifact_bytes = path.stat().st_size
+        artifact_bytes = store.size(key)
         if artifact_bytes > limits.max_artifact_bytes:
             return [
                 diagnostic(
@@ -683,19 +673,34 @@ def stage(status: str, text: str) -> dict[str, str]:
     return {"status": status, "text": text}
 
 
-def session_artifact_paths(session_dir: Path, session_id: str) -> dict[str, str]:
-    """The artifacts a ready session leaves on disk, keyed by their role.
+def session_artifact_keys(session_id: str) -> dict[str, str]:
+    """The artifacts a ready session leaves in the store, keyed by their role.
 
-    This is the single definition of that layout, so a session reloaded from
-    disk after a restart resolves exactly the artifacts its preparation wrote.
+    This is the single definition of that layout, so a session reloaded after
+    a restart resolves exactly the artifacts its preparation wrote.
     """
 
     return {
-        "graph_facts_json": str(session_dir / session_id / "graph_facts.json"),
-        "graph_facts_datalog": str(session_dir / "graph_facts.dl"),
-        "derived_graph_semantics_datalog": str(
-            session_dir / "derived_graph_semantics.dl"
-        ),
-        "readiness_metadata": str(session_dir / "readiness.json"),
-        "topology_view_model": str(session_dir / "topology_view.json"),
+        "graph_facts_json": f"{session_id}/{session_id}/graph_facts.json",
+        "graph_facts_datalog": f"{session_id}/graph_facts.dl",
+        "derived_graph_semantics_datalog": f"{session_id}/derived_graph_semantics.dl",
+        "readiness_metadata": f"{session_id}/readiness.json",
+        "topology_view_model": f"{session_id}/topology_view.json",
+    }
+
+
+def session_artifact_paths(store: ArtifactStore, session_id: str) -> dict[str, str]:
+    """The same artifacts as absolute local paths, for the preparation result.
+
+    Preparation advertises absolute paths to its caller, which only a local
+    store can honour. This is the one place that projection happens; bead
+    2afe.8 (hosted artifacts on object storage) has to revisit what the
+    result advertises rather than chase the assumption through the flow.
+    """
+
+    root = getattr(store, "root", None)
+    if root is None:
+        raise TypeError("absolute artifact paths need a local-backed store")
+    return {
+        role: str(root / key) for role, key in session_artifact_keys(session_id).items()
     }

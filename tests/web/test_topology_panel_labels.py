@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.qa.topology_tools import TopologyTools
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
 
@@ -28,7 +29,7 @@ E06_FIXTURE = (
 class TopologyPanelLabelTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.mkdtemp()
-        self.flow = ChainlitReviewFlow(artifact_root=Path(self.tmp) / "sessions")
+        self.flow = ChainlitReviewFlow(store=LocalArtifactStore(Path(self.tmp) / "sessions"))
         self.session_id = "label-session"
         self.flow.prepare_upload(dexpi_xml_path=E06_FIXTURE, session_id=self.session_id)
 

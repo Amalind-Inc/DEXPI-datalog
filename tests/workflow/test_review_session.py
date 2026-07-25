@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import unittest
 
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
     ReviewSessionService,
     build_evidence_highlight_payload,
@@ -85,7 +86,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            service = ReviewSessionService(artifact_root=Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(Path(tmp_dir) / "sessions"))
 
             for session_id, dexpi_xml_path in ACCEPTANCE_DOCUMENTS:
                 with self.subTest(session_id=session_id):
@@ -111,7 +112,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            service = ReviewSessionService(artifact_root=Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(Path(tmp_dir) / "sessions"))
 
             for session_id, dexpi_xml_path in ACCEPTANCE_DOCUMENTS:
                 with self.subTest(session_id=session_id):
@@ -170,7 +171,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
 
     def test_evidence_highlight_payload_represents_scope_matches_and_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            service = ReviewSessionService(artifact_root=Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(Path(tmp_dir) / "sessions"))
             result = service.start_preparation(
                 dexpi_xml_path=E06_FIXTURE,
                 session_id="highlight-contract",
@@ -217,7 +218,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
     def test_prepare_review_session_persists_artifacts_and_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             artifact_root = Path(tmp_dir) / "sessions"
-            service = ReviewSessionService(artifact_root=artifact_root)
+            service = ReviewSessionService(store=LocalArtifactStore(artifact_root))
 
             result = service.start_preparation(
                 dexpi_xml_path=E06_FIXTURE,
@@ -257,7 +258,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
 
     def test_prepare_review_session_has_stable_artifact_ids_across_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            service = ReviewSessionService(artifact_root=Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(Path(tmp_dir) / "sessions"))
 
             first = service.start_preparation(
                 dexpi_xml_path=E03_FIXTURE,
@@ -289,7 +290,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
     def test_retry_failed_preparation_reuses_session_and_input_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            service = ReviewSessionService(artifact_root=tmp_path / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(tmp_path / "sessions"))
             missing_xml = tmp_path / "later.xml"
 
             failed = service.start_preparation(
@@ -309,7 +310,7 @@ class ReviewSessionServiceTests(unittest.TestCase):
     def test_invalid_inputs_return_normalized_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            service = ReviewSessionService(artifact_root=tmp_path / "sessions")
+            service = ReviewSessionService(store=LocalArtifactStore(tmp_path / "sessions"))
 
             non_xml = tmp_path / "not-a-pid.txt"
             non_xml.write_text("not xml", encoding="utf-8")

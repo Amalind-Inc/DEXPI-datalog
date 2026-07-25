@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
+from ..workflow.artifact_store import ArtifactStore
 
 AUDIT_FILENAME = "datalog_audit.jsonl"
 
@@ -65,9 +65,9 @@ def build_datalog_audit_record(
     }
 
 
-def append_datalog_audit_record(session_dir: Path, record: dict[str, object]) -> Path:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    audit_path = session_dir / AUDIT_FILENAME
-    with audit_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return audit_path
+def append_datalog_audit_record(
+    store: ArtifactStore, session_id: str, record: dict[str, object]
+) -> str:
+    key = f"{session_id}/{AUDIT_FILENAME}"
+    store.append_line(key, json.dumps(record, ensure_ascii=False))
+    return key

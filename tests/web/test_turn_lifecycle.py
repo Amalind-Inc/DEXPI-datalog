@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer
 from pydexpi_datalog.qa.structured_intent import encode_structured_intent_program
 from pydexpi_datalog.web.review_api import create_review_api_app
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.web.turn_lifecycle import TurnLifecycleStore, compute_turn_id
 from pydexpi_datalog.workflow.principal import LOCAL_PRINCIPAL
 
@@ -38,7 +39,7 @@ E06_FIXTURE = (
 
 def test_review_required_event_preserves_batched_direction_review_items() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir))
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir)))
         turn = store.start(
             session_id="session-batch",
             request_id="request-batch",
@@ -69,7 +70,7 @@ def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
         # The API scopes storage by the default local workspace, so a store
         # built directly here must write where the API will read.
         workspace_root = root / LOCAL_PRINCIPAL.workspace
-        store = TurnLifecycleStore(workspace_root)
+        store = TurnLifecycleStore(LocalArtifactStore(workspace_root))
 
         turn = store.start(
             session_id="trace-session",
@@ -140,7 +141,7 @@ def test_template_trace_is_rendered_as_structured_lifecycle_events() -> None:
 def test_unknown_trace_activity_is_grouped_bounded_and_redacted() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        store = TurnLifecycleStore(root)
+        store = TurnLifecycleStore(LocalArtifactStore(root))
         repeated = [
             {
                 "event": "vendor.widget.inspected",
@@ -199,7 +200,7 @@ def test_unknown_trace_activity_is_grouped_bounded_and_redacted() -> None:
 
 def test_trace_preserves_supported_status_and_ignores_malformed_metadata() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
         turn = store.start(
             session_id="status-trace-session",
             request_id="status-trace-request",
@@ -238,7 +239,7 @@ def test_trace_preserves_supported_status_and_ignores_malformed_metadata() -> No
 
 def test_trace_rendering_is_independent_of_capability_review_state() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
         turn = store.start(
             session_id="review-trace-session",
             request_id="review-trace-request",
@@ -268,7 +269,7 @@ def test_progress_events_carry_sanitized_tool_arguments_and_bounded_reasoning() 
     discipline as the governed execution trace, and omitted entirely when a
     provider supplies nothing (no fabrication)."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
         session_id = "progress-session"
         request_id = "progress-request"
         turn_id = compute_turn_id(session_id, request_id)
@@ -332,7 +333,7 @@ def test_progress_events_preserve_scalars_inside_nested_tool_arguments() -> None
     persisted progress event, or the live channel misleads the reviewer with
     empty lists while the real tool call carried the full bindings."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
         session_id = "nested-progress-session"
         request_id = "nested-progress-request"
         turn_id = compute_turn_id(session_id, request_id)
@@ -445,7 +446,7 @@ def test_duplicate_turn_request_executes_once_and_reconnect_replays_events() -> 
 def test_active_turn_cancellation_is_terminal_persisted_and_idempotent() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        store = TurnLifecycleStore(root)
+        store = TurnLifecycleStore(LocalArtifactStore(root))
         active = store.begin(
             session_id="cancel-session",
             request_id="request-1",
@@ -458,7 +459,7 @@ def test_active_turn_cancellation_is_terminal_persisted_and_idempotent() -> None
         duplicate = store.cancel(
             session_id="cancel-session", turn_id=str(active["turn_id"])
         )
-        reloaded = TurnLifecycleStore(root).get(
+        reloaded = TurnLifecycleStore(LocalArtifactStore(root)).get(
             session_id="cancel-session", turn_id=str(active["turn_id"])
         )
 
@@ -473,7 +474,7 @@ def test_active_turn_cancellation_is_terminal_persisted_and_idempotent() -> None
 
 def test_execution_failure_is_persisted_as_typed_terminal_event() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
 
         turn = store.start(
             session_id="failure-session",
@@ -495,7 +496,7 @@ def test_execution_failed_result_surfaces_diagnostics_in_failure_message() -> No
     hiding the actual reason from the user.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        store = TurnLifecycleStore(Path(tmp_dir) / "sessions")
+        store = TurnLifecycleStore(LocalArtifactStore(Path(tmp_dir) / "sessions"))
         turn = store.start(
             session_id="failure-session",
             request_id="request-1",
@@ -775,7 +776,7 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        store = TurnLifecycleStore(root)
+        store = TurnLifecycleStore(LocalArtifactStore(root))
 
         execute_started = threading.Event()
         cancel_done = threading.Event()
@@ -819,7 +820,7 @@ def test_cancel_during_active_execution_is_not_overwritten() -> None:
             f"expected canceled, got {final['status']}"
         )
         # Disk state must also be canceled — not overwritten
-        reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
+        reloaded = TurnLifecycleStore(LocalArtifactStore(root)).get(session_id=session_id, turn_id=turn_id)
         assert reloaded is not None
         assert reloaded["status"] == "canceled"
         assert reloaded["events"][-1]["type"] == "cancellation"
@@ -846,7 +847,7 @@ def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir) / "sessions"
-        store = TurnLifecycleStore(root)
+        store = TurnLifecycleStore(LocalArtifactStore(root))
 
         paused = store.start(
             session_id=session_id,
@@ -900,7 +901,7 @@ def test_cancel_during_resumed_execution_is_not_overwritten() -> None:
         assert final["status"] == "canceled", (
             f"expected canceled, got {final['status']}"
         )
-        reloaded = TurnLifecycleStore(root).get(session_id=session_id, turn_id=turn_id)
+        reloaded = TurnLifecycleStore(LocalArtifactStore(root)).get(session_id=session_id, turn_id=turn_id)
         assert reloaded is not None
         assert reloaded["status"] == "canceled"
         assert reloaded["events"][-1]["type"] == "cancellation"

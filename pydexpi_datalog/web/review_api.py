@@ -21,6 +21,7 @@ from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
 from ..verification.authored_rule_pack import AuthoredRulePackError, AuthoredRulePackStore
 from ..verification.bundled_rule_pack import bundled_rule_packs
+from ..workflow.artifact_store import LocalArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.review_session import PreparationLimits
 from ..workflow.session_catalog import CATALOG_FILENAME, SessionCatalog
@@ -108,16 +109,17 @@ def create_review_api_app(
     """
 
     active_principal = LOCAL_PRINCIPAL if principal is None else principal
-    workspace_root = artifact_root / active_principal.workspace
+    # One store for the workspace: nothing below this line builds a path.
+    store = LocalArtifactStore(artifact_root / active_principal.workspace)
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     flow = ChainlitReviewFlow(
-        artifact_root=workspace_root,
+        store=store,
         limits=preparation_limits,
         max_conversation_turns=max_conversation_turns,
     )
-    turns = TurnLifecycleStore(workspace_root)
-    authored_packs = AuthoredRulePackStore(workspace_root / "authored_rule_packs")
+    turns = TurnLifecycleStore(store)
+    authored_packs = AuthoredRulePackStore(store)
     # One catalog for every workspace, scoped by column: the shape the hosted
     # profile needs, kept identical locally so there is one schema to migrate.
     catalog = SessionCatalog(artifact_root / CATALOG_FILENAME)
@@ -192,13 +194,13 @@ def create_review_api_app(
     ) -> dict[str, object]:
         filename = _filename(body, "filename")
         content = _required_string(body, "content")
-        upload_dir = workspace_root / "_uploads" / session_id
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        upload_path = upload_dir / filename
-        upload_path.write_text(content, encoding="utf-8")
-        state = flow.prepare_upload(
-            dexpi_xml_path=upload_path, session_id=session_id
-        )
+        upload_key = f"_uploads/{session_id}/{filename}"
+        store.write_text(upload_key, content)
+        # pyDEXPI parses from a real file, so preparation borrows one.
+        with store.local_path(upload_key) as upload_path:
+            state = flow.prepare_upload(
+                dexpi_xml_path=upload_path, session_id=session_id
+            )
         # Only a session that became ready is reopenable, so only that one is
         # worth offering back to the reviewer.
         if state.get("status") == "ready":
@@ -643,13 +645,11 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/exports")
     def export_session(session_id: str) -> dict[str, object]:
-        export_dir = (
-            workspace_root / "_exports" / session_id / f"export-{time.time_ns()}"
-        )
+        export_prefix = f"_exports/{session_id}/export-{time.time_ns()}"
         return _call_ready(
             lambda: flow.export_session_artifacts(
                 session_id=session_id,
-                export_dir=export_dir,
+                export_prefix=export_prefix,
             )
         )
 

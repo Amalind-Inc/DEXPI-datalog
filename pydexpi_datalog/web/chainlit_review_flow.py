@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import re
-import shutil
 import time
 from typing import Callable
 
@@ -36,10 +35,12 @@ from ..qa.grounded_qa_harness import (
     run_grounded_qa_turn,
 )
 from ..qa.topology_tools import TopologyTools
+from ..workflow.artifact_store import ArtifactStore, ArtifactStoreError
 from ..workflow.review_session import (
     PreparationLimits,
     ReviewSessionService,
     build_evidence_highlight_payload,
+    session_artifact_keys,
     session_artifact_paths,
 )
 from ..verification.bundled_rule_pack import (
@@ -158,14 +159,13 @@ class ChainlitReviewFlow:
     def __init__(
         self,
         *,
-        artifact_root: Path,
+        store: ArtifactStore,
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
         max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     ) -> None:
-        self._service = ReviewSessionService(
-            artifact_root=artifact_root, limits=limits
-        )
+        self._store = store
+        self._service = ReviewSessionService(store=store, limits=limits)
         self._clock = clock
         self._max_conversation_turns = max_conversation_turns
         self._timing_records: list[dict[str, object]] = []
@@ -683,10 +683,9 @@ class ChainlitReviewFlow:
         rule_id: str,
         authored_packs: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
-        graph_facts_path = Path(
-            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        graph_facts = self._store.read_json(
+            session_artifact_keys(session_id)["graph_facts_json"]
         )
-        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
         pack = self._resolve_pack(pack_id, authored_packs=authored_packs)
         rule_result = evaluate_pack_rule(
             graph_facts,
@@ -999,28 +998,27 @@ class ChainlitReviewFlow:
         }
 
     def export_session_artifacts(
-        self, *, session_id: str, export_dir: Path
+        self, *, session_id: str, export_prefix: str
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
-        export_dir.mkdir(parents=True, exist_ok=True)
 
         prepared_artifacts = self._copy_prepared_artifacts(
             session_id=session_id,
-            export_dir=export_dir / "prepared",
+            export_prefix=f"{export_prefix}/prepared",
         )
         logic_request_results = self._copy_artifact_directory(
             session_id=session_id,
             source_dirname="logic_request_results",
-            export_dir=export_dir / "logic_request_results",
+            export_prefix=f"{export_prefix}/logic_request_results",
         )
         rule_pack_results = self._copy_artifact_directory(
             session_id=session_id,
             source_dirname="rule_pack_results",
-            export_dir=export_dir / "rule_pack_results",
+            export_prefix=f"{export_prefix}/rule_pack_results",
         )
         missing_capabilities = self._write_missing_capability_exports(
             session_id=session_id,
-            export_dir=export_dir / "missing_capabilities",
+            export_prefix=f"{export_prefix}/missing_capabilities",
         )
         manifest = {
             "artifact_type": "explicit_session_export",
@@ -1038,16 +1036,13 @@ class ChainlitReviewFlow:
             "rule_pack_results": rule_pack_results,
             "missing_capabilities": missing_capabilities,
         }
-        manifest_path = export_dir / "manifest.json"
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        manifest_key = f"{export_prefix}/manifest.json"
+        self._store.write_json(manifest_key, manifest)
         return {
             "status": "exported",
             "session_id": session_id,
-            "export_dir": str(export_dir),
-            "manifest_path": str(manifest_path),
+            "export_dir": str(self._local_path_for(export_prefix)),
+            "manifest_path": str(self._local_path_for(manifest_key)),
             "manifest": manifest,
         }
 
@@ -1271,10 +1266,9 @@ class ChainlitReviewFlow:
             stored_proposal_raw if isinstance(stored_proposal_raw, dict) else {}
         )
 
-        graph_facts_path = Path(
-            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        graph_facts = self._store.read_json(
+            session_artifact_keys(session_id)["graph_facts_json"]
         )
-        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
         tools = TopologyTools(
             topology_view=topology,
             session_id=session_id,
@@ -1372,9 +1366,7 @@ class ChainlitReviewFlow:
             executed=executed,
             execution_status=execution_status,
         )
-        append_datalog_audit_record(
-            self._service.artifact_root / session_id, record
-        )
+        append_datalog_audit_record(self._store, session_id, record)
 
     def _persist_automatic_datalog_audits(
         self,
@@ -1411,9 +1403,7 @@ class ChainlitReviewFlow:
                 "provider_usage": provider_usage,
                 "decided_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
-            append_datalog_audit_record(
-                self._service.artifact_root / session_id, record
-            )
+            append_datalog_audit_record(self._store, session_id, record)
 
     @staticmethod
     def _temporary_datalog_confirmation_payload(
@@ -1493,10 +1483,9 @@ class ChainlitReviewFlow:
         steering: Steering | None = None,
         constraints: RunConstraints | None = None,
     ) -> dict[str, object]:
-        graph_facts_path = Path(
-            str(self._artifacts_by_session[session_id]["graph_facts_json"])
+        graph_facts = self._store.read_json(
+            session_artifact_keys(session_id)["graph_facts_json"]
         )
-        graph_facts = json.loads(graph_facts_path.read_text(encoding="utf-8"))
         tools = TopologyTools(
             topology_view=topology,
             session_id=session_id,
@@ -1901,23 +1890,14 @@ class ChainlitReviewFlow:
         or its artifacts are unreadable: callers then report it as unknown.
         """
 
-        root = self._service.artifact_root.resolve()
-        session_dir = (self._service.artifact_root / session_id).resolve()
-        # session_id arrives from the request path, so a traversal attempt must
-        # not be able to read outside this workspace's artifact root.
-        if not session_dir.is_relative_to(root):
-            return None
-
-        readiness_path = session_dir / "readiness.json"
-        topology_view_path = session_dir / "topology_view.json"
-        if not readiness_path.is_file() or not topology_view_path.is_file():
-            return None
+        # session_id arrives from the request path; the store refuses a key
+        # that would leave this workspace, so a traversal attempt reads as an
+        # unknown session rather than someone else's artifacts.
+        keys = session_artifact_keys(session_id)
         try:
-            readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
-            topology_view = json.loads(
-                topology_view_path.read_text(encoding="utf-8")
-            )
-        except (OSError, ValueError):
+            readiness = self._store.read_json(keys["readiness_metadata"])
+            topology_view = self._store.read_json(keys["topology_view_model"])
+        except (ArtifactStoreError, ValueError):
             return None
         if not isinstance(readiness, dict) or readiness.get("state") != "ready":
             return None
@@ -1927,7 +1907,7 @@ class ChainlitReviewFlow:
         self._activate_ready_session(
             session_id=session_id,
             topology_view=topology_view,
-            artifacts=dict(session_artifact_paths(session_dir, session_id)),
+            artifacts=dict(session_artifact_paths(self._store, session_id)),
         )
         return topology_view
 
@@ -2062,17 +2042,12 @@ class ChainlitReviewFlow:
         session_id: str,
         result_artifact: dict[str, object],
     ) -> Path:
-        session_dir = self._service.artifact_root / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-        result_dir = session_dir / "logic_request_results"
-        result_dir.mkdir(parents=True, exist_ok=True)
-        result_index = len(list(result_dir.glob("logic_request_result_*.json"))) + 1
-        result_path = result_dir / f"logic_request_result_{result_index}.json"
-        result_path.write_text(
-            json.dumps(result_artifact, indent=2, sort_keys=True),
-            encoding="utf-8",
+        return self._write_result_artifact(
+            session_id=session_id,
+            result_artifact=result_artifact,
+            dirname="logic_request_results",
+            filename_prefix="logic_request_result",
         )
-        return result_path
 
     def _rule_pack_evidence_items(
         self,
@@ -2130,38 +2105,45 @@ class ChainlitReviewFlow:
         dirname: str,
         filename_prefix: str,
     ) -> Path:
-        session_dir = self._service.artifact_root / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-        result_dir = session_dir / dirname
-        result_dir.mkdir(parents=True, exist_ok=True)
-        result_index = len(list(result_dir.glob(f"{filename_prefix}_*.json"))) + 1
-        result_path = result_dir / f"{filename_prefix}_{result_index}.json"
-        result_path.write_text(
-            json.dumps(result_artifact, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        return result_path
+        prefix = f"{session_id}/{dirname}"
+        result_index = len(self._store.list(prefix, suffix=".json")) + 1
+        key = f"{prefix}/{filename_prefix}_{result_index}.json"
+        self._store.write_json(key, result_artifact)
+        return self._local_path_for(key)
+
+    def _local_path_for(self, key: str) -> Path:
+        """Project a key to an absolute local path for the API contract.
+
+        Preparation results and export manifests advertise absolute paths,
+        which only a local store can honour. Bead 2afe.8 (hosted artifacts on
+        object storage) has to revisit what those responses advertise; this is
+        the one place in the flow that assumes a local backing.
+        """
+
+        root = getattr(self._store, "root", None)
+        if root is None:
+            raise TypeError("absolute artifact paths need a local-backed store")
+        return root / key
 
     def _copy_prepared_artifacts(
-        self, *, session_id: str, export_dir: Path
+        self, *, session_id: str, export_prefix: str
     ) -> list[dict[str, object]]:
         exported = []
         public_kinds = {
             "readiness_metadata": "readiness",
             "topology_view_model": "topology_view",
         }
-        for kind, source_path in sorted(self._artifacts_by_session[session_id].items()):
-            source = Path(str(source_path))
-            if not source.is_file():
+        for kind, key in sorted(session_artifact_keys(session_id).items()):
+            if not self._store.exists(key):
                 continue
             public_kind = public_kinds.get(kind, kind)
-            target = export_dir / f"{public_kind}{source.suffix}"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            suffix = Path(key).suffix
+            target_key = f"{export_prefix}/{public_kind}{suffix}"
+            self._store.copy(key, target_key)
             exported.append(
                 {
                     "kind": public_kind,
-                    "path": str(target),
+                    "path": str(self._local_path_for(target_key)),
                 }
             )
         return exported
@@ -2171,47 +2153,40 @@ class ChainlitReviewFlow:
         *,
         session_id: str,
         source_dirname: str,
-        export_dir: Path,
+        export_prefix: str,
     ) -> list[dict[str, object]]:
-        source_dir = self._service.artifact_root / session_id / source_dirname
-        if not source_dir.is_dir():
-            return []
-
-        exported = []
-        export_dir.mkdir(parents=True, exist_ok=True)
-        for source in sorted(source_dir.glob("*.json")):
-            target = export_dir / source.name
-            shutil.copyfile(source, target)
+        exported: list[dict[str, object]] = []
+        for source_key in self._store.list(
+            f"{session_id}/{source_dirname}", suffix=".json"
+        ):
+            name = source_key.rsplit("/", 1)[-1]
+            target_key = f"{export_prefix}/{name}"
+            self._store.copy(source_key, target_key)
             exported.append(
                 {
                     "kind": source_dirname[:-1],
-                    "path": str(target),
+                    "path": str(self._local_path_for(target_key)),
                 }
             )
         return exported
 
     def _write_missing_capability_exports(
-        self, *, session_id: str, export_dir: Path
+        self, *, session_id: str, export_prefix: str
     ) -> list[dict[str, object]]:
-        exported = []
-        missing_capabilities = self._missing_capabilities_by_session.get(session_id, [])
-        if not missing_capabilities:
-            return exported
-
-        export_dir.mkdir(parents=True, exist_ok=True)
-        for artifact in missing_capabilities:
+        exported: list[dict[str, object]] = []
+        for artifact in self._missing_capabilities_by_session.get(session_id, []):
             download = artifact["download"]
             if not isinstance(download, dict):
                 continue
             filename = Path(str(download["filename"])).name
-            target = export_dir / filename
-            target.write_text(str(download["content"]), encoding="utf-8")
+            target_key = f"{export_prefix}/{filename}"
+            self._store.write_text(target_key, str(download["content"]))
             exported.append(
                 {
                     "kind": "missing_capability",
                     "code": artifact["code"],
                     "message": artifact["message"],
-                    "path": str(target),
+                    "path": str(self._local_path_for(target_key)),
                 }
             )
         return exported

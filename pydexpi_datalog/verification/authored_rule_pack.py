@@ -8,7 +8,11 @@ claim maintainer ``authoritative`` / bundled trust are rejected.
 
 from __future__ import annotations
 
-from pathlib import Path
+from ..workflow.artifact_store import (
+    ArtifactStore,
+    InvalidArtifactKey,
+    validate_key,
+)
 
 from .bundled_rule_pack import bundled_rule_packs
 from .promote_advisory import (
@@ -28,11 +32,28 @@ class AuthoredRulePackError(ValueError):
 
 
 class AuthoredRulePackStore:
-    """Persist authored packs as canonical markdown under a store directory."""
+    """Persist authored packs as canonical markdown under a store prefix."""
 
-    def __init__(self, root: Path) -> None:
-        self.root = root
-        self.root.mkdir(parents=True, exist_ok=True)
+    def __init__(self, store: ArtifactStore, prefix: str = "authored_rule_packs") -> None:
+        self._store = store
+        self._prefix = prefix
+
+    def _key(self, pack_id: str) -> str:
+        """The key for a pack.
+
+        `pack_id` comes from uploaded markdown, so a pack claiming an id like
+        `../../escape` must not be able to write outside the prefix. The store
+        refuses such a key; surface that as a pack-level rejection.
+        """
+        try:
+            key = f"{self._prefix}/{pack_id}.md"
+            validate_key(key)
+        except InvalidArtifactKey as error:
+            raise AuthoredRulePackError(
+                "authored_pack.invalid_pack_id",
+                f"Rule pack id is not a valid identifier: {pack_id!r}",
+            ) from error
+        return key
 
     def ingest(self, markdown: str) -> dict[str, object]:
         pack = parse_rule_pack_markdown(markdown)
@@ -47,7 +68,8 @@ class AuthoredRulePackStore:
                 "authored_pack.pack_id_collision",
                 f"Pack id '{pack_id}' collides with a repository-bundled rule pack.",
             )
-        if (self.root / f"{pack_id}.md").exists():
+        key = self._key(pack_id)
+        if self._store.exists(key):
             raise AuthoredRulePackError(
                 "authored_pack.already_exists",
                 f"Authored rule pack '{pack_id}' already exists.",
@@ -56,31 +78,30 @@ class AuthoredRulePackStore:
         # Force authored provenance regardless of uploaded prose claims.
         pack["authoritative"] = False
         pack["source"] = "user"
-        path = self.root / f"{pack_id}.md"
-        path.write_text(markdown, encoding="utf-8")
-        # Re-parse from disk so markdown key matches stored bytes.
-        stored = parse_rule_pack_markdown(path.read_text(encoding="utf-8"))
+        self._store.write_text(key, markdown)
+        # Re-parse from the store so markdown key matches stored bytes.
+        stored = parse_rule_pack_markdown(self._store.read_text(key))
         stored["authoritative"] = False
         stored["source"] = "user"
         return stored
 
     def list_packs(self) -> list[dict[str, object]]:
         packs: list[dict[str, object]] = []
-        for path in sorted(self.root.glob("*.md")):
-            pack = parse_rule_pack_markdown(path.read_text(encoding="utf-8"))
+        for key in self._store.list(self._prefix, suffix=".md"):
+            pack = parse_rule_pack_markdown(self._store.read_text(key))
             pack["authoritative"] = False
             pack["source"] = "user"
             packs.append(pack)
         return packs
 
     def get(self, pack_id: str) -> dict[str, object]:
-        path = self.root / f"{pack_id}.md"
-        if not path.exists():
+        key = self._key(pack_id)
+        if not self._store.exists(key):
             raise AuthoredRulePackError(
                 "authored_pack.not_found",
                 f"Unknown authored rule pack: {pack_id}",
             )
-        pack = parse_rule_pack_markdown(path.read_text(encoding="utf-8"))
+        pack = parse_rule_pack_markdown(self._store.read_text(key))
         pack["authoritative"] = False
         pack["source"] = "user"
         return pack
@@ -110,13 +131,13 @@ class AuthoredRulePackStore:
                 "Authored rule packs cannot claim authoritative or bundled trust.",
             )
 
-        path = self.root / f"{pack_id}.md"
-        if not path.exists():
+        key = self._key(pack_id)
+        if not self._store.exists(key):
             raise AuthoredRulePackError(
                 "authored_pack.not_found",
                 f"Unknown authored rule pack: {pack_id}",
             )
-        current = parse_rule_pack_markdown(path.read_text(encoding="utf-8"))
+        current = parse_rule_pack_markdown(self._store.read_text(key))
         rule_id = str(draft.get("rule_id") or "")
         if any(str(rule["rule_id"]) == rule_id for rule in current["rules"]):  # type: ignore[union-attr]
             raise AuthoredRulePackError(
@@ -137,8 +158,8 @@ class AuthoredRulePackStore:
         confirmed_draft["trust"] = "author_confirmed"
         confirmed_draft["authoritative"] = False
         updated_markdown = append_confirmed_rule_to_pack_markdown(
-            path.read_text(encoding="utf-8"),
+            self._store.read_text(key),
             draft=confirmed_draft,
         )
-        path.write_text(updated_markdown, encoding="utf-8")
+        self._store.write_text(key, updated_markdown)
         return self.get(pack_id)

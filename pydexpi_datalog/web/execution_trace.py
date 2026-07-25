@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 from pydexpi_datalog.qa.grounded_qa_harness import MAX_TRACE_REASONING_LENGTH
+from pydexpi_datalog.workflow.artifact_store import ArtifactStore
 
 TRACE_SCHEMA_VERSION = 1
 TRACE_EVENT_ID_LENGTH = 16
@@ -118,7 +119,7 @@ def _sanitize_progress_value(value: object, *, depth: int) -> object | None:
 
 def render_execution_trace(
     *,
-    artifact_root: Path,
+    store: ArtifactStore,
     session_id: str,
     turn_id: str,
     raw_events: object,
@@ -171,7 +172,7 @@ def render_execution_trace(
 
     rendered = [
         _render_group(
-            artifact_root=artifact_root,
+            store=store,
             session_id=session_id,
             turn_id=turn_id,
             group=grouped[key],
@@ -182,7 +183,7 @@ def render_execution_trace(
     if omitted:
         rendered.append(
             _render_omitted_group(
-                artifact_root=artifact_root,
+                store=store,
                 session_id=session_id,
                 turn_id=turn_id,
                 omitted=omitted,
@@ -193,7 +194,7 @@ def render_execution_trace(
 
 def _render_group(
     *,
-    artifact_root: Path,
+    store: ArtifactStore,
     session_id: str,
     turn_id: str,
     group: dict[str, object],
@@ -226,7 +227,7 @@ def _render_group(
         "occurrences": occurrences,
         "omitted_occurrence_count": max(0, count - len(occurrences)),
     }
-    _write_artifact(artifact_root / session_id / relative_path, detail)
+    _write_artifact(store, f"{session_id}/{relative_path.as_posix()}", detail)
     return {
         "schema_version": TRACE_SCHEMA_VERSION,
         "event_id": event_id,
@@ -249,13 +250,13 @@ def _render_group(
 
 def _render_omitted_group(
     *,
-    artifact_root: Path,
+    store: ArtifactStore,
     session_id: str,
     turn_id: str,
     omitted: int,
 ) -> dict[str, object]:
     return _render_group(
-        artifact_root=artifact_root,
+        store=store,
         session_id=session_id,
         turn_id=turn_id,
         group={
@@ -370,10 +371,7 @@ def _safe_value(value: object) -> str:
     return bounded if _SAFE_VALUE_PATTERN.fullmatch(bounded) else ""
 
 
-def _write_artifact(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    temporary.replace(path)
+def _write_artifact(store: ArtifactStore, key: str, value: object) -> None:
+    # Trailing newline preserved: these artifacts predate the store and are
+    # compared byte-for-byte by replay tooling.
+    store.write_text(key, json.dumps(value, indent=2, sort_keys=True) + "\n")

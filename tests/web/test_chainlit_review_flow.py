@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from pydexpi_datalog import FakeModelProvider
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.web.chainlit_review_flow import ChainlitReviewFlow
 
 
@@ -117,7 +118,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -149,7 +150,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             flow = ChainlitReviewFlow(
-                artifact_root=tmp_path / "sessions",
+                store=LocalArtifactStore(tmp_path / "sessions"),
                 clock=FakeClock(),
             )
             missing_xml = tmp_path / "later.xml"
@@ -177,7 +178,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -214,7 +215,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_topology_selection_updates_visible_editable_source_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -268,7 +269,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -307,7 +308,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -375,7 +376,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -416,7 +417,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -515,7 +516,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -551,7 +552,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -664,7 +665,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             first_topology_id = ""
@@ -709,7 +710,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -761,7 +762,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -827,7 +828,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_absent_deterministic_evidence_id_is_not_highlighted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -858,7 +859,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -907,7 +908,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_list_bundled_rule_packs_returns_restatement_first_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -933,7 +934,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_load_rule_pack_marks_session_state_without_executing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -959,7 +960,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_load_unknown_pack_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -975,7 +976,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
     def test_run_rule_pack_executes_all_rules_and_matches_run_one_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
 
@@ -1021,7 +1022,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
         sentinel = "sk-sentinel-secret-should-never-leak"
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -1053,7 +1054,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
         sentinel = "sk-sentinel-secret-should-never-leak"
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             flow.prepare_upload(
@@ -1094,7 +1095,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
         sentinel = "sk-sentinel-secret-should-never-leak"
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -1138,7 +1139,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             flow = ChainlitReviewFlow(
-                artifact_root=tmp_path / "sessions",
+                store=LocalArtifactStore(tmp_path / "sessions"),
                 clock=FakeClock(),
             )
             state = flow.prepare_upload(
@@ -1184,17 +1185,13 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 session_id="explicit-export-session",
                 rule_id="pump_discharge_check_valve",
             )
-            export_dir = tmp_path / "explicit-export"
-
-            self.assertFalse(export_dir.exists())
-
             export = flow.export_session_artifacts(
                 session_id="explicit-export-session",
-                export_dir=export_dir,
+                export_prefix="explicit-export",
             )
 
             self.assertEqual(export["status"], "exported")
-            self.assertTrue(export_dir.exists())
+            self.assertTrue(Path(str(export["export_dir"])).is_dir())
             self.assertTrue(Path(str(export["manifest_path"])).exists())
             manifest = export["manifest"]
             self.assertEqual(manifest["session_id"], "explicit-export-session")

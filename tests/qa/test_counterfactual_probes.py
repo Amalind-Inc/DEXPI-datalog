@@ -7,6 +7,7 @@ from pydexpi_datalog.qa import counterfactual_probes
 from pydexpi_datalog.qa.counterfactual_probes import (
     run_mandatory_counterfactual_probes,
 )
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.qa.datalog_audit import (
     append_datalog_audit_record,
     build_datalog_audit_record,
@@ -316,8 +317,9 @@ def test_datalog_audit_persists_counterfactual_probe_versions_and_outcomes(
         decided_at="2026-07-23T00:00:00+00:00",
     )
 
-    audit_path = append_datalog_audit_record(tmp_path, record)
-    persisted = json.loads(audit_path.read_text(encoding="utf-8"))
+    store = LocalArtifactStore(tmp_path)
+    audit_key = append_datalog_audit_record(store, "session-1", record)
+    persisted = json.loads(store.read_text(audit_key))
 
     assert persisted["faithfulness_probes"] == probes
     assert persisted["faithfulness_probe_attempts"] == attempts

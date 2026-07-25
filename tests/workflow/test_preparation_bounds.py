@@ -11,6 +11,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
 from pydexpi_datalog.workflow.review_session import (
     PreparationLimits,
     ReviewSessionService,
@@ -46,7 +47,7 @@ class StepClock:
 def _service(tmp_dir: str, **limit_overrides: object) -> ReviewSessionService:
     limits = PreparationLimits(**limit_overrides) if limit_overrides else None
     return ReviewSessionService(
-        artifact_root=Path(tmp_dir) / "sessions", limits=limits
+        store=LocalArtifactStore(Path(tmp_dir) / "sessions"), limits=limits
     )
 
 
@@ -93,7 +94,7 @@ class ConfigurableLimitTests(unittest.TestCase):
     def test_processing_time_limit_fails_with_explicit_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = ReviewSessionService(
-                artifact_root=Path(tmp_dir) / "sessions",
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
                 limits=PreparationLimits(max_preparation_seconds=1.0),
                 clock=StepClock([0.0, 100.0]),
             )
