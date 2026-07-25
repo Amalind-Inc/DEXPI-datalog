@@ -4,9 +4,12 @@ import json
 import os
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from threading import RLock
+from typing import Protocol
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..llm.byok_provider import OPENAI_COMPATIBLE_BASE_URLS, create_byok_provider
@@ -24,6 +27,7 @@ from ..verification.authored_rule_pack import (
     AuthoredRulePackStore,
 )
 from ..verification.bundled_rule_pack import bundled_rule_packs
+from ..workflow.artifact_store import ArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
@@ -32,6 +36,7 @@ from .deployment import (
     bundle_for,
     profile_from_env_or_default,
 )
+from .hosted_auth import TokenRejected
 from .turn_lifecycle import TurnLifecycleStore, compute_turn_id
 
 
@@ -97,10 +102,34 @@ class TopologyAwareFakeModelProvider:
         return "__missing_topology_answer__"
 
 
+@dataclass(frozen=True)
+class WorkspaceServices:
+    """Everything an endpoint may touch, already scoped to one owner.
+
+    Endpoints receive this instead of reaching for module-level objects, so
+    the scoping is in the type rather than in everyone's memory: there is no
+    unscoped ``flow`` or ``store`` in scope for a handler to use by accident.
+    """
+
+    principal: Principal
+    store: ArtifactStore
+    flow: ChainlitReviewFlow
+    turns: TurnLifecycleStore
+    authored_packs: AuthoredRulePackStore
+
+
+class PrincipalResolver(Protocol):
+    """Resolves the owner of one request from the credential it carries."""
+
+    def principal_for(self, authorization_header: str | None) -> Principal:
+        """The signed-in owner, or raise `TokenRejected`."""
+
+
 def create_review_api_app(
     *,
     artifact_root: Path,
     principal: Principal | None = None,
+    principal_resolver: PrincipalResolver | None = None,
     profile: DeploymentProfile | None = None,
     model_provider_factory: Callable[[], ModelProvider] | None = None,
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
@@ -111,37 +140,93 @@ def create_review_api_app(
 ) -> FastAPI:
     """Create the OSS v1 review workflow API.
 
-    Every artifact this app writes is scoped to ``principal``'s workspace, so
+    Every artifact this app writes is scoped to a principal's workspace, so
     two workspaces sharing one ``artifact_root`` never observe each other's
-    sessions or authored rule packs. Callers that pass no principal get the
-    single local operator (ADR 0016).
+    sessions or authored rule packs.
+
+    Identity arrives one of two ways. ``principal`` fixes a single owner for
+    the whole app: that is the local profile, and it is what a test or a
+    script wants. ``principal_resolver`` resolves an owner per request from
+    the credential it carries: that is the hosted profile, where one process
+    serves many signed-in users. Passing neither gives the single local
+    operator (ADR 0016), which is why the existing suite runs unchanged under
+    either deployment profile.
 
     ``profile`` selects which implementations fill the deployment seams. It is
     a library default rather than a refusal here: an unset profile means
     ``local``, and only the deployment entry point (``asgi``) insists on an
-    explicit answer. That default is also what lets CI re-run the entire
-    existing suite under the other profile by setting one variable, instead of
-    needing every test to opt in.
+    explicit answer.
     """
+
+    if principal is not None and principal_resolver is not None:
+        raise ValueError(
+            "pass principal or principal_resolver, not both: one fixes a "
+            "single owner for the app, the other resolves an owner per "
+            "request, and having both would leave it unclear which wins"
+        )
 
     environment = os.environ if env is None else env
     active_profile = (
         profile_from_env_or_default(environment) if profile is None else profile
     )
     bundle = bundle_for(active_profile)
-    active_principal = LOCAL_PRINCIPAL if principal is None else principal
-    # One store for the workspace: nothing below this line builds a path.
-    store = bundle.build_store(artifact_root, active_principal)
+    fixed_principal = LOCAL_PRINCIPAL if principal is None else principal
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
     app.state.deployment_profile = active_profile
-    flow = ChainlitReviewFlow(
-        store=store,
-        limits=preparation_limits,
-        max_conversation_turns=max_conversation_turns,
-    )
-    turns = TurnLifecycleStore(store)
-    authored_packs = AuthoredRulePackStore(store)
+
+    # One object graph per workspace, built on first use and kept. Building it
+    # per request instead would be correct but would throw away the flow's
+    # in-memory session caches on every call; sharing one graph across
+    # workspaces is what this bead exists to stop.
+    graphs: dict[str, WorkspaceServices] = {}
+    graphs_lock = RLock()
+
+    def _services_for(owner: Principal) -> WorkspaceServices:
+        with graphs_lock:
+            existing = graphs.get(owner.workspace)
+            if existing is not None:
+                return existing
+            store = bundle.build_store(artifact_root, owner)
+            services = WorkspaceServices(
+                principal=owner,
+                store=store,
+                flow=ChainlitReviewFlow(
+                    store=store,
+                    limits=preparation_limits,
+                    max_conversation_turns=max_conversation_turns,
+                ),
+                turns=TurnLifecycleStore(store),
+                authored_packs=AuthoredRulePackStore(store),
+            )
+            graphs[owner.workspace] = services
+            return services
+
+    def _workspace(request: Request) -> WorkspaceServices:
+        """The caller's workspace, or a refusal. Every endpoint goes through
+        here, so an endpoint that forgets to ask cannot read anything at all.
+        """
+
+        if principal_resolver is None:
+            return _services_for(fixed_principal)
+        try:
+            owner = principal_resolver.principal_for(
+                request.headers.get("Authorization")
+            )
+        except TokenRejected:
+            # One shape for every failure: absent, expired, forged, or for a
+            # workspace that does not exist all look the same from outside.
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": {
+                        "code": "auth.unauthenticated",
+                        "message": "Sign in to continue.",
+                    }
+                },
+            ) from None
+        return _services_for(owner)
+
     # One catalog for every workspace, scoped by column: the shape the hosted
     # profile needs, kept identical locally so there is one schema to migrate.
     catalog = bundle.build_catalog(artifact_root)
@@ -160,7 +245,7 @@ def create_review_api_app(
         else force_scripted_provider
     )
 
-    def _resolve_provider(session_id: str) -> ModelProvider:
+    def _resolve_provider(flow: ChainlitReviewFlow, session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
             return model_provider_factory()
         if force_scripted:
@@ -175,7 +260,7 @@ def create_review_api_app(
             )
         return TopologyAwareFakeModelProvider()
 
-    def _resolve_qa_provider(session_id: str) -> QATurnProvider:
+    def _resolve_qa_provider(flow: ChainlitReviewFlow, session_id: str) -> QATurnProvider:
         if qa_provider_factory is not None:
             return qa_provider_factory()
         if force_scripted:
@@ -209,50 +294,55 @@ def create_review_api_app(
         return JSONResponse(status_code=exception.status_code, content=content)
 
     @app.get("/api/review/sessions")
-    def list_sessions() -> dict[str, object]:
+    def list_sessions(ws: WorkspaceServices = Depends(_workspace)) -> dict[str, object]:
         return {
             "sessions": [
                 record.as_dict()
                 for record in catalog.list_sessions(
-                    workspace=active_principal.workspace
+                    workspace=ws.principal.workspace
                 )
             ]
         }
 
     @app.post("/api/review/sessions/{session_id}/prepare")
     def prepare_session(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         filename = _filename(body, "filename")
         content = _required_string(body, "content")
         upload_key = f"_uploads/{session_id}/{filename}"
-        store.write_text(upload_key, content)
+        ws.store.write_text(upload_key, content)
         # pyDEXPI parses from a real file, so preparation borrows one.
-        with store.local_path(upload_key) as upload_path:
-            state = flow.prepare_upload(
+        with ws.store.local_path(upload_key) as upload_path:
+            state = ws.flow.prepare_upload(
                 dexpi_xml_path=upload_path, session_id=session_id
             )
         # Only a session that became ready is reopenable, so only that one is
         # worth offering back to the reviewer.
         if state.get("status") == "ready":
             catalog.record_preparation(
-                workspace=active_principal.workspace,
+                workspace=ws.principal.workspace,
                 session_id=session_id,
                 source_filename=filename,
-                artifact_prefix=f"{active_principal.workspace}/{session_id}",
+                artifact_prefix=f"{ws.principal.workspace}/{session_id}",
             )
         return state
 
     @app.get("/api/review/sessions/{session_id}/topology")
-    def topology(session_id: str) -> dict[str, object]:
-        return _call_ready(lambda: flow.topology_panel_state(session_id=session_id))
+    def topology(
+        session_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        return _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
 
     @app.put("/api/review/sessions/{session_id}/source-scope")
     def update_source_scope(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.edit_visible_source_scope(
+            lambda: ws.flow.edit_visible_source_scope(
                 session_id=session_id,
                 source_scope_ids=_string_list(body, "source_scope_ids"),
             )
@@ -260,10 +350,11 @@ def create_review_api_app(
 
     @app.put("/api/review/sessions/{session_id}/provider-settings")
     def configure_provider(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.configure_provider_settings(
+            lambda: ws.flow.configure_provider_settings(
                 session_id=session_id,
                 provider=_required_string(body, "provider"),
                 model=_required_string(body, "model"),
@@ -274,10 +365,11 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/logic-requests/improve")
     def improve_logic_request(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.improve_logic_request(
+            lambda: ws.flow.improve_logic_request(
                 session_id=session_id,
                 prompt=_required_string(body, "prompt"),
             )
@@ -285,40 +377,43 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/logic-requests/confirm")
     def confirm_logic_request(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         improvement = body.get("improvement")
         if not isinstance(improvement, dict):
             raise _bad_request("request body must include an improvement object")
         return _call_ready(
-            lambda: flow.accept_logic_request_refinement(
+            lambda: ws.flow.accept_logic_request_refinement(
                 session_id=session_id,
                 improvement=improvement,
-                provider=_resolve_provider(session_id),
+                provider=_resolve_provider(ws.flow, session_id),
             )
         )
 
     @app.post("/api/review/sessions/{session_id}/logic-requests/execute")
     def execute_logic_request(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         confirmation = body.get("confirmation")
         if not isinstance(confirmation, dict):
             raise _bad_request("request body must include a confirmation object")
         return _call_ready(
-            lambda: flow.execute_confirmed_logic_request(
+            lambda: ws.flow.execute_confirmed_logic_request(
                 session_id=session_id,
                 confirmation=confirmation,
-                provider=_resolve_provider(session_id),
+                provider=_resolve_provider(ws.flow, session_id),
             )
         )
 
     @app.post("/api/review/sessions/{session_id}/rule-pack-results")
     def execute_rule_pack_result(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.execute_selected_rule_pack_query(
+            lambda: ws.flow.execute_selected_rule_pack_query(
                 session_id=session_id,
                 pack_id=str(body.get("pack_id", "demo-process-safety")),
                 rule_id=_required_string(body, "rule_id"),
@@ -326,28 +421,36 @@ def create_review_api_app(
         )
 
     @app.get("/api/review/sessions/{session_id}/rule-packs")
-    def list_rule_packs(session_id: str) -> dict[str, object]:
-        return flow.list_rule_packs(
-            session_id=session_id, authored_packs=authored_packs.list_packs()
+    def list_rule_packs(
+        session_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        return ws.flow.list_rule_packs(
+            session_id=session_id, authored_packs=ws.authored_packs.list_packs()
         )
 
     @app.get("/api/rule-packs")
-    def list_all_rule_packs() -> dict[str, object]:
+    def list_all_rule_packs(
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         return {
             "packs": [
                 *[_serialize_pack(pack, source="system") for pack in bundled_rule_packs()],
                 *[
                     _serialize_pack(pack, source="user")
-                    for pack in authored_packs.list_packs()
+                    for pack in ws.authored_packs.list_packs()
                 ],
             ]
         }
 
     @app.post("/api/rule-packs")
-    def create_rule_pack(body: dict[str, object]) -> dict[str, object]:
+    def create_rule_pack(
+        body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         markdown = _required_string(body, "markdown")
         try:
-            pack = authored_packs.ingest(markdown)
+            pack = ws.authored_packs.ingest(markdown)
         except AuthoredRulePackError as error:
             status = 409 if error.code.endswith("collision") or error.code.endswith(
                 "already_exists"
@@ -360,11 +463,12 @@ def create_review_api_app(
 
     @app.post("/api/rule-packs/{pack_id}/promote")
     def promote_advisory_clause(
-        pack_id: str, body: dict[str, object]
+        pack_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         advisory_title = _required_string(body, "advisory_title")
         try:
-            proposal = authored_packs.propose_promotion(
+            proposal = ws.authored_packs.propose_promotion(
                 pack_id=pack_id, advisory_title=advisory_title
             )
         except AuthoredRulePackError as error:
@@ -379,13 +483,14 @@ def create_review_api_app(
 
     @app.post("/api/rule-packs/{pack_id}/promote/confirm")
     def confirm_promoted_rule(
-        pack_id: str, body: dict[str, object]
+        pack_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         draft = body.get("draft")
         if not isinstance(draft, dict):
             raise _bad_request("request body must include a draft object")
         try:
-            pack = authored_packs.confirm_promotion(pack_id=pack_id, draft=draft)
+            pack = ws.authored_packs.confirm_promotion(pack_id=pack_id, draft=draft)
         except AuthoredRulePackError as error:
             if error.code.endswith("not_found"):
                 status = 404
@@ -400,43 +505,62 @@ def create_review_api_app(
         return {"pack": _serialize_pack(pack, source="user")}
 
     @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/load")
-    def load_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+    def load_rule_pack(
+        session_id: str,
+        pack_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.load_rule_pack(
+            lambda: ws.flow.load_rule_pack(
                 session_id=session_id,
                 pack_id=pack_id,
-                authored_packs=authored_packs.list_packs(),
+                authored_packs=ws.authored_packs.list_packs(),
             )
         )
 
     @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/unload")
-    def unload_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+    def unload_rule_pack(
+        session_id: str,
+        pack_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.unload_rule_pack(
+            lambda: ws.flow.unload_rule_pack(
                 session_id=session_id,
                 pack_id=pack_id,
-                authored_packs=authored_packs.list_packs(),
+                authored_packs=ws.authored_packs.list_packs(),
             )
         )
 
     @app.get("/api/review/sessions/{session_id}/rule-pack-results")
-    def list_rule_pack_results(session_id: str) -> dict[str, object]:
+    def list_rule_pack_results(
+        session_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.rule_pack_results_state(session_id=session_id)
+            lambda: ws.flow.rule_pack_results_state(session_id=session_id)
         )
 
     @app.post("/api/review/sessions/{session_id}/rule-packs/{pack_id}/run")
-    def run_rule_pack(session_id: str, pack_id: str) -> dict[str, object]:
+    def run_rule_pack(
+        session_id: str,
+        pack_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         return _call_ready(
-            lambda: flow.run_rule_pack(
+            lambda: ws.flow.run_rule_pack(
                 session_id=session_id,
                 pack_id=pack_id,
-                authored_packs=authored_packs.list_packs(),
+                authored_packs=ws.authored_packs.list_packs(),
             )
         )
 
     @app.post("/api/review/sessions/{session_id}/qa-turns")
-    def run_qa_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
+    def run_qa_turn(
+        session_id: str,
+        body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         question = _required_string(body, "question")
         conversation = body.get("conversation")
         conversation_turns = (
@@ -445,10 +569,10 @@ def create_review_api_app(
             else None
         )
         return _call_ready(
-            lambda: flow.run_qa_turn(
+            lambda: ws.flow.run_qa_turn(
                 session_id=session_id,
                 question=question,
-                qa_provider=_resolve_qa_provider(session_id),
+                qa_provider=_resolve_qa_provider(ws.flow, session_id),
                 conversation=conversation_turns,
             )
         )
@@ -456,7 +580,11 @@ def create_review_api_app(
     BUNDLED_PUMP_CHECK_COMMAND = "run the bundled pump discharge check."
 
     @app.post("/api/review/sessions/{session_id}/turns")
-    def start_turn(session_id: str, body: dict[str, object]) -> dict[str, object]:
+    def start_turn(
+        session_id: str,
+        body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         question = _required_string(body, "question")
         request_id = _required_string(body, "request_id")
         conversation = body.get("conversation")
@@ -475,7 +603,7 @@ def create_review_api_app(
             tool_input: dict[str, object] | None = None,
             reasoning: str | None = None,
         ) -> None:
-            turns.append_progress(
+            ws.turns.append_progress(
                 session_id=session_id,
                 turn_id=turn_id,
                 round_index=round_index,
@@ -488,21 +616,21 @@ def create_review_api_app(
         steering_constraints = _parse_run_constraints(body.get("constraints"))
 
         def _steering() -> str | None:
-            return turns.steering_directive(session_id=session_id, turn_id=turn_id)
+            return ws.turns.steering_directive(session_id=session_id, turn_id=turn_id)
 
         def _execute() -> dict[str, object]:
             # The bundled pump check is a trusted rule-pack execution command,
             # not a QA question; run it inside the turn so dedupe, replay, and
             # cancellation apply uniformly.
             if question.strip().lower() == BUNDLED_PUMP_CHECK_COMMAND:
-                return flow.execute_selected_rule_pack_query(
+                return ws.flow.execute_selected_rule_pack_query(
                     session_id=session_id,
                     rule_id="pump_discharge_check_valve",
                 )
-            return flow.run_qa_turn(
+            return ws.flow.run_qa_turn(
                 session_id=session_id,
                 question=question,
-                qa_provider=_resolve_qa_provider(session_id),
+                qa_provider=_resolve_qa_provider(ws.flow, session_id),
                 conversation=conversation_turns,
                 on_round=_report_round,
                 steering=_steering,
@@ -510,7 +638,7 @@ def create_review_api_app(
             )
 
         return _call_ready(
-            lambda: turns.start(
+            lambda: ws.turns.start(
                 session_id=session_id,
                 request_id=request_id,
                 question=question,
@@ -519,8 +647,12 @@ def create_review_api_app(
         )
 
     @app.get("/api/review/sessions/{session_id}/turns/{turn_id}")
-    def get_turn(session_id: str, turn_id: str) -> dict[str, object]:
-        turn = turns.get(session_id=session_id, turn_id=turn_id)
+    def get_turn(
+        session_id: str,
+        turn_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        turn = ws.turns.get(session_id=session_id, turn_id=turn_id)
         if turn is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
         return turn
@@ -529,9 +661,10 @@ def create_review_api_app(
         "/api/review/sessions/{session_id}/turns/{turn_id}/trace/{event_id}"
     )
     def get_turn_trace_detail(
-        session_id: str, turn_id: str, event_id: str
+        session_id: str, turn_id: str, event_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
-        detail = turns.get_trace_detail(
+        detail = ws.turns.get_trace_detail(
             session_id=session_id,
             turn_id=turn_id,
             event_id=event_id,
@@ -550,9 +683,10 @@ def create_review_api_app(
 
     @app.get("/api/review/sessions/{session_id}/turns/{turn_id}/events")
     def stream_turn_events(
-        session_id: str, turn_id: str, after: int = -1
+        session_id: str, turn_id: str, after: int = -1,
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> StreamingResponse:
-        turn = turns.get(session_id=session_id, turn_id=turn_id)
+        turn = ws.turns.get(session_id=session_id, turn_id=turn_id)
         if turn is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
         events = turn.get("events", [])
@@ -563,15 +697,23 @@ def create_review_api_app(
         )
 
     @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/cancel")
-    def cancel_turn(session_id: str, turn_id: str) -> dict[str, object]:
-        turn = turns.cancel(session_id=session_id, turn_id=turn_id)
+    def cancel_turn(
+        session_id: str,
+        turn_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        turn = ws.turns.cancel(session_id=session_id, turn_id=turn_id)
         if turn is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
         return turn
 
     @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/answer-now")
-    def answer_now_turn(session_id: str, turn_id: str) -> dict[str, object]:
-        turn = turns.request_answer_now(session_id=session_id, turn_id=turn_id)
+    def answer_now_turn(
+        session_id: str,
+        turn_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        turn = ws.turns.request_answer_now(session_id=session_id, turn_id=turn_id)
         if turn is None:
             raise HTTPException(
                 status_code=404,
@@ -583,24 +725,25 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/direction-review")
     def resume_direction_review(
-        session_id: str, turn_id: str, body: dict[str, object]
+        session_id: str, turn_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         decisions = _direction_review_decisions(body)
         decision = _optional_string(body, "decision")
         review_key = _optional_string(body, "review_key")
-        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        existing = ws.turns.get(session_id=session_id, turn_id=turn_id)
         if existing is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
-        resumed = turns.resume(
+        resumed = ws.turns.resume(
             session_id=session_id,
             turn_id=turn_id,
-            execute=lambda: flow.submit_direction_review(
+            execute=lambda: ws.flow.submit_direction_review(
                 session_id=session_id,
                 question=str(existing["question"]),
                 decision=decision,
                 review_key=review_key,
                 decisions=decisions,
-                qa_provider=_resolve_qa_provider(session_id),
+                qa_provider=_resolve_qa_provider(ws.flow, session_id),
             ),
         )
         assert resumed is not None
@@ -608,19 +751,20 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/turns/{turn_id}/datalog-review")
     def resume_datalog_review(
-        session_id: str, turn_id: str, body: dict[str, object]
+        session_id: str, turn_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         decision = _required_string(body, "decision")
         proposal_result = body.get("proposal_result")
         if not isinstance(proposal_result, dict):
             raise _bad_request("request body must include a proposal_result object")
-        existing = turns.get(session_id=session_id, turn_id=turn_id)
+        existing = ws.turns.get(session_id=session_id, turn_id=turn_id)
         if existing is None:
             raise HTTPException(status_code=404, detail={"error": {"code": "turn.not_found", "message": "Turn not found."}})
-        resumed = turns.resume(
+        resumed = ws.turns.resume(
             session_id=session_id,
             turn_id=turn_id,
-            execute=lambda: flow.submit_temporary_datalog_review(
+            execute=lambda: ws.flow.submit_temporary_datalog_review(
                 session_id=session_id,
                 question=str(existing["question"]),
                 decision=decision,
@@ -632,7 +776,8 @@ def create_review_api_app(
 
     @app.post("/api/review/sessions/{session_id}/direction-reviews")
     def submit_direction_review(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         question = _required_string(body, "question")
         decisions = _direction_review_decisions(body)
@@ -645,20 +790,21 @@ def create_review_api_app(
             else None
         )
         return _call_ready(
-            lambda: flow.submit_direction_review(
+            lambda: ws.flow.submit_direction_review(
                 session_id=session_id,
                 question=question,
                 decision=decision,
                 review_key=review_key,
                 decisions=decisions,
-                qa_provider=_resolve_qa_provider(session_id),
+                qa_provider=_resolve_qa_provider(ws.flow, session_id),
                 conversation=conversation_turns,
             )
         )
 
     @app.post("/api/review/sessions/{session_id}/temporary-datalog-reviews")
     def submit_temporary_datalog_review(
-        session_id: str, body: dict[str, object]
+        session_id: str, body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         question = _required_string(body, "question")
         decision = _required_string(body, "decision")
@@ -666,7 +812,7 @@ def create_review_api_app(
         if not isinstance(proposal_result, dict):
             raise _bad_request("request body must include a proposal_result object")
         return _call_ready(
-            lambda: flow.submit_temporary_datalog_review(
+            lambda: ws.flow.submit_temporary_datalog_review(
                 session_id=session_id,
                 question=question,
                 decision=decision,
@@ -675,10 +821,13 @@ def create_review_api_app(
         )
 
     @app.post("/api/review/sessions/{session_id}/exports")
-    def export_session(session_id: str) -> dict[str, object]:
+    def export_session(
+        session_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
         export_prefix = f"_exports/{session_id}/export-{time.time_ns()}"
         return _call_ready(
-            lambda: flow.export_session_artifacts(
+            lambda: ws.flow.export_session_artifacts(
                 session_id=session_id,
                 export_prefix=export_prefix,
             )

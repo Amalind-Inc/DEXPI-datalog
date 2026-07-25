@@ -17,6 +17,9 @@ dependencies = [
     "uvicorn==0.49.0",
     "networkx==3.6.1",
     "PyYAML==6.0.3",
+    # Hosted-profile token verification. The [crypto] extra pulls
+    # `cryptography`, which RS256 needs; the local profile never loads it.
+    "PyJWT[crypto]==2.13.0",
 ]
 
 [project.optional-dependencies]
@@ -84,6 +87,14 @@ extend-exclude = [
 select = ["E4", "E7", "E9", "F", "B", "I", "UP"]
 
 [tool.ruff.lint.flake8-bugbear]
-# EpisodeBudgets is a frozen dataclass, so calling it in a default argument
-# cannot leak state between calls.
-extend-immutable-calls = ["pydexpi_datalog.benchmark.agentic_arm.EpisodeBudgets"]
+# B008 objects to calls in argument defaults because they evaluate once and
+# can leak state between calls. Neither of these can:
+#   EpisodeBudgets   a frozen dataclass, so the shared value is immutable.
+#   fastapi.Depends  not a call the function ever sees. FastAPI reads it off
+#                    the signature and resolves the dependency per request;
+#                    it is the framework's documented way to declare one, and
+#                    30 `noqa` comments would say less than this line does.
+extend-immutable-calls = [
+    "pydexpi_datalog.benchmark.agentic_arm.EpisodeBudgets",
+    "fastapi.Depends",
+]
