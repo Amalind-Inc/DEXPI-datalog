@@ -44,6 +44,16 @@ jobs:
       fail-fast: false
       matrix:
         profile: [local, hosted]
+    services:
+      # The hosted profile indexes sessions in a shared libSQL database, so
+      # the hosted leg needs a real one; there is no in-process libSQL. The
+      # local leg ignores it. Running one server for both legs is cheaper
+      # than a conditional service and keeps the two jobs identical apart
+      # from the profile itself.
+      libsql:
+        image: ghcr.io/tursodatabase/libsql-server:latest
+        ports:
+          - 8080:8080
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,10 +96,16 @@ jobs:
           souffle --version
 
       - name: Install project
+        # The hosted extra (libsql) is installed only on the hosted leg. That
+        # makes the local leg a standing proof of the OSS promise in ADR 0016:
+        # a standalone install is standard-library only, and no import path
+        # reachable from the local profile may reach for libsql.
+        env:
+          EXTRAS: ${{ matrix.profile == 'hosted' && 'dev,hosted' || 'dev' }}
         run: |
           set -euo pipefail
           pip install -e ./pyDEXPI
-          pip install -e ".[dev]"
+          pip install -e ".[${EXTRAS}]"
 
       - name: Run the suite under the ${{ matrix.profile }} profile
         # PYDEXPI_QA_PROVIDER=scripted is the existing hermeticity switch: it
@@ -102,9 +118,20 @@ jobs:
         # truth-by-construction disagrees with real Souffle). Wiring it in
         # while it is red would train everyone to ignore this badge. Bead
         # pydexpi-datalog-1-hawf adds it once plz7 is fixed.
+        #
+        # The libSQL variables are set only on the hosted leg, matching where
+        # the package is installed. The local leg therefore runs with no
+        # libSQL available at all, which is the condition a standalone user
+        # installs into.
+        #
+        # `CI` is set by Actions, which stops tests/conftest.py from turning a
+        # missing database into a skip. A broken service container has to look
+        # different from a passing run.
         env:
           PYDEXPI_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
           PYDEXPI_QA_PROVIDER: scripted
+          PYDEXPI_LIBSQL_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
+          PYDEXPI_LIBSQL_TEST_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
         run: pytest -m "not slow"
 
   frontend:

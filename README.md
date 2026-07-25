@@ -159,31 +159,51 @@ and authored rule pack to the signed-in account. Sign-in is
 is a resource server that verifies the JWT against the JWKS Next publishes, so
 no account data or password ever reaches Python.
 
-Create the account tables once, then start both processes with a shared
-identity configuration:
+The session index lives in a shared [libSQL](https://turso.tech/libsql)
+database rather than a file on the instance, so it survives a redeploy and is
+the same index for every instance. libSQL is SQLite's own dialect over a
+network: one schema and one migration set serve both profiles, which is why
+the local path cannot rot into a demo while hosted grows features.
+
+Install the extra, create the account tables once, then start both processes:
 
 ```bash
+pip install -e ".[hosted]"      # libsql; the local profile never needs it
+
 export PYDEXPI_DEPLOYMENT_PROFILE=hosted
 export BETTER_AUTH_URL=http://localhost:3000
 export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"   # required in hosted
 
 (cd frontend && node scripts/migrate-auth.mjs)
 
-# Backend: these three must agree with BETTER_AUTH_URL above.
+# A libSQL database. Turso hosts them; this runs one locally.
+docker run -d -p 8080:8080 ghcr.io/tursodatabase/libsql-server:latest
+
+# Backend: the three OIDC settings must agree with BETTER_AUTH_URL above.
 PYTHONPATH=. \
   PYDEXPI_OIDC_ISSUER=$BETTER_AUTH_URL \
   PYDEXPI_OIDC_AUDIENCE=$BETTER_AUTH_URL \
   PYDEXPI_OIDC_JWKS_URL=$BETTER_AUTH_URL/api/auth/jwks \
+  PYDEXPI_LIBSQL_URL=http://127.0.0.1:8080 \
   .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --port 8000
 ```
 
-The backend refuses to start if any of the three `PYDEXPI_OIDC_*` settings is
-missing, rather than coming up unauthenticated and serving every user from one
-workspace. To check a hosted deployment really does isolate two accounts:
+Against Turso, set `PYDEXPI_LIBSQL_URL` to the database URL and
+`PYDEXPI_LIBSQL_AUTH_TOKEN` to its token. The token is optional because a
+`libsql-server` on a private network may not want one; the database, not this
+code, decides whether it needs authenticating.
+
+The backend refuses to start if the OIDC settings or `PYDEXPI_LIBSQL_URL` are
+missing, rather than coming up unauthenticated, or indexing sessions onto a
+disk that the next redeploy throws away. To check a hosted deployment really
+does isolate two accounts:
 
 ```bash
 .venv/bin/python scripts/hosted_auth_smoke.py
 ```
+
+Running the test suite under the hosted profile needs a libSQL server too;
+`tests/conftest.py` prints the command if one is missing.
 
 ## End-to-end screenshot test
 

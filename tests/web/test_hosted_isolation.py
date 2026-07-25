@@ -19,6 +19,7 @@ from pathlib import Path
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from hosted_env import hosted_catalog_env
 
 from pydexpi_datalog.web.deployment import DeploymentProfile
 from pydexpi_datalog.web.hosted_auth import (
@@ -78,6 +79,10 @@ class HostedIsolationTests(unittest.TestCase):
         return create_review_api_app(
             artifact_root=root,
             profile=DeploymentProfile.HOSTED,
+            # A hosted app refuses to start without its shared catalog
+            # (bead 2afe.7), so these tests need a real one whatever ambient
+            # profile the suite is running under.
+            env=hosted_catalog_env(),
             principal_resolver=HostedPrincipalResolver(
                 settings=HostedAuthSettings(
                     issuer=ISSUER, audience=AUDIENCE, jwks_url="https://unused"

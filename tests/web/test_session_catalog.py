@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -25,8 +26,6 @@ E06_FIXTURE = (
     / "E06V01-VER.EX01.xml"
 )
 
-ALICE = Principal(user_id="alice", workspace="alice")
-BOB = Principal(user_id="bob", workspace="bob")
 
 
 def _client(root: Path, principal: Principal) -> TestClient:
@@ -62,6 +61,21 @@ def _listed(client: TestClient) -> list[dict]:
 
 
 class SessionCatalogTests(unittest.TestCase):
+    def setUp(self) -> None:
+        """Give every test its own workspace.
+
+        Locally the catalog is a fresh temporary file per test, so an empty
+        database was free. The hosted profile shares one long-lived libSQL
+        database across the whole run -- which is what a real deployment
+        looks like, and a test that assumes an empty table would only ever
+        pass on the profile that throws its database away. Scoping by
+        workspace is the isolation the catalog actually provides.
+        """
+
+        unique = uuid.uuid4().hex[:12]
+        self.alice = Principal(user_id=f"alice-{unique}", workspace=f"alice-{unique}")
+        self.bob = Principal(user_id=f"bob-{unique}", workspace=f"bob-{unique}")
+
     def test_prepared_session_is_findable_after_the_client_forgets_its_id(
         self,
     ) -> None:
@@ -70,13 +84,13 @@ class SessionCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
             self.assertEqual(
-                _prepare(_client(root, ALICE), "forgotten-session").status_code,
+                _prepare(_client(root, self.alice), "forgotten-session").status_code,
                 200,
             )
 
             # A brand new client knows no session id at all, exactly like a
             # browser whose storage was cleared.
-            sessions = _listed(_client(root, ALICE))
+            sessions = _listed(_client(root, self.alice))
 
             self.assertEqual(len(sessions), 1)
             entry = sessions[0]
@@ -90,12 +104,12 @@ class SessionCatalogTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "never-created" / "sessions"
-            self.assertEqual(_listed(_client(root, ALICE)), [])
+            self.assertEqual(_listed(_client(root, self.alice)), [])
 
     def test_sessions_are_listed_newest_first(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
-            client = _client(root, ALICE)
+            client = _client(root, self.alice)
             self.assertEqual(_prepare(client, "older-session").status_code, 200)
             self.assertEqual(_prepare(client, "newer-session").status_code, 200)
 
@@ -108,17 +122,17 @@ class SessionCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
             self.assertEqual(
-                _prepare(_client(root, ALICE), "alice-session").status_code, 200
+                _prepare(_client(root, self.alice), "alice-session").status_code, 200
             )
 
-            self.assertEqual(_listed(_client(root, BOB)), [])
+            self.assertEqual(_listed(_client(root, self.bob)), [])
 
     def test_failed_preparation_is_not_offered_as_a_session(self) -> None:
         """A session that never became ready is not reopenable, so not listed."""
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
-            client = _client(root, ALICE)
+            client = _client(root, self.alice)
             failed = _prepare(
                 client,
                 "broken-session",
@@ -133,7 +147,7 @@ class SessionCatalogTests(unittest.TestCase):
     def test_repreparing_a_session_does_not_duplicate_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
-            client = _client(root, ALICE)
+            client = _client(root, self.alice)
             self.assertEqual(_prepare(client, "same-session").status_code, 200)
             self.assertEqual(_prepare(client, "same-session").status_code, 200)
 
@@ -145,10 +159,10 @@ class SessionCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
             self.assertEqual(
-                _prepare(_client(root, ALICE), "durable-session").status_code, 200
+                _prepare(_client(root, self.alice), "durable-session").status_code, 200
             )
 
-            restarted = _client(root, ALICE)
+            restarted = _client(root, self.alice)
             self.assertEqual(
                 [entry["session_id"] for entry in _listed(restarted)],
                 ["durable-session"],
@@ -160,10 +174,10 @@ class SessionCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "sessions"
             self.assertEqual(
-                _prepare(_client(root, ALICE), "reopen-session").status_code, 200
+                _prepare(_client(root, self.alice), "reopen-session").status_code, 200
             )
 
-            restarted = _client(root, ALICE)
+            restarted = _client(root, self.alice)
             session_id = _listed(restarted)[0]["session_id"]
             topology = restarted.get(f"/api/review/sessions/{session_id}/topology")
             self.assertEqual(topology.status_code, 200, topology.text)

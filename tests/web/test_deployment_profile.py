@@ -13,9 +13,11 @@ from __future__ import annotations
 import ast
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from hosted_env import hosted_catalog_env
 
 from pydexpi_datalog.web.deployment import (
     PROFILE_ENV_VAR,
@@ -25,6 +27,7 @@ from pydexpi_datalog.web.deployment import (
     resolve_profile,
 )
 from pydexpi_datalog.web.review_api import create_review_api_app
+from pydexpi_datalog.workflow.principal import Principal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "pydexpi_datalog"
@@ -36,6 +39,21 @@ E06_FIXTURE = (
     / "E06 Pump, HeatExchanger, Nozzles Connected With PNS"
     / "E06V01-VER.EX01.xml"
 )
+
+
+def _env_for(profile: DeploymentProfile) -> dict[str, str]:
+    """What a profile needs from the environment before it will construct.
+
+    The hosted profile refuses to start without a libSQL database, which is
+    the point of bead 2afe.7: a hosted deployment that quietly indexed
+    sessions on the container's own disk would lose them at the next
+    redeploy. That makes a real server a precondition of these tests rather
+    than a detail of them. The local profile needs nothing.
+    """
+
+    if profile is not DeploymentProfile.HOSTED:
+        return {}
+    return hosted_catalog_env()
 
 
 class ProfileResolutionTests(unittest.TestCase):
@@ -82,7 +100,9 @@ class ProfileSelectionTests(unittest.TestCase):
         for profile in DeploymentProfile:
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
                 app = create_review_api_app(
-                    artifact_root=Path(tmp) / "sessions", profile=profile
+                    artifact_root=Path(tmp) / "sessions",
+                    profile=profile,
+                    env=_env_for(profile),
                 )
                 self.assertIs(app.state.deployment_profile, profile)
 
@@ -90,7 +110,10 @@ class ProfileSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app = create_review_api_app(
                 artifact_root=Path(tmp) / "sessions",
-                env={PROFILE_ENV_VAR: "hosted"},
+                env={
+                    PROFILE_ENV_VAR: "hosted",
+                    **_env_for(DeploymentProfile.HOSTED),
+                },
             )
             self.assertIs(app.state.deployment_profile, DeploymentProfile.HOSTED)
 
@@ -171,11 +194,20 @@ class BothProfilesServeTheSameReviewTests(unittest.TestCase):
 
     def test_prepare_and_list_behave_identically_under_both_profiles(self) -> None:
         observed: dict[DeploymentProfile, object] = {}
+        # Both legs run as the same fresh principal. The local catalog is a
+        # new temporary file each time, but the hosted one is a shared
+        # database that outlives the run, so a fixed workspace would compare
+        # one prepared session against every session this test ever prepared.
+        unique = uuid.uuid4().hex[:12]
+        principal = Principal(user_id=f"parity-{unique}", workspace=f"parity-{unique}")
         for profile in DeploymentProfile:
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
                 client = TestClient(
                     create_review_api_app(
-                        artifact_root=Path(tmp) / "sessions", profile=profile
+                        artifact_root=Path(tmp) / "sessions",
+                        profile=profile,
+                        principal=principal,
+                        env=_env_for(profile),
                     )
                 )
                 prepared = client.post(
@@ -204,6 +236,16 @@ class BothProfilesServeTheSameReviewTests(unittest.TestCase):
                         for record in listed.json()["sessions"]
                     ],
                 }
+
+        # A profile that could not be built (hosted, with no libSQL server)
+        # leaves no observation. Say so, rather than failing on a missing key
+        # and making an absent database look like a parity break.
+        unobserved = [profile for profile in DeploymentProfile if profile not in observed]
+        if unobserved:
+            self.skipTest(
+                "no parity claim: "
+                f"{', '.join(p.value for p in unobserved)} could not be built"
+            )
 
         self.assertEqual(
             observed[DeploymentProfile.LOCAL],

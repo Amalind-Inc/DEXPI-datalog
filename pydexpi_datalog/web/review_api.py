@@ -229,7 +229,8 @@ def create_review_api_app(
 
     # One catalog for every workspace, scoped by column: the shape the hosted
     # profile needs, kept identical locally so there is one schema to migrate.
-    catalog = bundle.build_catalog(artifact_root)
+    # The environment carries the hosted profile's database; local ignores it.
+    catalog = bundle.build_catalog(artifact_root, environment)
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,

@@ -55,11 +55,32 @@ That default is also what lets CI re-run the entire existing suite under the
 other profile by setting one variable rather than by every test opting in.
 
 The hosted seams arrive one at a time, and the bundle names the local
-implementation until each one exists. The verified-token principal is built;
-the libSQL catalog and object-store artifacts are not, so hosted still writes
-the local filesystem and the local SQLite catalog. Replacing one line in the
+implementation until each one exists. The verified-token principal and the
+libSQL catalog are built; object-store artifacts are not, so hosted still
+writes artifact trees to the local filesystem. Replacing one line in the
 hosted bundle is what puts a hosted implementation under the whole suite, and
 no hosted slice can land without both CI legs staying green.
+
+The catalog is reached through an injected connection factory rather than two
+catalog classes. There is exactly one copy of the schema and of every
+statement, so "one schema, one migration set" holds by construction instead
+of by review: a dialect branch cannot drift when there is no second copy to
+drift from. The local profile opens the file with the standard library and
+the hosted profile opens libSQL with the `libsql` package, which is an
+optional extra imported inside the hosted factory. That import placement is
+load-bearing: `libsql` is a native extension without a published wheel for
+every supported platform and Python version, so a base dependency would make
+a standalone local install cost a Rust toolchain. CI installs the extra only
+on the hosted leg, which leaves the local leg a standing proof that nothing
+reachable from the local profile imports it.
+
+A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL`, for the
+same reason it refuses to start without identity settings. The failure being
+avoided is silent: a hosted instance that fell back to a SQLite file on the
+container's disk would look completely healthy, serve correctly, and lose
+every session index the next time the container was replaced. The auth token
+is optional, because Turso issues tokens while a `libsql-server` on a private
+network need not -- the database is the authority on its own access control.
 
 Hosted sign-in is Better Auth running inside the Next app, with its JWT
 plugin publishing a JWKS that the Python backend verifies against. Better Auth

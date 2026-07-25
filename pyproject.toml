@@ -37,6 +37,15 @@ benchmark = [
     "numpy==2.4.6",
     "openpyxl==3.1.5",
 ]
+# The hosted profile keeps its session catalog in a shared libSQL database
+# (ADR 0016). Deliberately not a base dependency: it is a native extension,
+# and platforms without a published wheel compile it from Rust source. A
+# standalone local install stays standard-library only, and
+# `session_catalog.libsql_catalog` imports this inside the function so a
+# local run never touches it.
+hosted = [
+    "libsql==0.1.11",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

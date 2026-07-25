@@ -33,13 +33,64 @@ from pathlib import Path
 
 from ..workflow.artifact_store import ArtifactStore, LocalArtifactStore
 from ..workflow.principal import Principal
-from ..workflow.session_catalog import CATALOG_FILENAME, SessionCatalog
+from ..workflow.session_catalog import (
+    CATALOG_FILENAME,
+    SessionCatalog,
+    libsql_catalog,
+    local_catalog,
+)
 
 PROFILE_ENV_VAR = "PYDEXPI_DEPLOYMENT_PROFILE"
+
+# Read only by the hosted profile, and only when it builds its catalog.
+HOSTED_CATALOG_ENV_VARS = (
+    "PYDEXPI_LIBSQL_URL",
+    "PYDEXPI_LIBSQL_AUTH_TOKEN",
+)
+_REQUIRED_CATALOG_ENV_VARS = ("PYDEXPI_LIBSQL_URL",)
 
 
 class DeploymentProfileError(ValueError):
     """The deployment profile is missing or is not one this build knows."""
+
+
+class HostedCatalogNotConfigured(ValueError):
+    """The hosted profile was selected without a catalog to write to."""
+
+
+@dataclass(frozen=True)
+class HostedCatalogSettings:
+    """Which libSQL database the hosted profile indexes sessions in."""
+
+    url: str
+    auth_token: str
+
+
+def hosted_catalog_settings_from_env(
+    env: Mapping[str, str],
+) -> HostedCatalogSettings:
+    """Catalog settings for a hosted deployment, or refuse to start.
+
+    The auth token is optional because the server, not this code, is the
+    authority on whether it needs one: Turso issues tokens, while a
+    `libsql-server` on a private network may accept anonymous clients.
+    Refusing to start without a token would reject a deployment the database
+    itself is happy to serve.
+    """
+
+    values = {name: env.get(name, "").strip() for name in HOSTED_CATALOG_ENV_VARS}
+    missing = [name for name in _REQUIRED_CATALOG_ENV_VARS if not values[name]]
+    if missing:
+        raise HostedCatalogNotConfigured(
+            "the hosted deployment profile keeps its session index in a "
+            "shared libSQL database, so it cannot start without one: a local "
+            "file would be lost the next time the instance is replaced. "
+            f"Missing: {', '.join(missing)}."
+        )
+    return HostedCatalogSettings(
+        url=values["PYDEXPI_LIBSQL_URL"],
+        auth_token=values["PYDEXPI_LIBSQL_AUTH_TOKEN"],
+    )
 
 
 class DeploymentProfile(StrEnum):
@@ -103,7 +154,7 @@ class ProfileBundle:
 
     profile: DeploymentProfile
     build_store: Callable[[Path, Principal], ArtifactStore]
-    build_catalog: Callable[[Path], SessionCatalog]
+    build_catalog: Callable[[Path, Mapping[str, str]], SessionCatalog]
 
 
 def _local_store(artifact_root: Path, principal: Principal) -> ArtifactStore:
@@ -112,10 +163,32 @@ def _local_store(artifact_root: Path, principal: Principal) -> ArtifactStore:
     return LocalArtifactStore(artifact_root / principal.workspace)
 
 
-def _local_catalog(artifact_root: Path) -> SessionCatalog:
-    """One SQLite database holding every workspace's rows, scoped by column."""
+def _local_catalog(
+    artifact_root: Path, env: Mapping[str, str] | None = None
+) -> SessionCatalog:
+    """One SQLite file holding every workspace's rows, scoped by column.
 
-    return SessionCatalog(artifact_root / CATALOG_FILENAME)
+    The environment is accepted and ignored: a local deployment is configured
+    by where it is run, not by what it is told.
+    """
+
+    del env
+    return local_catalog(artifact_root / CATALOG_FILENAME)
+
+
+def _hosted_catalog(
+    artifact_root: Path, env: Mapping[str, str] | None = None
+) -> SessionCatalog:
+    """One libSQL database, shared by every instance of the deployment.
+
+    The artifact root is ignored on purpose. A hosted catalog that fell back
+    to the container's disk would look healthy right up to the redeploy that
+    threw the disk away, so there is no path here that can write one.
+    """
+
+    del artifact_root
+    settings = hosted_catalog_settings_from_env(env or {})
+    return libsql_catalog(url=settings.url, auth_token=settings.auth_token)
 
 
 _BUNDLES: dict[DeploymentProfile, ProfileBundle] = {
@@ -124,16 +197,15 @@ _BUNDLES: dict[DeploymentProfile, ProfileBundle] = {
         build_store=_local_store,
         build_catalog=_local_catalog,
     ),
-    # The hosted profile is wired but not yet distinct: its object-store
-    # artifacts (bead pydexpi-datalog-1-2afe.8), libSQL catalog (2afe.7), and
-    # verified-token principal (2afe.6) are not built. It names the local
-    # implementations meanwhile, so the harness that runs the suite under both
-    # profiles exists before the capabilities it has to keep honest. Replacing
-    # a line here is what puts a hosted implementation under the whole suite.
+    # The hosted profile's catalog is its own now (bead 2afe.7); its
+    # object-store artifacts (2afe.8) are not built yet, so it still names the
+    # local store. That remaining line is what a hosted deployment on more
+    # than one instance still has to fix, and replacing it is what puts an
+    # object store under the whole suite.
     DeploymentProfile.HOSTED: ProfileBundle(
         profile=DeploymentProfile.HOSTED,
         build_store=_local_store,
-        build_catalog=_local_catalog,
+        build_catalog=_hosted_catalog,
     ),
 }
 
