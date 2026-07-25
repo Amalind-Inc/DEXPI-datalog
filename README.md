@@ -159,12 +159,20 @@ and authored rule pack to the signed-in account. Sign-in is
 is a resource server that verifies the JWT against the JWKS Next publishes, so
 no account data or password ever reaches Python.
 
-A hosted deployment keeps nothing on the instance. The session index lives in
-a shared [libSQL](https://turso.tech/libsql) database and review artifacts
-live in an S3-compatible bucket, so both survive a redeploy and are the same
-for every instance. libSQL is SQLite's own dialect over a network: one schema
-and one migration set serve both profiles, which is why the local path cannot
-rot into a demo while hosted grows features.
+The review backend keeps nothing on the instance. The session index and saved
+model credentials live in a shared [libSQL](https://turso.tech/libsql)
+database and review artifacts live in an S3-compatible bucket, so all three
+survive a redeploy and are the same for every instance. libSQL is SQLite's
+own dialect over a network: one schema and one migration set serve both
+profiles, which is why the local path cannot rot into a demo while hosted
+grows features.
+
+> **Run one instance for now.** The accounts database is still a
+> `better-sqlite3` file on the instance, and Better Auth's JWT signing keys
+> live in it. A second instance would have its own users and its own signing
+> keys, so sign-ins would not carry across and a redeploy would discard every
+> account. Give the instance a persistent volume and point `PYDEXPI_AUTH_DB`
+> at it. Moving accounts onto the shared database is tracked separately.
 
 Install the extras, create the account tables once, then start both processes:
 

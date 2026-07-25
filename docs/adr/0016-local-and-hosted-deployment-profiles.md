@@ -55,11 +55,24 @@ That default is also what lets CI re-run the entire existing suite under the
 other profile by setting one variable rather than by every test opting in.
 
 Four hosted seams are now built: the verified-token principal, the libSQL
-catalog, object-store artifacts, and the encrypted provider-key store. A
-hosted instance keeps nothing on its own disk, which was the point of the
-epic. The bundle stays the one place a profile's implementations are named,
-and the fourth seam was indeed one line there rather than a branch in the
-flow -- which is the claim the first three were making.
+catalog, object-store artifacts, and the encrypted provider-key store. The
+bundle stays the one place a profile's implementations are named, and the
+fourth seam was indeed one line there rather than a branch in the flow --
+which is the claim the first three were making.
+
+**Everything the Python backend owns is now off the instance. The accounts
+database is not.** Better Auth is constructed with `better-sqlite3` against a
+file path (`frontend/lib/auth.ts`), in the hosted profile as much as the
+local one, and the JWT plugin keeps its JWKS signing keys in that same file.
+A second instance therefore has a second user table and a second set of
+signing keys, so an account created on one instance does not exist on the
+other and a token signed by one fails verification against the other's JWKS.
+A redeploy discards both. This is the same failure the catalog and the object
+store were built to remove, surviving in the one component this ADR's seams
+do not reach, and it means the epic's "hosted keeps nothing on its own disk"
+is not yet true end to end. Tracked as its own bead; until it lands, the
+hosted profile is single-instance with a persistent volume, not horizontally
+scalable.
 
 That fourth seam is also the first where the local profile's answer is
 "nothing": `build_key_store` returns `None` locally, because ADR 0014's
