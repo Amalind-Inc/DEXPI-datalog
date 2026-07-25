@@ -31,6 +31,14 @@ services:
       # Optional: set both to offer "Continue with Google" on the sign-in page.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Optional: an SMTP relay enables "Forgot your password?". Without one
+      # the link is not offered, because unsent reset mail is worse than none.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
     volumes:
       # Accounts and the generated secrets. Losing this loses every account and
       # makes saved model credentials undecryptable, so it is a named volume

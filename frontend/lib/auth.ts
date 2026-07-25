@@ -21,6 +21,7 @@ import { jwt } from "better-auth/plugins";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { type SmtpSettings, resetPasswordMessage, smtpSettings } from "./email.ts";
 import { configuredSocialProviders } from "./social-providers.ts";
 
 /**
@@ -60,7 +61,38 @@ function authSecret(): string {
   return "development-only-secret-not-for-hosted-use";
 }
 
+/**
+ * Send one message, over SMTP, or throw.
+ *
+ * Better Auth treats a rejected `sendResetPassword` as a failed request, which
+ * is the behaviour worth having: a reset that silently fails to send looks
+ * identical to one that worked, and the person waits for mail that will never
+ * arrive.
+ *
+ * `nodemailer` is imported lazily for the same reason nothing here is built at
+ * module scope -- a local install should not pay for a transport it never uses.
+ */
+async function sendMail(
+  settings: SmtpSettings,
+  to: string,
+  message: { subject: string; text: string; html: string },
+): Promise<void> {
+  const { createTransport } = await import("nodemailer");
+  const transport = createTransport({
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    ...(settings.auth ? { auth: settings.auth } : {}),
+  });
+  await transport.sendMail({ from: settings.from, to, ...message });
+}
+
 function createHostedAuth() {
+  // Read once, at construction: a deployment does not grow an SMTP server
+  // between requests, and reading per-send would turn a configuration error
+  // into an intermittent one.
+  const smtp = smtpSettings(process.env);
+
   return betterAuth({
     database: new Database(authDatabasePath()),
     baseURL: baseUrl(),
@@ -71,7 +103,19 @@ function createHostedAuth() {
     // configuration -- `social-providers.ts` decides which, from the
     // environment, and the sign-in page reads the same decision so a button
     // can never point at a provider this instance did not configure.
-    emailAndPassword: { enabled: true },
+    emailAndPassword: {
+      enabled: true,
+      // Better Auth owns the reset entirely -- token, expiry, single use, and
+      // the exchange. The only thing it cannot supply is a way to deliver the
+      // link, so without SMTP the endpoint stays off rather than half-working.
+      ...(smtp
+        ? {
+            sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+              await sendMail(smtp, user.email, resetPasswordMessage(url));
+            },
+          }
+        : {}),
+    },
     socialProviders: configuredSocialProviders(process.env),
     plugins: [jwt()],
   });

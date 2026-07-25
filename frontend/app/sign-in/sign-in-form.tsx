@@ -13,22 +13,46 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { signIn, signUp } from "@/lib/auth-client";
+import { requestPasswordReset, signIn, signUp } from "@/lib/auth-client";
 import type { OfferedSocialProvider, SocialProviderId } from "@/lib/social-providers.ts";
 
 type Mode = "sign-in" | "sign-up";
 
 export default function SignInForm({
   socialProviders,
+  canResetPassword,
 }: {
   socialProviders: OfferedSocialProvider[];
+  canResetPassword: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function requestReset() {
+    if (email.trim() === "") {
+      setError("Enter your email address first, then ask for a reset link.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await requestPasswordReset({
+      email,
+      redirectTo: "/reset-password",
+    });
+    setBusy(false);
+    if (result.error) {
+      setError(result.error.message ?? "Could not send a reset link.");
+      return;
+    }
+    // Deliberately the same message whether or not that address has an
+    // account: the alternative tells a stranger which emails are registered.
+    setNotice(`If an account exists for ${email}, a reset link is on its way.`);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -125,6 +149,12 @@ export default function SignInForm({
           </p>
         ) : null}
 
+        {notice ? (
+          <p className="sign-in-notice" role="status">
+            {notice}
+          </p>
+        ) : null}
+
         <button className="sign-in-submit" type="submit" disabled={busy}>
           {busy ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}
         </button>
@@ -135,10 +165,19 @@ export default function SignInForm({
           onClick={() => {
             setMode(mode === "sign-in" ? "sign-up" : "sign-in");
             setError(null);
+            setNotice(null);
           }}
         >
           {mode === "sign-in" ? "No account yet? Create one" : "Already have an account? Sign in"}
         </button>
+
+        {/* Only when mail can actually be sent. Offering a reset link that
+            silently goes nowhere is worse than not offering one. */}
+        {canResetPassword && mode === "sign-in" ? (
+          <button className="sign-in-toggle" type="button" disabled={busy} onClick={requestReset}>
+            Forgot your password?
+          </button>
+        ) : null}
       </form>
     </main>
   );

@@ -264,6 +264,37 @@ redeploy throws away, or storing a user's model credential in the clear.
 Artifact downloads are handed out as presigned URLs, so bytes travel from the
 bucket to the browser without passing through the API.
 
+#### Password reset
+
+Better Auth implements the reset itself -- the token, its hour-long expiry,
+its single use, and the exchange. The only thing it cannot supply is delivery,
+so set an SMTP relay and "Forgot your password?" appears on the sign-in page.
+Set none of these and the link is not offered, because a reset that silently
+fails to send is worse than none.
+
+| Setting | Required | Meaning |
+| --- | --- | --- |
+| `SMTP_HOST` | to send mail | Relay hostname |
+| `SMTP_FROM` | to send mail | Address the message comes from |
+| `SMTP_PORT` | no | Defaults to 587 |
+| `SMTP_USER` | no | Omit for a relay that wants no credentials |
+| `SMTP_PASSWORD` | no | Required if `SMTP_USER` is set |
+| `SMTP_SECURE` | no | Implicit TLS; inferred for port 465 |
+
+A partial configuration fails the sign-in page naming what is missing, rather
+than hiding the feature. To try it without a relay, run a throwaway mailbox:
+
+```bash
+docker run -d -p 2025:1025 -p 8025:8025 axllent/mailpit
+export SMTP_HOST=127.0.0.1 SMTP_PORT=2025 SMTP_FROM=pydexpi@example.com
+```
+
+Mail lands at <http://localhost:8025> instead of being delivered.
+
+Note that sign-up does **not** verify the address: anyone can register any
+email. That is a separate piece of work, and until it lands, a reset link is
+the only thing that proves someone controls the address they signed up with.
+
 #### Signing in with Google or Apple
 
 Email and password is always available and needs no external service. Google

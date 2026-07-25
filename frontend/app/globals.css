@@ -2595,3 +2595,12 @@
   height: 1px;
   background: var(--border, #e5e7eb);
 }
+
+/* Reset-link confirmation (bead 2qdw). Deliberately not styled as an error:
+   it reports success, and says the same thing whether or not the address has
+   an account. */
+.sign-in-notice {
+  color: var(--muted-foreground, #4b5563);
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
