@@ -290,13 +290,16 @@ export default function Home() {
           </section>
 
           <footer className={styles.footer}>
-            <div className={styles.footerWordmark}>amalind</div>
             <div className={styles.footerMeta}>
               <span>Neurosymbolic engineering intelligence</span>
               <br />
               <span>Prototype / 2026</span>
             </div>
+            <Link href="/assistant">Enter workspace ↗</Link>
           </footer>
+          <div className={styles.footerWordmark} aria-hidden="true">
+            amalind
+          </div>
         </main>
       </div>
     </div>
