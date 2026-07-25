@@ -21,9 +21,10 @@ import unittest
 
 import jwt
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
 
 from pydexpi_datalog.web.hosted_auth import (
+    ACCEPTED_ALGORITHMS,
     HOSTED_AUTH_ENV_VARS,
     HostedAuthNotConfigured,
     HostedAuthSettings,
@@ -292,6 +293,57 @@ class HostedAuthConfigurationTests(unittest.TestCase):
             hosted_auth_settings_from_env({})
         for name in HOSTED_AUTH_ENV_VARS:
             self.assertIn(name, str(caught.exception))
+
+
+class AsymmetricAlgorithmTests(unittest.TestCase):
+    """Every asymmetric algorithm a provider might sign with is accepted.
+
+    Better Auth signs EdDSA/Ed25519 by default; most OIDC providers sign
+    RS256. Supporting the set keeps the verifier provider-agnostic, and none
+    of them is vulnerable to the confusion attack, which needs a *symmetric*
+    algorithm to succeed.
+    """
+
+    def _resolver(self, public_key: object) -> HostedPrincipalResolver:
+        return HostedPrincipalResolver(
+            settings=HostedAuthSettings(
+                issuer=ISSUER, audience=AUDIENCE, jwks_url="https://unused"
+            ),
+            key_resolver=lambda _token: public_key,
+        )
+
+    def _claims(self) -> dict[str, object]:
+        return {
+            "sub": "user-abc",
+            "iss": ISSUER,
+            "aud": AUDIENCE,
+            "exp": int(time.time()) + 300,
+        }
+
+    def test_ed25519_is_accepted(self) -> None:
+        key = ed25519.Ed25519PrivateKey.generate()
+        token = jwt.encode(self._claims(), key, algorithm="EdDSA")  # type: ignore[arg-type]
+        principal = self._resolver(key.public_key()).principal_for(f"Bearer {token}")
+        self.assertEqual(principal.user_id, "user-abc")
+
+    def test_es256_is_accepted(self) -> None:
+        key = ec.generate_private_key(ec.SECP256R1())
+        token = jwt.encode(self._claims(), key, algorithm="ES256")  # type: ignore[arg-type]
+        principal = self._resolver(key.public_key()).principal_for(f"Bearer {token}")
+        self.assertEqual(principal.user_id, "user-abc")
+
+    def test_no_symmetric_algorithm_is_accepted(self) -> None:
+        # The allowlist is what stops algorithm confusion. If a symmetric
+        # algorithm ever enters it, a public key becomes a signing secret.
+        for algorithm in ("HS256", "HS384", "HS512"):
+            with self.subTest(algorithm=algorithm):
+                self.assertNotIn(algorithm, ACCEPTED_ALGORITHMS)
+
+    def test_every_accepted_algorithm_is_asymmetric(self) -> None:
+        for algorithm in ACCEPTED_ALGORITHMS:
+            with self.subTest(algorithm=algorithm):
+                self.assertFalse(algorithm.startswith("HS"))
+                self.assertNotEqual(algorithm.lower(), "none")
 
 
 if __name__ == "__main__":

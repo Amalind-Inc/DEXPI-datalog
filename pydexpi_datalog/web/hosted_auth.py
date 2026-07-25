@@ -33,9 +33,15 @@ import jwt
 
 from ..workflow.principal import InvalidWorkspace, Principal
 
-# RS256 only. Accepting whichever algorithm the token names is the classic JWT
-# forgery: an attacker signs HS256 using the public key as the shared secret.
-_ALGORITHMS = ["RS256"]
+# Asymmetric algorithms only, and named explicitly. Trusting whichever
+# algorithm the token's header asks for is the classic JWT forgery: an
+# attacker signs HS256 using the public key -- which is public -- as the
+# shared secret. No symmetric algorithm may ever join this list.
+#
+# The set spans what providers actually sign with: Better Auth defaults to
+# EdDSA/Ed25519, most OIDC providers use RS256. Verifying all of them is what
+# lets the identity provider change without a code change here.
+ACCEPTED_ALGORITHMS = ("EdDSA", "ES256", "ES384", "RS256", "RS384", "RS512", "PS256")
 
 _BEARER_PREFIX = "Bearer "
 
@@ -163,7 +169,7 @@ class HostedPrincipalResolver:
             return jwt.decode(
                 token,
                 key=key,
-                algorithms=_ALGORITHMS,
+                algorithms=list(ACCEPTED_ALGORITHMS),
                 audience=self._settings.audience,
                 issuer=self._settings.issuer,
                 options={"require": ["exp", "iss", "aud", "sub"]},
