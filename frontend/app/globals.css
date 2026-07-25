@@ -2549,3 +2549,49 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* Social sign-in buttons (bead 1keu). Rendered only for providers this
+   deployment configured, so this block is dead CSS on a default install. */
+.sign-in-social {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sign-in-social-button {
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--background, #fff);
+  color: var(--foreground, #111827);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.sign-in-social-button:hover:not(:disabled) {
+  background: var(--muted, #f3f4f6);
+}
+
+.sign-in-social-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* A rule with the word "or" sitting on it. */
+.sign-in-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.sign-in-divider::before,
+.sign-in-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border, #e5e7eb);
+}

@@ -233,6 +233,40 @@ redeploy throws away, or storing a user's model credential in the clear.
 Artifact downloads are handed out as presigned URLs, so bytes travel from the
 bucket to the browser without passing through the API.
 
+#### Signing in with Google or Apple
+
+Email and password is always available and needs no external service. Google
+and Apple are additive, and are configuration rather than code: set both
+variables of a pair and a button appears on the sign-in page; set neither and
+the page renders email and password alone.
+
+| Setting | Meaning |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | Google OAuth client id |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `APPLE_CLIENT_ID` | Apple Services ID |
+| `APPLE_CLIENT_SECRET` | Apple client secret, which is a signed JWT |
+
+Setting one variable of a pair fails the sign-in page with a message naming
+the other. That is deliberate: a half-configured provider that silently
+rendered no button would leave you with nothing to search for.
+
+Register this redirect URI with the provider, matching `BETTER_AUTH_URL`:
+
+```
+http://localhost:3000/api/auth/callback/google
+```
+
+**Google** accepts `http://localhost` redirect URIs, so it can be tried on a
+local install with nothing but a Google Cloud project.
+
+**Apple cannot.** It requires an HTTPS redirect URI on a domain you own, so
+it cannot be exercised against `localhost` at all. It also needs a paid
+Apple Developer account, and its "client secret" is not a fixed string but an
+ES256 JWT signed with a `.p8` key that Apple caps at six months -- so a
+deployment offering Apple needs somewhere to regenerate and redeploy that
+value on a schedule. Nothing here generates it for you.
+
 ### Saved model credentials
 
 The hosted profile stores each signed-in user's model provider key encrypted

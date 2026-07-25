@@ -21,6 +21,8 @@ import { jwt } from "better-auth/plugins";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { configuredSocialProviders } from "./social-providers.ts";
+
 /**
  * Where the account database lives. SQLite today; ADR 0016 puts the hosted
  * catalog on libSQL, which shares the dialect, so this becomes one connection
@@ -63,10 +65,14 @@ function createHostedAuth() {
     database: new Database(authDatabasePath()),
     baseURL: baseUrl(),
     secret: authSecret(),
-    // Email and password only, on purpose: it needs no external service, so a
+    // Email and password is always on: it needs no external service, so a
     // self-hoster can run the hosted profile without signing up for anything.
-    // Social providers are configuration, not code, when they are wanted.
+    // Social providers sit alongside it rather than replacing it, and are
+    // configuration -- `social-providers.ts` decides which, from the
+    // environment, and the sign-in page reads the same decision so a button
+    // can never point at a provider this instance did not configure.
     emailAndPassword: { enabled: true },
+    socialProviders: configuredSocialProviders(process.env),
     plugins: [jwt()],
   });
 }
