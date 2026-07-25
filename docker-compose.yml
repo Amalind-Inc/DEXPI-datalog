@@ -1,0 +1,79 @@
+# The hosted profile, whole, in one command:
+#
+#   docker compose up
+#
+# Then open http://localhost:3000 and create an account.
+#
+# This is a self-hosting default, not a production template: MinIO and libSQL
+# run beside the app with development credentials. Pointing PYDEXPI_S3_* at S3
+# or R2 and PYDEXPI_LIBSQL_URL at Turso is a change to this file alone.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Souffle ships no arm64 build, so the image is amd64 and runs under
+    # emulation on Apple Silicon. Stating it here means a slow first run is
+    # expected rather than mysterious.
+    platform: linux/amd64
+    ports:
+      - "3000:3000"
+    environment:
+      # Must match the address a browser uses. Behind a domain or a reverse
+      # proxy, set this to the public URL or sign-in redirects come back here.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      PYDEXPI_LIBSQL_URL: http://libsql:8080
+      PYDEXPI_S3_BUCKET: pydexpi
+      PYDEXPI_S3_ENDPOINT_URL: http://minio:9000
+      PYDEXPI_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      PYDEXPI_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Optional: set both to offer "Continue with Google" on the sign-in page.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      # Accounts and the generated secrets. Losing this loses every account and
+      # makes saved model credentials undecryptable, so it is a named volume
+      # rather than a container-lifetime directory.
+      - app-state:/data
+    depends_on:
+      libsql:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  libsql:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    platform: linux/amd64
+    environment:
+      SQLD_NODE: primary
+    volumes:
+      - libsql-data:/var/lib/sqld
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      # The console, for looking at what the app wrote. Not needed by the app.
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # The app creates its own bucket at startup, but only once MinIO is
+      # actually serving -- `depends_on` alone waits for the container, not
+      # for the process inside it.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  app-state:
+  libsql-data:
+  minio-data:

@@ -203,3 +203,123 @@ jobs:
       # and enforcing the formatter is its own change, tracked separately.
       - run: npx oxlint
         working-directory: frontend
+
+  # The quickstart is a claim the README makes to every new reader, so CI has
+  # to hold it. This builds the real image and drives the composed stack the
+  # way a first-time user would: sign up, save a credential, prepare a review
+  # from a real DEXPI file, and confirm the artifacts landed in the bucket.
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # pyDEXPI is a submodule and the image installs it. Without this the
+          # build fails exactly as it does for someone who forgets the flag.
+          submodules: recursive
+      - name: Build the image
+        run: docker compose build
+      - name: Start the stack
+        run: docker compose up -d
+      - name: Wait for the app to answer
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl --silent --fail --output /dev/null http://localhost:3000/sign-in; then
+              echo "app is up"; exit 0
+            fi
+            sleep 5
+          done
+          echo "app never came up"; docker compose logs app; exit 1
+      - name: Sign up, save a credential, run a review
+        run: |
+          set -euo pipefail
+          jar=$(mktemp)
+
+          # Auth is enforced: the review API must refuse an anonymous caller.
+          code=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            http://localhost:3000/api/review/sessions)
+          [ "$code" = "401" ] || { echo "expected 401, got $code"; exit 1; }
+
+          curl --silent --fail --cookie-jar "$jar" \
+            --request POST http://localhost:3000/api/auth/sign-up/email \
+            --header 'content-type: application/json' \
+            --data '{"email":"ci@example.com","password":"a-long-enough-password","name":"ci"}' \
+            --output /dev/null
+
+          # Proves the generated PYDEXPI_BYOK_SECRET encrypts and decrypts.
+          curl --silent --fail --cookie "$jar" \
+            --request PUT http://localhost:3000/api/provider-keys/openrouter \
+            --header 'content-type: application/json' \
+            --data '{"model":"openai/gpt-4.1","credential":"sk-or-ci-canary"}' \
+            --output /dev/null
+          curl --silent --fail --cookie "$jar" http://localhost:3000/api/provider-keys \
+            | grep -q openrouter || { echo "saved credential did not come back"; exit 1; }
+
+          # A real DEXPI file through the real pipeline, which needs Souffle.
+          fixture="TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml"
+          python3 -c "
+          import json, pathlib, sys
+          print(json.dumps({'filename': 'E06V01-VER.EX01.xml',
+                            'content': pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')}))
+          " "$fixture" > /tmp/prepare.json
+
+          curl --silent --fail --cookie "$jar" \
+            --request POST http://localhost:3000/api/review/sessions/ci-smoke/prepare \
+            --header 'content-type: application/json' \
+            --data @/tmp/prepare.json --output /tmp/prepared.json
+          grep -q '"status":"ready"' /tmp/prepared.json \
+            || { echo "prepare did not report ready"; cat /tmp/prepared.json; exit 1; }
+      - name: Artifacts reached the bucket
+        run: |
+          set -euo pipefail
+          docker compose exec -T app python - <<'PY'
+          import os
+          import sys
+
+          import boto3
+          from botocore.config import Config
+
+          client = boto3.client(
+              "s3",
+              endpoint_url=os.environ["PYDEXPI_S3_ENDPOINT_URL"],
+              aws_access_key_id=os.environ["PYDEXPI_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["PYDEXPI_S3_SECRET_ACCESS_KEY"],
+              region_name="us-east-1",
+              config=Config(s3={"addressing_style": "path"}),
+          )
+          keys = [
+              item["Key"]
+              for item in client.list_objects_v2(
+                  Bucket=os.environ["PYDEXPI_S3_BUCKET"]
+              ).get("Contents", [])
+          ]
+          print("\n".join(keys))
+          # The Souffle program is the one that proves the engine ran, rather
+          # than the upload merely being echoed back.
+          for expected in ("graph_facts.json", "derived_graph_semantics.dl"):
+              if not any(key.endswith(expected) for key in keys):
+                  print(f"missing {expected} in the bucket", file=sys.stderr)
+                  raise SystemExit(1)
+          PY
+      - name: Accounts and credentials survive a restart
+        run: |
+          set -euo pipefail
+          docker compose down
+          docker compose up -d
+          for _ in $(seq 1 60); do
+            curl --silent --fail --output /dev/null http://localhost:3000/sign-in && break
+            sleep 5
+          done
+          jar=$(mktemp)
+          # Sign IN, not up: the account has to have outlived the container.
+          curl --silent --fail --cookie-jar "$jar" \
+            --request POST http://localhost:3000/api/auth/sign-in/email \
+            --header 'content-type: application/json' \
+            --data '{"email":"ci@example.com","password":"a-long-enough-password"}' \
+            --output /dev/null
+          curl --silent --fail --cookie "$jar" http://localhost:3000/api/provider-keys \
+            | grep -q openrouter \
+            || { echo "credential did not survive the restart"; exit 1; }
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs

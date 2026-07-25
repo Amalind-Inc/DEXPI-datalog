@@ -10,6 +10,37 @@ small Python library modules that users can integrate into their own workflows.
 using it as a way to verify the validity of production P&ID documents. Try this out, see if 
 you like it, and let us know what you like, don't like, and what you would change. 
 
+## Quickstart
+
+The whole stack -- web UI, review backend, Souffle, database, object storage --
+in one command:
+
+```bash
+git clone --recurse-submodules https://github.com/<your-fork>/pydexpi-datalog.git
+cd pydexpi-datalog
+docker compose up
+```
+
+Then open <http://localhost:3000>, create an account, and upload a DEXPI 1.3
+file. There is one in `TrainingTestCases/` if you do not have one to hand.
+
+`--recurse-submodules` is not optional: `pyDEXPI` does the XML-to-graph
+extraction and is a submodule, so a plain `git clone` gives you an empty
+directory and a build that fails while installing it.
+
+The stack generates its own secrets on first run and keeps them, along with
+your accounts, in a Docker volume. `docker compose down` keeps that volume;
+`docker compose down -v` deletes it, and with it every account and every
+saved model credential.
+
+**On Apple Silicon the first run is slow.** Souffle publishes no arm64 binary,
+so the image is `linux/amd64` and runs under emulation. It works; it is not
+quick. Native amd64 servers pay none of this.
+
+To run without Docker -- as a CLI, a library, or a local web UI with no
+accounts and no services -- see [Setup](#setup) and
+[Running the web UI](#running-the-web-ui).
+
 ## OSS scope
 
 OSS supports one DEXPI source file per run, but a run may target a selected
