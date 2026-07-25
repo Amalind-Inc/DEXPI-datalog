@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PanelLeftOpen size={15} />
           </button>
         )}
-        <div className="app-shell-main">{children}</div>
+        <main className="app-shell-main">{children}</main>
       </div>
     </PidAssistantProviders>
   );

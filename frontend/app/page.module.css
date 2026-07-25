@@ -1,11 +1,3 @@
-@font-face {
-  font-family: "Commit Mono";
-  src: url("/fonts/CommitMonoV143-VF.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 200 700;
-  font-display: swap;
-}
-
 .page {
   --home-bg: #efefed;
   --home-panel: #f8f8f6;

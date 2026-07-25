@@ -1,16 +1,8 @@
 import type { Metadata } from "next";
-import { Fraunces } from "next/font/google";
 import { AccountPanel } from "@/components/auth/account-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isHostedProfile } from "@/lib/deployment";
 import "./globals.css";
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--calm-display-font",
-  display: "swap",
-  preload: false,
-});
 
 export const metadata: Metadata = {
   title: {
@@ -26,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={fraunces.variable}>
+    <html lang="en" suppressHydrationWarning>
       <body>
         <TooltipProvider>
           {/* Server-resolved: the client bundle is never told the profile, and

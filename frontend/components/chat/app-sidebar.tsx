@@ -148,9 +148,7 @@ export function AppSidebar({
         inert={collapsed || undefined}
       >
         <div className="app-sidebar-header">
-          <span className="calm-rail-mark" aria-hidden="true">
-            A
-          </span>
+          <span className="calm-rail-mark">AMALIND</span>
           <button
             type="button"
             aria-label="Hide sidebar"

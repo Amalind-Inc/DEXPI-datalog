@@ -1,13 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: "Commit Mono";
+  src: url("/fonts/CommitMonoV143-VF.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-sans: "Commit Mono", "SFMono-Regular", Consolas, monospace;
+  --font-mono: "Commit Mono", "SFMono-Regular", Consolas, monospace;
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -72,15 +80,16 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
 
-  /* Calm shell design tokens (bead pydexpi-datalog-1-2ki.10) -- kept
-     separate from the shadcn tokens above so restyling the app shell
-     never bleeds into the answer-card components built on those tokens. */
-  --calm-paper: #fbfaf8;
-  --calm-ink: #1c1815;
-  --calm-ink-muted: #6b6259;
-  --calm-accent: #b9542e;
-  --calm-accent-soft: #f4e3d8;
-  --calm-line: #e8e3dc;
+  /* Shared light monochrome brand tokens. The homepage and application use
+     the same Commit Mono hierarchy; application components consume these
+     aliases so product states stay neutral rather than reintroducing accents. */
+  --calm-paper: #efefed;
+  --calm-ink: #111111;
+  --calm-ink-muted: #666666;
+  --calm-accent: #111111;
+  --calm-accent-soft: #e4e4e1;
+  --calm-line: #c9c9c5;
+  --calm-display-font: "Commit Mono";
 }
 
 .dark {
@@ -130,6 +139,24 @@
 .pid-app-shell {
   background: var(--calm-paper);
   color: var(--calm-ink);
+  --background: #efefed;
+  --foreground: #111111;
+  --card: #f8f8f6;
+  --card-foreground: #111111;
+  --popover: #f8f8f6;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #efefed;
+  --secondary: #e4e4e1;
+  --secondary-foreground: #111111;
+  --muted: #e4e4e1;
+  --muted-foreground: #666666;
+  --accent: #dededb;
+  --accent-foreground: #111111;
+  --border: #c9c9c5;
+  --input: #c9c9c5;
+  --ring: #111111;
+  font-family: var(--font-sans);
   display: flex;
   height: 100dvh;
   min-height: 100dvh;
@@ -138,9 +165,10 @@
 
 .calm-rail-mark {
   color: var(--calm-ink);
-  font-family: var(--calm-display-font), Georgia, serif;
-  font-size: 1.15rem;
-  font-style: italic;
+  font-family: var(--calm-display-font), monospace;
+  font-size: 0.72rem;
+  font-variation-settings: "wght" 650;
+  letter-spacing: 0.025em;
   margin-bottom: 10px;
 }
 
@@ -154,14 +182,14 @@
 /* Page-navigated app shell (ADR 0006): wide icon+label sidebar, desktop
    collapse fully hides it (bead pydexpi-datalog-1-2c5.1). */
 .app-sidebar {
-  background: #ffffff;
+  background: var(--card);
   border-right: 1px solid var(--calm-line);
   display: flex;
   flex: none;
   flex-direction: column;
   gap: 2px;
   overflow: hidden;
-  padding: 16px 12px;
+  padding: 18px 14px;
   position: relative;
   transition:
     width 260ms ease-out,
@@ -215,7 +243,7 @@
   align-items: center;
   background: none;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--calm-ink-muted);
   cursor: pointer;
   display: inline-flex;
@@ -226,11 +254,11 @@
 
 .app-sidebar-collapse-btn:hover,
 .app-shell-reopen-btn:hover {
-  background: var(--calm-paper);
+  background: var(--accent);
 }
 
 .app-shell-reopen-btn {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--calm-line);
   flex: none;
   margin: 12px;
@@ -245,13 +273,14 @@
 
 .app-sidebar-item {
   align-items: center;
-  border-radius: 10px;
+  border-radius: 0;
   color: var(--calm-ink);
   cursor: pointer;
   display: flex;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   gap: 10px;
-  padding: 8px 10px;
+  letter-spacing: -0.01em;
+  padding: 9px 10px;
   text-decoration: none;
   transition:
     background-color 150ms ease,
@@ -259,12 +288,12 @@
 }
 
 .app-sidebar-item:hover {
-  background: var(--calm-paper);
+  background: var(--accent);
 }
 
 .app-sidebar-item.active {
-  background: var(--calm-accent-soft);
-  color: var(--calm-accent);
+  background: var(--calm-ink);
+  color: var(--calm-paper);
 }
 
 .app-sidebar-new-chat {
@@ -300,7 +329,7 @@
   align-items: center;
   background: none;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--calm-ink-muted);
   cursor: pointer;
   display: flex;
@@ -313,7 +342,7 @@
 }
 
 .app-sidebar-section-header:hover {
-  background: var(--calm-paper);
+  background: var(--accent);
 }
 
 .app-sidebar-section-chevron {
@@ -354,7 +383,7 @@
 }
 
 .app-sidebar-history-row {
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--calm-ink-muted);
   display: block;
   font-size: 0.84rem;
@@ -367,7 +396,7 @@
 }
 
 .app-sidebar-history-row:hover {
-  background: var(--calm-paper);
+  background: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -386,6 +415,7 @@
   flex-direction: column;
   min-width: 0;
   overflow: auto;
+  background: var(--calm-paper);
 }
 
 .assistant-page-row {
@@ -822,6 +852,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  background: var(--calm-paper);
 }
 
 /* The assistant-ui thread paints bg-background on its root and footer; make
@@ -841,9 +872,9 @@
 
 .calm-reopen-graph-btn {
   align-items: center;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--calm-line);
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--calm-ink-muted);
   cursor: pointer;
   display: inline-flex;
@@ -857,9 +888,9 @@
 }
 
 .calm-reopen-graph-btn:hover {
-  background: var(--calm-paper);
-  border-color: var(--calm-accent);
-  color: var(--calm-accent);
+  background: var(--accent);
+  border-color: var(--calm-ink);
+  color: var(--calm-ink);
 }
 
 .calm-reopen-graph-btn span {
@@ -878,11 +909,46 @@
   color: var(--calm-ink);
   font-family: var(--font-sans);
 }
+.calm-chat-column .aui-thread-welcome-message-inner {
+  font-size: clamp(2.45rem, 6vw, 5.25rem);
+  font-variation-settings: "wght" 440;
+  letter-spacing: -0.075em;
+  line-height: 0.94;
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+.calm-chat-column .aui-thread-welcome-suggestions {
+  justify-content: flex-start;
+  padding-inline: 0;
+}
+
+.calm-chat-column .aui-thread-welcome-suggestion {
+  font-variation-settings: "wght" 480;
+  letter-spacing: -0.02em;
+}
+
+.calm-chat-column [data-slot="aui_composer-shell"] {
+  background: var(--card);
+}
+
+.calm-chat-column .aui-composer-input {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  letter-spacing: -0.02em;
+}
+
+.calm-chat-column [data-slot="aui_assistant-message-content"],
+.calm-chat-column .aui-user-message-content {
+  font-size: 0.8rem;
+  letter-spacing: -0.018em;
+  line-height: 1.7;
+}
 
 .pid-panel {
-  background: #ffffff;
+  background: var(--card);
   border-left: 1px solid var(--calm-line);
-  box-shadow: 0 16px 36px -20px rgba(28, 24, 21, 0.2);
+  box-shadow: none;
   display: grid;
   flex: 1 1 auto;
   gap: 12px;
@@ -1013,7 +1079,9 @@
   background: var(--calm-paper);
   border: 1px solid var(--calm-line);
   border-radius: 1rem;
-  box-shadow: 0 1px 2px rgba(28, 24, 21, 0.05), 0 20px 40px -20px rgba(28, 24, 21, 0.25);
+  box-shadow:
+    0 1px 2px rgba(28, 24, 21, 0.05),
+    0 20px 40px -20px rgba(28, 24, 21, 0.25);
   max-height: min(620px, calc(100dvh - 180px));
   overflow: auto;
   padding: 14px;
@@ -1598,7 +1666,10 @@
   backdrop-filter: blur(4px);
   color: #6b7280;
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
 /* Tier-1 drawing-faithful schematic (ADR 0004): painted verbatim from the backend scene.
@@ -1977,10 +2048,15 @@
      item dropped entirely, desktop collapse toggle hidden. */
   .app-sidebar {
     align-items: center;
+    border-bottom: 1px solid var(--calm-line);
+    border-right: 0;
     flex-direction: row;
     gap: 4px;
     padding: 8px 12px;
+    position: sticky;
+    top: 0;
     width: auto;
+    z-index: 10;
   }
 
   .app-sidebar-header {
@@ -1989,6 +2065,8 @@
 
   .app-sidebar-header .calm-rail-mark {
     margin-bottom: 0;
+    font-size: 0.62rem;
+    margin-right: 6px;
   }
 
   .app-sidebar-collapse-btn {
@@ -2019,6 +2097,11 @@
   .app-sidebar-footer,
   .app-sidebar-resize-handle {
     display: none;
+  }
+
+  .calm-chat-column .aui-thread-welcome-message-inner {
+    font-size: clamp(2.3rem, 11vw, 3.35rem);
+    max-width: 13ch;
   }
 
   .calm-rail-divider {

@@ -79,10 +79,10 @@ export const Thread: FC = () => {
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "44rem",
+        ["--thread-max-width" as string]: "52rem",
         ["--composer-bg" as string]: "#0000",
-        ["--composer-radius" as string]: "1.5rem",
-        ["--composer-padding" as string]: "8px",
+        ["--composer-radius" as string]: "0px",
+        ["--composer-padding" as string]: "10px",
       }}
     >
       <ThreadPrimitive.Viewport
@@ -152,8 +152,8 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="aui-thread-welcome-root mb-10 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-[family-name:var(--calm-display-font)] text-4xl leading-[1.1] text-[var(--calm-ink)] duration-500 md:text-5xl">
+    <div className="aui-thread-welcome-root mb-10 flex flex-col items-start px-0 text-left">
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-[family-name:var(--calm-display-font)] duration-500">
         How can I help you with your P&ID today?
       </h1>
     </div>
@@ -174,7 +174,7 @@ const ThreadSuggestionItem: FC = () => {
       <SuggestionPrimitive.Trigger send asChild>
         <Button
           variant="ghost"
-          className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+          className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border h-auto gap-1.5 rounded-none border px-3.5 py-2 text-xs font-normal whitespace-nowrap transition-colors"
         >
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
           <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
@@ -190,11 +190,12 @@ const Composer: FC = () => {
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
-          className="flex w-full flex-col gap-2 rounded-2xl border border-[var(--calm-line)] bg-white p-(--composer-padding) shadow-[0_1px_2px_rgba(28,24,21,0.05),0_20px_40px_-20px_rgba(28,24,21,0.25)] transition-[border-color,box-shadow] focus-within:border-[var(--calm-accent)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[var(--calm-accent-soft)]"
+          className="flex w-full flex-col gap-2 rounded-none border border-[var(--calm-line)] bg-[var(--card)] p-(--composer-padding) shadow-none transition-[border-color,box-shadow] focus-within:border-[var(--calm-accent)] focus-within:shadow-[0_0_0_1px_var(--calm-accent)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[var(--calm-accent-soft)]"
         >
           <ComposerAttachments />
           <ComposerPrimitive.Input
             placeholder="Send a message..."
+            name="message"
             className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
             rows={1}
             autoFocus
@@ -255,7 +256,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-send size-7 rounded-full bg-[var(--calm-accent)] text-white hover:bg-[var(--calm-accent)]/90"
+              className="aui-composer-send size-7 rounded-none bg-[var(--calm-accent)] text-[var(--calm-paper)] hover:bg-[var(--calm-accent)]/85"
               aria-label="Send message"
             >
               <ArrowUpIcon className="aui-composer-send-icon size-4.5" />
@@ -268,7 +269,7 @@ const ComposerAction: FC = () => {
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-cancel size-7 rounded-full bg-[var(--calm-accent)] text-white hover:bg-[var(--calm-accent)]/90"
+              className="aui-composer-cancel size-7 rounded-none bg-[var(--calm-accent)] text-[var(--calm-paper)] hover:bg-[var(--calm-accent)]/85"
               aria-label="Stop generating"
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
@@ -1030,7 +1031,7 @@ const UserMessage: FC = () => {
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-muted text-foreground border-[var(--calm-line)] border-l-2 px-4 py-2 wrap-break-word empty:hidden">
           <MessagePrimitive.Parts />
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
