@@ -1,0 +1,94 @@
+name: CI
+
+# ADR 0016 names feature skew as the expected failure mode of the hosted
+# epic: hosted grows capability, the local path rots into a demo, and the
+# standalone product becomes theatre. The test job therefore runs the same
+# suite under both deployment profiles from this slice onward, before the
+# hosted capabilities it has to keep honest exist.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Runners are pinned, not "latest": the Souffle package below is built for
+  # one Ubuntu release, and ruff's default rule set widens between versions.
+  # A drifting runner turns an unrelated commit into a red build.
+  SOUFFLE_VERSION: "2.5"
+  SOUFFLE_SHA512: "6b86e554f6aa5abf8a8b55d8312ae37c0957c5bd6c9edeea89246db9406f645ec5e600b84fe6636b1c163da556f0da6c3d2dad46c1083413f2fcf4f95b9ac62c"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # Only ruff is needed to lint, so this job skips the submodules and the
+      # project install entirely and stays fast.
+      - run: pip install "ruff==0.16.0"
+      - run: ruff check --output-format=github .
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      # Both legs always run. Cancelling the sibling on first failure is what
+      # hides "green locally, red hosted" -- the exact signal this job exists
+      # to produce.
+      fail-fast: false
+      matrix:
+        profile: [local, hosted]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # pyDEXPI does the XML-to-graph extraction and is not on PyPI;
+          # TrainingTestCases holds the DEXPI fixtures the suite reads.
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Souffle
+        # Souffle is a native binary the verification layer shells out to, so
+        # it cannot come from pip. The PPA is unmaintained upstream; the
+        # release .deb is pinned by version and checked by digest so a
+        # re-uploaded asset fails loudly instead of changing the engine under
+        # the rule tests.
+        run: |
+          set -euo pipefail
+          deb="x86_64-ubuntu-2404-souffle-${SOUFFLE_VERSION}-Linux.deb"
+          url="https://github.com/souffle-lang/souffle/releases/download/${SOUFFLE_VERSION}/${deb}"
+          curl --fail --location --silent --show-error --output "$deb" "$url"
+          echo "${SOUFFLE_SHA512}  ${deb}" | sha512sum --check --strict
+          sudo apt-get install --yes "./${deb}"
+          souffle --version
+
+      - name: Install project
+        run: |
+          set -euo pipefail
+          pip install -e ./pyDEXPI
+          pip install -e ".[dev]"
+
+      - name: Run the suite under the ${{ matrix.profile }} profile
+        # PYDEXPI_QA_PROVIDER=scripted is the existing hermeticity switch: it
+        # forces the deterministic zero-LLM providers so the real turn
+        # transport is exercised without any model call or credential.
+        #
+        # The benchmark suite is deselected by `-m "not slow"`. It is a
+        # ten-minute measurement suite, and it currently carries one real
+        # failure tracked as bead pydexpi-datalog-1-plz7 (synthetic
+        # truth-by-construction disagrees with real Souffle). Wiring it in
+        # while it is red would train everyone to ignore this badge. Bead
+        # pydexpi-datalog-1-hawf adds it once plz7 is fixed.
+        env:
+          PYDEXPI_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
+          PYDEXPI_QA_PROVIDER: scripted
+        run: pytest -m "not slow"

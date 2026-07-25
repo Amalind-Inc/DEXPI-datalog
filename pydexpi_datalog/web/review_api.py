@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -24,11 +24,14 @@ from ..verification.authored_rule_pack import (
     AuthoredRulePackStore,
 )
 from ..verification.bundled_rule_pack import bundled_rule_packs
-from ..workflow.artifact_store import LocalArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.review_session import PreparationLimits
-from ..workflow.session_catalog import CATALOG_FILENAME, SessionCatalog
 from .chainlit_review_flow import ChainlitReviewFlow
+from .deployment import (
+    DeploymentProfile,
+    bundle_for,
+    profile_from_env_or_default,
+)
 from .turn_lifecycle import TurnLifecycleStore, compute_turn_id
 
 
@@ -98,11 +101,13 @@ def create_review_api_app(
     *,
     artifact_root: Path,
     principal: Principal | None = None,
+    profile: DeploymentProfile | None = None,
     model_provider_factory: Callable[[], ModelProvider] | None = None,
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
     force_scripted_provider: bool | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API.
 
@@ -110,13 +115,26 @@ def create_review_api_app(
     two workspaces sharing one ``artifact_root`` never observe each other's
     sessions or authored rule packs. Callers that pass no principal get the
     single local operator (ADR 0016).
+
+    ``profile`` selects which implementations fill the deployment seams. It is
+    a library default rather than a refusal here: an unset profile means
+    ``local``, and only the deployment entry point (``asgi``) insists on an
+    explicit answer. That default is also what lets CI re-run the entire
+    existing suite under the other profile by setting one variable, instead of
+    needing every test to opt in.
     """
 
+    environment = os.environ if env is None else env
+    active_profile = (
+        profile_from_env_or_default(environment) if profile is None else profile
+    )
+    bundle = bundle_for(active_profile)
     active_principal = LOCAL_PRINCIPAL if principal is None else principal
     # One store for the workspace: nothing below this line builds a path.
-    store = LocalArtifactStore(artifact_root / active_principal.workspace)
+    store = bundle.build_store(artifact_root, active_principal)
 
     app = FastAPI(title="pyDEXPI Datalog Review API")
+    app.state.deployment_profile = active_profile
     flow = ChainlitReviewFlow(
         store=store,
         limits=preparation_limits,
@@ -126,7 +144,7 @@ def create_review_api_app(
     authored_packs = AuthoredRulePackStore(store)
     # One catalog for every workspace, scoped by column: the shape the hosted
     # profile needs, kept identical locally so there is one schema to migrate.
-    catalog = SessionCatalog(artifact_root / CATALOG_FILENAME)
+    catalog = bundle.build_catalog(artifact_root)
     # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,

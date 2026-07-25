@@ -44,6 +44,23 @@ path rots into a demo, and the standalone product becomes theatre. The
 integration suite therefore runs against both profiles in CI from the first
 slice, using the existing `PYDEXPI_QA_PROVIDER=scripted` hermeticity switch.
 
+The profile has no default. `PYDEXPI_DEPLOYMENT_PROFILE` must name `local` or
+`hosted`, and an unset or unrecognised value stops the server from starting.
+Defaulting is dangerous in one specific direction: a hosted deployment that
+forgot the setting would fall back to a single shared workspace with no
+sign-in, and would look like it was working. The app factory below the entry
+point still defaults to `local`, because a script or a test importing it
+should not need an environment; only a served deployment must be explicit.
+That default is also what lets CI re-run the entire existing suite under the
+other profile by setting one variable rather than by every test opting in.
+
+Until the hosted seams are built (verified-token principal, libSQL catalog,
+object-store artifacts) the hosted profile names the local implementations,
+so the two CI legs are near-identical and the hosted leg guards little today.
+The harness is still what lands first: replacing one line in the hosted
+bundle is what puts a hosted implementation under the whole suite, and no
+hosted slice can land without both legs staying green.
+
 `AuthoredRulePackStore(artifact_root / "authored_rule_packs")` is a single
 global directory shared by every session. It already violates the authored
 rule pack and author-confirmed rule trust definitions, which scope authored

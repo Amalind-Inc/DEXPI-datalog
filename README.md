@@ -133,10 +133,14 @@ logic requests — store it in a `.env` file that the frontend reads at startup.
 **Start the backend:**
 
 ```bash
-PYTHONPATH=. PYDEXPI_REVIEW_ARTIFACT_ROOT=.tmp/review-sessions \
+PYDEXPI_DEPLOYMENT_PROFILE=local PYTHONPATH=. PYDEXPI_REVIEW_ARTIFACT_ROOT=.tmp/review-sessions \
   .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app \
   --host 127.0.0.1 --port 8000
 ```
+
+`PYDEXPI_DEPLOYMENT_PROFILE` has no default and the server will not start
+without it. `local` keeps every artifact on this machine with no accounts;
+`hosted` is wired but not yet distinct from it (ADR 0016).
 
 **Start the frontend** (separate terminal):
 
