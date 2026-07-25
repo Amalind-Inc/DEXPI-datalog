@@ -52,7 +52,7 @@ def validate_key(key: str) -> PurePosixPath:
     """
     if not isinstance(key, str) or key.strip() == "":
         raise InvalidArtifactKey("artifact key must be a non-empty string")
-    if key.startswith("/") or key.startswith("\\"):
+    if key.startswith(("/", "\\")):
         raise InvalidArtifactKey(f"artifact key must be relative: {key!r}")
     pure = PurePosixPath(key)
     if pure.is_absolute():

@@ -548,7 +548,12 @@ class OpenRouterProviderRoutingTests(unittest.TestCase):
                 ]
             }
 
-            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            # Routing is this test's subject, so it opts out of the scripted
+            # hermeticity switch. httpx.post is mocked above: no real call.
+            app = create_review_api_app(
+                artifact_root=Path(tmp_dir) / "sessions",
+                force_scripted_provider=False,
+            )
             client = TestClient(app)
             session_id = "openrouter-session"
             prepared = client.post(
@@ -583,3 +588,50 @@ class OpenRouterProviderRoutingTests(unittest.TestCase):
             self.assertIn("openrouter.ai", call_url)
             call_headers = mock_post.call_args[1]["headers"]
             self.assertEqual(call_headers["Authorization"], "Bearer sk-or-test-key")
+
+class ScriptedHermeticitySwitchTests(unittest.TestCase):
+    """Test hermeticity guard: PYDEXPI_QA_PROVIDER=scripted forces the
+    deterministic zero-LLM provider so an e2e stack exercises the real turn
+    transport without a real model call.
+
+    Provider routing is the one subject that switch overrides, so
+    OpenRouterProviderRoutingTests opts out with force_scripted_provider=False.
+    This guard pins the other side: the opt-out must not weaken the default for
+    anything else (bead pydexpi-datalog-1-hzgb)."""
+
+    def _configured_session(self, app: object) -> TestClient:
+        client = TestClient(app)
+        prepared = client.post(
+            "/api/review/sessions/hermeticity-session/prepare",
+            json={
+                "filename": "E06V01-VER.EX01.xml",
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            },
+        )
+        self.assertEqual(prepared.status_code, 200, prepared.text)
+        configured = client.put(
+            "/api/review/sessions/hermeticity-session/provider-settings",
+            json={
+                "provider": "openrouter",
+                "model": "anthropic/claude-sonnet-4",
+                "credential": "sk-or-test-key",
+            },
+        )
+        self.assertEqual(configured.status_code, 200, configured.text)
+        return client
+
+    def test_switch_overrides_a_configured_provider_by_default(self) -> None:
+        """Hermeticity holds: a configured BYOK session still reaches no model."""
+        with tempfile.TemporaryDirectory() as tmp_dir, mock.patch(
+            "httpx.post"
+        ) as mock_post, mock.patch.dict(
+            os.environ, {"PYDEXPI_QA_PROVIDER": "scripted"}
+        ):
+            app = create_review_api_app(artifact_root=Path(tmp_dir) / "sessions")
+            client = self._configured_session(app)
+            turn = client.post(
+                "/api/review/sessions/hermeticity-session/turns",
+                json={"question": "What equipment is here?", "request_id": "h-1"},
+            )
+            self.assertEqual(turn.status_code, 200, turn.text)
+            mock_post.assert_not_called()

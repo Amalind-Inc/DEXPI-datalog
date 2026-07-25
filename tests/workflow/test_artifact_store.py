@@ -17,8 +17,8 @@ import unittest
 from pathlib import Path
 
 from pydexpi_datalog.workflow.artifact_store import (
-    ArtifactStore,
     ArtifactNotFound,
+    ArtifactStore,
     InvalidArtifactKey,
     LocalArtifactStore,
 )

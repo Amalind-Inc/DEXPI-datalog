@@ -99,6 +99,7 @@ def create_review_api_app(
     qa_provider_factory: Callable[[], QATurnProvider] | None = None,
     preparation_limits: PreparationLimits | None = None,
     max_conversation_turns: int = DEFAULT_MAX_CONVERSATION_TURNS,
+    force_scripted_provider: bool | None = None,
 ) -> FastAPI:
     """Create the OSS v1 review workflow API.
 
@@ -127,7 +128,16 @@ def create_review_api_app(
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,
     # while a developer's .env.local can still drive a live LLM manually.
-    force_scripted = os.environ.get("PYDEXPI_QA_PROVIDER", "").lower() == "scripted"
+    #
+    # Provider routing is the one subject that switch overrides, so a test of
+    # routing itself passes force_scripted_provider=False to opt out. Such a
+    # test must supply its own transport double; opting out does not license a
+    # real model call.
+    force_scripted = (
+        os.environ.get("PYDEXPI_QA_PROVIDER", "").lower() == "scripted"
+        if force_scripted_provider is None
+        else force_scripted_provider
+    )
 
     def _resolve_provider(session_id: str) -> ModelProvider:
         if model_provider_factory is not None:
