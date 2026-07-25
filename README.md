@@ -2,6 +2,10 @@
 
 An open source tool for deterministic P&ID QA over DEXPI source files (version 1.3)
 
+[![CI](https://github.com/Amalind-Inc/DEXPI-datalog/actions/workflows/ci.yml/badge.svg)](https://github.com/Amalind-Inc/DEXPI-datalog/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/tag/Amalind-Inc/DEXPI-datalog?label=release&sort=semver)](https://github.com/Amalind-Inc/DEXPI-datalog/releases)
+
 This OSS version is intended to work both as a standalone CLI/TUI/GUI tool and as a set of
 small Python library modules that users can integrate into their own workflows.
 
@@ -40,6 +44,10 @@ quick. Native amd64 servers pay none of this.
 To run without Docker -- as a CLI, a library, or a local web UI with no
 accounts and no services -- see [Setup](#setup) and
 [Running the web UI](#running-the-web-ui).
+
+Contributions, bug reports, and the security policy:
+[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
+[CHANGELOG.md](CHANGELOG.md).
 
 ## OSS scope
 
