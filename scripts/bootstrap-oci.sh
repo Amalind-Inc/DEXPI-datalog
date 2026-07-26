@@ -90,6 +90,14 @@ else
   # session and makes every stored model key undecryptable, so the file is
   # never overwritten above.
   cat > "$ENV_FILE" <<EOF
+# Naming the four overlays here means every later command is a plain
+# "docker compose ..." with no flags. The long -f chain was a line that had
+# to be pasted correctly every single time, and a terminal that wraps it
+# silently drops the verb off the end -- which shows up as compose printing
+# its help text rather than as an error.
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.micro.yml:docker-compose.pull.yml
+PORTLOG_IMAGE_TAG=latest
+
 HARBORFIELD_PUBLIC_HOST=harborfield.live
 BETTER_AUTH_URL=https://harborfield.live
 TLS_CONTACT_EMAIL=CHANGEME@harborfield.live
@@ -132,9 +140,7 @@ cat <<'NEXT'
 3. Start it:
 
      cd ~/PortLog
-     export PORTLOG_IMAGE_TAG=latest
-     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-       -f docker-compose.micro.yml -f docker-compose.pull.yml up -d --pull always
+     docker compose up -d --pull always
 
    Then watch the certificate arrive:
 
