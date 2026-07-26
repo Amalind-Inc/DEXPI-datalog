@@ -61,6 +61,32 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
     graphContextRef.current = { selectedNode, selectedNodeId };
   }, [selectedNode, selectedNodeId]);
 
+  // Reopening a chat from the sidebar carries only a session id: it sets the
+  // pointer and navigates, and the upload is never resent. Without this the
+  // reviewer lands on their own conversation, with its name in the sidebar,
+  // beside an empty canvas -- which reads as the file having been lost rather
+  // than never having been asked for. It is still on the server.
+  //
+  // A miss is left alone deliberately. A brand new session has nothing to
+  // restore and must not be reported as a failure, and a session that cannot
+  // be read must not overwrite the canvas with an empty plant.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/review/sessions/${sessionId}`);
+        if (!response.ok || cancelled) return;
+        const restored = (await response.json()) as PrepareResult;
+        if (!cancelled && restored.graph.nodes.length > 0) applyPrepareResult(restored);
+      } catch {
+        // Offline or mid-deploy. The canvas keeps whatever it already had.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, applyPrepareResult]);
+
   const modelAdapter = useMemo<ChatModelAdapter>(
     () => ({
       async *run({ messages, abortSignal }) {

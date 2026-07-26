@@ -280,6 +280,17 @@ class ChainlitReviewFlow:
         return {
             "session_id": session_id,
             "graph_objects": graph_objects,
+            # The nodes and edges as extracted, carried verbatim. graph_objects
+            # above is a selection list: it flattens an edge to id/kind/label
+            # and drops the pair of nodes it joins, which is all the picker
+            # needs and not enough to draw with. Reopening a saved session has
+            # to redraw the reviewer's plant from this call alone, and a redraw
+            # missing its connections is a different claim about the plant
+            # rather than a partial one.
+            "topology_view": {
+                "nodes": topology["nodes"],
+                "edges": topology["edges"],
+            },
             # Compressed P&ID-like view (equipment units + collapsed lines).
             "pid_view": topology.get("pid_view", {"units": [], "lines": [], "hidden_topology_ids": []}),
             # Drawing-faithful tier-1 scene (ADR 0004/0005); None when the

@@ -6,6 +6,7 @@ import {
   getTurnFromBackend,
   getTurnTraceDetailFromBackend,
   prepareReviewSession,
+  restoreReviewSession,
   startTurnOnBackend,
   submitDirectionReview,
   submitTemporaryDatalogReview,
@@ -965,4 +966,47 @@ test("getTurnTraceDetailFromBackend proxies bounded artifacts and statuses", asy
     fetcher: (async () => new Response("nope", { status: 404 })) as typeof fetch,
   });
   assert.deepEqual(notFound, { detail: null, status: 404 });
+});
+
+test("restoreReviewSession rebuilds a previously prepared review from the backend", async () => {
+  // Reopening a chat from the sidebar has to put the reviewer's own P&ID back
+  // on screen. The upload is not resent, so this call is the only thing that
+  // can do it, and the edges matter as much as the nodes: equipment drawn
+  // without its connections is a different plant, not a partial one.
+  const calls: string[] = [];
+  const fetcher = async (url: string | URL | Request) => {
+    calls.push(String(url));
+    return Response.json({
+      session_id: "session-1",
+      topology_view: {
+        nodes: [{ id: "node-p101", tag_name: "P-101", label: "Pump object" }],
+        edges: [{ id: "edge-p-v", source_id: "node-p101", target_id: "node-v102" }],
+      },
+      visible_source_scope: { ids: ["node-p101"] },
+    });
+  };
+
+  const result = await restoreReviewSession("session-1", {
+    baseUrl: "http://backend.test",
+    fetcher: fetcher as typeof fetch,
+  });
+
+  assert.deepEqual(calls, ["http://backend.test/api/review/sessions/session-1/topology"]);
+  assert.equal(result?.status, "ready");
+  assert.equal(result?.graph.nodes[0].id, "node-p101");
+  assert.equal(result?.graph.edges[0].source, "node-p101");
+});
+
+test("restoreReviewSession reports nothing rather than an empty review when the backend refuses", async () => {
+  // Same rule as prepare: a session that cannot be read is not a session with
+  // no equipment in it. Returning an empty graph here would redraw the
+  // reviewer's plant as blank and look like a finished load.
+  const fetcher = async () => new Response("nope", { status: 500 });
+
+  const result = await restoreReviewSession("session-1", {
+    baseUrl: "http://backend.test",
+    fetcher: fetcher as typeof fetch,
+  });
+
+  assert.equal(result, null);
 });

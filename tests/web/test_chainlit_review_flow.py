@@ -213,6 +213,38 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 {session_id for session_id, _ in ACCEPTANCE_DOCUMENTS},
             )
 
+    def test_topology_panel_state_carries_the_graph_needed_to_reopen_a_session(
+        self,
+    ) -> None:
+        # Reopening a chat has to redraw the P&ID the reviewer uploaded, and the
+        # only server call that can do it is this one. graph_objects flattens
+        # edges to id/kind/label for the selection list, dropping which nodes
+        # they join -- enough to list, not enough to draw. Without the edges a
+        # restored session shows equipment floating unconnected, which is not a
+        # redraw of their plant so much as a different claim about it.
+        session_id, dexpi_xml_path = ACCEPTANCE_DOCUMENTS[0]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            flow = ChainlitReviewFlow(
+                store=LocalArtifactStore(Path(tmp_dir) / "sessions"),
+                clock=FakeClock(),
+            )
+            prepared = flow.prepare_upload(
+                dexpi_xml_path=dexpi_xml_path,
+                session_id=session_id,
+            )
+
+            panel = flow.topology_panel_state(session_id=session_id)
+
+            self.assertIn("topology_view", panel)
+            self.assertEqual(
+                panel["topology_view"]["nodes"],
+                prepared["topology_view"]["nodes"],
+            )
+            self.assertEqual(
+                panel["topology_view"]["edges"],
+                prepared["topology_view"]["edges"],
+            )
+
     def test_topology_selection_updates_visible_editable_source_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             flow = ChainlitReviewFlow(

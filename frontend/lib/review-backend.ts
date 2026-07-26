@@ -261,6 +261,41 @@ async function prepareWithPythonBackend(
   }
 }
 
+/**
+ * Rebuild a review the reviewer prepared earlier.
+ *
+ * Reopening a chat from the sidebar carries only a session id -- the upload is
+ * not resent -- so this is the one call that can put their P&ID back on
+ * screen. Failure returns null rather than an empty review, for the reason
+ * `prepareReviewSession` does: a session that cannot be read is not a session
+ * with no equipment in it, and drawing it blank would look like a load that
+ * finished.
+ */
+export async function restoreReviewSession(
+  sessionId: string,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
+): Promise<PrepareResult | null> {
+  if (!baseUrl || !sessionId) return null;
+
+  try {
+    const response = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/topology`);
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    return {
+      status: "ready",
+      filename: typeof data.filename === "string" ? data.filename : "plant.xml",
+      graph: readTopology(data),
+      pidView: readPidView(data),
+      schematicScene: readSchematicScene(data),
+      schematicSceneKind: readSchematicSceneKind(data),
+      geometryReport: readGeometryReport(data),
+      sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function runBackendLogicRequest(
   sessionId: string | undefined,
   prompt: string,
