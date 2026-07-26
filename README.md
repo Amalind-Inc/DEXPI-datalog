@@ -460,7 +460,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 Then deploy, pulling rather than building:
 
 ```bash
-export PORTLOG_IMAGE_TAG=0.1.0   # or `latest` to follow main
+export PORTLOG_IMAGE_TAG=latest   # or a version once one has been published
 
 docker compose \
   -f docker-compose.yml \
@@ -469,6 +469,21 @@ docker compose \
   -f docker-compose.pull.yml \
   up -d
 ```
+
+**Make the package public first.** A new GitHub Container Registry package is
+private, so an anonymous `docker pull` is denied and the deploy fails with
+what looks like a missing image. Either publish it -- the repository's
+Packages page, `portlog`, Package settings, Change visibility -- or log the
+server in with a read-only token:
+
+```bash
+echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u <your-github-user> --password-stdin
+```
+
+Note also that `v0.1.0` was tagged before this workflow existed, so no `0.1.0`
+image exists yet. Until the next release tag, `latest` is the only tag to
+use; re-running the Publish image workflow against a tag mints the rest.
+
 
 Oracle's free instances are `VM.Standard.E2.1.Micro`, which is amd64 -- the
 architecture the image needs. Their larger free tier is Ampere ARM, and
