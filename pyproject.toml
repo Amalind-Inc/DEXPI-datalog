@@ -97,6 +97,14 @@ extend-exclude = [
 # effect of upgrading ruff.
 select = ["E4", "E7", "E9", "F", "B", "I", "UP"]
 
+[tool.ruff.lint.isort]
+# `pydexpi` is an installed dependency that happens to live in this checkout
+# as a submodule. Without saying so, ruff infers first-party from the presence
+# of the `pyDEXPI/` directory, so `ruff check` gives one answer on a developer
+# machine and the opposite in the lint job, which does not fetch submodules.
+# Lint results should not depend on whether a sibling directory exists.
+known-third-party = ["pydexpi"]
+
 [tool.ruff.lint.flake8-bugbear]
 # B008 objects to calls in argument defaults because they evaluate once and
 # can leak state between calls. Neither of these can:
