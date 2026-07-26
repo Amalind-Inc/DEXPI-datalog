@@ -86,7 +86,10 @@ COPY TrainingTestCases/ ./TrainingTestCases/
 # The built front end, its runtime dependencies, and the auth migration script.
 COPY --from=frontend /app/frontend/.next ./frontend/.next
 COPY --from=frontend /app/frontend/node_modules ./frontend/node_modules
-# No `public/`: this app ships no static files outside the build output.
+# `public/` holds the self-hosted webfont, served from `/fonts/...` by CSS.
+# Next does not fold it into `.next`, so omitting it costs no error and no
+# failed request the app can see -- just the wrong typeface in production.
+COPY frontend/public ./frontend/public
 COPY frontend/package.json frontend/next.config.ts ./frontend/
 COPY frontend/lib ./frontend/lib
 COPY frontend/scripts ./frontend/scripts
