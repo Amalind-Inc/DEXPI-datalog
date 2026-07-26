@@ -144,3 +144,37 @@ export function resetPasswordMessage(url: string): {
 
   return { subject, text, html };
 }
+
+/**
+ * The address-verification message.
+ *
+ * Deliberately says what an unverified account cannot do, rather than only
+ * asking for a click. Someone who did not sign up is being told that their
+ * address was typed by a stranger, and the reassuring fact is that the
+ * account is unusable until the link is followed.
+ */
+export function verifyEmailMessage(url: string): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const subject = "Confirm your email address for PortLog";
+  const text = [
+    "Confirm this address to finish setting up your PortLog account.",
+    "",
+    url,
+    "",
+    "The link expires in a day.",
+    "If you didn't sign up, you can ignore this message. The account cannot",
+    "be signed in to until the address is confirmed, and it will stay that way.",
+  ].join("\n");
+  const html = [
+    "<p>Confirm this address to finish setting up your PortLog account.</p>",
+    `<p><a href="${url}">Confirm my email address</a></p>`,
+    "<p>The link expires in a day.</p>",
+    "<p>If you didn't sign up, you can ignore this message. The account cannot",
+    " be signed in to until the address is confirmed, and it will stay that way.</p>",
+  ].join("");
+
+  return { subject, text, html };
+}

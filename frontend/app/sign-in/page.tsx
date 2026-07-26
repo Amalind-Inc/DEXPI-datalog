@@ -28,6 +28,9 @@ export default async function SignInPage({
     <SignInForm
       socialProviders={enabledSocialProviders(process.env)}
       canResetPassword={isEmailConfigured(process.env)}
+      // Same source of truth: addresses are verified exactly when mail can be
+      // sent, because requiring it without a sender locks every account out.
+      verifiesEmail={isEmailConfigured(process.env)}
       initialMode={mode === "sign-up" ? "sign-up" : "sign-in"}
     />
   );

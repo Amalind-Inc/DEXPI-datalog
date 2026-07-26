@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SMTP_VARS, isEmailConfigured, resetPasswordMessage, smtpSettings } from "./email.ts";
+import {
+  SMTP_VARS,
+  isEmailConfigured,
+  resetPasswordMessage,
+  smtpSettings,
+  verifyEmailMessage,
+} from "./email.ts";
 
 const complete = {
   SMTP_HOST: "smtp.example.com",
@@ -122,4 +128,27 @@ test("the variable list matches what the settings reader actually reads", () => 
     "SMTP_SECURE",
     "SMTP_USER",
   ]);
+});
+
+test("the verification message carries the link and says what it is for", () => {
+  const url = "https://harborfield.live/api/auth/verify-email?token=abc123";
+  const message = verifyEmailMessage(url);
+
+  assert.ok(message.subject.length > 0);
+  assert.ok(message.text.includes(url));
+  assert.ok(message.html.includes(url));
+  // Someone who did not sign up needs to know that ignoring it is enough:
+  // an unverified account cannot be signed in to.
+  assert.match(message.text, /did ?n[o']?t|ignore/i);
+});
+
+test("verification and reset messages are distinguishable", () => {
+  // Both arrive from the same address and both contain one link. If the
+  // subjects were interchangeable a reader could click the wrong one and
+  // conclude the product is broken.
+  const verify = verifyEmailMessage("https://example.com/v?token=a");
+  const reset = resetPasswordMessage("https://example.com/r?token=b");
+
+  assert.notEqual(verify.subject, reset.subject);
+  assert.doesNotMatch(verify.subject, /reset/i);
 });

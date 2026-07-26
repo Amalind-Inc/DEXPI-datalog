@@ -43,9 +43,11 @@ design. It assumes a single trusted operator on their own machine, so
 These are tracked as work, not secrets. Reporting them is not necessary,
 though pointing out that one is worse than described certainly is.
 
-- **Sign-up does not verify email addresses.** Anyone can register with an
-  address they do not control. Password reset does prove control of an
-  address, but only after the fact.
+- **Registration is open, and unverified when no mail relay is configured.**
+  With SMTP set, an address must be confirmed before the account can be used.
+  Without it, verification cannot be enforced -- requiring it with no way to
+  send the link would lock every account out -- so a deployment reachable by
+  strangers should configure SMTP or sit behind a private network.
 - **Accounts live on the instance's disk.** The hosted profile keeps its
   account database in a SQLite file rather than the shared database, so a
   second instance would have its own users and its own JWT signing keys. Run

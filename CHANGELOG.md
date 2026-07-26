@@ -10,6 +10,12 @@ release. Anything depending on them should pin a version.
 
 ## [Unreleased]
 
+### Added
+
+- Email address verification at sign-up, enforced whenever an SMTP relay is
+  configured. An unverified account cannot be signed in to, and an attempt
+  resends the link.
+
 ## [0.1.0] - 2026-07-25
 
 First tagged release. The project existed for six weeks before this tag, so
@@ -68,7 +74,7 @@ version.
 
 ### Known limitations
 
-- Sign-up does not verify email addresses.
+- Registration is open to anyone who can reach the instance.
 - The hosted profile keeps its accounts database on the instance's own disk,
   so it should be run as a single instance with a persistent volume.
 - Projects and chats are not persisted; the catalog holds review sessions and

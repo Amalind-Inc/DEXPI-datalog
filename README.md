@@ -299,9 +299,17 @@ export SMTP_HOST=127.0.0.1 SMTP_PORT=2025 SMTP_FROM=portlog@example.com
 
 Mail lands at <http://localhost:8025> instead of being delivered.
 
-Note that sign-up does **not** verify the address: anyone can register any
-email. That is a separate piece of work, and until it lands, a reset link is
-the only thing that proves someone controls the address they signed up with.
+Configuring SMTP also turns on **email verification**, because the two are
+the same capability: Better Auth refuses a sign-in from an unverified address
+only if it can send a link to fix that. So with a relay configured, sign-up
+issues no session until the address is confirmed, and a sign-in attempt
+before then resends the link rather than dead-ending. Following it verifies
+the address and signs the user in.
+
+With no relay, sign-up and sign-in behave as they always have and addresses
+are not verified -- which is the right default for a single-operator install,
+and the wrong one for anything with a public URL. Configure SMTP before you
+put an instance somewhere strangers can reach it.
 
 #### Signing in with Google or Apple
 
@@ -444,10 +452,11 @@ a migration back.
 
 #### Before inviting anyone
 
-Sign-up is open to anyone who can reach the URL, and email addresses are not
-verified. Until that changes, treat a public instance as open registration --
-put it behind a private network, or create the accounts you want and watch the
-user table.
+Sign-up is open to anyone who can reach the URL. With SMTP configured they
+must confirm their address before the account works, which stops one person
+registering another's email but does not stop anyone registering. If you want
+a closed instance, put it behind a private network or a proxy that
+authenticates before PortLog sees the request.
 
 ## End-to-end screenshot test
 

@@ -21,10 +21,12 @@ type Mode = "sign-in" | "sign-up";
 export default function SignInForm({
   socialProviders,
   canResetPassword,
+  verifiesEmail,
   initialMode = "sign-in",
 }: {
   socialProviders: OfferedSocialProvider[];
   canResetPassword: boolean;
+  verifiesEmail: boolean;
   initialMode?: Mode;
 }) {
   const router = useRouter();
@@ -60,18 +62,42 @@ export default function SignInForm({
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
     const result =
       mode === "sign-in"
         ? await signIn.email({ email, password })
         : await signUp.email({ email, password, name: email });
     setBusy(false);
+
     if (result.error) {
-      // The provider's message is shown as-is rather than reworded: guessing
-      // at a friendlier phrasing is how "wrong password" becomes "unknown
-      // error" and the reviewer stops being able to fix their own problem.
+      // One exception to showing the provider's message as-is. Better Auth
+      // says "Email not verified", which is accurate and leaves the reader
+      // stuck: the useful fact is that a fresh link has just been sent,
+      // because `sendOnSignIn` resends on exactly this failure.
+      if (result.error.code === "EMAIL_NOT_VERIFIED") {
+        setNotice(
+          `Confirm your email address first. We've sent another link to ${email} -- ` +
+            `following it signs you in.`,
+        );
+        return;
+      }
+      // Otherwise the provider's message stands. Guessing at a friendlier
+      // phrasing is how "wrong password" becomes "unknown error" and the
+      // reviewer stops being able to fix their own problem.
       setError(result.error.message ?? "Could not sign in.");
       return;
     }
+
+    // Signing up with verification on returns no session: the account exists
+    // but cannot be used yet, so sending them to the app would bounce them
+    // straight back here with nothing explained.
+    if (mode === "sign-up" && verifiesEmail) {
+      setNotice(`Almost there. Confirm the link we sent to ${email} to finish signing up.`);
+      setPassword("");
+      setMode("sign-in");
+      return;
+    }
+
     router.push("/assistant");
     router.refresh();
   }

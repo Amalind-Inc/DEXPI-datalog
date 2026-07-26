@@ -21,7 +21,12 @@ import { jwt } from "better-auth/plugins";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { type SmtpSettings, resetPasswordMessage, smtpSettings } from "./email.ts";
+import {
+  type SmtpSettings,
+  resetPasswordMessage,
+  smtpSettings,
+  verifyEmailMessage,
+} from "./email.ts";
 import { configuredSocialProviders } from "./social-providers.ts";
 
 /**
@@ -113,9 +118,39 @@ function createHostedAuth() {
             sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
               await sendMail(smtp, user.email, resetPasswordMessage(url));
             },
+            // Enforcement and delivery move together, and the reason is in
+            // Better Auth's sign-in path: when this is true and
+            // `sendVerificationEmail` is missing it throws EMAIL_NOT_VERIFIED
+            // with no route to a token, so every account is locked out for
+            // good. Requiring verification is therefore only safe in the same
+            // branch that can actually send the link.
+            requireEmailVerification: true,
           }
         : {}),
     },
+    ...(smtp
+      ? {
+          emailVerification: {
+            sendVerificationEmail: async ({
+              user,
+              url,
+            }: {
+              user: { email: string };
+              url: string;
+            }) => {
+              await sendMail(smtp, user.email, verifyEmailMessage(url));
+            },
+            sendOnSignUp: true,
+            // A blocked sign-in resends rather than dead-ending. Without this
+            // someone who lost the first message has no way to ask for another
+            // and simply cannot get in.
+            sendOnSignIn: true,
+            // Following the link is proof enough; making them type the
+            // password again buys nothing.
+            autoSignInAfterVerification: true,
+          },
+        }
+      : {}),
     socialProviders: configuredSocialProviders(process.env),
     plugins: [jwt()],
   });
