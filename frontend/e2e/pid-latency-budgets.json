@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "small": { "totalMs": 5000, "serverMs": 2000, "browserMainThreadMs": 1000 },
+    "medium": { "totalMs": 7000, "serverMs": 3000, "browserMainThreadMs": 1500 },
+    "large": { "totalMs": 30000, "serverMs": 20000, "browserMainThreadMs": 8000 }
+  }
+}

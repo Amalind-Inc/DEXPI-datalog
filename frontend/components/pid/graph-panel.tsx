@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, SlidersHorizontal, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { cn } from "@/lib/utils";
 import { usePidGraph } from "@/components/pid/graph-context";
@@ -14,6 +14,10 @@ import { PidLegend } from "@/components/pid/pid-legend";
 import { GeometryHealthCard } from "@/components/pid/geometry-health-card";
 import { ZoomableScene, ZoomControls } from "@/components/pid/zoomable-scene";
 import { describeSchematicTier } from "@/lib/schematic-scene";
+import {
+  completePidLatencyTrace,
+  endPidLatencyPhase,
+} from "@/lib/pid-latency-trace";
 
 const filters: Array<PidNodeKind | "All"> = [
   "All",
@@ -52,6 +56,32 @@ export function PidGraphPanel() {
   const [showLegend, setShowLegend] = useState(false);
   const [processFlow, setProcessFlow] = useState(true);
   const schematicZoomRef = useRef<ReactZoomPanPinchRef>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!loadedFileName || (schematicSceneKind === "auto-layout" && hasPidView)) return;
+    endPidLatencyPhase("layout");
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        completePidLatencyTrace({
+          renderedEntities: graph.nodes.length + graph.edges.length,
+          svgElements: panelRef.current?.querySelectorAll("svg *").length ?? 0,
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [
+    graph.edges.length,
+    graph.nodes.length,
+    hasPidView,
+    loadedFileName,
+    schematicScene,
+    schematicSceneKind,
+  ]);
 
   const visibleNodes = useMemo(
     () =>
@@ -87,7 +117,7 @@ export function PidGraphPanel() {
   }, [nodeLabelById, pidView.lines, selectedNodeId]);
 
   return (
-    <aside className="pid-panel" aria-label="Process document graph panel">
+    <aside ref={panelRef} className="pid-panel" aria-label="Process document graph panel">
       <div className="pid-tabbar">
         <div className="pid-tab" data-testid="pid-tab">
           <span className="pid-tab-name">{loadedFileName ?? "sample graph"}</span>

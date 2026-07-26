@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..export.pipeline import export_graph_facts_artifact
+from ..export.pipeline import export_graph_facts_artifact_timed
 from ..semantics.derive_graph_semantics import (
     TOPOLOGY_ATTR_NAMES,
     build_derived_graph_semantics_datalog,
@@ -144,14 +144,18 @@ class ReviewSessionService:
         ]
         try:
             started_at = self._clock()
+            phases_ms: dict[str, float] = {}
             # The export pipeline writes graph_facts.json into a directory it
             # is handed, so preparation borrows a real one from the store.
             with self.store.local_dir(session_id) as session_dir:
-                graph_facts = export_graph_facts_artifact(
+                export = export_graph_facts_artifact_timed(
                     dexpi_xml_path=dexpi_xml_path,
                     fixture_id=session_id,
                     output_dir=session_dir,
+                    clock=self._clock,
                 )
+                graph_facts = export.artifact
+                phases_ms.update(export.phases_ms)
 
             graph_limit_diagnostics = check_graph_size_limits(
                 graph=graph_facts["graph"], limits=self._limits
@@ -165,25 +169,37 @@ class ReviewSessionService:
                 )
 
             stage_history.append(stage("running", "deriving graph facts datalog"))
+            phase_started_at = self._clock()
             graph_facts_datalog = build_graph_facts_datalog(graph_facts)
             self.store.write_text(
                 f"{session_id}/graph_facts.dl", graph_facts_datalog
             )
+            phases_ms["graph_datalog"] = (self._clock() - phase_started_at) * 1000
 
             stage_history.append(stage("running", "deriving graph semantics"))
+            phase_started_at = self._clock()
             derived_graph_semantics = build_derived_graph_semantics_datalog(graph_facts)
             self.store.write_text(
                 f"{session_id}/derived_graph_semantics.dl", derived_graph_semantics
             )
+            phases_ms["derived_semantics"] = (
+                self._clock() - phase_started_at
+            ) * 1000
 
             stage_history.append(stage("running", "building topology view model"))
+            phase_started_at = self._clock()
             topology_view = build_topology_view_model(
                 graph_facts=graph_facts,
                 session_id=session_id,
                 source_id=source_id,
                 dexpi_xml_path=dexpi_xml_path,
             )
+            phases_ms["topology_scene"] = (
+                self._clock() - phase_started_at
+            ) * 1000
+
             artifact_paths = session_artifact_paths(self.store, session_id)
+            phase_started_at = self._clock()
             self.store.write_json(f"{session_id}/topology_view.json", topology_view)
 
             readiness = {
@@ -195,9 +211,11 @@ class ReviewSessionService:
                 "topology_view_model_path": artifact_paths["topology_view_model"],
             }
             self.store.write_json(f"{session_id}/readiness.json", readiness)
+            phases_ms["topology_artifact_write"] = (
+                self._clock() - phase_started_at
+            ) * 1000
 
             artifacts = artifact_paths
-
             elapsed_seconds = self._clock() - started_at
             time_limit_diagnostics = check_preparation_time_limit(
                 elapsed_seconds=elapsed_seconds, limits=self._limits
@@ -221,6 +239,26 @@ class ReviewSessionService:
                     diagnostics=artifact_limit_diagnostics,
                 )
 
+            artifact_bytes = sum(
+                self.store.size(key) for key in self.store.list(session_id)
+            )
+            metrics = {
+                "schema_version": 1,
+                "total_ms": elapsed_seconds * 1000,
+                "phases_ms": phases_ms,
+                "counts": {
+                    "upload_bytes": dexpi_xml_path.stat().st_size,
+                    "graph_nodes": graph_facts["graph"]["node_count"],
+                    "graph_edges": graph_facts["graph"]["edge_count"],
+                    "topology_nodes": len(topology_view["nodes"]),
+                    "topology_edges": len(topology_view["edges"]),
+                    "topology_bytes": self.store.size(
+                        f"{session_id}/topology_view.json"
+                    ),
+                    "artifact_bytes": artifact_bytes,
+                },
+            }
+
             stage_history.append(stage("succeeded", "ready"))
             self._ready_source_by_session[session_id] = source_id
 
@@ -238,6 +276,7 @@ class ReviewSessionService:
                 "readiness": readiness,
                 "topology_view": topology_view,
                 "artifacts": artifacts,
+                "metrics": metrics,
                 "diagnostics": [],
             }
         except Exception as error:  # pyDEXPI has parser and conversion exceptions.

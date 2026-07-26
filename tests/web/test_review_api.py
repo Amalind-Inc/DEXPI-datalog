@@ -319,6 +319,19 @@ class ReviewApiTests(unittest.TestCase):
             first_body = first.json()
             self.assertEqual(first_body["status"], "ready")
             self.assertTrue(first_body["source_id"].startswith("source-"))
+            pipeline_metrics = first_body["timing"]["pipeline"]
+            self.assertEqual(
+                pipeline_metrics["counts"]["request_content_bytes"],
+                len(E06_FIXTURE.read_text(encoding="utf-8").encode("utf-8")),
+            )
+            self.assertGreaterEqual(
+                pipeline_metrics["phases_ms"]["upload_store"],
+                0,
+            )
+            self.assertGreaterEqual(
+                pipeline_metrics["total_ms"],
+                sum(pipeline_metrics["phases_ms"].values()),
+            )
 
             # A second, different source for the same chat is rejected.
             second = client.post(

@@ -1,4 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+const frontendPort = process.env.PLAYWRIGHT_FRONTEND_PORT ?? "3000";
+const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -9,7 +11,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: frontendUrl,
     trace: "on-first-retry",
   },
   projects: [
@@ -30,8 +32,8 @@ export default defineConfig({
       // Force the deterministic stub provider for e2e regardless of any real key
       // in the shell or repo .env. The real tool-calling model path is covered by
       // Python integration tests (test_qa_turns_real_provider.py).
-      command: "HARBORFIELD_DISABLE_BYOK=1 npm run dev -- --hostname 127.0.0.1",
-      url: "http://127.0.0.1:3000",
+      command: `HARBORFIELD_DISABLE_BYOK=1 npm run dev -- --hostname 127.0.0.1 --port ${frontendPort}`,
+      url: frontendUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

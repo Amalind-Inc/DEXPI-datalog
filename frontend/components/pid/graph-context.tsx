@@ -4,6 +4,7 @@ import {
   createContext,
   type ReactNode,
   useContext,
+  useCallback,
   useMemo,
   useState,
 } from "react";
@@ -55,6 +56,18 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
     "pump-101",
   ]);
 
+  const applyPrepareResult = useCallback((result: PrepareResult) => {
+    setGraph(result.graph);
+    setPidView(result.pidView ?? EMPTY_PID_VIEW);
+    setSchematicScene(result.schematicScene ?? null);
+    setSchematicSceneKind(result.schematicSceneKind ?? "none");
+    setGeometryReport(result.geometryReport ?? null);
+    setLoadedFileName(result.filename);
+    setGraphOpen(true);
+    setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
+    setHighlightedNodeIds(result.sourceScopeIds);
+  }, []);
+
   const selectedNode = useMemo(
     () => graph.nodes.find((node) => node.id === selectedNodeId) ?? null,
     [graph.nodes, selectedNodeId],
@@ -76,19 +89,10 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       setSelectedNodeId,
       setHighlightedNodeIds,
       setGraphOpen,
-      applyPrepareResult(result) {
-        setGraph(result.graph);
-        setPidView(result.pidView ?? EMPTY_PID_VIEW);
-        setSchematicScene(result.schematicScene ?? null);
-        setSchematicSceneKind(result.schematicSceneKind ?? "none");
-        setGeometryReport(result.geometryReport ?? null);
-        setLoadedFileName(result.filename);
-        setGraphOpen(true);
-        setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
-        setHighlightedNodeIds(result.sourceScopeIds);
-      },
+      applyPrepareResult,
     }),
     [
+      applyPrepareResult,
       sessionId,
       graph,
       pidView,

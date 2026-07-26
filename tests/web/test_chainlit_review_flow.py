@@ -143,6 +143,9 @@ class ChainlitReviewFlowTests(unittest.TestCase):
             self.assertEqual(state["prompt_composer"]["enabled"], True)
             self.assertGreater(state["timing"]["upload_to_ready_seconds"], 0)
             self.assertEqual(state["timing"]["document_id"], "chainlit-e06")
+            self.assertEqual(state["timing"]["pipeline"]["schema_version"], 1)
+            self.assertEqual(state["timing"]["pipeline"]["counts"]["graph_nodes"], 18)
+            self.assertIn("xml_parse", state["timing"]["pipeline"]["phases_ms"])
             self.assertTrue(state["topology_view"]["nodes"])
 
     def test_failed_upload_keeps_query_controls_disabled_and_retry_can_reach_ready(

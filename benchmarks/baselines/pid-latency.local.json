@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-26T17:18:38.130Z",
+  "environment": {
+    "profile": "local-playwright",
+    "browser": "chromium",
+    "host": "Apple M1 Max"
+  },
+  "traces": [
+    {
+      "profile": "small",
+      "schemaVersion": 1,
+      "status": "interactive",
+      "filename": "E09V01-VER.EX01.xml",
+      "totalMs": 1660.5999999642372,
+      "phasesMs": {
+        "file_read": 0.5,
+        "upload_proxy": 1578.5,
+        "response_transfer": 0.19999998807907104,
+        "json_decode": 0.09999996423721313,
+        "state_apply": 0.10000002384185791,
+        "layout": 69.10000002384186,
+        "react_commit_to_interactive": 12.099999964237213
+      },
+      "server": {
+        "schema_version": 1,
+        "total_ms": 15.861542022321373,
+        "phases_ms": {
+          "xml_parse": 12.440499966032803,
+          "graph_extraction": 1.5465409960597754,
+          "graph_artifact_write": 0.32595801167190075,
+          "graph_datalog": 0.2956670359708369,
+          "derived_semantics": 0.2869160380214453,
+          "topology_scene": 0.27941697044298053,
+          "topology_artifact_write": 0.4360419698059559
+        },
+        "counts": {
+          "upload_bytes": 1367,
+          "graph_nodes": 2,
+          "graph_edges": 1,
+          "topology_nodes": 2,
+          "topology_edges": 0,
+          "topology_bytes": 3420,
+          "artifact_bytes": 13594
+        }
+      },
+      "counts": {
+        "uploadBytes": 1367,
+        "responseBytes": 2020,
+        "renderedEntities": 1,
+        "svgElements": 20
+      }
+    },
+    {
+      "profile": "medium",
+      "schemaVersion": 1,
+      "status": "interactive",
+      "filename": "I02V01-VER.EX01.xml",
+      "totalMs": 63.19999998807907,
+      "phasesMs": {
+        "file_read": 0.5999999642372131,
+        "upload_proxy": 32.10000002384186,
+        "response_transfer": 0.19999998807907104,
+        "json_decode": 0,
+        "state_apply": 0.19999998807907104,
+        "layout": 0.5,
+        "react_commit_to_interactive": 8.5
+      },
+      "server": {
+        "schema_version": 1,
+        "total_ms": 16.894000000320375,
+        "phases_ms": {
+          "xml_parse": 11.954166984651238,
+          "graph_extraction": 1.2802500277757645,
+          "graph_artifact_write": 0.4507920239120722,
+          "graph_datalog": 0.4342910251580179,
+          "derived_semantics": 0.4290000069886446,
+          "topology_scene": 0.9405000018887222,
+          "topology_artifact_write": 0.9728749864734709
+        },
+        "counts": {
+          "upload_bytes": 5106,
+          "graph_nodes": 15,
+          "graph_edges": 23,
+          "topology_nodes": 15,
+          "topology_edges": 12,
+          "topology_bytes": 22823,
+          "artifact_bytes": 64411
+        }
+      },
+      "counts": {
+        "uploadBytes": 5106,
+        "responseBytes": 5870,
+        "renderedEntities": 27,
+        "svgElements": 94
+      }
+    },
+    {
+      "profile": "large",
+      "schemaVersion": 1,
+      "status": "interactive",
+      "filename": "C01V04-VER.EX01.xml",
+      "totalMs": 213.89999997615814,
+      "phasesMs": {
+        "file_read": 0.8999999761581421,
+        "upload_proxy": 123.40000003576279,
+        "response_transfer": 0.8999999761581421,
+        "json_decode": 0.5,
+        "state_apply": 0.10000002384185791,
+        "layout": 1.600000023841858,
+        "react_commit_to_interactive": 20.399999976158142
+      },
+      "server": {
+        "schema_version": 1,
+        "total_ms": 84.08337499713525,
+        "phases_ms": {
+          "xml_parse": 44.1368329920806,
+          "graph_extraction": 13.214416976552457,
+          "graph_artifact_write": 1.4199159923009574,
+          "graph_datalog": 3.0197500018402934,
+          "derived_semantics": 2.6798330363817513,
+          "topology_scene": 14.859666989650577,
+          "topology_artifact_write": 3.7812080117873847
+        },
+        "counts": {
+          "upload_bytes": 445726,
+          "graph_nodes": 214,
+          "graph_edges": 376,
+          "topology_nodes": 214,
+          "topology_edges": 268,
+          "topology_bytes": 564527,
+          "artifact_bytes": 1225111
+        }
+      },
+      "counts": {
+        "uploadBytes": 445726,
+        "responseBytes": 172347,
+        "renderedEntities": 482,
+        "svgElements": 683
+      }
+    }
+  ]
+}

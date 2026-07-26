@@ -355,10 +355,13 @@ def create_review_api_app(
         session_id: str, body: dict[str, object],
         ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
+        request_started_at = time.perf_counter()
         filename = _filename(body, "filename")
         content = _required_string(body, "content")
+        upload_store_started_at = time.perf_counter()
         upload_key = f"_uploads/{session_id}/{filename}"
         ws.store.write_text(upload_key, content)
+        upload_store_ms = (time.perf_counter() - upload_store_started_at) * 1000
         # pyDEXPI parses from a real file, so preparation borrows one.
         with ws.store.local_path(upload_key) as upload_path:
             state = ws.flow.prepare_upload(
@@ -373,6 +376,19 @@ def create_review_api_app(
                 source_filename=filename,
                 artifact_prefix=f"{ws.principal.workspace}/{session_id}",
             )
+        timing = state.get("timing")
+        if isinstance(timing, dict):
+            pipeline_metrics = timing.get("pipeline")
+            if isinstance(pipeline_metrics, dict):
+                phases_ms = pipeline_metrics.get("phases_ms")
+                counts = pipeline_metrics.get("counts")
+                if isinstance(phases_ms, dict):
+                    phases_ms["upload_store"] = upload_store_ms
+                if isinstance(counts, dict):
+                    counts["request_content_bytes"] = len(content.encode("utf-8"))
+                pipeline_metrics["total_ms"] = (
+                    time.perf_counter() - request_started_at
+                ) * 1000
         return state
 
     @app.get("/api/review/sessions/{session_id}/topology")

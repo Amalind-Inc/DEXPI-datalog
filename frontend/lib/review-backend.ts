@@ -255,6 +255,7 @@ async function prepareWithPythonBackend(
       schematicSceneKind: readSchematicSceneKind(data),
       geometryReport: readGeometryReport(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
+      serverMetrics: readServerPipelineMetrics(data),
     };
   } catch {
     return null;
@@ -629,6 +630,33 @@ async function postJson(
 
 function readStatus(data: Record<string, unknown>) {
   return data.status === "failed" ? "failed" : "ready";
+}
+function readServerPipelineMetrics(data: Record<string, unknown>): PrepareResult["serverMetrics"] {
+  if (!isRecord(data.timing) || !isRecord(data.timing.pipeline)) return null;
+  const pipeline = data.timing.pipeline;
+  if (
+    pipeline.schema_version !== 1 ||
+    typeof pipeline.total_ms !== "number" ||
+    !isRecord(pipeline.phases_ms) ||
+    !isRecord(pipeline.counts)
+  ) {
+    return null;
+  }
+  return {
+    schema_version: 1,
+    total_ms: pipeline.total_ms,
+    phases_ms: readNumberRecord(pipeline.phases_ms),
+    counts: readNumberRecord(pipeline.counts),
+  };
+}
+
+function readNumberRecord(value: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number] =>
+        typeof entry[1] === "number" && Number.isFinite(entry[1]),
+    ),
+  );
 }
 
 /**

@@ -1829,6 +1829,7 @@ class ChainlitReviewFlow:
             "document_id": document_id,
             "session_id": result["session_id"],
             "upload_to_ready_seconds": elapsed_seconds,
+            "pipeline": result.get("metrics"),
         }
         if is_ready:
             self._timing_records.append(timing)

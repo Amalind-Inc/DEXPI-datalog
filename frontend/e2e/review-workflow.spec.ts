@@ -11,6 +11,15 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
 
   await workflow.uploadPlantXml();
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await expect
+    .poll(() => page.evaluate(() => window.__PID_LATENCY_TRACE__?.status))
+    .toBe("interactive");
+  const latencyTrace = await page.evaluate(() => window.__PID_LATENCY_TRACE__);
+  expect(latencyTrace?.server?.phases_ms.xml_parse).toBeGreaterThanOrEqual(0);
+  expect(latencyTrace?.server?.phases_ms.graph_extraction).toBeGreaterThanOrEqual(0);
+  expect(latencyTrace?.phasesMs.layout).toBeGreaterThanOrEqual(0);
+  expect(latencyTrace?.counts.renderedEntities).toBeGreaterThan(0);
+  expect(latencyTrace?.counts.svgElements).toBeGreaterThan(0);
 
   await workflow.sendPrompt("What downstream process objects are reachable from the pump?");
   await page.getByTestId("grounded-qa-answer").waitFor({ state: "visible" });

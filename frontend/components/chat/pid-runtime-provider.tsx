@@ -29,6 +29,12 @@ import { parseGroundedQAAnswerMessage } from "@/lib/grounded-qa-answer";
 import { deriveTurnSteps } from "@/lib/turn-steps";
 import { serializeInProgressTurn } from "@/lib/in-progress-turn";
 import { readOrCreateSessionId, SESSION_KEY } from "@/lib/session-id";
+import {
+  beginPidLatencyTrace,
+  endPidLatencyPhase,
+  setPidResponseBytes,
+  setPidServerMetrics,
+} from "@/lib/pid-latency-trace";
 
 const HISTORY_KEY = "pydexpi.pidQa.threadHistory.v2";
 const ACTIVE_TURN_KEY_PREFIX = "pydexpi.pidQa.activeTurn.v1.";
@@ -101,7 +107,9 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         // (backend dedupes); a different history prefix or scope selection
         // yields a fresh turn.
         const requestId = (
-          await sha256Hex(`${sessionId}\n${selectedNodeId ?? ""}\n${JSON.stringify(backendMessages)}`)
+          await sha256Hex(
+            `${sessionId}\n${selectedNodeId ?? ""}\n${JSON.stringify(backendMessages)}`,
+          )
         ).slice(0, 32);
         const turnId = await computeTurnId(sessionId, requestId);
 
@@ -194,17 +202,29 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         if (!file.name.toLowerCase().endsWith(".xml")) {
           throw new Error("Only plant XML files are supported.");
         }
+        beginPidLatencyTrace({
+          filename: file.name,
+          uploadBytes: file.size,
+        });
         const content = await readFileText(file);
+        endPidLatencyPhase("file_read");
         const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: file.name, content }),
         });
+        endPidLatencyPhase("upload_proxy");
+        const responseText = await response.text();
+        setPidResponseBytes(new TextEncoder().encode(responseText).byteLength);
+        endPidLatencyPhase("response_transfer");
         if (!response.ok) {
           throw new Error(`XML prepare failed: ${response.status}`);
         }
-        const result = (await response.json()) as PrepareResult;
+        const result = JSON.parse(responseText) as PrepareResult;
+        endPidLatencyPhase("json_decode");
+        setPidServerMetrics(result.serverMetrics ?? null);
         applyPrepareResult(result);
+        endPidLatencyPhase("state_apply");
         return {
           id: crypto.randomUUID(),
           type: "document",
@@ -487,8 +507,7 @@ function lastUserText(messages: Array<{ role: string; content: string }>): strin
 function buildTurnConversation(
   messages: Array<{ role: string; content: string }>,
 ): Array<{ question: string; answer_text: string; evidence_references: string[] }> {
-  const turns: Array<{ question: string; answer_text: string; evidence_references: string[] }> =
-    [];
+  const turns: Array<{ question: string; answer_text: string; evidence_references: string[] }> = [];
   for (let index = 0; index < messages.length - 1; index += 1) {
     const message = messages[index];
     if (message.role !== "assistant") continue;

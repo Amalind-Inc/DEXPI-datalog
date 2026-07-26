@@ -111,6 +111,43 @@ class ReviewSessionServiceTests(unittest.TestCase):
                             artifact_name,
                         )
 
+    def test_prepare_review_session_reports_pipeline_timings_and_payload_counts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            service = ReviewSessionService(store=LocalArtifactStore(Path(tmp_dir) / "sessions"))
+
+            result = service.start_preparation(
+                dexpi_xml_path=E06_FIXTURE,
+                session_id="timing-contract",
+            )
+
+            metrics = result["metrics"]
+            self.assertEqual(metrics["schema_version"], 1)
+            self.assertEqual(metrics["counts"]["upload_bytes"], E06_FIXTURE.stat().st_size)
+            self.assertEqual(metrics["counts"]["graph_nodes"], 18)
+            self.assertEqual(metrics["counts"]["graph_edges"], 21)
+            self.assertGreater(metrics["counts"]["topology_bytes"], 0)
+            self.assertGreater(metrics["counts"]["artifact_bytes"], 0)
+            self.assertEqual(
+                set(metrics["phases_ms"]),
+                {
+                    "xml_parse",
+                    "graph_extraction",
+                    "graph_artifact_write",
+                    "graph_datalog",
+                    "derived_semantics",
+                    "topology_scene",
+                    "topology_artifact_write",
+                },
+            )
+            for elapsed_ms in metrics["phases_ms"].values():
+                self.assertGreaterEqual(elapsed_ms, 0)
+            self.assertGreaterEqual(
+                metrics["total_ms"],
+                sum(metrics["phases_ms"].values()),
+            )
+
     def test_topology_view_contract_resolves_all_ids_for_evidence_highlighting(
         self,
     ) -> None:

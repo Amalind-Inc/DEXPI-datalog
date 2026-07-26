@@ -6,6 +6,7 @@ import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
 import { buildAutoLayoutScene } from "@/components/pid/auto-layout-scene";
 import { ZoomableScene, ZoomControls } from "@/components/pid/zoomable-scene";
 import type { PidView, SchematicScene } from "@/components/pid/types";
+import { completePidLatencyTrace, endPidLatencyPhase } from "@/lib/pid-latency-trace";
 
 type Props = {
   pidView: PidView;
@@ -22,6 +23,7 @@ type Props = {
 export function AutoLayoutSchematicView({ pidView, selectedId, highlightedIds, onSelect }: Props) {
   const [scene, setScene] = useState<SchematicScene | null>(null);
   const zoomRef = useRef<ReactZoomPanPinchRef>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,8 +36,27 @@ export function AutoLayoutSchematicView({ pidView, selectedId, highlightedIds, o
     };
   }, [pidView]);
 
+  useEffect(() => {
+    if (!scene) return;
+    endPidLatencyPhase("layout");
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        completePidLatencyTrace({
+          renderedEntities: pidView.units.length + pidView.lines.length,
+          svgElements: containerRef.current?.querySelectorAll("svg *").length ?? 0,
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [pidView.lines.length, pidView.units.length, scene]);
+
   return (
     <div
+      ref={containerRef}
       className="pid-auto-layout-wrap"
       data-testid="auto-layout-schematic"
       data-highlight-active={highlightedIds.length > 0}

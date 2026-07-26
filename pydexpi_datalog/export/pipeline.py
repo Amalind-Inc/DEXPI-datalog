@@ -5,6 +5,8 @@ import json
 import re
 import shutil
 import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import networkx as nx
@@ -273,6 +275,47 @@ def run_export_corpus(
     )
     print(render_corpus_report(summary))
     return 0
+
+
+@dataclass(frozen=True)
+class TimedGraphFactsExport:
+    artifact: dict[str, object]
+    phases_ms: dict[str, float]
+
+
+def export_graph_facts_artifact_timed(
+    *,
+    dexpi_xml_path: Path,
+    fixture_id: str,
+    output_dir: Path,
+    source_path: str | None = None,
+    clock: Callable[[], float],
+) -> TimedGraphFactsExport:
+    phases_ms: dict[str, float] = {}
+
+    started_at = clock()
+    serializer = ProteusSerializer()
+    dexpi_model = serializer.load(dexpi_xml_path.parent, dexpi_xml_path.name)
+    phases_ms["xml_parse"] = (clock() - started_at) * 1000
+
+    started_at = clock()
+    graph = GraphLoader().dexpi_to_graph(dexpi_model)
+    artifact = build_graph_facts_artifact(
+        dexpi_xml_path=dexpi_xml_path,
+        fixture_id=fixture_id,
+        graph=graph,
+        source_path=source_path,
+    )
+    phases_ms["graph_extraction"] = (clock() - started_at) * 1000
+
+    started_at = clock()
+    persist_graph_facts_artifact(
+        output_dir=output_dir,
+        fixture_id=fixture_id,
+        artifact=artifact,
+    )
+    phases_ms["graph_artifact_write"] = (clock() - started_at) * 1000
+    return TimedGraphFactsExport(artifact=artifact, phases_ms=phases_ms)
 
 
 def export_graph_facts_artifact(

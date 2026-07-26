@@ -1,3 +1,5 @@
+import type { ServerPipelineMetrics } from "@/lib/pid-latency-trace";
+
 export type PidNodeKind = "Pump" | "Valve" | "Instrument" | "Line" | "Equipment";
 
 export type PidNode = {
@@ -173,4 +175,5 @@ export type PrepareResult = {
   schematicSceneKind: SchematicSceneKind;
   geometryReport: GeometryReport | null;
   sourceScopeIds: string[];
+  serverMetrics?: ServerPipelineMetrics | null;
 };

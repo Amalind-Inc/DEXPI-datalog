@@ -87,6 +87,14 @@ test("prepareReviewSession adapts backend topology_view into graph state", async
           },
         ],
       },
+      timing: {
+        pipeline: {
+          schema_version: 1,
+          total_ms: 48,
+          phases_ms: { xml_parse: 12 },
+          counts: { graph_nodes: 2, graph_edges: 1 },
+        },
+      },
       visible_source_scope: { ids: ["node-p101"] },
     });
   };
@@ -103,6 +111,7 @@ test("prepareReviewSession adapts backend topology_view into graph state", async
   assert.equal(result.graph.nodes[0].label, "P-101");
   assert.equal(result.graph.edges[0].source, "node-p101");
   assert.deepEqual(result.sourceScopeIds, ["node-p101"]);
+  assert.equal(result.serverMetrics?.total_ms, 48);
 });
 
 test("prepareReviewSession reports failure instead of inventing a review", async () => {
