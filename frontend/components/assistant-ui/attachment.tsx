@@ -1,6 +1,6 @@
 "use client";
 
-import { type PropsWithChildren, useEffect, useState, type FC } from "react";
+import { type CSSProperties, type PropsWithChildren, useEffect, useState, type FC } from "react";
 import { XIcon, PlusIcon, FileText } from "lucide-react";
 import {
   AttachmentPrimitive,
@@ -123,11 +123,58 @@ const AttachmentThumb: FC = () => {
   );
 };
 
+const XmlUploadProgress: FC = () => {
+  const name = useAuiState((s) => s.attachment.name);
+  const status = useAuiState((s) => s.attachment.status);
+  const progress =
+    status.type === "running"
+      ? Math.round(status.progress)
+      : status.type === "requires-action"
+        ? 100
+        : 0;
+  const label =
+    status.type === "incomplete"
+      ? "Preparation failed"
+      : status.type === "requires-action"
+        ? "Process document ready"
+        : progress < 12
+          ? "Reading process document"
+          : progress < 80
+            ? "Preparing process document"
+            : "Building process graph";
+
+  return (
+    <div className="xml-upload">
+      <div className="xml-upload__copy">
+        <span className="xml-upload__name">{name}</span>
+        <span className="xml-upload__status" aria-live="polite">
+          {label}
+        </span>
+      </div>
+      <div
+        className="xml-upload__track"
+        role="progressbar"
+        aria-label="Preparing plant XML"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        style={{ "--xml-upload-progress": `${progress}%` } as CSSProperties}
+      >
+        <span className="xml-upload__fill" />
+      </div>
+    </div>
+  );
+};
+
 const AttachmentUI: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
+  const isXml = useAuiState((s) => {
+    const contentType = s.attachment.contentType?.toLowerCase();
+    return contentType?.includes("xml") || s.attachment.name.toLowerCase().endsWith(".xml");
+  });
   const typeLabel = useAuiState((s) => {
     const type = s.attachment.type;
     switch (type) {
@@ -141,6 +188,15 @@ const AttachmentUI: FC = () => {
         return type;
     }
   });
+
+  if (isComposer && isXml) {
+    return (
+      <AttachmentPrimitive.Root className="aui-attachment-root relative w-full max-w-[24rem]">
+        <XmlUploadProgress />
+        <AttachmentRemove />
+      </AttachmentPrimitive.Root>
+    );
+  }
 
   return (
     <Tooltip>

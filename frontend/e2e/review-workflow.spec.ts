@@ -1,6 +1,26 @@
 import { expect, test } from "@playwright/test";
 import { c01DexpiFixture, reviewWorkflow } from "./review-workflow";
 
+test("shows patterned progress while an XML document is prepared", async ({ page }) => {
+  const workflow = reviewWorkflow(page);
+  await page.route("**/api/review/sessions/*/prepare", async (route) => {
+    await page.waitForTimeout(750);
+    await route.continue();
+  });
+
+  await workflow.open();
+  await workflow.uploadPlantXml();
+
+  const progress = page.getByRole("progressbar", { name: "Preparing plant XML" });
+  await expect(progress).toBeVisible();
+  await expect(progress).toHaveAttribute("aria-valuenow", /^[1-9]\d*$/);
+  await expect(page.getByText("Preparing process document")).toBeVisible();
+
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await expect(progress).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.getByText("Process document ready")).toBeVisible();
+});
+
 test("uploads E06 XML and a direct topology question gets a grounded QA answer without Datalog confirmation", async ({
   page,
 }) => {

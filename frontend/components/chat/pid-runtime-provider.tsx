@@ -198,39 +198,53 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
   const attachments = useMemo<AttachmentAdapter>(
     () => ({
       accept: ".xml,text/xml,application/xml",
-      async add({ file }) {
+      async *add({ file }) {
         if (!file.name.toLowerCase().endsWith(".xml")) {
           throw new Error("Only plant XML files are supported.");
         }
+        const attachment = {
+          id: crypto.randomUUID(),
+          type: "document" as const,
+          name: file.name,
+          contentType: file.type || "application/xml",
+          file,
+        };
+        const uploading = (progress: number) =>
+          ({
+            ...attachment,
+            status: { type: "running", reason: "uploading", progress },
+          }) satisfies PendingAttachment;
+
+        yield uploading(6);
         beginPidLatencyTrace({
           filename: file.name,
           uploadBytes: file.size,
         });
         const content = await readFileText(file);
         endPidLatencyPhase("file_read");
+        yield uploading(18);
         const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: file.name, content }),
         });
         endPidLatencyPhase("upload_proxy");
+        yield uploading(72);
         const responseText = await response.text();
         setPidResponseBytes(new TextEncoder().encode(responseText).byteLength);
         endPidLatencyPhase("response_transfer");
         if (!response.ok) {
           throw new Error(`XML prepare failed: ${response.status}`);
         }
+        yield uploading(84);
         const result = JSON.parse(responseText) as PrepareResult;
         endPidLatencyPhase("json_decode");
         setPidServerMetrics(result.serverMetrics ?? null);
+        yield uploading(92);
         applyPrepareResult(result);
         endPidLatencyPhase("state_apply");
-        return {
-          id: crypto.randomUUID(),
-          type: "document",
-          name: file.name,
-          contentType: file.type || "application/xml",
-          file,
+        yield {
+          ...attachment,
           status: { type: "requires-action", reason: "composer-send" },
         } satisfies PendingAttachment;
       },
