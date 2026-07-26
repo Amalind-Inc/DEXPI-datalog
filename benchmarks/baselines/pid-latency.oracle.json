@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "environment": {
+    "profile": "oracle-micro-canary",
+    "shape": "VM.Standard.E2.1.Micro",
+    "appCpus": 0.5,
+    "image": "sha-4052451",
+    "browser": "server-only; browser phases captured in pid-latency.local.json"
+  },
+  "traces": [
+    {
+      "profile": "small",
+      "status": "ready",
+      "server": {
+        "schema_version": 1,
+        "total_ms": 1235.8577060003881,
+        "phases_ms": {
+          "xml_parse": 90.16040300048189,
+          "graph_extraction": 2.598701001261361,
+          "graph_artifact_write": 0.45382700045593083,
+          "graph_datalog": 195.35560200165492,
+          "derived_semantics": 194.9139019998256,
+          "topology_scene": 0.7656680027139373,
+          "topology_artifact_write": 105.85091499524424,
+          "upload_store": 329.8919709995971
+        },
+        "counts": {
+          "upload_bytes": 1367,
+          "graph_nodes": 2,
+          "graph_edges": 1,
+          "topology_nodes": 2,
+          "topology_edges": 0,
+          "topology_bytes": 3341,
+          "artifact_bytes": 13677,
+          "request_content_bytes": 1367
+        }
+      }
+    },
+    {
+      "profile": "medium",
+      "status": "ready",
+      "server": {
+        "schema_version": 1,
+        "total_ms": 1401.245294000546,
+        "phases_ms": {
+          "xml_parse": 80.25727000494953,
+          "graph_extraction": 3.2532080003875308,
+          "graph_artifact_write": 1.2792880006600171,
+          "graph_datalog": 793.7785969988909,
+          "derived_semantics": 104.42813600093359,
+          "topology_scene": 2.535622006689664,
+          "topology_artifact_write": 197.20332100405358,
+          "upload_store": 102.12692799541401
+        },
+        "counts": {
+          "upload_bytes": 5106,
+          "graph_nodes": 15,
+          "graph_edges": 23,
+          "topology_nodes": 15,
+          "topology_edges": 12,
+          "topology_bytes": 22745,
+          "artifact_bytes": 64497,
+          "request_content_bytes": 5106
+        }
+      }
+    },
+    {
+      "profile": "large",
+      "status": "ready",
+      "server": {
+        "schema_version": 1,
+        "total_ms": 2513.2006030034972,
+        "phases_ms": {
+          "xml_parse": 523.5396419957397,
+          "graph_extraction": 86.25469300022814,
+          "graph_artifact_write": 12.239608993695583,
+          "graph_datalog": 294.3936890005716,
+          "derived_semantics": 298.06353399908403,
+          "topology_scene": 87.56752499903087,
+          "topology_artifact_write": 607.3437750019366,
+          "upload_store": 202.3988700020709
+        },
+        "counts": {
+          "upload_bytes": 445726,
+          "graph_nodes": 214,
+          "graph_edges": 376,
+          "topology_nodes": 214,
+          "topology_edges": 268,
+          "topology_bytes": 564447,
+          "artifact_bytes": 1225193,
+          "request_content_bytes": 445726
+        }
+      }
+    }
+  ],
+  "capturedAt": "2026-07-26T17:36:13.763Z",
+  "cpuCapExperiment": {
+    "fixture": "large C01",
+    "runsPerSetting": 5,
+    "storage": "local /tmp to isolate CPU",
+    "halfCpuMedianMs": 701.007,
+    "oneCpuMedianMs": 676.093,
+    "improvementPercent": 3.55,
+    "restoredCpu": 0.5
+  }
+}
