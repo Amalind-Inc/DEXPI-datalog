@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadByokCatalog } from "./byok-catalog.ts";
-import { samplePidGraph } from "../components/pid/sample-graph.ts";
 import type {
   GeometryReport,
   PidGraph,
@@ -107,16 +106,25 @@ export async function prepareReviewSession(
   const proxied = await prepareWithPythonBackend(sessionId, body, options);
   if (proxied) return proxied;
 
-  const graph = graphFromXml(body.content ?? "");
+  // The backend did not answer, so there is no review. This used to parse the
+  // XML here and return `status: "ready"` with the resulting graph, which was
+  // indistinguishable downstream from a real preparation: no Souffle had run,
+  // no facts had been exported, no artifact existed, and nothing said so. A
+  // misconfigured or unreachable backend produced confident fiction, and it
+  // hid a real production bug through several rounds of testing.
+  //
+  // An empty graph is the honest answer. `status: "failed"` is already part
+  // of the contract and the route turns it into a non-2xx, so the browser
+  // raises rather than rendering an invented plant.
   return {
-    status: "ready",
+    status: "failed",
     filename: body.filename ?? "plant.xml",
-    graph,
+    graph: { nodes: [], edges: [] },
     pidView: EMPTY_PID_VIEW,
     schematicScene: null,
     schematicSceneKind: "none",
     geometryReport: null,
-    sourceScopeIds: [graph.nodes[0]?.id ?? "pump-101"],
+    sourceScopeIds: [],
   };
 }
 
@@ -584,25 +592,18 @@ async function postJson(
   return (await response.json()) as Record<string, unknown>;
 }
 
-function graphFromXml(content: string): PidGraph {
-  const graph = structuredClone(samplePidGraph);
-  const labels = Array.from(content.matchAll(/\b(P-\d+|V-\d+|FT-\d+)\b/gi)).map((match) =>
-    match[1].toUpperCase(),
-  );
-  if (labels.length === 0) return graph;
-
-  return {
-    ...graph,
-    nodes: graph.nodes.map((node) =>
-      labels.includes(node.label) ? { ...node, status: "selected" } : node,
-    ),
-  };
-}
-
 function readStatus(data: Record<string, unknown>) {
   return data.status === "failed" ? "failed" : "ready";
 }
 
+/**
+ * Adapt a backend topology payload into graph state.
+ *
+ * Missing nodes or edges yield an empty graph, never the bundled sample
+ * plant. Substituting the demo here meant a backend response that carried no
+ * topology rendered as somebody else's P&ID, with tags a reviewer could read
+ * and act on. Empty is visibly nothing; a sample is invisibly wrong.
+ */
 function readTopology(data: Record<string, unknown>): PidGraph {
   const topology = (data.topology_view ?? data.topology ?? data) as {
     nodes?: Array<Record<string, unknown>>;
@@ -626,14 +627,14 @@ function readTopology(data: Record<string, unknown>): PidGraph {
         description,
         status: "normal",
       };
-    }) ?? samplePidGraph.nodes;
+    }) ?? [];
   const edges =
     topology.edges?.map((edge, index) => ({
       id: String(edge.id ?? `edge-${index}`),
       source: String(edge.source_id ?? edge.source ?? ""),
       target: String(edge.target_id ?? edge.target ?? ""),
       label: String(edge.relationship ?? edge.label ?? "connected to"),
-    })) ?? samplePidGraph.edges;
+    })) ?? [];
   return { nodes, edges };
 }
 

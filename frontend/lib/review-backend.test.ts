@@ -104,6 +104,47 @@ test("prepareReviewSession adapts backend topology_view into graph state", async
   assert.deepEqual(result.sourceScopeIds, ["node-p101"]);
 });
 
+test("prepareReviewSession reports failure instead of inventing a review", async () => {
+  // The whole product claim is that an answer is backed by evidence. A
+  // backend that is down, misconfigured or rejecting auth must not come back
+  // as a finished review -- that is indistinguishable from a real one to
+  // everyone downstream, including the person reading it.
+  for (const status of [401, 404, 500, 503]) {
+    const result = await prepareReviewSession(
+      "session-1",
+      { filename: "plant.xml", content: "<PlantModel><Equipment ID='E1'/></PlantModel>" },
+      {
+        baseUrl: "http://backend.test",
+        fetcher: (async () => new Response("", { status })) as typeof fetch,
+      },
+    );
+
+    assert.equal(result.status, "failed", `HTTP ${status} must not read as ready`);
+    // No invented topology either: an empty graph is honest, a plausible one
+    // is a lie the UI would happily render.
+    assert.deepEqual(result.graph.nodes, [], `HTTP ${status} must not invent nodes`);
+    assert.deepEqual(result.sourceScopeIds, []);
+  }
+});
+
+test("prepareReviewSession reports failure when the backend cannot be reached at all", async () => {
+  // A refused connection is the shape this actually took in production: the
+  // JWKS URL pointed at a container that was not listening.
+  const result = await prepareReviewSession(
+    "session-1",
+    { filename: "plant.xml", content: "<PlantModel />" },
+    {
+      baseUrl: "http://backend.test",
+      fetcher: (async () => {
+        throw new TypeError("fetch failed");
+      }) as typeof fetch,
+    },
+  );
+
+  assert.equal(result.status, "failed");
+  assert.deepEqual(result.graph.nodes, []);
+});
+
 test("answerChatWithReviewBackend routes topology question through QA harness and returns grounded answer", async () => {
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
