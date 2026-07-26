@@ -1,0 +1,28 @@
+#!/bin/sh
+# Run docker compose with the deployment overlays already selected.
+#
+#   ./dc up -d --pull always
+#   ./dc logs -f proxy
+#   ./dc ps
+#
+# The four files have to be named in order -- base first, so the overlays
+# that follow can override it -- and getting that wrong is not loud. Omit
+# the pull overlay and compose builds from source instead, which on a 1 GB
+# host means fifteen minutes of work ending in a heap OOM. Omit the prod
+# overlay and there is no TLS proxy at all, just a plain-HTTP site that
+# looks fine.
+#
+# This exists as a committed file rather than a documented command because
+# the command is 130 characters long, and a terminal that soft-wraps it
+# turns "-f docker-compose.pull.yml" into a "-f" with no argument.
+set -eu
+
+cd "$(dirname "$0")"
+
+B=docker-compose
+exec docker compose \
+  -f "$B.yml" \
+  -f "$B.prod.yml" \
+  -f "$B.micro.yml" \
+  -f "$B.pull.yml" \
+  "$@"
