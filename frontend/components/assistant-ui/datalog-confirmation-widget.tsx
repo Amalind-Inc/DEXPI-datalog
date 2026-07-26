@@ -46,7 +46,7 @@ const FALLBACK_ACTIONS: DatalogWidgetAction[] = [
 // The effect line is a fixed reviewer guarantee: the temporary Datalog
 // executor is strictly read-only, so this text must never come from the model.
 const DATALOG_EFFECT_STATEMENT =
-  "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.";
+  "Read-only analysis. Does not modify the source document, graph, annotations, or rule pack.";
 
 export const DatalogConfirmationWidget: FC<{
   confirmation: DatalogConfirmationState;

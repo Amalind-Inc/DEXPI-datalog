@@ -114,7 +114,7 @@ export const Thread: FC = () => {
             <Composer />
             <AuiIf condition={isNewChatView}>
               <p className="text-center text-xs text-[var(--calm-ink-muted)]">
-                Answers are grounded in the P&amp;ID you upload here — nothing outside it.
+                Answers are grounded in the process document you upload here — nothing outside it.
               </p>
             </AuiIf>
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
@@ -154,7 +154,7 @@ const ThreadWelcome: FC = () => {
   return (
     <div className="aui-thread-welcome-root mb-10 flex flex-col items-start px-0 text-left">
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-[family-name:var(--calm-display-font)] duration-500">
-        How can I help you with your P&ID today?
+        How can I help you with your process document today?
       </h1>
     </div>
   );
@@ -600,7 +600,7 @@ const DatalogConfirmationCard: FC<{
 // The effect line is a fixed reviewer guarantee: the temporary Datalog
 // executor is strictly read-only, so this text must never come from the model.
 const DATALOG_EFFECT_STATEMENT =
-  "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.";
+  "Read-only analysis. Does not modify the source document, graph, annotations, or rule pack.";
 
 function readDatalogConsentContext(raw: Record<string, unknown>): {
   interpretation: string;

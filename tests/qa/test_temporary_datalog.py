@@ -153,6 +153,10 @@ def test_propose_temporary_datalog_discloses_interpretation_scope_and_effect() -
     assert scope["direction_basis"]
     assert scope["path_treatment"]
     assert disclosure["route"] == "generated_temporary_datalog"
+    assert disclosure["effect"] == (
+        "Read-only analysis. Does not modify the source document, graph, "
+        "annotations, or rule pack."
+    )
 
 
 def test_propose_temporary_datalog_rejects_filesystem_directives() -> None:

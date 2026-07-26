@@ -42,7 +42,7 @@ export const c01ShelfFixture = path.resolve("e2e", "fixtures", "C01-shelf.xml");
 export function reviewWorkflow(page: Page) {
   const chat = page.getByRole("region", { name: "Chat" });
   const graphPanel = page.getByRole("complementary", {
-    name: "P&ID graph panel",
+    name: "Process document graph panel",
   });
   const composer = page.getByRole("textbox", { name: "Message input" });
 
@@ -76,8 +76,8 @@ export function reviewWorkflow(page: Page) {
     },
 
     async expectGraphNonPrimaryBeforeUpload() {
-      // Graph-on-demand: the topology panel is not shown until a P&ID is
-      // prepared. The chat is the primary, full-width surface on entry.
+      // Graph-on-demand: the topology panel is not shown until a process document
+      // is prepared. The chat is the primary, full-width surface on entry.
       await expect(chat).toBeVisible();
       await expect(graphPanel).toHaveCount(0);
     },

@@ -72,13 +72,13 @@ export function VariantB() {
         {mode === "empty" ? (
           <div className="flex min-h-screen flex-col items-center justify-center px-6">
             <h2 className="max-w-2xl text-center font-[family-name:var(--calm-display-font)] text-5xl leading-[1.1] text-[var(--calm-ink)]">
-              Review a P&ID with a second pair of eyes.
+              Review a process document with a second pair of eyes.
             </h2>
             <div className="relative mt-10 w-full max-w-2xl">
               <div className="flex items-center gap-2 rounded-2xl border border-[var(--calm-line)] bg-white px-5 py-4 shadow-[0_1px_2px_rgba(28,24,21,0.05),0_20px_40px_-20px_rgba(28,24,21,0.25)]">
                 <Paperclip size={17} className="text-[var(--calm-ink-muted)]" />
                 <input
-                  placeholder="Ask about this P&ID or drop a file…"
+                  placeholder="Ask about this document or drop an XML file…"
                   className="flex-1 bg-transparent text-base outline-none placeholder:text-[var(--calm-ink-muted)]"
                 />
                 <button

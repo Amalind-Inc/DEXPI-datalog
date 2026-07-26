@@ -51,7 +51,7 @@ export const fakeTurns: FakeTurn[] = [
     id: "t2",
     step: 2,
     kind: "assistant",
-    title: "Cross-checked line list against P&ID connectivity",
+    title: "Cross-checked line list against source-document connectivity",
     body: "All 58 process lines resolve to a source and destination unit. No dangling ends detected.",
     evidence: ["L-100-6\"-CS", "L-101-4\"-CS"],
   },

@@ -51,8 +51,8 @@ export function PidLegend({ onClose }: { onClose: () => void }) {
       </ul>
 
       <p className="pid-legend-note">
-        A compressed, P&amp;ID-style reading of the topology — equipment with their
-        nozzles as ports, joined by collapsed process lines.
+        A compressed process-schematic reading of the topology — equipment with their nozzles as
+        ports, joined by collapsed process lines.
       </p>
     </div>
   );

@@ -383,7 +383,7 @@ class ModelAccessTests(unittest.TestCase):
             provider.requests[0]["context"]["source_node_context"], source_context
         )
 
-    def test_logic_request_without_source_selection_records_whole_pid_scope(self) -> None:
+    def test_logic_request_without_source_selection_records_whole_document_scope(self) -> None:
         provider = pydexpi_datalog.FakeModelProvider(response="generated logic")
 
         artifact = pydexpi_datalog.draft_logic_request(
@@ -397,11 +397,11 @@ class ModelAccessTests(unittest.TestCase):
         self.assertEqual(
             artifact["source_node_context"],
             {
-                "scope": {"kind": "whole_pid"},
+                "scope": {"kind": "whole_document"},
                 "diagnostics": [
                     {
                         "code": "source_selection.not_provided",
-                        "message": "No source node selector was provided; the logic request has whole-P&ID scope.",
+                        "message": "No source node selector was provided; the logic request has whole-document scope.",
                     }
                 ],
             },

@@ -122,7 +122,7 @@ def _datalog_generation_system_prompt(context: dict[str, object]) -> str:
         )
 
     return f"""\
-You are a Souffle Datalog query generator for P&ID (Piping and Instrumentation Diagram) topology analysis.
+You are a Souffle Datalog query generator for process-engineering document topology analysis.
 
 Your job: given a natural-language question about a process topology, produce a Souffle Datalog program that identifies the relevant topology objects.
 
@@ -173,7 +173,7 @@ def _grounded_answer_system_prompt(context: dict[str, object]) -> str:
     )
 
     return f"""\
-You are a P&ID (Process and Instrumentation Diagram) analysis assistant.
+You analyze process-engineering documents such as P&IDs, PFDs, and block diagrams.
 
 {instructions}
 

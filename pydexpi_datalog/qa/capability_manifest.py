@@ -109,7 +109,7 @@ GROUNDING_DISCLOSURE_POLICY = "\n".join(
         "- needs_clarification: the request omits the object, scope, or acceptance "
         "criterion needed for a source-grounded check. Ask for that detail and "
         "offer concrete checks the loaded source can support.",
-        "- out_of_scope: a question unrelated to P&ID source review. You may "
+        "- out_of_scope: a question unrelated to process-document source review. You may "
         "first give a brief, honest acknowledgment of the question (one or two "
         "sentences -- e.g. name the model you are, or answer a trivial general "
         "question directly); never pretend you cannot understand it. Then "
@@ -133,7 +133,7 @@ def default_grounded_qa_manifest(
             GroundedQACapability(
                 tool_name="find_equipment",
                 description=(
-                    "Search or list topology objects in the loaded P&ID source. "
+                    "Search or list topology objects in the loaded process-document source. "
                     "Results are bounded and ordered toward process-facing objects."
                 ),
                 permission_class=PERMISSION_ALLOWED_READ_ONLY,

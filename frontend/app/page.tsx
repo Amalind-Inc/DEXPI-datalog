@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Engineering knowledge that can show its work · Harborfield",
   description:
-    "A neurosymbolic engineering assistant for projects, inspectable rulepacks, and evidence-grounded answers.",
+    "Neurosymbolic analysis for process-engineering XML documents, including P&IDs, PFDs, and block diagrams.",
 };
 
 const WindowBar = ({ label }: { label: string }) => (
@@ -77,9 +77,10 @@ export default function Home() {
                 </a>
               </div>
               <p className={styles.heroIntro}>
-                Harborfield combines PortLog&apos;s conversational interface with explicit
-                engineering logic. Ask questions in plain language. Get answers tied to the rules,
-                objects, and paths that made them true.
+                Harborfield analyzes supported process-engineering XML documents, including
+                P&amp;IDs, PFDs, and block diagrams. PortLog combines a conversational interface
+                with explicit engineering logic, keeping every answer tied to the rules, objects,
+                and paths that made it true.
               </p>
             </div>
           </section>

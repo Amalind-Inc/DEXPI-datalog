@@ -301,14 +301,14 @@ def validate_upload_input(
         return [
             diagnostic(
                 code="upload.missing_file",
-                message=f"Uploaded DEXPI source file does not exist: {dexpi_xml_path}",
+                message=f"Uploaded process document does not exist: {dexpi_xml_path}",
             )
         ]
     if dexpi_xml_path.suffix.lower() != ".xml":
         return [
             diagnostic(
                 code="upload.non_xml",
-                message="Uploaded P&ID source must be a DEXPI XML file.",
+                message="Uploaded process document must be a supported DEXPI XML file.",
             )
         ]
 

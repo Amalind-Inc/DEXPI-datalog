@@ -87,7 +87,7 @@ export function PidGraphPanel() {
   }, [nodeLabelById, pidView.lines, selectedNodeId]);
 
   return (
-    <aside className="pid-panel" aria-label="P&ID graph panel">
+    <aside className="pid-panel" aria-label="Process document graph panel">
       <div className="pid-tabbar">
         <div className="pid-tab" data-testid="pid-tab">
           <span className="pid-tab-name">{loadedFileName ?? "sample graph"}</span>
@@ -194,7 +194,7 @@ export function PidGraphPanel() {
             />
           </div>
         ) : (
-        <svg viewBox="0 0 430 290" role="img" aria-label="P&ID topology graph">
+        <svg viewBox="0 0 430 290" role="img" aria-label="Process document topology graph">
           {graph.edges.map((edge) => {
             const source = positions[edge.source] ?? { x: 60, y: 60 };
             const target = positions[edge.target] ?? { x: 320, y: 180 };

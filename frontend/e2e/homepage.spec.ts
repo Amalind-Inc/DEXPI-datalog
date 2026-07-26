@@ -17,6 +17,9 @@ test("Harborfield homepage introduces PortLog before entering the workspace (bea
     "href",
     "/sign-in?mode=sign-up",
   );
+  await expect(
+    page.getByText(/process-engineering XML documents, including P&IDs, PFDs, and block diagrams/i),
+  ).toBeVisible();
 
   const product = page.getByRole("region", { name: "Product capabilities" });
   await expect(product.getByRole("heading", { name: "PortLog" })).toBeVisible();
@@ -56,6 +59,17 @@ test("PortLog carries the Harborfield identity into the chat application (bead 2
     "href",
     "/assistant",
   );
+  await expect(
+    page.getByRole("heading", {
+      name: "How can I help you with your process document today?",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Answers are grounded in the process document you upload here — nothing outside it.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText(/your P&ID/i)).toHaveCount(0);
 });
 
 test("Sign Up opens the account form in registration mode (bead 2cut)", async ({ page }) => {

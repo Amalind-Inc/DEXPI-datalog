@@ -84,7 +84,7 @@ def draft_logic_request(
     artifact["model_access"] = model_access.metadata()
 
     if source_node_context["diagnostics"] and source_node_context["scope"] != {
-        "kind": "whole_pid"
+        "kind": "whole_document"
     }:
         artifact["status"] = "failed"
         artifact["diagnostics"] = source_node_context["diagnostics"]
@@ -260,11 +260,11 @@ def build_source_node_context(
     )
     if source_selection["selectors"] == {}:
         return {
-            "scope": {"kind": "whole_pid"},
+            "scope": {"kind": "whole_document"},
             "diagnostics": [
                 {
                     "code": "source_selection.not_provided",
-                    "message": "No source node selector was provided; the logic request has whole-P&ID scope.",
+                    "message": "No source node selector was provided; the logic request has whole-document scope.",
                 }
             ],
         }

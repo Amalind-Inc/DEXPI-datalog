@@ -56,7 +56,7 @@ export function AutoLayoutSchematicView({ pidView, selectedId, highlightedIds, o
           />
         </ZoomableScene>
       ) : (
-        <p className="pid-auto-layout-loading">Laying out P&amp;ID…</p>
+        <p className="pid-auto-layout-loading">Laying out process document…</p>
       )}
     </div>
   );

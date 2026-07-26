@@ -46,8 +46,8 @@ _POSTURE_DISCLOSURES: dict[str, str] = {
         "so the required inputs are unavailable."
     ),
     POSTURE_OUT_OF_SCOPE: (
-        "That is outside grounded P&ID source review. I can answer questions about "
-        "your loaded source."
+        "That is outside grounded process-document source review. I can answer "
+        "questions about your loaded source."
     ),
     POSTURE_NEEDS_CLARIFICATION: (
         "The request needs a specific object, scope, or acceptance criterion "

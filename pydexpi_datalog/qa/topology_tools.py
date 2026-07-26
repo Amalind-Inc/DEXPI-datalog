@@ -101,7 +101,7 @@ def _production_mechanical_safety_marker(**_kwargs: object) -> dict[str, object]
 # strictly read-only. The assumptions describe what the traversal actually
 # does: undirected breadth-first reachability over topology-attribute edges.
 TEMPORARY_DATALOG_EFFECT = (
-    "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack."
+    "Read-only analysis. Does not modify the source document, graph, annotations, or rule pack."
 )
 
 TEMPORARY_DATALOG_ASSUMPTIONS: dict[str, object] = {

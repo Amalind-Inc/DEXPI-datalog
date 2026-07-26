@@ -263,7 +263,7 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
         excluded_edge_types: ["instrument signal references"],
       },
       effect:
-        "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
+        "Read-only analysis. Does not modify the source document, graph, annotations, or rule pack.",
       generated_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
       exact_datalog: '.decl answer(x:symbol)\n.output answer\nanswer("node-p101").',
       validation: { status: "safe_to_confirm" },
@@ -381,7 +381,7 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
     "process-flow piping connectivity",
   );
   await expect(widget.getByTestId("datalog-effect")).toHaveText(
-    "Read-only analysis. Does not modify the P&ID, graph, annotations, or rule pack.",
+    "Read-only analysis. Does not modify the source document, graph, annotations, or rule pack.",
   );
   await expect(widget.getByTestId("datalog-widget-option-run")).toContainText("1.");
   await expect(widget.getByTestId("datalog-widget-option-run")).toContainText("Run");
