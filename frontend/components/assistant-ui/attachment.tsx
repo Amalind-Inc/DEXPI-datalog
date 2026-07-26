@@ -151,17 +151,19 @@ const XmlUploadProgress: FC = () => {
           {label}
         </span>
       </div>
-      <div
-        className="xml-upload__track"
-        role="progressbar"
-        aria-label="Preparing plant XML"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress}
-        style={{ "--xml-upload-progress": `${progress}%` } as CSSProperties}
-      >
-        <span className="xml-upload__fill" />
-      </div>
+      {status.type === "running" && (
+        <div
+          className="xml-upload__track"
+          role="progressbar"
+          aria-label="Preparing plant XML"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+          style={{ "--xml-upload-progress": `${progress}%` } as CSSProperties}
+        >
+          <span className="xml-upload__fill" />
+        </div>
+      )}
     </div>
   );
 };

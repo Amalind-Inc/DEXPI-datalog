@@ -17,7 +17,7 @@ test("shows patterned progress while an XML document is prepared", async ({ page
   await expect(page.getByText("Preparing process document")).toBeVisible();
 
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
-  await expect(progress).toHaveAttribute("aria-valuenow", "100");
+  await expect(progress).toHaveCount(0);
   await expect(page.getByText("Process document ready")).toBeVisible();
 });
 
