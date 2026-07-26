@@ -45,7 +45,7 @@ def compute_source_id(dexpi_xml_path: Path) -> str:
 
 
 class ReviewSessionService:
-    """Prepare one uploaded DEXPI source file for the web review workflow."""
+    """Prepare uploaded DEXPI source files for a web review session."""
 
     def __init__(
         self,
@@ -109,22 +109,6 @@ class ReviewSessionService:
             )
 
         source_id = compute_source_id(dexpi_xml_path)
-        prepared_source_id = self._ready_source_by_session.get(session_id)
-        if prepared_source_id is not None and prepared_source_id != source_id:
-            return self._failed_result(
-                session_id=session_id,
-                attempt=attempt,
-                source_id=prepared_source_id,
-                diagnostics=[
-                    diagnostic(
-                        code="source.already_prepared",
-                        message=(
-                            "This chat already prepared a source. Start a new chat "
-                            "to review a different DEXPI source."
-                        ),
-                    )
-                ],
-            )
 
         validation_diagnostics = validate_upload_input(
             dexpi_xml_path, limits=self._limits

@@ -36,9 +36,12 @@ export function PidGraphPanel() {
     geometryReport,
     highlightedNodeIds,
     loadedFileName,
+    documentNames,
     selectedNode,
     selectedNodeId,
     setSelectedNodeId,
+    selectDocument,
+    deleteDocument,
     setGraphOpen,
   } = usePidGraph();
   const shelvedTopologyIds = useMemo(() => {
@@ -119,18 +122,41 @@ export function PidGraphPanel() {
   return (
     <aside ref={panelRef} className="pid-panel" aria-label="Process document graph panel">
       <div className="pid-tabbar">
-        <div className="pid-tab" data-testid="pid-tab">
-          <span className="pid-tab-name">{loadedFileName ?? "sample graph"}</span>
-          <button
-            type="button"
-            className="pid-tab-close"
-            data-testid="close-graph"
-            aria-label="Close topology view"
-            onClick={() => setGraphOpen(false)}
-          >
-            <X size={14} aria-hidden="true" />
-          </button>
+        <div className="pid-document-tabs" role="tablist" aria-label="Uploaded topologies">
+          {documentNames.map((filename) => (
+            <div
+              key={filename}
+              className={cn("pid-tab", filename === loadedFileName && "pid-tab--active")}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={filename === loadedFileName}
+                className="pid-tab-name"
+                onClick={() => selectDocument(filename)}
+              >
+                {filename}
+              </button>
+              <button
+                type="button"
+                className="pid-tab-close"
+                aria-label={`Delete ${filename}`}
+                onClick={() => deleteDocument(filename)}
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
         </div>
+        <button
+          type="button"
+          className="pid-tab-close pid-panel-close"
+          data-testid="close-graph"
+          aria-label="Close topology view"
+          onClick={() => setGraphOpen(false)}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
       </div>
 
       <GeometryHealthCard />

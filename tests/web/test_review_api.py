@@ -294,7 +294,7 @@ class ReviewApiTests(unittest.TestCase):
             )
             self.assertEqual(response_text.count(sentinel), 0)
 
-    def test_chat_accepts_one_source_and_rejects_a_second_distinct_source(self) -> None:
+    def test_chat_accepts_multiple_distinct_sources(self) -> None:
         session_id = "api-single-source"
         e03_fixture = (
             REPO_ROOT
@@ -333,7 +333,7 @@ class ReviewApiTests(unittest.TestCase):
                 sum(pipeline_metrics["phases_ms"].values()),
             )
 
-            # A second, different source for the same chat is rejected.
+            # A second, different source becomes the active source for the chat.
             second = client.post(
                 f"/api/review/sessions/{session_id}/prepare",
                 json={
@@ -343,12 +343,10 @@ class ReviewApiTests(unittest.TestCase):
             )
             self.assertEqual(second.status_code, 200)
             second_body = second.json()
-            self.assertEqual(second_body["status"], "failed")
-            self.assertEqual(
-                second_body["diagnostics"][0]["code"], "source.already_prepared"
-            )
+            self.assertEqual(second_body["status"], "ready")
+            self.assertNotEqual(second_body["source_id"], first_body["source_id"])
 
-            # The originally prepared source still answers topology queries.
+            # Topology queries now resolve against the most recently prepared source.
             topology = client.get(f"/api/review/sessions/{session_id}/topology")
             self.assertEqual(topology.status_code, 200)
             self.assertTrue(topology.json()["graph_objects"])

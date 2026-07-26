@@ -2,8 +2,8 @@
 Behavioral contracts for bounding preparation of a single DEXPI source (37x.22.16).
 
 Boundary: ReviewSessionService public API (start_preparation / retry_preparation)
-and the validate_upload_input gate. Tests assert observable diagnostics, the
-single-source lock, retryability, and source-id provenance — not internal calls.
+and the validate_upload_input gate. Tests assert observable diagnostics,
+retryability, multiple-source behavior, and source-id provenance — not internal calls.
 """
 from __future__ import annotations
 
@@ -136,8 +136,8 @@ class ConfigurableLimitTests(unittest.TestCase):
             self.assertEqual(_first_diag_code(result), "limit.artifact_bytes_exceeded")
 
 
-class SingleSourcePerChatTests(unittest.TestCase):
-    def test_successful_preparation_prevents_a_second_distinct_source(self) -> None:
+class MultipleSourcesPerChatTests(unittest.TestCase):
+    def test_successful_preparation_allows_a_second_distinct_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = _service(tmp_dir)
             first = service.start_preparation(
@@ -148,8 +148,8 @@ class SingleSourcePerChatTests(unittest.TestCase):
             second = service.start_preparation(
                 dexpi_xml_path=E03_FIXTURE, session_id="one-chat"
             )
-            self.assertEqual(second["job"]["status"], "failed")
-            self.assertEqual(_first_diag_code(second), "source.already_prepared")
+            self.assertEqual(second["readiness"]["state"], "ready")
+            self.assertNotEqual(first["source_id"], second["source_id"])
 
     def test_re_preparing_identical_source_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -225,11 +225,12 @@ class DrawingCountIsNotPageCountTests(unittest.TestCase):
             self.assertEqual(
                 result["source_id"], result["readiness"]["source_id"]
             )
-            # A second distinct file is rejected — the chat holds one source.
+            # A second file is independently prepared with its own identity.
             second = service.start_preparation(
                 dexpi_xml_path=E06_FIXTURE, session_id="c01-one-source"
             )
-            self.assertEqual(_first_diag_code(second), "source.already_prepared")
+            self.assertEqual(second["readiness"]["state"], "ready")
+            self.assertNotEqual(result["source_id"], second["source_id"])
 
 
 class SourceIdProvenanceTests(unittest.TestCase):

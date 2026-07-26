@@ -999,9 +999,16 @@
   padding: 0 10px;
 }
 
+.pid-document-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .pid-tab {
   align-items: center;
-  border-bottom: 2px solid var(--calm-accent);
+  border-bottom: 2px solid transparent;
   color: var(--calm-ink);
   display: inline-flex;
   font-size: 13px;
@@ -1011,7 +1018,17 @@
   padding: 11px 4px 10px;
 }
 
+.pid-tab--active {
+  border-bottom-color: var(--calm-accent);
+}
+
 .pid-tab-name {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1033,6 +1050,11 @@
 .pid-tab-close:hover {
   background: var(--calm-paper);
   color: var(--calm-ink);
+}
+
+.pid-panel-close {
+  align-self: center;
+  margin-left: auto;
 }
 
 /* Geometry health summary card (bead pydexpi-datalog-1-2ki.8): a calm,

@@ -30,6 +30,7 @@ type GraphContextValue = {
   schematicSceneKind: SchematicSceneKind;
   geometryReport: GeometryReport | null;
   loadedFileName: string | null;
+  documentNames: string[];
   isGraphOpen: boolean;
   selectedNodeId: string | null;
   highlightedNodeIds: string[];
@@ -38,35 +39,78 @@ type GraphContextValue = {
   setHighlightedNodeIds: (nodeIds: string[]) => void;
   setGraphOpen: (open: boolean) => void;
   applyPrepareResult: (result: PrepareResult) => void;
+  selectDocument: (filename: string) => void;
+  deleteDocument: (filename: string) => void;
 };
 
 const GraphContext = createContext<GraphContextValue | null>(null);
 
 export function PidGraphProvider({ children }: { children: ReactNode }) {
   const [sessionId] = useState(readOrCreateSessionId);
-  const [graph, setGraph] = useState<PidGraph>(samplePidGraph);
-  const [pidView, setPidView] = useState<PidView>(EMPTY_PID_VIEW);
-  const [schematicScene, setSchematicScene] = useState<SchematicScene | null>(null);
-  const [schematicSceneKind, setSchematicSceneKind] = useState<SchematicSceneKind>("none");
-  const [geometryReport, setGeometryReport] = useState<GeometryReport | null>(null);
-  const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<PrepareResult[]>([]);
+  const [activeDocumentName, setActiveDocumentName] = useState<string | null>(null);
   const [isGraphOpen, setGraphOpen] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("pump-101");
-  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([
-    "pump-101",
-  ]);
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>(["pump-101"]);
 
-  const applyPrepareResult = useCallback((result: PrepareResult) => {
-    setGraph(result.graph);
-    setPidView(result.pidView ?? EMPTY_PID_VIEW);
-    setSchematicScene(result.schematicScene ?? null);
-    setSchematicSceneKind(result.schematicSceneKind ?? "none");
-    setGeometryReport(result.geometryReport ?? null);
-    setLoadedFileName(result.filename);
+  const activeDocument = useMemo(
+    () => documents.find((document) => document.filename === activeDocumentName) ?? null,
+    [activeDocumentName, documents],
+  );
+  const documentNames = useMemo(
+    () => documents.map((document) => document.filename),
+    [documents],
+  );
+  const graph = activeDocument?.graph ?? samplePidGraph;
+  const pidView = activeDocument?.pidView ?? EMPTY_PID_VIEW;
+  const schematicScene = activeDocument?.schematicScene ?? null;
+  const schematicSceneKind = activeDocument?.schematicSceneKind ?? "none";
+  const geometryReport = activeDocument?.geometryReport ?? null;
+  const loadedFileName = activeDocument?.filename ?? null;
+
+  const activateDocument = useCallback((result: PrepareResult) => {
+    setActiveDocumentName(result.filename);
     setGraphOpen(true);
     setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
     setHighlightedNodeIds(result.sourceScopeIds);
   }, []);
+
+  const applyPrepareResult = useCallback(
+    (result: PrepareResult) => {
+      setDocuments((current) => [
+        ...current.filter((document) => document.filename !== result.filename),
+        result,
+      ]);
+      activateDocument(result);
+    },
+    [activateDocument],
+  );
+
+  const selectDocument = useCallback(
+    (filename: string) => {
+      const document = documents.find((candidate) => candidate.filename === filename);
+      if (document) activateDocument(document);
+    },
+    [activateDocument, documents],
+  );
+
+  const deleteDocument = useCallback(
+    (filename: string) => {
+      const remaining = documents.filter((document) => document.filename !== filename);
+      setDocuments(remaining);
+      if (filename !== activeDocumentName) return;
+      const fallback = remaining.at(-1);
+      if (fallback) {
+        activateDocument(fallback);
+        return;
+      }
+      setActiveDocumentName(null);
+      setGraphOpen(false);
+      setSelectedNodeId(null);
+      setHighlightedNodeIds([]);
+    },
+    [activateDocument, activeDocumentName, documents],
+  );
 
   const selectedNode = useMemo(
     () => graph.nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -82,6 +126,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       schematicSceneKind,
       geometryReport,
       loadedFileName,
+      documentNames,
       isGraphOpen,
       selectedNodeId,
       highlightedNodeIds,
@@ -90,20 +135,25 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       setHighlightedNodeIds,
       setGraphOpen,
       applyPrepareResult,
+      selectDocument,
+      deleteDocument,
     }),
     [
       applyPrepareResult,
-      sessionId,
-      graph,
-      pidView,
-      schematicScene,
-      schematicSceneKind,
+      deleteDocument,
+      documentNames,
       geometryReport,
+      graph,
       highlightedNodeIds,
       isGraphOpen,
       loadedFileName,
+      pidView,
+      schematicScene,
+      schematicSceneKind,
+      selectDocument,
       selectedNode,
       selectedNodeId,
+      sessionId,
     ],
   );
 

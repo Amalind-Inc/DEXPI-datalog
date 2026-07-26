@@ -15,8 +15,8 @@ import { usePidGraph } from "@/components/pid/graph-context";
 const noopStorage: LayoutStorage = { getItem: () => null, setItem: () => {} };
 
 export default function AssistantPage() {
-  const { loadedFileName, isGraphOpen, setGraphOpen } = usePidGraph();
-  const hasPid = loadedFileName !== null;
+  const { documentNames, isGraphOpen, setGraphOpen } = usePidGraph();
+  const hasPid = documentNames.length > 0;
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     // v2: an earlier build used the Panel's own collapsible/collapsedSize
     // mechanism to open/close, which persisted a collapsed 0% width to
@@ -93,7 +93,7 @@ export default function AssistantPage() {
                 onClick={() => setGraphOpen(true)}
               >
                 <PanelRightOpen size={15} aria-hidden="true" />
-                <span>View topology · {loadedFileName}</span>
+                <span>{documentNames.length === 1 ? "View" : "View topologies"}</span>
               </button>
             </div>
           )}

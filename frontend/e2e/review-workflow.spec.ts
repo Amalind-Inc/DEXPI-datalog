@@ -21,6 +21,53 @@ test("shows patterned progress while an XML document is prepared", async ({ page
   await expect(page.getByText("Process document ready")).toBeVisible();
 });
 
+test("keeps multiple uploaded process documents available for topology review", async ({ page }) => {
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await workflow.uploadPlantXml(c01DexpiFixture);
+  await workflow.expectPreparedSchematicScene("C01V04-VER.EX01.xml");
+
+  const documents = page.getByRole("tablist", { name: "Uploaded topologies" });
+  await expect(documents.getByRole("tab")).toHaveCount(2);
+  await documents.getByRole("tab", { name: "E06V01-VER.EX01.xml" }).click();
+  await expect(page.getByTestId("auto-layout-schematic")).toBeVisible();
+});
+
+test("deletes uploaded documents and closes topology after the final deletion", async ({ page }) => {
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await workflow.uploadPlantXml(c01DexpiFixture);
+  await workflow.expectPreparedSchematicScene("C01V04-VER.EX01.xml");
+
+  await page.getByRole("button", { name: "Delete C01V04-VER.EX01.xml" }).click();
+  await expect(page.getByRole("tab", { name: "C01V04-VER.EX01.xml" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "E06V01-VER.EX01.xml" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("button", { name: "Delete E06V01-VER.EX01.xml" }).click();
+  await expect(workflow.graphPanel).toHaveCount(0);
+});
+
+test("labels the collapsed topology control by uploaded document count", async ({ page }) => {
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await page.getByTestId("close-graph").click();
+  await expect(page.getByTestId("reopen-graph")).toHaveText("View");
+
+  await workflow.uploadPlantXml(c01DexpiFixture);
+  await workflow.expectPreparedSchematicScene("C01V04-VER.EX01.xml");
+  await page.getByTestId("close-graph").click();
+  await expect(page.getByTestId("reopen-graph")).toHaveText("View topologies");
+});
+
 test("uploads E06 XML and a direct topology question gets a grounded QA answer without Datalog confirmation", async ({
   page,
 }) => {
