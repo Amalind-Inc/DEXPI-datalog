@@ -2,7 +2,7 @@
 
 Issues, PRDs, and wayfinder maps for this repo live in **Beads** (`br`, beads_rust) — a
 local SQLite + JSONL tracker committed under `.beads/`. Despite the GitHub remote
-(`Harborfield/portlog`), there is **no GitHub-Issues workflow**; all work is tracked
+(`Harborfield-suite/PortLog`), there is **no GitHub-Issues workflow**; all work is tracked
 in beads. Use the `br` CLI for every operation. **Use `br`, not `bd`.** Issue ids are
 prefixed `pydexpi-datalog-1-`.
 

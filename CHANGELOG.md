@@ -82,5 +82,5 @@ version.
 - One DEXPI source file per run.
 - Not audited, and not suitable for verifying production P&ID documents.
 
-[Unreleased]: https://github.com/Harborfield/portlog/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Harborfield/portlog/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Harborfield-suite/PortLog/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Harborfield-suite/PortLog/releases/tag/v0.1.0

@@ -6,7 +6,7 @@ look like, rather than rules for their own sake.
 
 ## Reporting a bug or asking for something
 
-Open a [GitHub issue](https://github.com/Harborfield/portlog/issues).
+Open a [GitHub issue](https://github.com/Harborfield-suite/PortLog/issues).
 
 For a bug, the two most useful things are the DEXPI file that triggered it (or
 one that reproduces it) and what you expected the answer to be. This tool makes
@@ -25,8 +25,8 @@ public issue.
 The fastest way to see it work:
 
 ```bash
-git clone --recurse-submodules https://github.com/Harborfield/portlog.git
-cd portlog
+git clone --recurse-submodules https://github.com/Harborfield-suite/PortLog.git
+cd PortLog
 docker compose up
 ```
 

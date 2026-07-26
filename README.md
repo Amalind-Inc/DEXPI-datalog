@@ -2,9 +2,9 @@
 
 An open source tool for deterministic P&ID QA over DEXPI source files (version 1.3)
 
-[![CI](https://github.com/Harborfield/portlog/actions/workflows/ci.yml/badge.svg)](https://github.com/Harborfield/portlog/actions/workflows/ci.yml)
+[![CI](https://github.com/Harborfield-suite/PortLog/actions/workflows/ci.yml/badge.svg)](https://github.com/Harborfield-suite/PortLog/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/tag/Harborfield/portlog?label=release&sort=semver)](https://github.com/Harborfield/portlog/releases)
+[![Release](https://img.shields.io/github/v/tag/Harborfield-suite/PortLog?label=release&sort=semver)](https://github.com/Harborfield-suite/PortLog/releases)
 
 This OSS version is intended to work both as a standalone CLI/TUI/GUI tool and as a set of
 small Python library modules that users can integrate into their own workflows.
@@ -20,8 +20,8 @@ The whole stack -- web UI, review backend, Souffle, database, object storage --
 in one command:
 
 ```bash
-git clone --recurse-submodules https://github.com/<your-fork>/portlog.git
-cd portlog
+git clone --recurse-submodules https://github.com/<your-fork>/PortLog.git
+cd PortLog
 docker compose up
 ```
 
@@ -383,8 +383,8 @@ You need a host with Docker, and a DNS `A` record pointing your domain at it.
 Ports 80 and 443 must be reachable -- Let's Encrypt validates over both.
 
 ```bash
-git clone --recurse-submodules https://github.com/Harborfield/portlog.git
-cd portlog
+git clone --recurse-submodules https://github.com/Harborfield-suite/PortLog.git
+cd PortLog
 
 cat > .env <<'EOF'
 HARBORFIELD_PUBLIC_HOST=harborfield.live

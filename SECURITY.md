@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report privately rather than in a public issue:
-[open a security advisory](https://github.com/Harborfield/portlog/security/advisories/new).
+[open a security advisory](https://github.com/Harborfield-suite/PortLog/security/advisories/new).
 
 That form is private to you and the maintainers. Include what you did, what
 happened, and what you expected. A proof of concept is welcome but not
