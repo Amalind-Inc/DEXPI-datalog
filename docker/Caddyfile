@@ -1,0 +1,40 @@
+# TLS and reverse proxy for the production overlay.
+#
+# Caddy obtains and renews a certificate for {$PYDEXPI_PUBLIC_HOST} on its own,
+# and redirects http to https by default. Nothing here needs editing for a
+# normal deployment: the domain and the contact address come from the
+# environment so one image serves any host.
+
+{
+	email {$TLS_CONTACT_EMAIL}
+}
+
+{$PYDEXPI_PUBLIC_HOST} {
+	# `app` is the compose service; it publishes no port to the host, so this
+	# is the only route in.
+	reverse_proxy app:3000
+
+	# Uploaded DEXPI files are XML and can be large. The default would reject
+	# a real drawing with a 413 that looks like a bug in the app.
+	request_body {
+		max_size 64MB
+	}
+
+	encode zstd gzip
+
+	header {
+		# The app is same-origin and embeds nothing, so these are safe to set
+		# globally rather than per-route.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy advertises itself otherwise.
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

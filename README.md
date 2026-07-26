@@ -364,6 +364,91 @@ To check a hosted deployment really does isolate two accounts:
 Running the test suite under the hosted profile needs both services;
 `tests/conftest.py` prints the commands if either is missing.
 
+### Deploying to a server
+
+`docker-compose.yml` on its own is a laptop default: it publishes a MinIO
+console with a known password and serves plain HTTP. Deploy with the
+production overlay instead, which terminates TLS, publishes nothing but the
+proxy, and turns every credential default into a required variable.
+
+You need a host with Docker, and a DNS `A` record pointing your domain at it.
+Ports 80 and 443 must be reachable -- Let's Encrypt validates over both.
+
+```bash
+git clone --recurse-submodules https://github.com/Amalind-Inc/DEXPI-datalog.git
+cd DEXPI-datalog
+
+cat > .env <<'EOF'
+PYDEXPI_PUBLIC_HOST=pid.example.com
+BETTER_AUTH_URL=https://pid.example.com
+TLS_CONTACT_EMAIL=you@example.com
+MINIO_ROOT_USER=pidadmin
+MINIO_ROOT_PASSWORD=generate-a-real-one
+EOF
+chmod 600 .env
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Caddy requests a certificate on first start, so the first request can take a
+few seconds. After that, <https://pid.example.com> serves the app and plain
+HTTP redirects to it.
+
+`BETTER_AUTH_URL` must be the public URL. Sign-in redirects, password-reset
+links, and OAuth callbacks are all built from it, and it is what makes the
+session cookie `__Secure-`. Pointing it at `localhost` on a deployed instance
+produces links that lead back to the server's own loopback.
+
+The image is `linux/amd64`. Most servers are; an arm64 host would need Souffle
+built from source.
+
+#### What to keep
+
+Three named volumes hold everything that cannot be rebuilt:
+
+| Volume | Contents | If you lose it |
+| --- | --- | --- |
+| `app-state` | Accounts, and the generated secrets | Every account, and every saved model credential becomes undecryptable |
+| `minio-data` | Review artifacts | Uploaded drawings, facts and traces |
+| `libsql-data` | Session index and saved credentials | The list of reviews, and stored model keys |
+
+`caddy-data` holds certificates; losing it only forces re-issuance, which
+Let's Encrypt rate-limits, so it is worth keeping too.
+
+Back them up while the stack is stopped, which avoids copying a database
+mid-write:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml stop
+for v in app-state minio-data libsql-data; do
+  docker run --rm -v "pydexpi-datalog_${v}:/from" -v "$PWD/backup:/to" \
+    alpine tar czf "/to/${v}.tar.gz" -C /from .
+done
+docker compose -f docker-compose.yml -f docker-compose.prod.yml start
+```
+
+Set `BETTER_AUTH_SECRET` and `PYDEXPI_BYOK_SECRET` in `.env` if you would
+rather hold them yourself than have the container generate them into
+`app-state`. Doing so is what lets you move the deployment to another host
+without invalidating sessions and saved keys.
+
+#### Updating
+
+```bash
+git pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The account schema migrates on start. Take a backup first: nothing here rolls
+a migration back.
+
+#### Before inviting anyone
+
+Sign-up is open to anyone who can reach the URL, and email addresses are not
+verified. Until that changes, treat a public instance as open registration --
+put it behind a private network, or create the accounts you want and watch the
+user table.
+
 ## End-to-end screenshot test
 
 `frontend/screenshot.mjs` drives the full logic-request flow with Playwright

@@ -7,6 +7,11 @@
 # This is a self-hosting default, not a production template: MinIO and libSQL
 # run beside the app with development credentials. Pointing PYDEXPI_S3_* at S3
 # or R2 and PYDEXPI_LIBSQL_URL at Turso is a change to this file alone.
+# Pinned so volume names do not depend on what the checkout directory is
+# called. Without it the project name is the directory, and the backup and
+# restore commands in the README would name volumes that exist only on a
+# machine that happened to clone into the same folder name.
+name: pydexpi-datalog
 
 services:
   app:
