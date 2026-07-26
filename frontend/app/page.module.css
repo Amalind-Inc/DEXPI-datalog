@@ -52,12 +52,10 @@
   text-decoration: none;
 }
 
-.wordmarkMark {
-  background: var(--home-ink);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(17 17 17 / 8%);
-  height: 7px;
-  width: 7px;
+.wordmarkLogo {
+  height: 32px;
+  object-fit: contain;
+  width: 32px;
 }
 
 .railNav {
@@ -95,6 +93,37 @@
 
 .main {
   min-width: 0;
+  position: relative;
+}
+
+.authNav {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  position: absolute;
+  right: clamp(28px, 5.5vw, 88px);
+  top: 24px;
+  z-index: 10;
+}
+
+.authNav a {
+  color: var(--home-ink);
+  font-size: 0.62rem;
+  font-variation-settings: "wght" 540;
+  letter-spacing: 0.025em;
+  padding: 8px 10px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.authNav .signUpLink {
+  background: var(--home-ink);
+  color: var(--home-bg);
+}
+
+.authNav a:hover,
+.authNav a:focus-visible {
+  text-decoration: underline;
 }
 
 .mobileHeader {
@@ -635,6 +664,18 @@
   text-transform: uppercase;
 }
 
+.footerIllustration {
+  display: flex;
+  justify-content: center;
+  margin: clamp(42px, 7vw, 96px) auto 0;
+}
+
+.footerLogo {
+  height: clamp(150px, 22vw, 280px);
+  opacity: 0.9;
+  width: clamp(150px, 22vw, 280px);
+}
+
 .footerWordmark {
   background: linear-gradient(
     to bottom,
@@ -645,11 +686,11 @@
   );
   background-clip: text;
   color: transparent;
-  font-size: clamp(6.5rem, 15.5vw, 14.5rem);
+  font-size: clamp(4.2rem, 10.4vw, 10rem);
   font-variation-settings: "wght" 650;
-  letter-spacing: -0.105em;
+  letter-spacing: -0.08em;
   line-height: 0.76;
-  margin: clamp(54px, 8vw, 110px) auto 0;
+  margin: clamp(24px, 4vw, 52px) auto 0;
   max-width: 1180px;
   overflow: hidden;
   padding-inline: clamp(28px, 5.5vw, 88px);
@@ -718,9 +759,13 @@
     z-index: 20;
   }
 
-  .mobileHeader nav {
-    display: flex;
-    gap: 14px;
+  .mobileHeader .authNav {
+    gap: 5px;
+    position: static;
+  }
+
+  .desktopAuthNav {
+    display: none;
   }
 
   .mobileHeader nav a {
@@ -750,11 +795,6 @@
 }
 
 @media (max-width: 640px) {
-  .mobileHeader nav a:first-child,
-  .mobileHeader nav a:nth-child(2) {
-    display: none;
-  }
-
   .hero,
   .section,
   .finalCta,

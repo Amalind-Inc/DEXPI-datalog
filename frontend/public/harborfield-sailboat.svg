@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-labelledby="title desc">
+  <title id="title">Harborfield sailboat</title>
+  <desc id="desc">Hand-drawn black line illustration of a two-person sailboat crossing calm water.</desc>
+  <g fill="none" stroke="#111" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="3" d="M33 601c28-3 44-18 64-19 18-1 27 14 46 10 18-4 20-30 38-35 16-4 25 25 43 28 30 5 49-3 75 11M525 600c36-1 51-3 77-13 18-7 26 4 44 1 16-3 26-23 43-25 14-2 17 17 32 18 16 1 31 1 47 17"/>
+    <path stroke-width="2" d="M22 601c82 2 167 1 251 0M535 601c77 1 158 1 243 0"/>
+    <path stroke-width="5" d="M388 128 351 609"/>
+    <path stroke-width="2" d="M394 133 370 604M387 128l42 21"/>
+    <path stroke-width="3" d="M385 148C318 236 273 367 228 570l118 20M397 152c83 90 126 236 139 425l-150 10"/>
+    <path stroke-width="2" d="M384 168c-53 99-90 223-137 394l99 16M403 169c60 113 100 248 119 391"/>
+    <path stroke-width="4" d="m215 584 348 2-34 39c-84 24-217 25-287-3Z" fill="#efefed"/>
+    <path stroke-width="2" d="M231 600c100 10 202 11 306 0M254 622c82 16 182 13 263-2"/>
+    <path stroke-width="3" d="M375 585c9-9 26-15 39-11 13 5 22 8 39 8"/>
+    <circle cx="403" cy="566" r="8" stroke-width="3"/>
+    <path stroke-width="3" d="M397 574c-6 7-7 18-8 27m18-27c7 8 10 18 11 28m-26-16 25 1"/>
+    <circle cx="447" cy="566" r="8" stroke-width="3"/>
+    <path stroke-width="3" d="M441 574c-6 8-7 18-8 29m17-29c7 8 10 18 11 28m-25-16 24 1"/>
+    <path stroke-width="2" d="M363 633c-55 6-113 7-165 19m185-10c-80 11-139 27-208 30m222-17c-50 7-93 21-135 34m158-25c48 1 99 5 147 16m-196 3c38 2 75 8 110 18m-276-11c39-3 75-2 106 1"/>
+    <path stroke-width="1.5" opacity=".58" d="M82 585c13-16 20-23 29-3m6 5c8-19 14-21 21 1m509-2c11-19 18-18 24-2m8-5c8-14 16-10 23 3"/>
+    <path stroke-width="1.5" opacity=".38" d="M346 174c5 103 4 211-4 319m15-294c2 83 1 161-5 236m32-271c-4 80-8 173-9 257"/>
+  </g>
+</svg>

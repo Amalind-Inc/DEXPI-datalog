@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { HarborfieldMark } from "@/components/brand/harborfield-mark";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_WIDTH,
@@ -24,7 +25,7 @@ import { SESSION_KEY } from "@/lib/session-id";
 import type { ReviewSessionSummary } from "@/lib/review-backend";
 
 const NAV_ITEMS = [
-  { href: "/assistant", label: "Assistant", icon: MessageSquare },
+  { href: "/assistant", label: "PortLog", icon: MessageSquare },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/rule-packs", label: "Rule Packs", icon: Layers },
 ] as const;
@@ -148,7 +149,10 @@ export function AppSidebar({
         inert={collapsed || undefined}
       >
         <div className="app-sidebar-header">
-          <span className="calm-rail-mark">AMALIND</span>
+          <span className="calm-rail-mark">
+            <HarborfieldMark className="calm-rail-logo" priority />
+            <span>PORTLOG</span>
+          </span>
           <button
             type="button"
             aria-label="Hide sidebar"

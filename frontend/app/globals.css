@@ -164,12 +164,21 @@
 }
 
 .calm-rail-mark {
+  align-items: center;
   color: var(--calm-ink);
+  display: flex;
   font-family: var(--calm-display-font), monospace;
   font-size: 0.72rem;
   font-variation-settings: "wght" 650;
+  gap: 7px;
   letter-spacing: 0.025em;
   margin-bottom: 10px;
+}
+
+.calm-rail-logo {
+  height: 30px;
+  object-fit: contain;
+  width: 30px;
 }
 
 .calm-rail-divider {

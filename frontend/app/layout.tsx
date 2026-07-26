@@ -6,8 +6,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Amalind",
-    template: "%s · Amalind",
+    default: "Harborfield",
+    template: "%s · Harborfield",
   },
   description: "Neurosymbolic engineering intelligence grounded in inspectable evidence.",
 };

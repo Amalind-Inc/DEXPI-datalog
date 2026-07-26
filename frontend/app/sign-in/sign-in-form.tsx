@@ -21,12 +21,14 @@ type Mode = "sign-in" | "sign-up";
 export default function SignInForm({
   socialProviders,
   canResetPassword,
+  initialMode = "sign-in",
 }: {
   socialProviders: OfferedSocialProvider[];
   canResetPassword: boolean;
+  initialMode?: Mode;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("sign-in");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

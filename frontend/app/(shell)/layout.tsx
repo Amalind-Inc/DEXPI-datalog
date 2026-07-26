@@ -1,6 +1,17 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/chat/app-shell";
-import { DEFAULT_WIDTH, MAX_WIDTH, MIN_WIDTH, WIDTH_STORAGE_KEY } from "@/components/chat/app-sidebar-constants";
+import {
+  DEFAULT_WIDTH,
+  MAX_WIDTH,
+  MIN_WIDTH,
+  WIDTH_STORAGE_KEY,
+} from "@/components/chat/app-sidebar-constants";
+
+export const metadata: Metadata = {
+  title: "PortLog",
+  description: "Harborfield's evidence-grounded engineering chat application.",
+};
 
 // Sets the sidebar's persisted width as a CSS var before the browser's first
 // paint (a plain synchronous <script>, not next/script, so it runs in
@@ -13,7 +24,10 @@ const setSidebarWidthVarScript = `(function(){try{var raw=window.localStorage.ge
 export default function ShellLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: setSidebarWidthVarScript }} />
+      <script
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: setSidebarWidthVarScript }}
+      />
       <AppShell>{children}</AppShell>
     </>
   );

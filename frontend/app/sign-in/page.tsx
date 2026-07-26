@@ -18,11 +18,17 @@ import { enabledSocialProviders } from "@/lib/social-providers.ts";
 
 import SignInForm from "./sign-in-form.tsx";
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string }>;
+}) {
+  const { mode } = await searchParams;
   return (
     <SignInForm
       socialProviders={enabledSocialProviders(process.env)}
       canResetPassword={isEmailConfigured(process.env)}
+      initialMode={mode === "sign-up" ? "sign-up" : "sign-in"}
     />
   );
 }

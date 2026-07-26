@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { HarborfieldMark } from "@/components/brand/harborfield-mark";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Engineering knowledge that can show its work · Amalind",
+  title: "Engineering knowledge that can show its work · Harborfield",
   description:
     "A neurosymbolic engineering assistant for projects, inspectable rulepacks, and evidence-grounded answers.",
 };
@@ -24,9 +25,9 @@ export default function Home() {
     <div className={styles.page}>
       <div className={styles.shell}>
         <aside className={styles.rail} aria-label="Homepage navigation">
-          <a className={styles.wordmark} href="#top">
-            <span className={styles.wordmarkMark} aria-hidden="true" />
-            AMALIND
+          <a className={styles.wordmark} href="#top" aria-label="Harborfield">
+            <HarborfieldMark className={styles.wordmarkLogo} priority />
+            HARBORFIELD
           </a>
           <nav className={styles.railNav}>
             <a href="#product">Product</a>
@@ -42,15 +43,22 @@ export default function Home() {
         </aside>
 
         <main className={styles.main}>
+          <nav className={`${styles.authNav} ${styles.desktopAuthNav}`} aria-label="Account">
+            <Link href="/sign-in">Log in</Link>
+            <Link className={styles.signUpLink} href="/sign-in?mode=sign-up">
+              Sign Up
+            </Link>
+          </nav>
           <header className={styles.mobileHeader}>
-            <a className={styles.wordmark} href="#top">
-              <span className={styles.wordmarkMark} aria-hidden="true" />
-              AMALIND
+            <a className={styles.wordmark} href="#top" aria-label="Harborfield">
+              <HarborfieldMark className={styles.wordmarkLogo} priority />
+              HARBORFIELD
             </a>
-            <nav aria-label="Mobile navigation">
-              <a href="#product">Product</a>
-              <a href="#why">Why</a>
-              <Link href="/assistant">Enter app</Link>
+            <nav className={styles.authNav} aria-label="Account">
+              <Link href="/sign-in">Log in</Link>
+              <Link className={styles.signUpLink} href="/sign-in?mode=sign-up">
+                Sign Up
+              </Link>
             </nav>
           </header>
 
@@ -62,16 +70,16 @@ export default function Home() {
             <div className={styles.heroBottom}>
               <div className={styles.heroActions}>
                 <Link className={styles.primaryLink} href="/assistant">
-                  Open assistant <span aria-hidden="true">↗</span>
+                  Open PortLog <span aria-hidden="true">↗</span>
                 </Link>
                 <a className={styles.secondaryLink} href="#product">
                   See how it works <span aria-hidden="true">↓</span>
                 </a>
               </div>
               <p className={styles.heroIntro}>
-                Amalind combines a conversational assistant with explicit engineering logic. Ask
-                questions in plain language. Get answers tied to the rules, objects, and paths that
-                made them true.
+                Harborfield combines PortLog&apos;s conversational interface with explicit
+                engineering logic. Ask questions in plain language. Get answers tied to the rules,
+                objects, and paths that made them true.
               </p>
             </div>
           </section>
@@ -109,14 +117,14 @@ export default function Home() {
               <article className={styles.feature}>
                 <span className={styles.featureIndex}>01 / ASK</span>
                 <div className={styles.featureCopy}>
-                  <h3>Assistant</h3>
+                  <h3>PortLog</h3>
                   <p>
                     Ask about a system the way you would ask an experienced engineer. Every claim
                     stays attached to its evidence.
                   </p>
                 </div>
-                <div className={styles.featureVisual} aria-label="Assistant answer example">
-                  <WindowBar label="assistant / grounded answer" />
+                <div className={styles.featureVisual} aria-label="PortLog answer example">
+                  <WindowBar label="portlog / grounded answer" />
                   <p className={styles.chatQuestion}>
                     “Can P-101 still reach V-204 if valve V-14 is closed?”
                   </p>
@@ -233,7 +241,7 @@ export default function Home() {
                   <h2 className={styles.sectionTitle}>Language in. Proof out.</h2>
                 </div>
                 <p className={styles.sectionIntro}>
-                  The model handles language. The engine handles entailment. Amalind keeps the two
+                  The model handles language. The engine handles entailment. PortLog keeps the two
                   responsibilities separate, then brings their results back together.
                 </p>
               </div>
@@ -285,20 +293,23 @@ export default function Home() {
             <p>Start with a question</p>
             <h2>Bring your engineering context into the conversation.</h2>
             <Link className={styles.primaryLink} href="/assistant">
-              Open assistant <span aria-hidden="true">↗</span>
+              Open PortLog <span aria-hidden="true">↗</span>
             </Link>
           </section>
 
           <footer className={styles.footer}>
             <div className={styles.footerMeta}>
-              <span>Neurosymbolic engineering intelligence</span>
+              <span>Harborfield / Neurosymbolic engineering intelligence</span>
               <br />
-              <span>Prototype / 2026</span>
+              <span>PortLog / 2026</span>
             </div>
-            <Link href="/assistant">Enter workspace ↗</Link>
+            <Link href="/assistant">Enter PortLog ↗</Link>
           </footer>
+          <div className={styles.footerIllustration}>
+            <HarborfieldMark className={styles.footerLogo} />
+          </div>
           <div className={styles.footerWordmark} aria-hidden="true">
-            amalind
+            harborfield
           </div>
         </main>
       </div>
