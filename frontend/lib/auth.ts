@@ -152,6 +152,26 @@ function createHostedAuth() {
         }
       : {}),
     socialProviders: configuredSocialProviders(process.env),
+    rateLimit: {
+      // Better Auth already throttles auth routes -- measured at three
+      // attempts per ten seconds, which is tuned to stop password guessing.
+      // That is the wrong shape of protection for sign-up once registration
+      // is open and every account costs an email: eighteen a minute drains a
+      // 100/day sending quota in under six minutes, and when the quota is
+      // gone nobody can verify an address, including real users. So sign-up
+      // gets a rule measured in accounts per hour rather than per second.
+      //
+      // Five an hour per IP is generous for a person and useless for a
+      // script. The cost is shared addresses: an office or a mobile carrier
+      // behind one NAT could reach it honestly, which is the trade being
+      // made rather than an oversight. Raise it if that shows up in support.
+      customRules: {
+        "/sign-up/email": { window: 3600, max: 5 },
+        // Resending verification is the other route that spends an email.
+        "/send-verification-email": { window: 3600, max: 5 },
+        "/request-password-reset": { window: 3600, max: 5 },
+      },
+    },
     plugins: [jwt()],
   });
 }
