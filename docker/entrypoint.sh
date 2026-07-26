@@ -44,11 +44,19 @@ export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export HARBORFIELD_AUTH_DB="${HARBORFIELD_AUTH_DB:-${STATE_DIR}/auth.sqlite3}"
 export HARBORFIELD_REVIEW_API_URL="${HARBORFIELD_REVIEW_API_URL:-http://127.0.0.1:8000}"
 
-# The three OIDC settings must agree with BETTER_AUTH_URL: the backend verifies
-# tokens the front end issues, so a mismatch means every request is a 401.
+# Issuer and audience must equal BETTER_AUTH_URL: they are claims inside the
+# token, and a mismatch rejects every request.
 export HARBORFIELD_OIDC_ISSUER="${HARBORFIELD_OIDC_ISSUER:-${BETTER_AUTH_URL}}"
 export HARBORFIELD_OIDC_AUDIENCE="${HARBORFIELD_OIDC_AUDIENCE:-${BETTER_AUTH_URL}}"
-export HARBORFIELD_OIDC_JWKS_URL="${HARBORFIELD_OIDC_JWKS_URL:-${BETTER_AUTH_URL}/api/auth/jwks}"
+
+# The JWKS URL is not a claim -- it is where this process goes to fetch keys,
+# and it must be resolvable from inside this container. Deriving it from
+# BETTER_AUTH_URL looked consistent and was wrong: the public URL points at
+# the TLS proxy, which is a different container, so the backend got
+# "connection refused" on every verification, answered 401 to its own front
+# end, and the UI quietly fell back to an unverified result. Both processes
+# live here, so the front end is one hop away on loopback.
+export HARBORFIELD_OIDC_JWKS_URL="${HARBORFIELD_OIDC_JWKS_URL:-http://127.0.0.1:3000/api/auth/jwks}"
 
 # --- Wait for the backing services -------------------------------------------
 # Compose's `depends_on` waits for a container, not for a database that answers.

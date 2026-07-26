@@ -1,0 +1,46 @@
+# Overlay for a 1 GB host, such as Oracle Cloud's Always Free
+# VM.Standard.E2.1.Micro (1/8 OCPU, 1 GB).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.micro.yml up -d
+#
+# The budget is the whole point. Ubuntu and the Docker daemon take roughly
+# 300 MB of the gigabyte before a container starts, so the stack gets about
+# 700 MB. Declaring limits means a leak is killed and restarted rather than
+# taking the kernel's OOM killer roulette, which on a box this small usually
+# picks sshd and locks you out.
+#
+# Do not build on this host. `npm ci` plus a Next production build needs more
+# memory than the machine has; the failure is a killed process with no useful
+# message. Pull a prebuilt image instead -- see the deployment runbook.
+
+services:
+  app:
+    # Souffle and the Next server are the memory consumers. Measured peak
+    # during a real DEXPI review is ~250 MB; this leaves room for a second
+    # concurrent review before the limit bites.
+    mem_limit: 512m
+    memswap_limit: 1g
+    cpus: 0.5
+
+  minio:
+    # MinIO sizes caches to available memory unless told otherwise, and on a
+    # small host that is how a storage daemon quietly becomes the largest
+    # process on the box.
+    mem_limit: 128m
+    memswap_limit: 512m
+    cpus: 0.2
+
+  libsql:
+    mem_limit: 96m
+    memswap_limit: 256m
+    cpus: 0.2
+
+  proxy:
+    # Caddy is small but not 64 MB small: measured at 56 MB idle, which was
+    # 87% of that cap before serving a single request. A starved proxy means
+    # the site is down even when everything behind it is healthy, so this one
+    # gets headroom rather than the tightest fit that appeared to work.
+    mem_limit: 128m
+    memswap_limit: 256m
+    cpus: 0.2

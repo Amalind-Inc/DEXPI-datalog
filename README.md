@@ -440,11 +440,69 @@ rather hold them yourself than have the container generate them into
 `app-state`. Doing so is what lets you move the deployment to another host
 without invalidating sessions and saved keys.
 
+#### On a 1 GB host (Oracle Always Free and similar)
+
+The stack runs in about 550 MB with a review in flight, so a 1 GB instance
+works -- but only if it never builds. Two extra overlays make that safe:
+`micro` caps each service, and `pull` runs the image CI already published to
+`ghcr.io/harborfield-suite/portlog` instead of building one.
+
+Add swap first. Measured usage leaves roughly 180 MB spare, and without swap
+a spike is resolved by the kernel's OOM killer, which on a small box has a
+habit of choosing sshd:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Then deploy, pulling rather than building:
+
+```bash
+export PORTLOG_IMAGE_TAG=0.1.0   # or `latest` to follow main
+
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  -f docker-compose.micro.yml \
+  -f docker-compose.pull.yml \
+  up -d
+```
+
+Oracle's free instances are `VM.Standard.E2.1.Micro`, which is amd64 -- the
+architecture the image needs. Their larger free tier is Ampere ARM, and
+Souffle publishes no arm64 build, so it cannot run PortLog without compiling
+Souffle from source.
+
+Expect it to be slow. A 1/8 OCPU burstable core is a fraction of a real one,
+and Souffle is the part that will feel it. That is a fine trade for letting
+people try the tool; it is not where you would put a team that depends on it.
+
+Measured on the E06 fixture, for sizing your own expectations:
+
+| | |
+| --- | --- |
+| Idle | ~370 MB across all four services |
+| Peak, review in flight | ~550 MB |
+| Storage per review | ~92 KB |
+| Image pull | ~2 GB, once |
+
 #### Updating
 
 ```bash
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+On a host that pulls rather than builds, change the tag and pull instead --
+`--build` on a 1 GB instance is the one command that will take the site down:
+
+```bash
+git pull                        # for compose files and the runbook
+export PORTLOG_IMAGE_TAG=0.2.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  -f docker-compose.micro.yml -f docker-compose.pull.yml up -d --pull always
 ```
 
 The account schema migrates on start. Take a backup first: nothing here rolls

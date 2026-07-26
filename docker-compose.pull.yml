@@ -1,0 +1,21 @@
+# Run a published image instead of building one.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.micro.yml -f docker-compose.pull.yml up -d
+#
+# Required on any host too small to build -- which is most cheap ones. The
+# frontend build alone needs more memory than a 1 GB instance has, and a
+# build killed by the OOM reaper reports a dead process rather than the
+# reason, so it is worth removing the possibility rather than debugging it.
+#
+# `PORTLOG_IMAGE_TAG` pins what runs. `latest` follows main; a version like
+# `0.1.0` is what a server should normally sit on, so a deploy is a decision
+# rather than whatever merged this morning.
+
+services:
+  app:
+    image: ghcr.io/harborfield-suite/portlog:${PORTLOG_IMAGE_TAG:-latest}
+    # `!reset` drops the build section inherited from the base file. Without
+    # it Compose still resolves the build context, and `docker compose up`
+    # would build the very image this file exists to avoid.
+    build: !reset null
