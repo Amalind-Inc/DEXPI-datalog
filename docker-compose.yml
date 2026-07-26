@@ -5,13 +5,13 @@
 # Then open http://localhost:3000 and create an account.
 #
 # This is a self-hosting default, not a production template: MinIO and libSQL
-# run beside the app with development credentials. Pointing PYDEXPI_S3_* at S3
-# or R2 and PYDEXPI_LIBSQL_URL at Turso is a change to this file alone.
+# run beside the app with development credentials. Pointing HARBORFIELD_S3_* at S3
+# or R2 and HARBORFIELD_LIBSQL_URL at Turso is a change to this file alone.
 # Pinned so volume names do not depend on what the checkout directory is
 # called. Without it the project name is the directory, and the backup and
 # restore commands in the README would name volumes that exist only on a
 # machine that happened to clone into the same folder name.
-name: pydexpi-datalog
+name: portlog
 
 services:
   app:
@@ -28,11 +28,11 @@ services:
       # Must match the address a browser uses. Behind a domain or a reverse
       # proxy, set this to the public URL or sign-in redirects come back here.
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      PYDEXPI_LIBSQL_URL: http://libsql:8080
-      PYDEXPI_S3_BUCKET: pydexpi
-      PYDEXPI_S3_ENDPOINT_URL: http://minio:9000
-      PYDEXPI_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      PYDEXPI_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      HARBORFIELD_LIBSQL_URL: http://libsql:8080
+      HARBORFIELD_S3_BUCKET: portlog
+      HARBORFIELD_S3_ENDPOINT_URL: http://minio:9000
+      HARBORFIELD_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      HARBORFIELD_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       # Optional: set both to offer "Continue with Google" on the sign-in page.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

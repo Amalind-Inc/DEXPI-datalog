@@ -40,7 +40,7 @@ Reproduce the green run after checking out the official KIRA repository:
 git clone https://github.com/krafton-ai/KIRA.git /tmp/terminus-kira
 python3 spikes/terminus_kira_hello_world/run_scripted_episode.py \
   --kira-dir /tmp/terminus-kira \
-  --jobs-dir /tmp/pydexpi-3q1-kira-green
+  --jobs-dir /tmp/portlog-3q1-kira-green
 ```
 
 The intentional red check is independently reproducible with:
@@ -48,7 +48,7 @@ The intentional red check is independently reproducible with:
 ```sh
 uv run --directory /tmp/terminus-kira harbor run \
   --path "$PWD/spikes/terminus_kira_hello_world/tasks" \
-  --agent nop --env docker --jobs-dir /tmp/pydexpi-3q1-kira-red
+  --agent nop --env docker --jobs-dir /tmp/portlog-3q1-kira-red
 ```
 
 Prerequisites are Docker, `uv`, and Python 3. The run intentionally uses no

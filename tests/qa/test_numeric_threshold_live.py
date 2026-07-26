@@ -8,8 +8,8 @@ confirmation-gated temporary-Datalog path (or explicitly say the loaded
 evidence cannot answer) -- and must NEVER invent a pass/fail verdict about
 a threshold it cannot read.
 
-Opt-in like the other live sets: set PYDEXPI_LIVE_QA_PROVIDER and
-PYDEXPI_LIVE_QA_MODEL (plus the provider credential env var) to run.
+Opt-in like the other live sets: set HARBORFIELD_LIVE_QA_PROVIDER and
+HARBORFIELD_LIVE_QA_MODEL (plus the provider credential env var) to run.
 
 The correct-outcome half of the acceptance criterion (DN 80 >= DN 25 ->
 satisfied through real Souffle) is deterministic and pinned in
@@ -44,15 +44,15 @@ QUESTION = (
 
 
 def _live_provider():
-    provider_name = os.environ.get("PYDEXPI_LIVE_QA_PROVIDER", "")
-    model = os.environ.get("PYDEXPI_LIVE_QA_MODEL", "")
+    provider_name = os.environ.get("HARBORFIELD_LIVE_QA_PROVIDER", "")
+    model = os.environ.get("HARBORFIELD_LIVE_QA_MODEL", "")
     if not provider_name or not model:
         pytest.skip(
-            "live model regression: set PYDEXPI_LIVE_QA_PROVIDER and "
-            "PYDEXPI_LIVE_QA_MODEL to run"
+            "live model regression: set HARBORFIELD_LIVE_QA_PROVIDER and "
+            "HARBORFIELD_LIVE_QA_MODEL to run"
         )
     base_url = os.environ.get(
-        "PYDEXPI_LIVE_QA_BASE_URL",
+        "HARBORFIELD_LIVE_QA_BASE_URL",
         OPENAI_COMPATIBLE_BASE_URLS.get(provider_name, ""),
     )
     if provider_name == "ollama":

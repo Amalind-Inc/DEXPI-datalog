@@ -1109,7 +1109,7 @@ function inferHighlights(prompt: string, fallbackId: string | undefined) {
 function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   // Explicit escape hatch for deterministic e2e: force the stub provider even
   // when a real key is present in the environment or a .env file.
-  if (process.env.PYDEXPI_DISABLE_BYOK) {
+  if (process.env.HARBORFIELD_DISABLE_BYOK) {
     return null;
   }
 
@@ -1175,7 +1175,7 @@ function readCatalogProviderFromEnv(): BackendProviderSettings | null {
 }
 
 export function backendBaseUrl() {
-  return readEnvValue("PYDEXPI_REVIEW_API_URL") ?? "http://127.0.0.1:8000";
+  return readEnvValue("HARBORFIELD_REVIEW_API_URL") ?? "http://127.0.0.1:8000";
 }
 
 function readEnvValue(key: string): string | undefined {

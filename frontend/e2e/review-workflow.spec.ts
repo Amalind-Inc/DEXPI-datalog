@@ -564,7 +564,7 @@ test("a turn's step list ticks live against the real scripted backend before the
   page,
 }) => {
   // Exercises real timing (not a route mock): the scripted backend sleeps
-  // PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS between each of its multi-round tool
+  // HARBORFIELD_QA_SCRIPTED_STEP_DELAY_MS between each of its multi-round tool
   // calls (playwright.config.ts) specifically so this window is observable.
   const workflow = reviewWorkflow(page);
 

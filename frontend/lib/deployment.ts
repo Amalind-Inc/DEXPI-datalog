@@ -13,7 +13,7 @@
 
 export type DeploymentProfile = "local" | "hosted";
 
-export const PROFILE_ENV_VAR = "PYDEXPI_DEPLOYMENT_PROFILE";
+export const PROFILE_ENV_VAR = "HARBORFIELD_DEPLOYMENT_PROFILE";
 
 export function deploymentProfile(env: NodeJS.ProcessEnv = process.env): DeploymentProfile {
   return env[PROFILE_ENV_VAR]?.trim().toLowerCase() === "hosted" ? "hosted" : "local";

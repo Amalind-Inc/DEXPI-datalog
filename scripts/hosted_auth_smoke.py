@@ -10,8 +10,8 @@ Not part of pytest, because it binds ports and needs a production Next build.
 Run it by hand after changing anything on the auth path:
 
     cd frontend && npm run build && cd ..
-    PYDEXPI_DEPLOYMENT_PROFILE=hosted BETTER_AUTH_SECRET=... \
-      BETTER_AUTH_URL=http://localhost:3100 PYDEXPI_AUTH_DB=/tmp/e2e-auth.sqlite3 \
+    HARBORFIELD_DEPLOYMENT_PROFILE=hosted BETTER_AUTH_SECRET=... \
+      BETTER_AUTH_URL=http://localhost:3100 HARBORFIELD_AUTH_DB=/tmp/e2e-auth.sqlite3 \
       node frontend/scripts/migrate-auth.mjs
     .venv/bin/python scripts/hosted_auth_smoke.py
 """
@@ -41,23 +41,23 @@ FIXTURE = (
 )
 
 common = {
-    "PYDEXPI_DEPLOYMENT_PROFILE": "hosted",
+    "HARBORFIELD_DEPLOYMENT_PROFILE": "hosted",
     "BETTER_AUTH_SECRET": "e2e-secret-0123456789abcdefghij",
     "BETTER_AUTH_URL": NEXT,
-    "PYDEXPI_AUTH_DB": "/tmp/e2e-auth.sqlite3",
+    "HARBORFIELD_AUTH_DB": "/tmp/e2e-auth.sqlite3",
 }
 
 backend_env = {
     **os.environ,
     **common,
-    "PYDEXPI_QA_PROVIDER": "scripted",
+    "HARBORFIELD_QA_PROVIDER": "scripted",
     "PYTHONPATH": str(REPO),
-    "PYDEXPI_REVIEW_ARTIFACT_ROOT": "/tmp/e2e-artifacts",
-    "PYDEXPI_OIDC_ISSUER": NEXT,
-    "PYDEXPI_OIDC_AUDIENCE": NEXT,
-    "PYDEXPI_OIDC_JWKS_URL": f"{NEXT}/api/auth/jwks",
+    "HARBORFIELD_REVIEW_ARTIFACT_ROOT": "/tmp/e2e-artifacts",
+    "HARBORFIELD_OIDC_ISSUER": NEXT,
+    "HARBORFIELD_OIDC_AUDIENCE": NEXT,
+    "HARBORFIELD_OIDC_JWKS_URL": f"{NEXT}/api/auth/jwks",
 }
-next_env = {**os.environ, **common, "PYDEXPI_REVIEW_API_URL": API, "PORT": "3100"}
+next_env = {**os.environ, **common, "HARBORFIELD_REVIEW_API_URL": API, "PORT": "3100"}
 
 procs: list[subprocess.Popen] = []
 

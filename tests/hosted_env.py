@@ -21,11 +21,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pydexpi_datalog.workflow.principal import Principal
 
-LIBSQL_URL_ENV_VAR = "PYDEXPI_LIBSQL_URL"
-LIBSQL_TOKEN_ENV_VAR = "PYDEXPI_LIBSQL_AUTH_TOKEN"
-S3_ENDPOINT_ENV_VAR = "PYDEXPI_S3_ENDPOINT_URL"
-S3_BUCKET_ENV_VAR = "PYDEXPI_S3_BUCKET"
-BYOK_SECRET_ENV_VAR = "PYDEXPI_BYOK_SECRET"
+LIBSQL_URL_ENV_VAR = "HARBORFIELD_LIBSQL_URL"
+LIBSQL_TOKEN_ENV_VAR = "HARBORFIELD_LIBSQL_AUTH_TOKEN"
+S3_ENDPOINT_ENV_VAR = "HARBORFIELD_S3_ENDPOINT_URL"
+S3_BUCKET_ENV_VAR = "HARBORFIELD_S3_BUCKET"
+BYOK_SECRET_ENV_VAR = "HARBORFIELD_BYOK_SECRET"
 
 TEST_BYOK_SECRET = base64.b64encode(b"pydexpi-test-secret-32-bytes!!!!").decode("ascii")
 """A fixed secret, because these tests are about the store, not the secret.
@@ -56,11 +56,11 @@ def hosted_catalog_env() -> dict[str, str]:
         LIBSQL_TOKEN_ENV_VAR: os.environ.get(LIBSQL_TOKEN_ENV_VAR, ""),
         S3_BUCKET_ENV_VAR: bucket,
         S3_ENDPOINT_ENV_VAR: os.environ.get(S3_ENDPOINT_ENV_VAR, ""),
-        "PYDEXPI_S3_ACCESS_KEY_ID": os.environ.get("PYDEXPI_S3_ACCESS_KEY_ID", ""),
-        "PYDEXPI_S3_SECRET_ACCESS_KEY": os.environ.get(
-            "PYDEXPI_S3_SECRET_ACCESS_KEY", ""
+        "HARBORFIELD_S3_ACCESS_KEY_ID": os.environ.get("HARBORFIELD_S3_ACCESS_KEY_ID", ""),
+        "HARBORFIELD_S3_SECRET_ACCESS_KEY": os.environ.get(
+            "HARBORFIELD_S3_SECRET_ACCESS_KEY", ""
         ),
-        "PYDEXPI_S3_REGION": os.environ.get("PYDEXPI_S3_REGION", ""),
+        "HARBORFIELD_S3_REGION": os.environ.get("HARBORFIELD_S3_REGION", ""),
         BYOK_SECRET_ENV_VAR: os.environ.get(BYOK_SECRET_ENV_VAR, TEST_BYOK_SECRET),
     }
 

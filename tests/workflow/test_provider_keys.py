@@ -29,7 +29,7 @@ from pydexpi_datalog.workflow.provider_keys import (
     local_provider_keys,
 )
 
-LIBSQL_URL_ENV_VAR = "PYDEXPI_LIBSQL_TEST_URL"
+LIBSQL_URL_ENV_VAR = "HARBORFIELD_LIBSQL_TEST_URL"
 SECRET = b"0" * 32
 
 

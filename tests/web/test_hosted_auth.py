@@ -261,9 +261,9 @@ class HostedAuthConfigurationTests(unittest.TestCase):
 
     def _env(self) -> dict[str, str]:
         return {
-            "PYDEXPI_OIDC_ISSUER": ISSUER,
-            "PYDEXPI_OIDC_AUDIENCE": AUDIENCE,
-            "PYDEXPI_OIDC_JWKS_URL": "https://issuer.example.com/jwks",
+            "HARBORFIELD_OIDC_ISSUER": ISSUER,
+            "HARBORFIELD_OIDC_AUDIENCE": AUDIENCE,
+            "HARBORFIELD_OIDC_JWKS_URL": "https://issuer.example.com/jwks",
         }
 
     def test_a_complete_environment_produces_settings(self) -> None:
@@ -282,7 +282,7 @@ class HostedAuthConfigurationTests(unittest.TestCase):
 
     def test_a_blank_setting_counts_as_missing(self) -> None:
         env = self._env()
-        env["PYDEXPI_OIDC_AUDIENCE"] = "   "
+        env["HARBORFIELD_OIDC_AUDIENCE"] = "   "
         with self.assertRaises(HostedAuthNotConfigured):
             hosted_auth_settings_from_env(env)
 

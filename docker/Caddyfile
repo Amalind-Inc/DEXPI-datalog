@@ -1,6 +1,6 @@
 # TLS and reverse proxy for the production overlay.
 #
-# Caddy obtains and renews a certificate for {$PYDEXPI_PUBLIC_HOST} on its own,
+# Caddy obtains and renews a certificate for {$HARBORFIELD_PUBLIC_HOST} on its own,
 # and redirects http to https by default. Nothing here needs editing for a
 # normal deployment: the domain and the contact address come from the
 # environment so one image serves any host.
@@ -9,7 +9,7 @@
 	email {$TLS_CONTACT_EMAIL}
 }
 
-{$PYDEXPI_PUBLIC_HOST} {
+{$HARBORFIELD_PUBLIC_HOST} {
 	# `app` is the compose service; it publishes no port to the host, so this
 	# is the only route in.
 	reverse_proxy app:3000

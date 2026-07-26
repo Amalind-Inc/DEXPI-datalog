@@ -1,6 +1,6 @@
 # Local and Hosted Deployment Profiles
 
-DEXPI-datalog ships two deployment profiles from one codebase. The `local`
+PortLog ships two deployment profiles from one codebase. The `local`
 profile keeps every artifact on the operator's own machine with no accounts
 and no network services; the `hosted` profile persists per-user projects,
 chats, and review sessions behind sign-in. The profile is selected once at
@@ -42,9 +42,9 @@ database offers RLS it is enabled with no policies, as a deny-all backstop.
 Feature skew is the expected failure mode: hosted grows capability, the local
 path rots into a demo, and the standalone product becomes theatre. The
 integration suite therefore runs against both profiles in CI from the first
-slice, using the existing `PYDEXPI_QA_PROVIDER=scripted` hermeticity switch.
+slice, using the existing `HARBORFIELD_QA_PROVIDER=scripted` hermeticity switch.
 
-The profile has no default. `PYDEXPI_DEPLOYMENT_PROFILE` must name `local` or
+The profile has no default. `HARBORFIELD_DEPLOYMENT_PROFILE` must name `local` or
 `hosted`, and an unset or unrecognised value stops the server from starting.
 Defaulting is dangerous in one specific direction: a hosted deployment that
 forgot the setting would fall back to a single shared workspace with no
@@ -117,8 +117,8 @@ a standalone local install cost a Rust toolchain. CI installs the extra only
 on the hosted leg, which leaves the local leg a standing proof that nothing
 reachable from the local profile imports it.
 
-A hosted deployment refuses to start without `PYDEXPI_LIBSQL_URL`,
-`PYDEXPI_S3_BUCKET`, or `PYDEXPI_BYOK_SECRET`, for the same reason it refuses
+A hosted deployment refuses to start without `HARBORFIELD_LIBSQL_URL`,
+`HARBORFIELD_S3_BUCKET`, or `HARBORFIELD_BYOK_SECRET`, for the same reason it refuses
 to start without identity settings. The failure being avoided is silent: a
 hosted instance that fell back to the container's disk would look completely
 healthy, serve correctly, and lose every session index and artifact the next

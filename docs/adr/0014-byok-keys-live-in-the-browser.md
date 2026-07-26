@@ -24,7 +24,7 @@ Environment configuration (`OPENROUTER_API_KEY` and friends, read by
 `readProviderSettingsFromEnv`) remains the fallback: a browser-supplied key
 wins when present, the server's own configuration answers when it is not, and
 the deterministic stub provider answers when neither exists. This keeps
-scripted e2e runs (`PYDEXPI_DISABLE_BYOK=1`) and single-operator local runs
+scripted e2e runs (`HARBORFIELD_DISABLE_BYOK=1`) and single-operator local runs
 working unchanged while giving a hosted reader a way to bring their own model.
 
 The model list offered per provider is a mirror of
@@ -68,7 +68,7 @@ data. A row copied into another user's name does not decrypt, so the
 isolation rule survives write access to the database rather than depending on
 every query remembering its `WHERE` clause.
 
-A hosted deployment **refuses to start without `PYDEXPI_BYOK_SECRET`**. The
+A hosted deployment **refuses to start without `HARBORFIELD_BYOK_SECRET`**. The
 tempting fallbacks are both worse than refusing: storing in the clear is
 obviously wrong, and generating a secret per instance is subtly wrong -- it
 works on one machine and fails behind a load balancer or after a redeploy,

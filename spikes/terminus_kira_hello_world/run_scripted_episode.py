@@ -186,7 +186,7 @@ def main() -> int:
     parser.add_argument(
         "--kira-dir",
         type=Path,
-        default=os.environ.get("PYDEXPI_TERMINUS_KIRA_DIR"),
+        default=os.environ.get("HARBORFIELD_TERMINUS_KIRA_DIR"),
         help="Checkout of the official krafton-ai/KIRA repository.",
     )
     parser.add_argument(
@@ -196,7 +196,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     if args.kira_dir is None:
-        parser.error("supply --kira-dir or set PYDEXPI_TERMINUS_KIRA_DIR")
+        parser.error("supply --kira-dir or set HARBORFIELD_TERMINUS_KIRA_DIR")
     kira_dir = args.kira_dir.resolve()
     if not (kira_dir / "pyproject.toml").exists():
         parser.error(f"not a KIRA checkout: {kira_dir}")

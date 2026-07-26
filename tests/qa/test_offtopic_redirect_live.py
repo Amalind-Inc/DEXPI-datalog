@@ -7,9 +7,9 @@ questions against a real tool-capable model and check *behavioral shape*, not
 exact wording: the answer briefly acknowledges the question (it is not a bare
 refusal) and then redirects back to P&ID review.
 
-Opt-in: skipped unless PYDEXPI_LIVE_QA_PROVIDER and PYDEXPI_LIVE_QA_MODEL are
-set (e.g. PYDEXPI_LIVE_QA_PROVIDER=openrouter PYDEXPI_LIVE_QA_MODEL=... with
-the provider's API-key env var exported; or PYDEXPI_LIVE_QA_PROVIDER=ollama
+Opt-in: skipped unless HARBORFIELD_LIVE_QA_PROVIDER and HARBORFIELD_LIVE_QA_MODEL are
+set (e.g. HARBORFIELD_LIVE_QA_PROVIDER=openrouter HARBORFIELD_LIVE_QA_MODEL=... with
+the provider's API-key env var exported; or HARBORFIELD_LIVE_QA_PROVIDER=ollama
 with a local server running).
 """
 
@@ -66,15 +66,15 @@ _OFF_TOPIC_PROMPTS: dict[str, tuple[str, ...]] = {
 
 
 def _live_provider():
-    provider_name = os.environ.get("PYDEXPI_LIVE_QA_PROVIDER", "")
-    model = os.environ.get("PYDEXPI_LIVE_QA_MODEL", "")
+    provider_name = os.environ.get("HARBORFIELD_LIVE_QA_PROVIDER", "")
+    model = os.environ.get("HARBORFIELD_LIVE_QA_MODEL", "")
     if not provider_name or not model:
         pytest.skip(
-            "live model regression: set PYDEXPI_LIVE_QA_PROVIDER and "
-            "PYDEXPI_LIVE_QA_MODEL to run"
+            "live model regression: set HARBORFIELD_LIVE_QA_PROVIDER and "
+            "HARBORFIELD_LIVE_QA_MODEL to run"
         )
     base_url = os.environ.get(
-        "PYDEXPI_LIVE_QA_BASE_URL",
+        "HARBORFIELD_LIVE_QA_BASE_URL",
         OPENAI_COMPATIBLE_BASE_URLS.get(provider_name, ""),
     )
     if provider_name == "ollama":

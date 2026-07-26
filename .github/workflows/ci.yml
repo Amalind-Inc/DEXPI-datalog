@@ -140,12 +140,12 @@ jobs:
                   signature_version="s3v4", s3={"addressing_style": "path"}
               ),
           )
-          client.create_bucket(Bucket="pydexpi-ci")
+          client.create_bucket(Bucket="portlog-ci")
           print("bucket created")
           PY
 
       - name: Run the suite under the ${{ matrix.profile }} profile
-        # PYDEXPI_QA_PROVIDER=scripted is the existing hermeticity switch: it
+        # HARBORFIELD_QA_PROVIDER=scripted is the existing hermeticity switch: it
         # forces the deterministic zero-LLM providers so the real turn
         # transport is exercised without any model call or credential.
         #
@@ -161,7 +161,7 @@ jobs:
         # libSQL and no object store reachable at all, which is the condition
         # a standalone user installs into.
         #
-        # `PYDEXPI_BYOK_SECRET` is deliberately absent: it is configuration
+        # `HARBORFIELD_BYOK_SECRET` is deliberately absent: it is configuration
         # rather than a service, and tests/conftest.py supplies a fixed one so
         # a developer needs no extra setup. That the hosted profile refuses to
         # boot without it is asserted directly, in test_provider_key_profiles.
@@ -170,16 +170,16 @@ jobs:
         # missing backend into a skip. A broken service has to look different
         # from a passing run.
         env:
-          PYDEXPI_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
-          PYDEXPI_QA_PROVIDER: scripted
-          PYDEXPI_LIBSQL_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
-          PYDEXPI_LIBSQL_TEST_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
-          PYDEXPI_S3_BUCKET: ${{ matrix.profile == 'hosted' && 'pydexpi-ci' || '' }}
-          PYDEXPI_S3_TEST_BUCKET: ${{ matrix.profile == 'hosted' && 'pydexpi-ci' || '' }}
-          PYDEXPI_S3_ENDPOINT_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
-          PYDEXPI_S3_TEST_ENDPOINT: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
-          PYDEXPI_S3_ACCESS_KEY_ID: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
-          PYDEXPI_S3_SECRET_ACCESS_KEY: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
+          HARBORFIELD_DEPLOYMENT_PROFILE: ${{ matrix.profile }}
+          HARBORFIELD_QA_PROVIDER: scripted
+          HARBORFIELD_LIBSQL_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
+          HARBORFIELD_LIBSQL_TEST_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:8080' || '' }}
+          HARBORFIELD_S3_BUCKET: ${{ matrix.profile == 'hosted' && 'portlog-ci' || '' }}
+          HARBORFIELD_S3_TEST_BUCKET: ${{ matrix.profile == 'hosted' && 'portlog-ci' || '' }}
+          HARBORFIELD_S3_ENDPOINT_URL: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
+          HARBORFIELD_S3_TEST_ENDPOINT: ${{ matrix.profile == 'hosted' && 'http://127.0.0.1:9000' || '' }}
+          HARBORFIELD_S3_ACCESS_KEY_ID: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
+          HARBORFIELD_S3_SECRET_ACCESS_KEY: ${{ matrix.profile == 'hosted' && 'minioadmin' || '' }}
         run: pytest -m "not slow"
 
   frontend:
@@ -246,7 +246,7 @@ jobs:
             --data '{"email":"ci@example.com","password":"a-long-enough-password","name":"ci"}' \
             --output /dev/null
 
-          # Proves the generated PYDEXPI_BYOK_SECRET encrypts and decrypts.
+          # Proves the generated HARBORFIELD_BYOK_SECRET encrypts and decrypts.
           curl --silent --fail --cookie "$jar" \
             --request PUT http://localhost:3000/api/provider-keys/openrouter \
             --header 'content-type: application/json' \
@@ -281,16 +281,16 @@ jobs:
 
           client = boto3.client(
               "s3",
-              endpoint_url=os.environ["PYDEXPI_S3_ENDPOINT_URL"],
-              aws_access_key_id=os.environ["PYDEXPI_S3_ACCESS_KEY_ID"],
-              aws_secret_access_key=os.environ["PYDEXPI_S3_SECRET_ACCESS_KEY"],
+              endpoint_url=os.environ["HARBORFIELD_S3_ENDPOINT_URL"],
+              aws_access_key_id=os.environ["HARBORFIELD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["HARBORFIELD_S3_SECRET_ACCESS_KEY"],
               region_name="us-east-1",
               config=Config(s3={"addressing_style": "path"}),
           )
           keys = [
               item["Key"]
               for item in client.list_objects_v2(
-                  Bucket=os.environ["PYDEXPI_S3_BUCKET"]
+                  Bucket=os.environ["HARBORFIELD_S3_BUCKET"]
               ).get("Contents", [])
           ]
           print("\n".join(keys))

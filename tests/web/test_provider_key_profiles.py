@@ -81,7 +81,7 @@ class ProfilesDifferOnKeyStorageTests(unittest.TestCase):
                 Path(tmp),
                 {
                     BYOK_SECRET_ENV_VAR: GOOD_SECRET,
-                    "PYDEXPI_LIBSQL_URL": _libsql_url(),
+                    "HARBORFIELD_LIBSQL_URL": _libsql_url(),
                 },
             )
         self.assertIsNotNone(store)
@@ -97,7 +97,7 @@ class ProfilesDifferOnKeyStorageTests(unittest.TestCase):
         bundle = bundle_for(DeploymentProfile.HOSTED)
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(HostedProviderKeysNotConfigured):
-                bundle.build_key_store(Path(tmp), {"PYDEXPI_LIBSQL_URL": _libsql_url()})
+                bundle.build_key_store(Path(tmp), {"HARBORFIELD_LIBSQL_URL": _libsql_url()})
 
     def test_the_hosted_store_does_not_touch_the_artifact_root(self) -> None:
         """The same rule as the catalog and the object store: no instance disk."""
@@ -109,7 +109,7 @@ class ProfilesDifferOnKeyStorageTests(unittest.TestCase):
                 Path(tmp),
                 {
                     BYOK_SECRET_ENV_VAR: GOOD_SECRET,
-                    "PYDEXPI_LIBSQL_URL": _libsql_url(),
+                    "HARBORFIELD_LIBSQL_URL": _libsql_url(),
                 },
             )
             self.assertEqual([], list(root.iterdir()), "hosted wrote to the local disk")
@@ -118,9 +118,9 @@ class ProfilesDifferOnKeyStorageTests(unittest.TestCase):
 def _libsql_url() -> str:
     import os
 
-    url = os.environ.get("PYDEXPI_LIBSQL_TEST_URL", "").strip()
+    url = os.environ.get("HARBORFIELD_LIBSQL_TEST_URL", "").strip()
     if not url:
-        raise unittest.SkipTest("PYDEXPI_LIBSQL_TEST_URL unset: nothing claimed")
+        raise unittest.SkipTest("HARBORFIELD_LIBSQL_TEST_URL unset: nothing claimed")
     return url
 
 

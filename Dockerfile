@@ -100,10 +100,10 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Accounts and generated secrets live here. Mount a volume on it or a redeploy
 # takes every account with it -- the entrypoint refuses to start if it is not
 # writable rather than letting that happen quietly.
-ENV PYDEXPI_STATE_DIR=/data
+ENV HARBORFIELD_STATE_DIR=/data
 VOLUME ["/data"]
 
-ENV PYDEXPI_DEPLOYMENT_PROFILE=hosted \
+ENV HARBORFIELD_DEPLOYMENT_PROFILE=hosted \
     PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     NODE_ENV=production

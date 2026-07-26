@@ -123,9 +123,9 @@ export function resetPasswordMessage(url: string): {
   text: string;
   html: string;
 } {
-  const subject = "Reset your DEXPI-datalog password";
+  const subject = "Reset your PortLog password";
   const text = [
-    "Someone asked to reset the password for this DEXPI-datalog account.",
+    "Someone asked to reset the password for this PortLog account.",
     "",
     "Open this link to choose a new one:",
     url,
@@ -135,7 +135,7 @@ export function resetPasswordMessage(url: string): {
     "will not change until the link is used.",
   ].join("\n");
   const html = [
-    "<p>Someone asked to reset the password for this DEXPI-datalog account.</p>",
+    "<p>Someone asked to reset the password for this PortLog account.</p>",
     `<p><a href="${url}">Choose a new password</a></p>`,
     "<p>The link expires in an hour and can be used once.</p>",
     "<p>If you didn't request this, you can ignore this message: your password",

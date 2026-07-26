@@ -101,7 +101,7 @@ test("the port defaults to 587 when unset, which is submission", () => {
 });
 
 test("the reset message carries the link and never the token alone", () => {
-  const url = "https://pid.example.com/reset-password?token=abc123";
+  const url = "https://harborfield.live/reset-password?token=abc123";
   const message = resetPasswordMessage(url);
 
   assert.ok(message.subject.length > 0);

@@ -16,7 +16,7 @@ The foundational stable seam is the graph export flow:
 ./.venv/bin/python -m pydexpi_datalog export-facts \
   "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml" \
   --fixture-id e06-natural \
-  --output-dir /tmp/pydexpi-export-facts
+  --output-dir /tmp/portlog-export-facts
 ```
 
 This command runs from one DEXPI 1.3 source fixture to persisted
@@ -35,7 +35,7 @@ The current stable verifier-facing command for the tracer-bullet workflow is:
 ```bash
 ./.venv/bin/python -m pydexpi_datalog verify-raw-fixture \
   "TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml" \
-  --output-dir /tmp/pydexpi-verify-e06
+  --output-dir /tmp/portlog-verify-e06
 ```
 
 This command should be understood as a consumer of the lower seams, not as the
@@ -66,5 +66,5 @@ For the broader tracer-bullet suite, the stable suite command is:
 ```bash
 ./.venv/bin/python -m pydexpi_datalog verify-suite \
   testdata/verifier_suite/manifest.json \
-  --output-dir /tmp/pydexpi-verify-suite
+  --output-dir /tmp/portlog-verify-suite
 ```

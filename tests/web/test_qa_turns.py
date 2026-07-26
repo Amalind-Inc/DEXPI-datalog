@@ -468,13 +468,13 @@ class QAConversationCompactionTests(unittest.TestCase):
 
 
 class ForceScriptedProviderTests(unittest.TestCase):
-    """PYDEXPI_QA_PROVIDER=scripted forces the deterministic provider even when a
+    """HARBORFIELD_QA_PROVIDER=scripted forces the deterministic provider even when a
     session has ollama provider-settings configured, so the e2e stack never makes
     a real LLM call. Regression for turns timing out on a live model."""
 
     def test_scripted_flag_overrides_configured_ollama_provider(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir, mock.patch.dict(
-            os.environ, {"PYDEXPI_QA_PROVIDER": "scripted"}
+            os.environ, {"HARBORFIELD_QA_PROVIDER": "scripted"}
         ), mock.patch(
             "pydexpi_datalog.web.review_api.OllamaQATurnProvider",
             side_effect=AssertionError("ollama provider must not be constructed"),
@@ -594,7 +594,7 @@ class OpenRouterProviderRoutingTests(unittest.TestCase):
             self.assertEqual(call_headers["Authorization"], "Bearer sk-or-test-key")
 
 class ScriptedHermeticitySwitchTests(unittest.TestCase):
-    """Test hermeticity guard: PYDEXPI_QA_PROVIDER=scripted forces the
+    """Test hermeticity guard: HARBORFIELD_QA_PROVIDER=scripted forces the
     deterministic zero-LLM provider so an e2e stack exercises the real turn
     transport without a real model call.
 
@@ -629,7 +629,7 @@ class ScriptedHermeticitySwitchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir, mock.patch(
             "httpx.post"
         ) as mock_post, mock.patch.dict(
-            os.environ, {"PYDEXPI_QA_PROVIDER": "scripted"}
+            os.environ, {"HARBORFIELD_QA_PROVIDER": "scripted"}
         ):
             app = create_review_api_app(principal=fresh_principal(), artifact_root=Path(tmp_dir) / "sessions")
             client = self._configured_session(app)

@@ -245,7 +245,7 @@ class ProviderKeyStore:
             # log, and a log is one of the places this key must never be.
             raise CorruptProviderKey(
                 f"a stored {provider} credential did not decrypt under this "
-                f"deployment's PYDEXPI_BYOK_SECRET. The secret was rotated, or "
+                f"deployment's HARBORFIELD_BYOK_SECRET. The secret was rotated, or "
                 f"the row was written by another deployment."
             ) from error
 

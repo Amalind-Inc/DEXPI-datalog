@@ -30,7 +30,7 @@ import { configuredSocialProviders } from "./social-providers.ts";
  * string change rather than a migration rewrite (bead 2afe.7).
  */
 function authDatabasePath(): string {
-  const configured = process.env.PYDEXPI_AUTH_DB?.trim();
+  const configured = process.env.HARBORFIELD_AUTH_DB?.trim();
   const path = resolve(
     process.cwd(),
     configured && configured !== "" ? configured : "../.tmp/auth.sqlite3",
@@ -51,7 +51,7 @@ function baseUrl(): string {
 function authSecret(): string {
   const configured = process.env.BETTER_AUTH_SECRET?.trim();
   if (configured) return configured;
-  if (process.env.PYDEXPI_DEPLOYMENT_PROFILE?.trim().toLowerCase() === "hosted") {
+  if (process.env.HARBORFIELD_DEPLOYMENT_PROFILE?.trim().toLowerCase() === "hosted") {
     throw new Error(
       "BETTER_AUTH_SECRET is not set. A hosted deployment signs session " +
         "cookies with it, so starting on a default would let anyone forge a " +

@@ -240,7 +240,7 @@ def create_review_api_app(
     # hosted, and nowhere at all locally, where ADR 0014 leaves them in the
     # browser. `None` is a profile's answer, not an unbuilt seam.
     key_store = bundle.build_key_store(artifact_root, environment)
-    # Test hermeticity: PYDEXPI_QA_PROVIDER=scripted forces the deterministic,
+    # Test hermeticity: HARBORFIELD_QA_PROVIDER=scripted forces the deterministic,
     # zero-LLM providers regardless of session provider-settings. This lets the
     # e2e stack exercise the real turn transport without any real model call,
     # while a developer's .env.local can still drive a live LLM manually.
@@ -250,7 +250,7 @@ def create_review_api_app(
     # test must supply its own transport double; opting out does not license a
     # real model call.
     force_scripted = (
-        os.environ.get("PYDEXPI_QA_PROVIDER", "").lower() == "scripted"
+        os.environ.get("HARBORFIELD_QA_PROVIDER", "").lower() == "scripted"
         if force_scripted_provider is None
         else force_scripted_provider
     )
@@ -310,7 +310,7 @@ def create_review_api_app(
         if qa_provider_factory is not None:
             return qa_provider_factory()
         if force_scripted:
-            step_delay_ms = float(os.environ.get("PYDEXPI_QA_SCRIPTED_STEP_DELAY_MS", "0"))
+            step_delay_ms = float(os.environ.get("HARBORFIELD_QA_SCRIPTED_STEP_DELAY_MS", "0"))
             return ScriptedQATurnProvider(step_delay_seconds=step_delay_ms / 1000)
         settings = _effective_settings(ws, session_id)
         provider = str(settings.get("provider", ""))

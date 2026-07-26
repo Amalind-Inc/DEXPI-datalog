@@ -8,8 +8,8 @@ the web workflow would confirm it, and real execution produces a correct,
 non-empty grounded outcome (evidence drawn from the objects genuinely
 structurally reachable in the E06 source).
 
-Opt-in like the other live sets: set PYDEXPI_LIVE_QA_PROVIDER and
-PYDEXPI_LIVE_QA_MODEL (plus the provider credential env var) to run.
+Opt-in like the other live sets: set HARBORFIELD_LIVE_QA_PROVIDER and
+HARBORFIELD_LIVE_QA_MODEL (plus the provider credential env var) to run.
 
 The deterministic half (engine correctness, explicit failure instead of
 silent-empty answers, legacy-shape parity) is pinned in
@@ -58,15 +58,15 @@ JOIN_QUESTION = (
 
 
 def _live_provider():
-    provider_name = os.environ.get("PYDEXPI_LIVE_QA_PROVIDER", "")
-    model = os.environ.get("PYDEXPI_LIVE_QA_MODEL", "")
+    provider_name = os.environ.get("HARBORFIELD_LIVE_QA_PROVIDER", "")
+    model = os.environ.get("HARBORFIELD_LIVE_QA_MODEL", "")
     if not provider_name or not model:
         pytest.skip(
-            "live model regression: set PYDEXPI_LIVE_QA_PROVIDER and "
-            "PYDEXPI_LIVE_QA_MODEL to run"
+            "live model regression: set HARBORFIELD_LIVE_QA_PROVIDER and "
+            "HARBORFIELD_LIVE_QA_MODEL to run"
         )
     base_url = os.environ.get(
-        "PYDEXPI_LIVE_QA_BASE_URL",
+        "HARBORFIELD_LIVE_QA_BASE_URL",
         OPENAI_COMPATIBLE_BASE_URLS.get(provider_name, ""),
     )
     if provider_name == "ollama":

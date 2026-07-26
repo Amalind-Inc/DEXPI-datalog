@@ -28,7 +28,7 @@ from pydexpi_datalog.workflow.artifact_store import (
     LocalArtifactStore,
 )
 
-S3_ENDPOINT_ENV_VAR = "PYDEXPI_S3_TEST_ENDPOINT"
+S3_ENDPOINT_ENV_VAR = "HARBORFIELD_S3_TEST_ENDPOINT"
 
 
 def _fetch(url: str) -> str:
@@ -68,10 +68,10 @@ def s3_test_store(case: unittest.TestCase, *, workspace: str) -> ArtifactStore:
 
     settings = S3Settings(
         endpoint_url=endpoint,
-        bucket=os.environ.get("PYDEXPI_S3_TEST_BUCKET", "pydexpi-test"),
-        access_key_id=os.environ.get("PYDEXPI_S3_ACCESS_KEY_ID", "minioadmin"),
-        secret_access_key=os.environ.get("PYDEXPI_S3_SECRET_ACCESS_KEY", "minioadmin"),
-        region=os.environ.get("PYDEXPI_S3_REGION", "us-east-1"),
+        bucket=os.environ.get("HARBORFIELD_S3_TEST_BUCKET", "pydexpi-test"),
+        access_key_id=os.environ.get("HARBORFIELD_S3_ACCESS_KEY_ID", "minioadmin"),
+        secret_access_key=os.environ.get("HARBORFIELD_S3_SECRET_ACCESS_KEY", "minioadmin"),
+        region=os.environ.get("HARBORFIELD_S3_REGION", "us-east-1"),
     )
     client = build_s3_client(settings)
     try:
@@ -280,7 +280,7 @@ class S3ArtifactStoreContractTests(ArtifactStoreContractTests):
         docker run -d -p 9100:9000 -e MINIO_ROOT_USER=minioadmin \\
             -e MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio:latest \\
             server /data
-        export PYDEXPI_S3_TEST_ENDPOINT=http://127.0.0.1:9100
+        export HARBORFIELD_S3_TEST_ENDPOINT=http://127.0.0.1:9100
     """
 
     def _make_store(self) -> ArtifactStore:

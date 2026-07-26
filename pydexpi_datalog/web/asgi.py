@@ -28,7 +28,7 @@ from .review_api import create_review_api_app
 # everything below scopes storage by the principal's workspace.
 profile = resolve_profile(os.environ)
 artifact_root = Path(
-    os.environ.get("PYDEXPI_REVIEW_ARTIFACT_ROOT", ".tmp/review-sessions")
+    os.environ.get("HARBORFIELD_REVIEW_ARTIFACT_ROOT", ".tmp/review-sessions")
 )
 
 if profile is DeploymentProfile.HOSTED:

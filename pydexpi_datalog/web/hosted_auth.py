@@ -51,9 +51,9 @@ WORKSPACE_DIGEST_LENGTH = 32
 
 # Read only by the composition root, and only in the hosted profile.
 HOSTED_AUTH_ENV_VARS = (
-    "PYDEXPI_OIDC_ISSUER",
-    "PYDEXPI_OIDC_AUDIENCE",
-    "PYDEXPI_OIDC_JWKS_URL",
+    "HARBORFIELD_OIDC_ISSUER",
+    "HARBORFIELD_OIDC_AUDIENCE",
+    "HARBORFIELD_OIDC_JWKS_URL",
 )
 
 

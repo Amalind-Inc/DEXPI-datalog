@@ -6,7 +6,7 @@ look like, rather than rules for their own sake.
 
 ## Reporting a bug or asking for something
 
-Open a [GitHub issue](https://github.com/Amalind-Inc/DEXPI-datalog/issues).
+Open a [GitHub issue](https://github.com/Harborfield/portlog/issues).
 
 For a bug, the two most useful things are the DEXPI file that triggered it (or
 one that reproduces it) and what you expected the answer to be. This tool makes
@@ -25,8 +25,8 @@ public issue.
 The fastest way to see it work:
 
 ```bash
-git clone --recurse-submodules https://github.com/Amalind-Inc/DEXPI-datalog.git
-cd DEXPI-datalog
+git clone --recurse-submodules https://github.com/Harborfield/portlog.git
+cd portlog
 docker compose up
 ```
 
@@ -53,13 +53,13 @@ cd frontend && npm ci && cd ..
 Run the two processes in separate terminals:
 
 ```bash
-PYDEXPI_DEPLOYMENT_PROFILE=local PYTHONPATH=. \
+HARBORFIELD_DEPLOYMENT_PROFILE=local PYTHONPATH=. \
   .venv/bin/python -m uvicorn pydexpi_datalog.web.asgi:app --port 8000
 
-cd frontend && PYDEXPI_DEPLOYMENT_PROFILE=local npm run dev
+cd frontend && HARBORFIELD_DEPLOYMENT_PROFILE=local npm run dev
 ```
 
-`PYDEXPI_DEPLOYMENT_PROFILE` has no default in the backend, on purpose: a
+`HARBORFIELD_DEPLOYMENT_PROFILE` has no default in the backend, on purpose: a
 hosted deployment that silently fell back to `local` would serve every user
 from one workspace with no sign-in.
 
@@ -70,7 +70,7 @@ Run what CI runs. All of it is fast except the Docker job.
 ```bash
 .venv/bin/ruff check .
 
-PYDEXPI_DEPLOYMENT_PROFILE=local  PYDEXPI_QA_PROVIDER=scripted .venv/bin/python -m pytest -m "not slow"
+HARBORFIELD_DEPLOYMENT_PROFILE=local  HARBORFIELD_QA_PROVIDER=scripted .venv/bin/python -m pytest -m "not slow"
 
 cd frontend
 npm run typecheck
@@ -78,13 +78,13 @@ npm test
 npx oxlint
 ```
 
-The suite also runs under `PYDEXPI_DEPLOYMENT_PROFILE=hosted` against a real
+The suite also runs under `HARBORFIELD_DEPLOYMENT_PROFILE=hosted` against a real
 libSQL server and a real MinIO. You do not need those locally -- the hosted
 tests skip without them, and CI covers that leg -- but if you are changing
 storage, the backends are two `docker run` commands and `tests/conftest.py`
 prints them when they are missing.
 
-`PYDEXPI_QA_PROVIDER=scripted` forces the deterministic no-LLM provider, so
+`HARBORFIELD_QA_PROVIDER=scripted` forces the deterministic no-LLM provider, so
 tests never need a model key and never make a network call.
 
 `oxfmt` is not enforced. It currently fails on files that predate it, and a

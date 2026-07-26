@@ -41,16 +41,16 @@ class HostedStorageConfigurationTests(unittest.TestCase):
     def test_an_empty_environment_names_the_missing_bucket(self) -> None:
         with self.assertRaises(HostedStorageNotConfigured) as caught:
             hosted_storage_settings_from_env({})
-        self.assertIn("PYDEXPI_S3_BUCKET", str(caught.exception))
+        self.assertIn("HARBORFIELD_S3_BUCKET", str(caught.exception))
 
     def test_a_blank_bucket_is_treated_as_missing(self) -> None:
         with self.assertRaises(HostedStorageNotConfigured):
-            hosted_storage_settings_from_env({"PYDEXPI_S3_BUCKET": "   "})
+            hosted_storage_settings_from_env({"HARBORFIELD_S3_BUCKET": "   "})
 
     def test_an_empty_endpoint_means_aws_rather_than_a_refusal(self) -> None:
         """A managed deployment on AWS proper configures no endpoint."""
 
-        settings = hosted_storage_settings_from_env({"PYDEXPI_S3_BUCKET": "reviews"})
+        settings = hosted_storage_settings_from_env({"HARBORFIELD_S3_BUCKET": "reviews"})
         self.assertEqual("reviews", settings.bucket)
         self.assertIsNone(settings.endpoint_url)
 
@@ -62,7 +62,7 @@ class HostedStorageConfigurationTests(unittest.TestCase):
         """
 
         settings = hosted_storage_settings_from_env(
-            {"PYDEXPI_S3_BUCKET": "reviews", "PYDEXPI_S3_ENDPOINT_URL": ""}
+            {"HARBORFIELD_S3_BUCKET": "reviews", "HARBORFIELD_S3_ENDPOINT_URL": ""}
         )
         self.assertIsNone(settings.access_key_id)
         self.assertIsNone(settings.secret_access_key)
@@ -70,11 +70,11 @@ class HostedStorageConfigurationTests(unittest.TestCase):
     def test_the_endpoint_makes_a_self_hosted_bucket_work(self) -> None:
         settings = hosted_storage_settings_from_env(
             {
-                "PYDEXPI_S3_BUCKET": "reviews",
-                "PYDEXPI_S3_ENDPOINT_URL": "https://minio.internal:9000",
-                "PYDEXPI_S3_ACCESS_KEY_ID": "key",
-                "PYDEXPI_S3_SECRET_ACCESS_KEY": "secret",
-                "PYDEXPI_S3_REGION": "eu-west-2",
+                "HARBORFIELD_S3_BUCKET": "reviews",
+                "HARBORFIELD_S3_ENDPOINT_URL": "https://minio.internal:9000",
+                "HARBORFIELD_S3_ACCESS_KEY_ID": "key",
+                "HARBORFIELD_S3_SECRET_ACCESS_KEY": "secret",
+                "HARBORFIELD_S3_REGION": "eu-west-2",
             }
         )
         self.assertEqual("https://minio.internal:9000", settings.endpoint_url)
@@ -155,7 +155,7 @@ class LocalProfileKeepsItsFilesystemTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = bundle.build_store(
-                root, owner, {"PYDEXPI_S3_BUCKET": "should-be-ignored"}
+                root, owner, {"HARBORFIELD_S3_BUCKET": "should-be-ignored"}
             )
             store.write_text("s1/local.json", "{}")
             self.assertTrue(

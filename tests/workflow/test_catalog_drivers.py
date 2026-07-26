@@ -11,10 +11,10 @@ that needs different SQL, applies the schema differently, or orders rows
 differently fails here rather than in the profile nobody runs locally.
 
 The libSQL leg needs a real server; there is no in-process libSQL. Set
-``PYDEXPI_LIBSQL_TEST_URL`` to one:
+``HARBORFIELD_LIBSQL_TEST_URL`` to one:
 
     docker run -d -p 8099:8080 ghcr.io/tursodatabase/libsql-server:latest
-    PYDEXPI_LIBSQL_TEST_URL=http://127.0.0.1:8099 pytest tests/workflow/test_catalog_drivers.py
+    HARBORFIELD_LIBSQL_TEST_URL=http://127.0.0.1:8099 pytest tests/workflow/test_catalog_drivers.py
 
 Unset, the libSQL leg skips and says so. In CI the variable is always set, and
 a set-but-unreachable URL is an error rather than a skip -- a broken service
@@ -38,7 +38,7 @@ from pydexpi_datalog.workflow.session_catalog import (
     local_catalog,
 )
 
-LIBSQL_URL_ENV_VAR = "PYDEXPI_LIBSQL_TEST_URL"
+LIBSQL_URL_ENV_VAR = "HARBORFIELD_LIBSQL_TEST_URL"
 
 
 @contextmanager

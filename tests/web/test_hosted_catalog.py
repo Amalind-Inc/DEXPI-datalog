@@ -27,7 +27,7 @@ from pydexpi_datalog.web.deployment import (
     hosted_catalog_settings_from_env,
 )
 
-LIBSQL_URL_ENV_VAR = "PYDEXPI_LIBSQL_TEST_URL"
+LIBSQL_URL_ENV_VAR = "HARBORFIELD_LIBSQL_TEST_URL"
 
 
 def _server_url() -> str:
@@ -45,11 +45,11 @@ class HostedCatalogConfigurationTests(unittest.TestCase):
     def test_an_empty_environment_names_the_missing_setting(self) -> None:
         with self.assertRaises(HostedCatalogNotConfigured) as caught:
             hosted_catalog_settings_from_env({})
-        self.assertIn("PYDEXPI_LIBSQL_URL", str(caught.exception))
+        self.assertIn("HARBORFIELD_LIBSQL_URL", str(caught.exception))
 
     def test_a_blank_url_is_treated_as_missing(self) -> None:
         with self.assertRaises(HostedCatalogNotConfigured):
-            hosted_catalog_settings_from_env({"PYDEXPI_LIBSQL_URL": "   "})
+            hosted_catalog_settings_from_env({"HARBORFIELD_LIBSQL_URL": "   "})
 
     def test_the_auth_token_is_optional(self) -> None:
         """A self-hosted libSQL server may legitimately run without one.
@@ -60,7 +60,7 @@ class HostedCatalogConfigurationTests(unittest.TestCase):
         """
 
         settings = hosted_catalog_settings_from_env(
-            {"PYDEXPI_LIBSQL_URL": "libsql://example.invalid"}
+            {"HARBORFIELD_LIBSQL_URL": "libsql://example.invalid"}
         )
         self.assertEqual("libsql://example.invalid", settings.url)
         self.assertEqual("", settings.auth_token)
@@ -68,15 +68,15 @@ class HostedCatalogConfigurationTests(unittest.TestCase):
     def test_the_url_and_token_are_read_from_the_environment(self) -> None:
         settings = hosted_catalog_settings_from_env(
             {
-                "PYDEXPI_LIBSQL_URL": "libsql://db.example.invalid",
-                "PYDEXPI_LIBSQL_AUTH_TOKEN": "secret-token",
+                "HARBORFIELD_LIBSQL_URL": "libsql://db.example.invalid",
+                "HARBORFIELD_LIBSQL_AUTH_TOKEN": "secret-token",
             }
         )
         self.assertEqual("libsql://db.example.invalid", settings.url)
         self.assertEqual("secret-token", settings.auth_token)
 
     def test_every_hosted_catalog_variable_is_documented_in_one_place(self) -> None:
-        self.assertIn("PYDEXPI_LIBSQL_URL", HOSTED_CATALOG_ENV_VARS)
+        self.assertIn("HARBORFIELD_LIBSQL_URL", HOSTED_CATALOG_ENV_VARS)
 
 
 class HostedBundleTests(unittest.TestCase):
@@ -97,7 +97,7 @@ class HostedBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             catalog = bundle.build_catalog(
-                root, {"PYDEXPI_LIBSQL_URL": url, "PYDEXPI_LIBSQL_AUTH_TOKEN": ""}
+                root, {"HARBORFIELD_LIBSQL_URL": url, "HARBORFIELD_LIBSQL_AUTH_TOKEN": ""}
             )
             catalog.record_preparation(
                 workspace=workspace,
@@ -118,7 +118,7 @@ class HostedBundleTests(unittest.TestCase):
 
         url = _server_url()
         bundle = bundle_for(DeploymentProfile.HOSTED)
-        env = {"PYDEXPI_LIBSQL_URL": url, "PYDEXPI_LIBSQL_AUTH_TOKEN": ""}
+        env = {"HARBORFIELD_LIBSQL_URL": url, "HARBORFIELD_LIBSQL_AUTH_TOKEN": ""}
         workspace = f"ws-{uuid.uuid4().hex[:12]}"
         with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
             first = bundle.build_catalog(Path(one), env)
@@ -142,7 +142,7 @@ class LocalProfileIsUntouchedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             catalog = bundle.build_catalog(
-                root, {"PYDEXPI_LIBSQL_URL": "libsql://should.be.ignored.invalid"}
+                root, {"HARBORFIELD_LIBSQL_URL": "libsql://should.be.ignored.invalid"}
             )
             catalog.record_preparation(
                 workspace="solo",

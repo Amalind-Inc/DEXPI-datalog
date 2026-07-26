@@ -285,13 +285,13 @@ def _every_object(prefix: str) -> list[tuple[str, bytes]]:
     env = hosted_catalog_env()
     client = boto3.client(
         "s3",
-        endpoint_url=env["PYDEXPI_S3_ENDPOINT_URL"] or None,
-        aws_access_key_id=env["PYDEXPI_S3_ACCESS_KEY_ID"] or None,
-        aws_secret_access_key=env["PYDEXPI_S3_SECRET_ACCESS_KEY"] or None,
-        region_name=env["PYDEXPI_S3_REGION"] or "us-east-1",
+        endpoint_url=env["HARBORFIELD_S3_ENDPOINT_URL"] or None,
+        aws_access_key_id=env["HARBORFIELD_S3_ACCESS_KEY_ID"] or None,
+        aws_secret_access_key=env["HARBORFIELD_S3_SECRET_ACCESS_KEY"] or None,
+        region_name=env["HARBORFIELD_S3_REGION"] or "us-east-1",
         config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
-    bucket = env["PYDEXPI_S3_BUCKET"]
+    bucket = env["HARBORFIELD_S3_BUCKET"]
     found: list[tuple[str, bytes]] = []
     paginator = client.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):

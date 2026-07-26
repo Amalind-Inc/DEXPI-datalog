@@ -1,6 +1,6 @@
 """Which deployment profile this process is, and what each one is built from.
 
-DEXPI-datalog ships two profiles from one codebase (ADR 0016). The `local`
+PortLog ships two profiles from one codebase (ADR 0016). The `local`
 profile keeps every artifact on the operator's machine with no accounts; the
 `hosted` profile persists per-user work behind sign-in. The choice is made
 once, here, at the composition root, and is invisible below it: no workflow,
@@ -53,14 +53,14 @@ from ..workflow.session_catalog import (
     local_catalog,
 )
 
-PROFILE_ENV_VAR = "PYDEXPI_DEPLOYMENT_PROFILE"
+PROFILE_ENV_VAR = "HARBORFIELD_DEPLOYMENT_PROFILE"
 
 # Read only by the hosted profile, and only when it builds its catalog.
 HOSTED_CATALOG_ENV_VARS = (
-    "PYDEXPI_LIBSQL_URL",
-    "PYDEXPI_LIBSQL_AUTH_TOKEN",
+    "HARBORFIELD_LIBSQL_URL",
+    "HARBORFIELD_LIBSQL_AUTH_TOKEN",
 )
-_REQUIRED_CATALOG_ENV_VARS = ("PYDEXPI_LIBSQL_URL",)
+_REQUIRED_CATALOG_ENV_VARS = ("HARBORFIELD_LIBSQL_URL",)
 
 
 class DeploymentProfileError(ValueError):
@@ -101,8 +101,8 @@ def hosted_catalog_settings_from_env(
             f"Missing: {', '.join(missing)}."
         )
     return HostedCatalogSettings(
-        url=values["PYDEXPI_LIBSQL_URL"],
-        auth_token=values["PYDEXPI_LIBSQL_AUTH_TOKEN"],
+        url=values["HARBORFIELD_LIBSQL_URL"],
+        auth_token=values["HARBORFIELD_LIBSQL_AUTH_TOKEN"],
     )
 
 
@@ -121,23 +121,23 @@ def hosted_storage_settings_from_env(env: Mapping[str, str]) -> S3Settings:
     """
 
     values = {name: env.get(name, "").strip() for name in HOSTED_STORAGE_ENV_VARS}
-    if not values["PYDEXPI_S3_BUCKET"]:
+    if not values["HARBORFIELD_S3_BUCKET"]:
         raise HostedStorageNotConfigured(
             "the hosted deployment profile keeps review artifacts in object "
             "storage, so it cannot start without a bucket: an instance disk "
             "is lost the next time the instance is replaced. "
-            "Missing: PYDEXPI_S3_BUCKET."
+            "Missing: HARBORFIELD_S3_BUCKET."
         )
     return S3Settings(
-        bucket=values["PYDEXPI_S3_BUCKET"],
-        endpoint_url=values["PYDEXPI_S3_ENDPOINT_URL"] or None,
-        access_key_id=values["PYDEXPI_S3_ACCESS_KEY_ID"] or None,
-        secret_access_key=values["PYDEXPI_S3_SECRET_ACCESS_KEY"] or None,
-        region=values["PYDEXPI_S3_REGION"] or "us-east-1",
+        bucket=values["HARBORFIELD_S3_BUCKET"],
+        endpoint_url=values["HARBORFIELD_S3_ENDPOINT_URL"] or None,
+        access_key_id=values["HARBORFIELD_S3_ACCESS_KEY_ID"] or None,
+        secret_access_key=values["HARBORFIELD_S3_SECRET_ACCESS_KEY"] or None,
+        region=values["HARBORFIELD_S3_REGION"] or "us-east-1",
     )
 
 
-BYOK_SECRET_ENV_VAR = "PYDEXPI_BYOK_SECRET"
+BYOK_SECRET_ENV_VAR = "HARBORFIELD_BYOK_SECRET"
 
 
 class HostedProviderKeysNotConfigured(ValueError):

@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report privately rather than in a public issue:
-[open a security advisory](https://github.com/Amalind-Inc/DEXPI-datalog/security/advisories/new).
+[open a security advisory](https://github.com/Harborfield/portlog/security/advisories/new).
 
 That form is private to you and the maintainers. Include what you did, what
 happened, and what you expected. A proof of concept is welcome but not
@@ -15,7 +15,7 @@ is valid we will agree a disclosure timeline with you rather than impose one.
 
 ## What this project is
 
-`DEXPI-datalog` is a demo and evaluation tool. Its own README says it should
+`PortLog` is a demo and evaluation tool. Its own README says it should
 not be used to verify production P&ID documents. Reports are welcome anyway,
 but treat that framing as honest rather than defensive: this has not had a
 security audit, and it should not be the only thing between an engineering
@@ -62,7 +62,7 @@ as the body of the request that needs them, and the server stores nothing.
 In the **hosted** profile a saved key is encrypted with AES-256-GCM before it
 is written, with the owning user and provider bound in as associated data, so
 a row copied to another user or provider fails to decrypt rather than
-returning someone else's key. Encryption uses `PYDEXPI_BYOK_SECRET`; a hosted
+returning someone else's key. Encryption uses `HARBORFIELD_BYOK_SECRET`; a hosted
 instance refuses to start without it rather than storing keys in the clear.
 
 If you find a path where a credential reaches a log line, an artifact, an
