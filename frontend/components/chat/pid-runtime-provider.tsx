@@ -29,6 +29,7 @@ import { parseGroundedQAAnswerMessage } from "@/lib/grounded-qa-answer";
 import { deriveTurnSteps } from "@/lib/turn-steps";
 import { serializeInProgressTurn } from "@/lib/in-progress-turn";
 import { readOrCreateSessionId, SESSION_KEY } from "@/lib/session-id";
+import { mergeRenderDataWithSession, readCachedRenderBundle, writeCachedRenderBundle } from "@/lib/render-bundle-cache";
 import {
   beginPidLatencyTrace,
   endPidLatencyPhase,
@@ -83,7 +84,17 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         const response = await fetch(`/api/review/sessions/${sessionId}`);
         if (!response.ok || cancelled) return;
         const restored = (await response.json()) as PrepareResult;
-        if (!cancelled && restored.graph.nodes.length > 0) applyPrepareResult(restored);
+        const cached = restored.renderBundleKey ? await readCachedRenderBundle(restored.renderBundleKey) : null;
+        const bundleResponse = await fetch(`/api/review/sessions/${sessionId}/render-bundle`, {
+          headers: cached ? { "If-None-Match": cached.etag } : {},
+        });
+        const bundle = bundleResponse.status === 304 ? cached?.bundle : await bundleResponse.json();
+        if (restored.renderBundleKey && bundleResponse.ok && bundleResponse.status !== 304) {
+          const etag = bundleResponse.headers.get("etag");
+          if (etag) await writeCachedRenderBundle(restored.renderBundleKey, { etag, bundle });
+        }
+        const merged = bundle ? mergeRenderDataWithSession(restored, bundle) : restored;
+        if (!cancelled && merged.graph.nodes.length > 0) applyPrepareResult(merged);
       } catch {
         // Offline or mid-deploy. The canvas keeps whatever it already had.
       }

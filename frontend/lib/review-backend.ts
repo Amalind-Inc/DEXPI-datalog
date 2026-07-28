@@ -291,6 +291,7 @@ export async function restoreReviewSession(
       schematicSceneKind: readSchematicSceneKind(data),
       geometryReport: readGeometryReport(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
+      renderBundleKey: typeof data.render_bundle_key === "string" ? data.render_bundle_key : undefined,
     };
   } catch {
     return null;
@@ -1240,6 +1241,21 @@ function readCatalogProviderFromEnv(): BackendProviderSettings | null {
 
 export function backendBaseUrl() {
   return readEnvValue("HARBORFIELD_REVIEW_API_URL") ?? "http://127.0.0.1:8000";
+}
+
+export async function fetchRenderBundle(
+  sessionId: string,
+  etag?: string,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
+): Promise<{ status: number; etag: string | null; body: Record<string, unknown> | null }> {
+  const response = await fetcher(`${baseUrl}/api/review/sessions/${sessionId}/render-bundle`, {
+    headers: etag ? { "If-None-Match": etag } : {},
+  });
+  return {
+    status: response.status,
+    etag: response.headers.get("etag"),
+    body: response.status === 304 ? null : ((await response.json()) as Record<string, unknown>),
+  };
 }
 
 function readEnvValue(key: string): string | undefined {
