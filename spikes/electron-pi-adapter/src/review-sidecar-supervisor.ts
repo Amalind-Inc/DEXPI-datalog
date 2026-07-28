@@ -2,7 +2,8 @@ export interface ReviewSidecarSpec {
   python: string;
   module: string;
   cwd: string;
-  healthUrl: string;
+  port: number;
+  healthPath: string;
 }
 
 export interface SpawnedProcess {
@@ -16,6 +17,7 @@ export interface ReviewSidecarPorts {
     options: { cwd: string },
   ): SpawnedProcess;
   waitForReady(url: string): Promise<void>;
+  waitForExit(child: SpawnedProcess): Promise<Error>;
 }
 
 /** Electron-main-process-compatible ownership of the local review API process. */
@@ -33,12 +35,24 @@ export class ReviewSidecarSupervisor {
     }
     const child = this.ports.spawn(
       spec.python,
-      ["-m", "uvicorn", spec.module, "--host", "127.0.0.1", "--port", "8000"],
+      [
+        "-m",
+        "uvicorn",
+        spec.module,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(spec.port),
+      ],
       { cwd: spec.cwd },
     );
     this.child = child;
+    const healthUrl = `http://127.0.0.1:${spec.port}${spec.healthPath}`;
     try {
-      await this.ports.waitForReady(spec.healthUrl);
+      await Promise.race([
+        this.ports.waitForReady(healthUrl),
+        this.ports.waitForExit(child).then((error) => Promise.reject(error)),
+      ]);
     } catch (error) {
       child.kill();
       this.child = undefined;
