@@ -12,7 +12,8 @@
     "format": "oxfmt --check",
     "format:fix": "oxfmt",
     "lint": "oxlint && oxfmt --check",
-    "lint:fix": "oxlint --fix && oxfmt"
+    "lint:fix": "oxlint --fix && oxfmt",
+    "desktop:dev": "electron desktop/electron-main.cjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
@@ -51,12 +52,14 @@
   },
   "devDependencies": {
     "@assistant-ui/next": "latest",
+    "@earendil-works/pi-coding-agent": "^0.82.1",
     "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "electron": "^43.2.0",
     "oxfmt": "^0.55.0",
     "oxlint": "^1.70.0",
     "tailwindcss": "^4.3.1",
