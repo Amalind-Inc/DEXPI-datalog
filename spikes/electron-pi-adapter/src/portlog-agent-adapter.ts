@@ -1,6 +1,15 @@
+export const PORTLOG_CAPABILITY_TOOLS = [
+  "inspect_pid_region",
+  "query_graph",
+  "run_validation",
+  "propose_correction",
+] as const;
+
+export type PortLogCapabilityTool = (typeof PORTLOG_CAPABILITY_TOOLS)[number];
+
 export type PortLogEvent =
   | { type: "assistant_text_delta"; turnId: string; text: string }
-  | { type: "inspection_started"; turnId: string; capability: string }
+  | { type: "inspection_started"; turnId: string; capability: PortLogCapabilityTool }
   | { type: "turn_completed"; turnId: string };
 
 export type PiEvent =
@@ -21,13 +30,22 @@ export interface PortLogTurnInput {
   text: string;
 }
 
+export interface PiSessionOptions {
+  noBuiltins: true;
+  capabilityTools: readonly PortLogCapabilityTool[];
+}
+
 export interface PiSessionFactory {
-  createSession(): Promise<PiSession>;
+  createSession(options: PiSessionOptions): Promise<PiSession>;
+}
+
+function isPortLogCapabilityTool(name: string): name is PortLogCapabilityTool {
+  return PORTLOG_CAPABILITY_TOOLS.includes(name as PortLogCapabilityTool);
 }
 
 /**
  * Translates a Pi invocation into PortLog events without allowing Pi session
- * persistence to become PortLog's visible chat or turn record.
+ * persistence or coding capabilities to become PortLog's visible turn record.
  */
 export class PiPortLogAgentAdapter {
   private readonly factory: PiSessionFactory;
@@ -37,7 +55,10 @@ export class PiPortLogAgentAdapter {
   }
 
   async *startTurn(input: PortLogTurnInput): AsyncIterable<PortLogEvent> {
-    const session = await this.factory.createSession();
+    const session = await this.factory.createSession({
+      noBuiltins: true,
+      capabilityTools: PORTLOG_CAPABILITY_TOOLS,
+    });
     if (session.sessionFile !== undefined) {
       session.dispose();
       throw new Error("PortLog requires an in-memory Pi session");
@@ -47,10 +68,12 @@ export class PiPortLogAgentAdapter {
     const unsubscribe = session.subscribe((event) => {
       if (event.type === "text") {
         events.push({ type: "assistant_text_delta", turnId: input.turnId, text: event.text });
+        return;
       }
-      if (event.type === "tool_start") {
-        events.push({ type: "inspection_started", turnId: input.turnId, capability: event.name });
+      if (!isPortLogCapabilityTool(event.name)) {
+        throw new Error(`unsupported Pi tool: ${event.name}`);
       }
+      events.push({ type: "inspection_started", turnId: input.turnId, capability: event.name });
     });
 
     try {
