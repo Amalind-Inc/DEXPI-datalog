@@ -89,6 +89,8 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
         assert.equal(artifactId, "drawing-1");
         assert.equal(claim, "P-101 is connected to V-201");
         assert.equal(signal, abortController.signal);
+        abortController.abort();
+        assert.equal(signal?.aborted, true);
         return { artifactId, evidence: [{ kind: "drawing-highlight", id: "hl-101" }] };
       },
     });
@@ -99,7 +101,11 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
     );
     await review.prompt("Check the claimed connection.");
     assert.equal(evidenceCalls, 1);
-    assert.equal(requestCount, 2);
+    assert.equal(
+      requestCount,
+      1,
+      "aborting an evidence lookup prevents Pi from issuing another model request",
+    );
   } finally {
     server.close();
     await rm(agentDir, { recursive: true, force: true });
