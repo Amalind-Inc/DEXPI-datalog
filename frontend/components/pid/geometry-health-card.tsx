@@ -20,49 +20,29 @@ export function GeometryHealthCard() {
   if (!geometryReport) return null;
 
   const { tier, label } = describeSchematicTier(schematicSceneKind, geometryReport);
-  const placedCount =
-    geometryReport.unpositionedEquipment.total - geometryReport.unpositionedEquipment.missing;
+  const placedCount = geometryReport.unpositionedEquipment.total - geometryReport.unpositionedEquipment.missing;
 
   return (
     <details className="geometry-health-card" data-testid="geometry-health-card">
-      <summary
-        className="geometry-health-summary"
-        data-testid="geometry-health-summary"
-        data-tier={tier}
-      >
+      <summary className="geometry-health-summary" data-testid="geometry-health-summary" data-tier={tier}>
         {label}
       </summary>
       <ul className="geometry-health-stats">
         {geometryReport.unpositionedEquipment.total > 0 && (
-          <li
-            className="geometry-health-stat"
-            data-testid="geometry-health-stat"
-            data-kind="placed"
-          >
-            {placedCount} of {geometryReport.unpositionedEquipment.total} equipment items placed as
-            drawn
+          <li className="geometry-health-stat" data-testid="geometry-health-stat" data-kind="placed">
+            {placedCount} of {geometryReport.unpositionedEquipment.total} equipment items placed as drawn
           </li>
         )}
         {geometryReport.pipeCoverage.segments > 0 && (
-          <li
-            className="geometry-health-stat"
-            data-testid="geometry-health-stat"
-            data-kind="routed"
-          >
-            {geometryReport.pipeCoverage.segmentsWithCenterline} of{" "}
-            {geometryReport.pipeCoverage.segments} pipe runs drawn as-drawn —{" "}
-            {geometryReport.routedPipeRuns.length} routed from source-stated endpoints
+          <li className="geometry-health-stat" data-testid="geometry-health-stat" data-kind="routed">
+            {geometryReport.pipeCoverage.segmentsWithCenterline} of {geometryReport.pipeCoverage.segments} pipe
+            runs drawn as-drawn — {geometryReport.routedPipeRuns.length} routed from source-stated endpoints
           </li>
         )}
         {geometryReport.shelvedEquipment.length > 0 && (
-          <li
-            className="geometry-health-stat"
-            data-testid="geometry-health-stat"
-            data-kind="shelved"
-          >
-            {geometryReport.shelvedEquipment.length} item
-            {geometryReport.shelvedEquipment.length === 1 ? "" : "s"} on the shelf — position not in
-            source
+          <li className="geometry-health-stat" data-testid="geometry-health-stat" data-kind="shelved">
+            {geometryReport.shelvedEquipment.length} item{geometryReport.shelvedEquipment.length === 1 ? "" : "s"} on
+            the shelf — position not in source
           </li>
         )}
         <li className="geometry-health-stat" data-testid="geometry-health-stat" data-kind="gate">

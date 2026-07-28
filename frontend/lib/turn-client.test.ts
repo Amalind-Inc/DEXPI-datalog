@@ -265,6 +265,7 @@ test("reduceTurn pulls conversationState from turn.result not events", () => {
   assert.deepEqual(reduced.conversationState, conversationState);
 });
 
+
 test("reduceTurn returns canceled when cancellation event follows review-required", () => {
   // A paused turn that was subsequently canceled has both a review-required event
   // and a later cancellation event. The terminal cancellation must win.
@@ -272,11 +273,7 @@ test("reduceTurn returns canceled when cancellation event follows review-require
     status: "canceled",
     events: [
       { sequence: 0, type: "tool-progress", data: { status: "started" } },
-      {
-        sequence: 1,
-        type: "review-required",
-        data: { review: { status: "needs_direction_review" } },
-      },
+      { sequence: 1, type: "review-required", data: { review: { status: "needs_direction_review" } } },
       { sequence: 2, type: "cancellation", data: { message: "Canceled by user." } },
     ],
   });
@@ -289,11 +286,7 @@ test("reduceTurn returns failed when failure event follows review-required", () 
     status: "failed",
     events: [
       { sequence: 0, type: "tool-progress", data: { status: "started" } },
-      {
-        sequence: 1,
-        type: "review-required",
-        data: { review: { status: "needs_direction_review" } },
-      },
+      { sequence: 1, type: "review-required", data: { review: { status: "needs_direction_review" } } },
       { sequence: 2, type: "failure", data: { message: "Backend error." } },
     ],
   });
@@ -301,6 +294,7 @@ test("reduceTurn returns failed when failure event follows review-required", () 
   assert.equal(reduced.kind, "failed");
   assert.equal("message" in reduced && reduced.message, "Backend error.");
 });
+
 
 test("turnToMessage tags a direction-review-required turn with turn identity for resume", () => {
   const turn = mockTurn({
@@ -321,11 +315,7 @@ test("turnToMessage tags a direction-review-required turn with turn identity for
               proposed_direction: "downstream",
               direction_basis: "inferred",
               basis_explanation: "The path traverses composition edges.",
-              evidence_highlight: {
-                source_scope_ids: [],
-                matched_object_ids: ["node-p101"],
-                paths: [],
-              },
+              evidence_highlight: { source_scope_ids: [], matched_object_ids: ["node-p101"], paths: [] },
             },
           },
         },
@@ -365,11 +355,7 @@ test("turnToMessage preserves batched direction-review items", () => {
                 proposed_direction: "downstream",
                 direction_basis: "inferred",
                 basis_explanation: "First inferred path.",
-                evidence_highlight: {
-                  source_scope_ids: [],
-                  matched_object_ids: ["pump-a"],
-                  paths: [],
-                },
+                evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-a"], paths: [] },
               },
               {
                 review_key: "review-b",
@@ -377,11 +363,7 @@ test("turnToMessage preserves batched direction-review items", () => {
                 proposed_direction: "downstream",
                 direction_basis: "inferred",
                 basis_explanation: "Second inferred path.",
-                evidence_highlight: {
-                  source_scope_ids: [],
-                  matched_object_ids: ["pump-b"],
-                  paths: [],
-                },
+                evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-b"], paths: [] },
               },
             ],
             direction_review: {
@@ -390,11 +372,7 @@ test("turnToMessage preserves batched direction-review items", () => {
               proposed_direction: "downstream",
               direction_basis: "inferred",
               basis_explanation: "First inferred path.",
-              evidence_highlight: {
-                source_scope_ids: [],
-                matched_object_ids: ["pump-a"],
-                paths: [],
-              },
+              evidence_highlight: { source_scope_ids: [], matched_object_ids: ["pump-a"], paths: [] },
             },
           },
         },
@@ -407,14 +385,8 @@ test("turnToMessage preserves batched direction-review items", () => {
 
   assert.equal(converted.status, "needs_direction_review");
   assert.equal(parsed?.items.length, 2);
-  assert.deepEqual(
-    parsed?.items.map((item) => item.reviewKey),
-    ["review-a", "review-b"],
-  );
-  assert.deepEqual(
-    parsed?.items.map((item) => item.objectId),
-    ["pump-a", "pump-b"],
-  );
+  assert.deepEqual(parsed?.items.map((item) => item.reviewKey), ["review-a", "review-b"]);
+  assert.deepEqual(parsed?.items.map((item) => item.objectId), ["pump-a", "pump-b"]);
 });
 
 test("turnToMessage tags a datalog-confirmation-required turn with turn identity for resume", () => {

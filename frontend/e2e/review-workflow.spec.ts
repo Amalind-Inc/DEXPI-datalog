@@ -21,9 +21,7 @@ test("shows patterned progress while an XML document is prepared", async ({ page
   await expect(page.getByText("Process document ready")).toBeVisible();
 });
 
-test("keeps multiple uploaded process documents available for topology review", async ({
-  page,
-}) => {
+test("keeps multiple uploaded process documents available for topology review", async ({ page }) => {
   const workflow = reviewWorkflow(page);
   await workflow.open();
 
@@ -38,9 +36,7 @@ test("keeps multiple uploaded process documents available for topology review", 
   await expect(page.getByTestId("auto-layout-schematic")).toBeVisible();
 });
 
-test("deletes uploaded documents and closes topology after the final deletion", async ({
-  page,
-}) => {
+test("deletes uploaded documents and closes topology after the final deletion", async ({ page }) => {
   const workflow = reviewWorkflow(page);
   await workflow.open();
   await workflow.uploadPlantXml();
@@ -107,7 +103,9 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
 
   // Stepped presentation (bead 2ki.11): no pause happened, so there is no
   // validation step -- just retrieval and the final evidence/answer step.
-  await expect(page.locator('[data-testid="turn-step"][data-step-id="validation"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="turn-step"][data-step-id="validation"]')).toHaveCount(
+    0,
+  );
 });
 
 test("QA answer evidence chips open the topology panel and highlight structural witnesses on click", async ({
@@ -206,9 +204,7 @@ test("inferred flow direction pauses for review and resumes after the reviewer c
   // Stepped presentation (bead 2ki.11): the review card is the blocking
   // Validation step, nested inside the paused turn's step list.
   await expect(
-    page.locator(
-      '[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]',
-    ),
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
   ).toBeVisible();
 
   // Clicking the witness chip highlights the structural witness in the
@@ -302,9 +298,7 @@ test("reversing an inferred flow direction resumes with the opposite direction",
   await workflow.sendPrompt("What is downstream of the segment?");
   await page.getByTestId("direction-review-card").waitFor({ state: "visible" });
   await expect(
-    page.locator(
-      '[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]',
-    ),
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
   ).toBeVisible();
   await page.getByTestId("direction-reverse").click();
 
@@ -448,9 +442,7 @@ test("temporary Datalog confirmation can be canceled or run from the chat card",
   // Stepped presentation (bead 2ki.11): the confirmation widget is the
   // blocking Validation step.
   await expect(
-    page.locator(
-      '[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]',
-    ),
+    page.locator('[data-testid="turn-step"][data-step-id="validation"][data-step-status="blocked"]'),
   ).toBeVisible();
 
   // The inline consent surface leads with the plain-language restatement and
@@ -659,13 +651,15 @@ test("a turn's step list ticks live against the real scripted backend before the
   await workflow.sendPrompt("What is downstream of the segment?");
 
   // The in-progress placeholder ticks in before the turn resolves.
-  await expect(page.locator('[data-testid="turn-step"][data-step-status="pending"]')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-status="pending"]'),
+  ).toBeVisible();
 
   // ...and the real answer eventually replaces it.
   await page.getByTestId("grounded-qa-answer").last().waitFor({ state: "visible" });
-  await expect(page.locator('[data-testid="turn-step"][data-step-status="pending"]')).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator('[data-testid="turn-step"][data-step-status="pending"]'),
+  ).toHaveCount(0);
 });
 
 test("canceling mid-stream against the real scripted backend leaves the step trail intact (bead 2ki.12)", async ({

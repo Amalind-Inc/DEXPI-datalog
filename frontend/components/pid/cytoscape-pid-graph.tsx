@@ -46,10 +46,7 @@ export function CytoscapePidGraph({
       },
     }));
     const edges: ElementDefinition[] = pidView.lines
-      .filter(
-        (l) =>
-          l.sourceUnit && l.targetUnit && unitIds.has(l.sourceUnit) && unitIds.has(l.targetUnit),
-      )
+      .filter((l) => l.sourceUnit && l.targetUnit && unitIds.has(l.sourceUnit) && unitIds.has(l.targetUnit))
       .map((line) => ({
         data: {
           id: line.id || `${line.sourceUnit}->${line.targetUnit}`,

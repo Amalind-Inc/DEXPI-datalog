@@ -71,7 +71,9 @@ export default function RulePacksPage() {
       };
       if (!res.ok) {
         const message =
-          body.error?.message ?? body.detail?.error?.message ?? `Create failed (${res.status})`;
+          body.error?.message ??
+          body.detail?.error?.message ??
+          `Create failed (${res.status})`;
         throw new Error(message);
       }
       const packId = body.pack?.pack_id;
@@ -92,9 +94,9 @@ export default function RulePacksPage() {
         <div>
           <h1 className="shell-page-title">Rule Packs</h1>
           <p className="shell-page-empty">
-            Browse bundled and authored rule packs. Advisory guidance and executable rules are
-            listed separately; attaching a pack to a chat still happens from the Rule Packs button
-            next to the composer.
+            Browse bundled and authored rule packs. Advisory guidance and executable
+            rules are listed separately; attaching a pack to a chat still happens from
+            the Rule Packs button next to the composer.
           </p>
         </div>
         <Button
@@ -189,8 +191,8 @@ export default function RulePacksPage() {
           <DialogHeader>
             <DialogTitle>New rule pack</DialogTitle>
             <DialogDescription>
-              Paste markdown with YAML frontmatter. It is stored immediately as a User pack
-              (advisory-first). Executable trust requires explicit promotion later.
+              Paste markdown with YAML frontmatter. It is stored immediately as a User
+              pack (advisory-first). Executable trust requires explicit promotion later.
             </DialogDescription>
           </DialogHeader>
           <textarea

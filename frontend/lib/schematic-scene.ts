@@ -156,10 +156,7 @@ function catalogueShapeRadius(primitives: SchematicPrimitive[]): number {
 }
 
 /** Invisible hit-circle radius (local, pre-transform space) for a symbol's shape -- a forgiving margin around the shape's painted geometry, not a maximal one (see comment above). */
-export function symbolHitRadius(
-  catalogue: Record<string, SchematicPrimitive[]>,
-  shape: string,
-): number {
+export function symbolHitRadius(catalogue: Record<string, SchematicPrimitive[]>, shape: string): number {
   const primitives = catalogue[shape];
   return primitives ? catalogueShapeRadius(primitives) : 3;
 }

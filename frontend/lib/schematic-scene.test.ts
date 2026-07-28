@@ -111,32 +111,8 @@ test("catalogueShapesUsed returns only shapes referenced by placed symbols, dedu
       UNUSED_SHAPE: [],
     },
     symbols: [
-      {
-        id: "a",
-        topologyId: null,
-        className: "",
-        shape: "PUMP_SHAPE",
-        tx: 0,
-        ty: 0,
-        angle: 0,
-        mirror: false,
-        sx: 1,
-        sy: 1,
-        shelved: false,
-      },
-      {
-        id: "b",
-        topologyId: null,
-        className: "",
-        shape: "PUMP_SHAPE",
-        tx: 5,
-        ty: 5,
-        angle: 0,
-        mirror: false,
-        sx: 1,
-        sy: 1,
-        shelved: false,
-      },
+      { id: "a", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
+      { id: "b", topologyId: null, className: "", shape: "PUMP_SHAPE", tx: 5, ty: 5, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false },
     ],
   });
   const used = catalogueShapesUsed(s);
@@ -146,52 +122,11 @@ test("catalogueShapesUsed returns only shapes referenced by placed symbols, dedu
 
 test("hitTestableObjects includes symbols and pipe/signal lines but not frame or leader polylines", () => {
   const s = scene({
-    symbols: [
-      {
-        id: "sym-1",
-        topologyId: "topo-1",
-        className: "",
-        shape: "X",
-        tx: 0,
-        ty: 0,
-        angle: 0,
-        mirror: false,
-        sx: 1,
-        sy: 1,
-        shelved: false,
-      },
-    ],
+    symbols: [{ id: "sym-1", topologyId: "topo-1", className: "", shape: "X", tx: 0, ty: 0, angle: 0, mirror: false, sx: 1, sy: 1, shelved: false }],
     polylines: [
-      {
-        id: "line-1",
-        topologyId: "topo-2",
-        kind: "pipe",
-        points: [],
-        stroke: "#000",
-        width: 0.3,
-        dash: null,
-        inferred: false,
-      },
-      {
-        id: "sheet",
-        topologyId: null,
-        kind: "frame",
-        points: [],
-        stroke: "#000",
-        width: 0.3,
-        dash: null,
-        inferred: false,
-      },
-      {
-        id: "leader",
-        topologyId: null,
-        kind: "leader",
-        points: [],
-        stroke: "#000",
-        width: 0.3,
-        dash: null,
-        inferred: false,
-      },
+      { id: "line-1", topologyId: "topo-2", kind: "pipe", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
+      { id: "sheet", topologyId: null, kind: "frame", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
+      { id: "leader", topologyId: null, kind: "leader", points: [], stroke: "#000", width: 0.3, dash: null, inferred: false },
     ],
   });
   const ids = hitTestableObjects(s).map((o) => o.id);

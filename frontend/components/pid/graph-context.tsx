@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useCallback, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { samplePidGraph } from "@/components/pid/sample-graph";
 import type {
   GeometryReport,
@@ -50,7 +57,10 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
     () => documents.find((document) => document.filename === activeDocumentName) ?? null,
     [activeDocumentName, documents],
   );
-  const documentNames = useMemo(() => documents.map((document) => document.filename), [documents]);
+  const documentNames = useMemo(
+    () => documents.map((document) => document.filename),
+    [documents],
+  );
   const graph = activeDocument?.graph ?? samplePidGraph;
   const pidView = activeDocument?.pidView ?? EMPTY_PID_VIEW;
   const schematicScene = activeDocument?.schematicScene ?? null;

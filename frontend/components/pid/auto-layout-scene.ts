@@ -28,17 +28,9 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
       const source = endpoint(line.sourceUnit);
       const target = endpoint(line.targetUnit);
       if (source == null || target == null || source === target) return null;
-      return {
-        id: line.id,
-        sources: [source],
-        targets: [target],
-        lineLabel: line.label || line.id,
-      };
+      return { id: line.id, sources: [source], targets: [target], lineLabel: line.label || line.id };
     })
-    .filter(
-      (edge): edge is { id: string; sources: string[]; targets: string[]; lineLabel: string } =>
-        edge !== null,
-    );
+    .filter((edge): edge is { id: string; sources: string[]; targets: string[]; lineLabel: string } => edge !== null);
 
   const graph: ElkNode = {
     id: "root",
@@ -68,28 +60,12 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
   const unitById = new Map(pidView.units.map((unit) => [unit.id, unit]));
   const scene: SchematicScene = {
     units: "mm",
-    extent: {
-      x0: 0,
-      y0: 0,
-      x1: (laidOut.width ?? 400) + MARGIN,
-      y1: (laidOut.height ?? 300) + MARGIN,
-    },
+    extent: { x0: 0, y0: 0, x1: (laidOut.width ?? 400) + MARGIN, y1: (laidOut.height ?? 300) + MARGIN },
     catalogue: autoLayoutCatalogue,
     symbols: [],
     polylines: [],
     polygons: [],
-    texts: [
-      {
-        kind: "text",
-        x: 8,
-        y: (laidOut.height ?? 300) + MARGIN - 4,
-        angle: 0,
-        string: "AUTO-LAYOUT",
-        height: 8,
-        font: "sans-serif",
-        just: "LeftBottom",
-      },
-    ],
+    texts: [{ kind: "text", x: 8, y: (laidOut.height ?? 300) + MARGIN - 4, angle: 0, string: "AUTO-LAYOUT", height: 8, font: "sans-serif", just: "LeftBottom" }],
   };
 
   for (const unit of pidView.units) {
@@ -127,7 +103,7 @@ export async function buildAutoLayoutScene(pidView: PidView): Promise<SchematicS
     for (const section of laidOutEdge.sections ?? []) {
       const points: [number, number][] = [
         [section.startPoint.x, section.startPoint.y],
-        ...(section.bendPoints ?? []).map((point) => [point.x, point.y] as [number, number]),
+        ...((section.bendPoints ?? []).map((point) => [point.x, point.y] as [number, number])),
         [section.endPoint.x, section.endPoint.y],
       ];
       scene.polylines.push({

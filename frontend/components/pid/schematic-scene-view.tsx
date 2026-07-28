@@ -49,8 +49,7 @@ export function SchematicSceneView({ scene, selectedId, highlightedIds, onSelect
   const symbolHitRadii = useMemo(() => {
     const raw = scene.symbols.map((symbol) =>
       Math.max(
-        symbolHitRadius(scene.catalogue, symbol.shape) *
-          Math.max(Math.abs(symbol.sx), Math.abs(symbol.sy)),
+        symbolHitRadius(scene.catalogue, symbol.shape) * Math.max(Math.abs(symbol.sx), Math.abs(symbol.sy)),
         MIN_HIT_RADIUS,
       ),
     );
@@ -156,8 +155,7 @@ function SchematicPolylineShape({
   onSelect: (topologyId: string) => void;
   onHover: (topologyId: string | null) => void;
 }) {
-  const hitTestable =
-    polyline.kind !== "frame" && polyline.kind !== "leader" && polyline.topologyId !== null;
+  const hitTestable = polyline.kind !== "frame" && polyline.kind !== "leader" && polyline.topologyId !== null;
   const points = polyline.points.map(([x, y]) => `${x},${y}`).join(" ");
   return (
     <>
@@ -200,7 +198,7 @@ function SchematicPolylineShape({
         // overrides any source-authored dash pattern -- drawn runs keep
         // whatever LineType the source declared, routed runs always get this
         // exact dash so "inferred" reads the same regardless of source style.
-        strokeDasharray={polyline.inferred ? "5 3" : (polyline.dash ?? undefined)}
+        strokeDasharray={polyline.inferred ? "5 3" : polyline.dash ?? undefined}
       />
     </>
   );
@@ -306,7 +304,7 @@ function SchematicPrimitiveShape({ primitive }: { primitive: SchematicPrimitive 
       const y0 = primitive.cy + primitive.r * Math.sin(a0);
       const x1 = primitive.cx + primitive.r * Math.cos(a1);
       const y1 = primitive.cy + primitive.r * Math.sin(a1);
-      const sweep = (((primitive.end - primitive.start) % 360) + 360) % 360;
+      const sweep = ((primitive.end - primitive.start) % 360 + 360) % 360;
       const largeArc = sweep > 180 ? 1 : 0;
       return (
         <path

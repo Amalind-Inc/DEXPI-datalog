@@ -28,10 +28,7 @@ test("a working OpenAI key reports the provider as reachable", async () => {
 
 test("each wire format is probed on its own authentication scheme", async () => {
   const anthropic = respondingFetcher(200);
-  await verifyByokCredential(
-    { provider: "anthropic", credential: "sk-ant-key" },
-    anthropic.fetcher,
-  );
+  await verifyByokCredential({ provider: "anthropic", credential: "sk-ant-key" }, anthropic.fetcher);
   assert.equal(anthropic.calls[0].url, "https://api.anthropic.com/v1/models");
   assert.equal(anthropic.calls[0].headers["x-api-key"], "sk-ant-key");
   assert.ok(anthropic.calls[0].headers["anthropic-version"]);
@@ -81,14 +78,8 @@ test("an unknown provider or blank credential is refused before any network call
     return new Response("{}", { status: 200 });
   }) as unknown as typeof fetch;
 
-  assert.equal(
-    (await verifyByokCredential({ provider: "hotdog", credential: "k" }, fetcher)).ok,
-    false,
-  );
-  assert.equal(
-    (await verifyByokCredential({ provider: "openai", credential: " " }, fetcher)).ok,
-    false,
-  );
+  assert.equal((await verifyByokCredential({ provider: "hotdog", credential: "k" }, fetcher)).ok, false);
+  assert.equal((await verifyByokCredential({ provider: "openai", credential: " " }, fetcher)).ok, false);
   assert.equal(called, false);
 });
 

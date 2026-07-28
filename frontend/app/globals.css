@@ -2760,7 +2760,11 @@
   position: relative;
   height: 0.875rem;
   overflow: hidden;
-  background-image: radial-gradient(circle, rgb(17 17 17 / 34%) 0.09rem, transparent 0.1rem);
+  background-image: radial-gradient(
+    circle,
+    rgb(17 17 17 / 34%) 0.09rem,
+    transparent 0.1rem
+  );
   background-position: 0.05rem 0.05rem;
   background-size: 0.42rem 0.42rem;
 }

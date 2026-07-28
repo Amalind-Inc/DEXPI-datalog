@@ -14,9 +14,18 @@ import { PidLegend } from "@/components/pid/pid-legend";
 import { GeometryHealthCard } from "@/components/pid/geometry-health-card";
 import { ZoomableScene, ZoomControls } from "@/components/pid/zoomable-scene";
 import { describeSchematicTier } from "@/lib/schematic-scene";
-import { completePidLatencyTrace, endPidLatencyPhase } from "@/lib/pid-latency-trace";
+import {
+  completePidLatencyTrace,
+  endPidLatencyPhase,
+} from "@/lib/pid-latency-trace";
 
-const filters: Array<PidNodeKind | "All"> = ["All", "Pump", "Valve", "Instrument", "Line"];
+const filters: Array<PidNodeKind | "All"> = [
+  "All",
+  "Pump",
+  "Valve",
+  "Instrument",
+  "Line",
+];
 
 export function PidGraphPanel() {
   const {
@@ -100,11 +109,12 @@ export function PidGraphPanel() {
     return pidView.lines
       .filter((line) => line.sourceUnit === selectedNodeId || line.targetUnit === selectedNodeId)
       .map((line) => {
-        const otherUnit = line.sourceUnit === selectedNodeId ? line.targetUnit : line.sourceUnit;
+        const otherUnit =
+          line.sourceUnit === selectedNodeId ? line.targetUnit : line.sourceUnit;
         return {
           id: line.id,
           label: line.label || line.id,
-          otherUnitLabel: otherUnit ? (nodeLabelById.get(otherUnit) ?? otherUnit) : "unconnected",
+          otherUnitLabel: otherUnit ? nodeLabelById.get(otherUnit) ?? otherUnit : "unconnected",
         };
       });
   }, [nodeLabelById, pidView.lines, selectedNodeId]);
@@ -240,68 +250,68 @@ export function PidGraphPanel() {
             />
           </div>
         ) : (
-          <svg viewBox="0 0 430 290" role="img" aria-label="Process document topology graph">
-            {graph.edges.map((edge) => {
-              const source = positions[edge.source] ?? { x: 60, y: 60 };
-              const target = positions[edge.target] ?? { x: 320, y: 180 };
-              const isVisible = visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target);
-              const isHighlighted =
-                highlightedNodeIds.includes(edge.source) ||
-                highlightedNodeIds.includes(edge.target);
-              return (
-                <g key={edge.id} opacity={isVisible ? 1 : 0.2}>
-                  <line
-                    className={cn("pid-edge", isHighlighted && "highlighted")}
-                    x1={source.x}
-                    y1={source.y}
-                    x2={target.x}
-                    y2={target.y}
-                  />
-                  <text
-                    className="pid-edge-label"
-                    x={(source.x + target.x) / 2}
-                    y={(source.y + target.y) / 2 - 8}
-                  >
-                    {edge.label}
-                  </text>
-                </g>
-              );
-            })}
-            {graph.nodes.map((node) => {
-              const position = positions[node.id] ?? { x: 160, y: 140 };
-              const isVisible = visibleNodeIds.has(node.id);
-              const isSelected = selectedNodeId === node.id;
-              const isHighlighted = highlightedNodeIds.includes(node.id);
-              return (
-                <g
-                  key={node.id}
-                  className="pid-node-group"
-                  opacity={isVisible ? 1 : 0.18}
-                  onClick={() => setSelectedNodeId(node.id)}
-                  role="button"
-                  aria-label={`Select ${node.label}`}
-                  tabIndex={0}
+        <svg viewBox="0 0 430 290" role="img" aria-label="Process document topology graph">
+          {graph.edges.map((edge) => {
+            const source = positions[edge.source] ?? { x: 60, y: 60 };
+            const target = positions[edge.target] ?? { x: 320, y: 180 };
+            const isVisible = visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target);
+            const isHighlighted =
+              highlightedNodeIds.includes(edge.source) ||
+              highlightedNodeIds.includes(edge.target);
+            return (
+              <g key={edge.id} opacity={isVisible ? 1 : 0.2}>
+                <line
+                  className={cn("pid-edge", isHighlighted && "highlighted")}
+                  x1={source.x}
+                  y1={source.y}
+                  x2={target.x}
+                  y2={target.y}
+                />
+                <text
+                  className="pid-edge-label"
+                  x={(source.x + target.x) / 2}
+                  y={(source.y + target.y) / 2 - 8}
                 >
-                  <rect
-                    className={cn(
-                      "pid-node",
-                      node.kind.toLowerCase(),
-                      isSelected && "selected",
-                      isHighlighted && "highlighted",
-                    )}
-                    x={position.x - 40}
-                    y={position.y - 23}
-                    width="80"
-                    height="46"
-                    rx="7"
-                  />
-                  <text className="pid-node-label" x={position.x} y={position.y + 4}>
-                    {node.label}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+                  {edge.label}
+                </text>
+              </g>
+            );
+          })}
+          {graph.nodes.map((node) => {
+            const position = positions[node.id] ?? { x: 160, y: 140 };
+            const isVisible = visibleNodeIds.has(node.id);
+            const isSelected = selectedNodeId === node.id;
+            const isHighlighted = highlightedNodeIds.includes(node.id);
+            return (
+              <g
+                key={node.id}
+                className="pid-node-group"
+                opacity={isVisible ? 1 : 0.18}
+                onClick={() => setSelectedNodeId(node.id)}
+                role="button"
+                aria-label={`Select ${node.label}`}
+                tabIndex={0}
+              >
+                <rect
+                  className={cn(
+                    "pid-node",
+                    node.kind.toLowerCase(),
+                    isSelected && "selected",
+                    isHighlighted && "highlighted",
+                  )}
+                  x={position.x - 40}
+                  y={position.y - 23}
+                  width="80"
+                  height="46"
+                  rx="7"
+                />
+                <text className="pid-node-label" x={position.x} y={position.y + 4}>
+                  {node.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
         )}
       </section>
 

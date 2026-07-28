@@ -5,17 +5,7 @@
 // state fills the viewport like a landing page. Turns render as full-width
 // cards with generous whitespace, no timeline rail.
 import { useState } from "react";
-import {
-  MessageSquare,
-  SlidersHorizontal,
-  Clock,
-  Paperclip,
-  ArrowUp,
-  Check,
-  X,
-  ChevronDown,
-  Download,
-} from "lucide-react";
+import { MessageSquare, SlidersHorizontal, Clock, Paperclip, ArrowUp, Check, X, ChevronDown, Download } from "lucide-react";
 import { SchematicSceneView } from "@/components/pid/schematic-scene-view";
 import { fakeRulePacks, fakeSessions, fakeTurns } from "./fake-data";
 import { fakePidScene } from "./fake-pid-scene";
@@ -68,10 +58,7 @@ export function VariantB() {
             Sessions
           </p>
           {fakeSessions.map((session) => (
-            <div
-              key={session.id}
-              className="mb-1 rounded-lg px-2 py-2 hover:bg-[var(--calm-paper)]"
-            >
+            <div key={session.id} className="mb-1 rounded-lg px-2 py-2 hover:bg-[var(--calm-paper)]">
               <p className="text-sm text-[var(--calm-ink)]">{session.title}</p>
               <p className="text-xs text-[var(--calm-ink-muted)]">
                 {session.status} · {session.updatedAt}
@@ -154,9 +141,7 @@ export function VariantB() {
                     {turn.kind === "assistant" ? (
                       <div
                         className={`rounded-2xl border bg-white p-6 shadow-[0_1px_2px_rgba(28,24,21,0.04),0_12px_28px_-16px_rgba(28,24,21,0.15)] ${
-                          isActive
-                            ? "border-[var(--calm-accent)] ring-1 ring-[var(--calm-accent)]"
-                            : "border-[var(--calm-line)]"
+                          isActive ? "border-[var(--calm-accent)] ring-1 ring-[var(--calm-accent)]" : "border-[var(--calm-line)]"
                         }`}
                       >
                         <h3 className="font-[family-name:var(--calm-display-font)] text-lg text-[var(--calm-ink)]">
@@ -179,9 +164,7 @@ export function VariantB() {
                     ) : (
                       <div
                         className={`flex overflow-hidden rounded-2xl border bg-white shadow-[0_1px_2px_rgba(28,24,21,0.04),0_16px_36px_-16px_rgba(185,84,46,0.35)] ${
-                          isActive
-                            ? "border-[var(--calm-accent)] ring-1 ring-[var(--calm-accent)]"
-                            : "border-[var(--calm-line)]"
+                          isActive ? "border-[var(--calm-accent)] ring-1 ring-[var(--calm-accent)]" : "border-[var(--calm-line)]"
                         }`}
                       >
                         <div className="w-1.5 flex-none bg-[var(--calm-accent)]" />
@@ -215,9 +198,7 @@ export function VariantB() {
                             </div>
                           ) : (
                             <p className="mt-4 text-sm font-medium text-[var(--calm-ink)]">
-                              {decided === "approved"
-                                ? "Approved — applying edit."
-                                : "Changes requested."}
+                              {decided === "approved" ? "Approved — applying edit." : "Changes requested."}
                             </p>
                           )}
                         </div>
@@ -231,9 +212,7 @@ export function VariantB() {
             <div className="flex w-[440px] flex-none flex-col border-l border-[var(--calm-line)] bg-[var(--calm-paper)] p-4">
               <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--calm-line)] bg-white shadow-[0_1px_2px_rgba(28,24,21,0.05),0_16px_36px_-20px_rgba(28,24,21,0.2)]">
                 <div className="flex items-center justify-between border-b border-[var(--calm-line)] px-4 py-3">
-                  <span className="truncate text-sm text-[var(--calm-ink)]">
-                    C01V04-VER.EX01.xml
-                  </span>
+                  <span className="truncate text-sm text-[var(--calm-ink)]">C01V04-VER.EX01.xml</span>
                   <Download size={15} className="flex-none text-[var(--calm-ink-muted)]" />
                 </div>
                 <div className="pid-schematic-wrap flex-1 bg-[var(--calm-paper)]">
@@ -271,9 +250,7 @@ function IconRailButton({
       title={label}
       onClick={onClick}
       className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-        active
-          ? "bg-[var(--calm-accent-soft)] text-[var(--calm-accent)]"
-          : "text-[var(--calm-ink-muted)] hover:bg-[var(--calm-paper)]"
+        active ? "bg-[var(--calm-accent-soft)] text-[var(--calm-accent)]" : "text-[var(--calm-ink-muted)] hover:bg-[var(--calm-paper)]"
       }`}
     >
       {icon}

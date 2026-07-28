@@ -10,27 +10,9 @@ export type FakeSession = {
 };
 
 export const fakeSessions: FakeSession[] = [
-  {
-    id: "s1",
-    title: "C01 Reference P&ID",
-    fileName: "C01V04-VER.EX01.xml",
-    updatedAt: "2m ago",
-    status: "blocked",
-  },
-  {
-    id: "s2",
-    title: "E06 Pump + HX skid",
-    fileName: "E06V01-VER.EX01.xml",
-    updatedAt: "1h ago",
-    status: "in review",
-  },
-  {
-    id: "s3",
-    title: "P14 Utility header",
-    fileName: "P14V02-VER.EX01.xml",
-    updatedAt: "yesterday",
-    status: "approved",
-  },
+  { id: "s1", title: "C01 Reference P&ID", fileName: "C01V04-VER.EX01.xml", updatedAt: "2m ago", status: "blocked" },
+  { id: "s2", title: "E06 Pump + HX skid", fileName: "E06V01-VER.EX01.xml", updatedAt: "1h ago", status: "in review" },
+  { id: "s3", title: "P14 Utility header", fileName: "P14V02-VER.EX01.xml", updatedAt: "yesterday", status: "approved" },
 ];
 
 export type FakeRulePack = {
@@ -42,27 +24,9 @@ export type FakeRulePack = {
 };
 
 export const fakeRulePacks: FakeRulePack[] = [
-  {
-    id: "rp1",
-    name: "DEXPI Core",
-    description: "Baseline topology and tag-format checks",
-    ruleCount: 42,
-    tag: "core",
-  },
-  {
-    id: "rp2",
-    name: "Client: Meridian Energy",
-    description: "Line-list numbering and insulation call-outs",
-    ruleCount: 18,
-    tag: "client",
-  },
-  {
-    id: "rp3",
-    name: "Draft: Relief Valve Sizing",
-    description: "Under construction, not yet reviewed",
-    ruleCount: 6,
-    tag: "draft",
-  },
+  { id: "rp1", name: "DEXPI Core", description: "Baseline topology and tag-format checks", ruleCount: 42, tag: "core" },
+  { id: "rp2", name: "Client: Meridian Energy", description: "Line-list numbering and insulation call-outs", ruleCount: 18, tag: "client" },
+  { id: "rp3", name: "Draft: Relief Valve Sizing", description: "Under construction, not yet reviewed", ruleCount: 6, tag: "draft" },
 ];
 
 export type FakeTurn = {
@@ -89,7 +53,7 @@ export const fakeTurns: FakeTurn[] = [
     kind: "assistant",
     title: "Cross-checked line list against source-document connectivity",
     body: "All 58 process lines resolve to a source and destination unit. No dangling ends detected.",
-    evidence: ['L-100-6"-CS', 'L-101-4"-CS'],
+    evidence: ["L-100-6\"-CS", "L-101-4\"-CS"],
   },
   {
     id: "t3",

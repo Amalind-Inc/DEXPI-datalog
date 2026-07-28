@@ -20,12 +20,20 @@ test("the index is small enough to ship to the browser and is featured-first", (
   const index = providerIndex();
 
   assert.ok(index.length > 100);
-  assert.deepEqual(
-    index.slice(0, 4).map((p) => p.id),
-    ["openrouter", "anthropic", "openai", "google"],
-  );
+  assert.deepEqual(index.slice(0, 4).map((p) => p.id), [
+    "openrouter",
+    "anthropic",
+    "openai",
+    "google",
+  ]);
   // No model lists in the index — those are fetched per provider.
-  assert.deepEqual(Object.keys(index[0]).sort(), ["doc", "id", "isLocal", "modelCount", "name"]);
+  assert.deepEqual(Object.keys(index[0]).sort(), [
+    "doc",
+    "id",
+    "isLocal",
+    "modelCount",
+    "name",
+  ]);
   assert.ok(JSON.stringify(index).length < 60_000);
 });
 

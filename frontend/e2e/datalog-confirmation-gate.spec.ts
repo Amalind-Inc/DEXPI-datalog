@@ -19,7 +19,9 @@ test("chat rule question pauses for keyboard-confirmed Datalog execution", async
   await workflow.uploadPlantXml();
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
-  await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
+  await workflow.sendPrompt(
+    "Must every connected object satisfy the temporary topology rule?",
+  );
 
   // The turn pauses: the purpose-built confirmation widget renders inline in
   // the chat thread with restatement + scope first, Datalog collapsed.
@@ -28,10 +30,14 @@ test("chat rule question pauses for keyboard-confirmed Datalog execution", async
   await expect(widget).toContainText(/direct process-connection target/i);
   await expect(page.getByTestId("datalog-exact-query")).toBeVisible();
   // Generated Datalog is collapsed by default but inspectable.
-  await expect(page.getByTestId("datalog-exact-query").locator("summary")).toBeVisible();
+  await expect(
+    page.getByTestId("datalog-exact-query").locator("summary"),
+  ).toBeVisible();
 
   // Numbered, keyboard-navigable choices. Select "Run" via keyboard only.
-  await expect(widget.getByTestId("datalog-widget-option-run")).toContainText(/1/);
+  await expect(
+    widget.getByTestId("datalog-widget-option-run"),
+  ).toContainText(/1/);
   await widget.press("1");
   await widget.press("Enter");
 
@@ -64,7 +70,9 @@ test("cancel via keyboard produces the non-executing outcome", async ({ page }) 
   await workflow.uploadPlantXml();
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
 
-  await workflow.sendPrompt("Must every connected object satisfy the temporary topology rule?");
+  await workflow.sendPrompt(
+    "Must every connected object satisfy the temporary topology rule?",
+  );
 
   const widget = page.getByTestId("datalog-confirmation-widget");
   await expect(widget).toBeVisible({ timeout: 30_000 });
@@ -79,5 +87,7 @@ test("cancel via keyboard produces the non-executing outcome", async ({ page }) 
   await expect(page.getByTestId("datalog-widget-decided")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByTestId("datalog-widget-decided")).toContainText(/cancel/i);
+  await expect(page.getByTestId("datalog-widget-decided")).toContainText(
+    /cancel/i,
+  );
 });

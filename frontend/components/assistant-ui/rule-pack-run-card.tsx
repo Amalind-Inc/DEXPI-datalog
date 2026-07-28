@@ -31,7 +31,8 @@ export function RulePackRunCard({ state }: { state: RulePackRunState }) {
   const anyEvidence = state.results.some((result) => hasEvidence(result.evidenceHighlight));
   const walkthrough = state.walkthrough;
   const isAdvisoryOnly =
-    state.mode === "advisory_walkthrough" || (state.results.length === 0 && Boolean(walkthrough));
+    state.mode === "advisory_walkthrough" ||
+    (state.results.length === 0 && Boolean(walkthrough));
 
   useEffect(() => {
     if (anyEvidence) setGraphOpen(true);
