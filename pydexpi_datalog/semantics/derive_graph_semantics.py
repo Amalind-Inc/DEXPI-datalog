@@ -22,6 +22,21 @@ TOPOLOGY_ATTR_NAMES = {
     "targetNode",
 }
 
+# Matches process_piping_attr_name in graph_topology_semantics.dl. Keep this
+# narrower than generic topology relationships: containment is not a piping path.
+PROCESS_PIPING_ATTR_NAMES = {
+    "connections",
+    "items",
+    "nodes",
+    "nozzles",
+    "pipingNetworkSystems",
+    "segments",
+    "sourceItem",
+    "sourceNode",
+    "targetItem",
+    "targetNode",
+}
+
 
 def run_derive_graph_semantics(*, graph_facts_path: Path, output_dir: Path) -> int:
     artifact = json.loads(graph_facts_path.read_text(encoding="utf-8"))

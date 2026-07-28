@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydexpi_datalog.semantics.topology_interpretation import TopologyInterpretation
 from pydexpi_datalog.workflow.review_session import build_topology_view_model
 
@@ -101,3 +104,30 @@ def test_reachable_relationship_includes_complete_canonical_witness() -> None:
         topology_id in topology["evidence_map"]
         for topology_id in valve.witness.topology_node_ids + valve.witness.topology_edge_ids
     )
+
+
+def test_e06_equipment_reaches_piping_through_nozzles() -> None:
+    """Real E06 equipment connectivity follows process-piping associations."""
+    repo_root = Path(__file__).resolve().parents[2]
+    graph_facts = json.loads(
+        (repo_root / "testdata/graph_contract/e06-pump-hex/graph_facts.json").read_text()
+    )
+    topology = build_topology_view_model(
+        graph_facts=graph_facts, session_id="e06", source_id="e06"
+    )
+    ids_by_tag = {
+        str(node.get("tag_name")): str(node["id"])
+        for node in topology["nodes"]
+        if isinstance(node, dict)
+    }
+    interpretation = TopologyInterpretation(
+        graph_facts=graph_facts, topology_view=topology, session_id="e06", source_id="e06"
+    )
+
+    result = interpretation.reachable_from(ids_by_tag["P-4713"], max_hops=12)
+
+    heat_exchanger = next(
+        item for item in result.reachable if item.topology_id == ids_by_tag["H-1009"]
+    )
+    assert "nozzles" in heat_exchanger.witness.relationships
+    assert result.truncated is False

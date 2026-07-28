@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from .derive_graph_semantics import TOPOLOGY_ATTR_NAMES
+from .derive_graph_semantics import PROCESS_PIPING_ATTR_NAMES
 
 DIRECTED_RELATIONSHIPS = frozenset(
     {"source", "target", "sourceItem", "targetItem", "sourceNode", "targetNode"}
@@ -269,7 +269,7 @@ class TopologyInterpretation:
             if not isinstance(attributes, dict):
                 attributes = {}
             relationship = str(attributes.get("attr_name", ""))
-            if relationship not in TOPOLOGY_ATTR_NAMES:
+            if relationship not in PROCESS_PIPING_ATTR_NAMES:
                 continue
             raw_source = str(edge["source_id"])
             raw_target = str(edge["target_id"])
