@@ -67,12 +67,15 @@ async function readEndpoint(
   options: LocalReviewRuntimeOptions,
   startupTimeoutMs: number,
 ): Promise<string> {
-  if (child.stdout === null) {
-    throw new Error("Local review sidecar did not expose standard output.");
+  if (child.stdout === null && child.stderr === null) {
+    throw new Error("Local review sidecar did not expose process output.");
   }
 
   const result = Promise.withResolvers<string>();
-  const lines = createInterface({ input: child.stdout });
+  const streams = [child.stdout, child.stderr].filter(
+    (stream): stream is NonNullable<typeof stream> => stream !== null,
+  );
+  const lines = streams.map((stream) => createInterface({ input: stream }));
   const timeout = setTimeout(() => {
     cleanup();
     result.reject(
@@ -101,15 +104,19 @@ async function readEndpoint(
   };
   const cleanup = () => {
     clearTimeout(timeout);
-    lines.close();
-    lines.off("line", onLine);
+    for (const lineReader of lines) {
+      lineReader.close();
+      lineReader.off("line", onLine);
+    }
     child.off("exit", rejectOnExit);
     child.off("error", rejectOnError);
   };
 
   child.on("exit", rejectOnExit);
   child.on("error", rejectOnError);
-  lines.on("line", onLine);
+  for (const lineReader of lines) {
+    lineReader.on("line", onLine);
+  }
   return result.promise;
 }
 
