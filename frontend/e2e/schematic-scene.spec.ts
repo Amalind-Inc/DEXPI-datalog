@@ -37,7 +37,9 @@ test("clicking a piped equipment symbol shows its identity and connections", asy
 
   // Click every symbol until one lands on a piped equipment unit -- not every
   // drawn symbol (e.g. a bare label glyph) has piping connections.
-  const symbols = page.getByTestId("schematic-scene").locator("use.schematic-symbol[role='button']");
+  const symbols = page
+    .getByTestId("schematic-scene")
+    .locator("use.schematic-symbol[role='button']");
   const count = await symbols.count();
   for (let index = 0; index < count; index += 1) {
     // Some drawn symbols are effectively zero-size connector glyphs
@@ -162,7 +164,9 @@ test("geometry health card describes a healthy as-drawn fixture (bead 2ki.8)", a
   await expect(stats.filter({ hasText: "on the shelf" })).toHaveCount(0);
 });
 
-test("geometry health card describes a partially-inferred fixture (bead 2ki.8)", async ({ page }) => {
+test("geometry health card describes a partially-inferred fixture (bead 2ki.8)", async ({
+  page,
+}) => {
   const workflow = reviewWorkflow(page);
 
   await workflow.open();

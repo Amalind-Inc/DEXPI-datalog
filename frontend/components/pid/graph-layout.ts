@@ -11,9 +11,7 @@ const samplePositions: Record<string, GraphPosition> = {
 
 export function layoutGraphNodes(graph: PidGraph): Record<string, GraphPosition> {
   if (graph.nodes.every((node) => samplePositions[node.id])) {
-    return Object.fromEntries(
-      graph.nodes.map((node) => [node.id, samplePositions[node.id]]),
-    );
+    return Object.fromEntries(graph.nodes.map((node) => [node.id, samplePositions[node.id]]));
   }
 
   const positions: Record<string, GraphPosition> = {};

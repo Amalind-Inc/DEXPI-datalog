@@ -56,7 +56,9 @@ export function parseDirectionReviewMessage(text: string): DirectionReviewState 
       evidenceHighlight: highlight,
       raw: {},
     };
-    const items = rawItems.map(readDirectionReviewItem).filter((item): item is DirectionReviewItem => item !== null);
+    const items = rawItems
+      .map(readDirectionReviewItem)
+      .filter((item): item is DirectionReviewItem => item !== null);
     return {
       question: parsed.question,
       reviewKey: parsed.reviewKey,

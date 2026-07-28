@@ -5,8 +5,24 @@ import type { PidView } from "./types.ts";
 
 const view: PidView = {
   units: [
-    { id: "u_pump", label: "P-4713", className: "Centrifugal Pump", category: "equipment", description: "", symbolKey: "CentrifugalPump", ports: [{ id: "nz1", label: "N-1" }] },
-    { id: "u_hx", label: "H-1009", className: "Plate Heat Exchanger", category: "equipment", description: "", symbolKey: "PlateHeatExchanger", ports: [{ id: "nz2", label: "N-2" }] },
+    {
+      id: "u_pump",
+      label: "P-4713",
+      className: "Centrifugal Pump",
+      category: "equipment",
+      description: "",
+      symbolKey: "CentrifugalPump",
+      ports: [{ id: "nz1", label: "N-1" }],
+    },
+    {
+      id: "u_hx",
+      label: "H-1009",
+      className: "Plate Heat Exchanger",
+      category: "equipment",
+      description: "",
+      symbolKey: "PlateHeatExchanger",
+      ports: [{ id: "nz2", label: "N-2" }],
+    },
   ],
   lines: [
     {

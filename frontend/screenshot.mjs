@@ -5,8 +5,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const FIXTURE = path.resolve(
-  __dirname, "..", "TrainingTestCases", "dexpi 1.3", "example pids",
-  "E06 Pump, HeatExchanger, Nozzles Connected With PNS", "E06V01-VER.EX01.xml",
+  __dirname,
+  "..",
+  "TrainingTestCases",
+  "dexpi 1.3",
+  "example pids",
+  "E06 Pump, HeatExchanger, Nozzles Connected With PNS",
+  "E06V01-VER.EX01.xml",
 );
 
 async function main() {
@@ -23,17 +28,20 @@ async function main() {
   await page.waitForSelector('[aria-label="P&ID topology graph"]', { timeout: 30000 });
   console.log("Topology loaded");
 
-  await page.getByRole("textbox", { name: "Message input" }).fill(
-    "What downstream process objects are reachable from the pump?"
-  );
+  await page
+    .getByRole("textbox", { name: "Message input" })
+    .fill("What downstream process objects are reachable from the pump?");
   await page.getByRole("button", { name: "Send message" }).click();
 
   await page.waitForSelector('[data-testid="datalog-confirmation-card"]', { timeout: 60000 });
   console.log("Confirmation card appeared");
   await page.screenshot({ path: path.join(__dirname, "03-confirmation.png") });
 
-  await page.locator('[data-testid="datalog-confirmation-card"]').last()
-    .getByRole("button", { name: "Run" }).click();
+  await page
+    .locator('[data-testid="datalog-confirmation-card"]')
+    .last()
+    .getByRole("button", { name: "Run" })
+    .click();
 
   await page.waitForSelector('[data-testid="grounded-logic-answer"]', { timeout: 60000 });
   await page.screenshot({ path: path.join(__dirname, "04-after-run.png") });
@@ -45,4 +53,7 @@ async function main() {
   await browser.close();
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

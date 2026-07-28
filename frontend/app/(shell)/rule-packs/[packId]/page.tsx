@@ -85,9 +85,7 @@ export default function RulePackDetailPage() {
             </div>
             <div>
               <dt>Advisory</dt>
-              <dd data-testid="rule-pack-advisory-count">
-                {pack.advisory_guidance?.length ?? 0}
-              </dd>
+              <dd data-testid="rule-pack-advisory-count">{pack.advisory_guidance?.length ?? 0}</dd>
             </div>
             <div>
               <dt>Rules</dt>
@@ -110,14 +108,10 @@ export default function RulePackDetailPage() {
             <section className="rule-pack-advisory" data-testid="rule-pack-advisory">
               <h2>Advisory guidance</h2>
               <p className="shell-page-empty">
-                Non-executable checklist and review posture. Does not produce engine
-                verdicts.
+                Non-executable checklist and review posture. Does not produce engine verdicts.
               </p>
               {pack.advisory_guidance.map((section, index) => (
-                <article
-                  key={`${section.title}-${index}`}
-                  data-testid="rule-pack-advisory-section"
-                >
+                <article key={`${section.title}-${index}`} data-testid="rule-pack-advisory-section">
                   {section.title ? <h3>{section.title}</h3> : null}
                   <p>{section.body}</p>
                 </article>

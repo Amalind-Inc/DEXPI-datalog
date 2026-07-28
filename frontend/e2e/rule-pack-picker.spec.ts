@@ -125,7 +125,11 @@ test("pick, load, and run a rule pack posts a stepped in-thread result (bead 2ki
     route.fulfill({ contentType: "application/json", body: JSON.stringify(fixturePacks) }),
   );
   await page.route("**/api/review/sessions/*/rule-packs/*/load", async (route) => {
-    loadRequestPackId = route.request().url().match(/rule-packs\/([^/]+)\/load/)?.[1] ?? null;
+    loadRequestPackId =
+      route
+        .request()
+        .url()
+        .match(/rule-packs\/([^/]+)\/load/)?.[1] ?? null;
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(fixtureLoad) });
   });
   await page.route("**/api/review/sessions/*/rule-packs/*/run", (route) =>
@@ -151,9 +155,7 @@ test("pick, load, and run a rule pack posts a stepped in-thread result (bead 2ki
   );
 
   // Load-on-select: no Load button, the load POST fires automatically.
-  await expect
-    .poll(() => loadRequestPackId)
-    .toBe("demo-pack");
+  await expect.poll(() => loadRequestPackId).toBe("demo-pack");
   await expect(page.getByTestId("rule-pack-load-status")).toHaveText("Loaded");
   await expect(page.locator('[data-role="assistant"]')).toHaveCount(0);
 
@@ -207,9 +209,7 @@ test("running a single rule from the detail pane posts a one-step in-thread resu
   await page.getByTestId("rule-pack-run-card").waitFor({ state: "visible" });
   await expect(workflow.ruleRunSteps).toHaveCount(1);
   await expect(workflow.ruleRunSteps.first()).toHaveAttribute("data-outcome", "violated");
-  await expect
-    .poll(() => (singleRuleBody as { rule_id?: string } | undefined)?.rule_id)
-    .toBe("r2");
+  await expect.poll(() => (singleRuleBody as { rule_id?: string } | undefined)?.rule_id).toBe("r2");
 });
 
 test("a session-not-ready load error surfaces inline without posting to the thread (bead 2ki.14)", async ({
@@ -229,13 +229,17 @@ test("a session-not-ready load error surfaces inline without posting to the thre
     route.fulfill({
       status: 409,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "session.not_ready", message: "Session is not ready yet." } }),
+      body: JSON.stringify({
+        error: { code: "session.not_ready", message: "Session is not ready yet." },
+      }),
     }),
   );
 
   await workflow.openRulePacksFlyout();
   await workflow.rulePackListItems.first().click();
 
-  await expect(page.getByTestId("rule-pack-action-error")).toContainText("Session is not ready yet.");
+  await expect(page.getByTestId("rule-pack-action-error")).toContainText(
+    "Session is not ready yet.",
+  );
   await expect(page.locator('[data-role="assistant"]')).toHaveCount(0);
 });

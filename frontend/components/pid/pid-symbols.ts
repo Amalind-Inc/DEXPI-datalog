@@ -25,9 +25,7 @@ const EXCHANGER = svg(
 );
 
 // Vessel / tank / drum: vertical capsule.
-const VESSEL = svg(
-  `<rect x="18" y="8" width="28" height="48" rx="14" fill="${FILL}"/>`,
-);
+const VESSEL = svg(`<rect x="18" y="8" width="28" height="48" rx="14" fill="${FILL}"/>`);
 
 // Column / tower: tall vessel with internal trays.
 const COLUMN = svg(
@@ -40,9 +38,7 @@ const VALVE = svg(
 );
 
 // Instrument: balloon circle with a centre line.
-const INSTRUMENT = svg(
-  `<circle cx="32" cy="32" r="20" fill="${FILL}"/><path d="M12 32 L52 32"/>`,
-);
+const INSTRUMENT = svg(`<circle cx="32" cy="32" r="20" fill="${FILL}"/><path d="M12 32 L52 32"/>`);
 
 // Generic tagged item fallback.
 const GENERIC = svg(`<rect x="10" y="16" width="44" height="32" rx="6" fill="${FILL}"/>`);
