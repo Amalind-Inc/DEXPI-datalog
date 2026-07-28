@@ -9,7 +9,9 @@
   "scripts": {
     "test": "node --test --experimental-strip-types",
     "typecheck": "tsc --noEmit",
-    "package:dir": "electron-builder --mac --dir --publish never"
+    "package:dir": "electron-builder --mac --dir --publish never",
+    "prototype:pi": "node --experimental-strip-types prototype-pi-session.ts",
+    "prototype:pi-auth": "node --experimental-strip-types prototype-pi-auth-status.ts"
   },
   "build": {
     "appId": "org.portlog.desktop.spike",
@@ -25,6 +27,7 @@
     "@types/node": "^26.0.0",
     "electron": "^40.0.0",
     "electron-builder": "^26.0.0",
+    "typebox": "1.1.38",
     "typescript": "^6.0.3"
   }
 }
