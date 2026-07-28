@@ -1,0 +1,3 @@
+#!/bin/sh
+# Fixture launcher used only to prove Electron resource packaging.
+exit 0

@@ -1,13 +1,29 @@
 {
   "name": "portlog-electron-pi-adapter-spike",
+  "version": "0.0.0",
+  "description": "PortLog Electron and Pi integration spike",
+  "author": "PortLog",
   "private": true,
   "type": "module",
+  "main": "src/electron-main.cjs",
   "scripts": {
     "test": "node --test --experimental-strip-types",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "package:dir": "electron-builder --mac --dir --publish never"
+  },
+  "build": {
+    "appId": "org.portlog.desktop.spike",
+    "productName": "PortLog Spike",
+    "files": ["src/electron-main.cjs", "src/electron-resource-path.cjs"],
+    "extraResources": [
+      { "from": "review-sidecar", "to": "review-sidecar" }
+    ],
+    "mac": { "target": ["dir"] }
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0",
     "typescript": "^6.0.3"
   }
 }
