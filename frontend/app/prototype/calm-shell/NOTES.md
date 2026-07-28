@@ -35,14 +35,14 @@ error handling) when building that slice.
 
 **Palette** (white ground, one accent):
 
-| Token | Value | Use |
-|---|---|---|
-| `--calm-paper` | `#fbfaf8` | page background |
-| `--calm-ink` | `#1c1815` | primary text |
-| `--calm-ink-muted` | `#6b6259` | secondary text |
-| `--calm-accent` | `#b9542e` | CTAs, active/selected state, consent-card accent |
+| Token                | Value     | Use                                                  |
+| -------------------- | --------- | ---------------------------------------------------- |
+| `--calm-paper`       | `#fbfaf8` | page background                                      |
+| `--calm-ink`         | `#1c1815` | primary text                                         |
+| `--calm-ink-muted`   | `#6b6259` | secondary text                                       |
+| `--calm-accent`      | `#b9542e` | CTAs, active/selected state, consent-card accent     |
 | `--calm-accent-soft` | `#f4e3d8` | accent-tinted fills (active nav item, selected chip) |
-| `--calm-line` | `#e8e3dc` | borders/dividers |
+| `--calm-line`        | `#e8e3dc` | borders/dividers                                     |
 
 **Type**: `Fraunces` (next/font/google, variable) for display moments
 (hero headline, turn/panel titles) via `font-[family-name:var(--calm-display-font)]`;
@@ -52,6 +52,7 @@ system sans (existing Tailwind default) for body text and UI chrome.
 (0.5rem) for buttons, `rounded-full` for pills and icon buttons.
 
 **Elevation** (soft, layered shadows — no hard drop shadows):
+
 - Resting card: `shadow-[0_1px_2px_rgba(28,24,21,0.04)]`
 - Raised panel/hero input: add
   `0_16px_36px_-20px_rgba(28,24,21,0.2)` (panel) or

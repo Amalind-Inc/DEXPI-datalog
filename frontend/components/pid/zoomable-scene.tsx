@@ -2,7 +2,11 @@
 
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { forwardRef, type ReactNode, type RefObject } from "react";
-import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
+import {
+  TransformComponent,
+  TransformWrapper,
+  type ReactZoomPanPinchRef,
+} from "react-zoom-pan-pinch";
 
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 4;
@@ -40,11 +44,7 @@ export const ZoomableScene = forwardRef<ReactZoomPanPinchRef, { children: ReactN
   },
 );
 
-export function ZoomControls({
-  zoomRef,
-}: {
-  zoomRef: RefObject<ReactZoomPanPinchRef | null>;
-}) {
+export function ZoomControls({ zoomRef }: { zoomRef: RefObject<ReactZoomPanPinchRef | null> }) {
   return (
     <div className="pid-zoom-toolbar">
       <button

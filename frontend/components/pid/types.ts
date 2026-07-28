@@ -58,10 +58,42 @@ export type PidView = {
 // symbols placed as drawn, drawn centerlines, drawing-native text. The
 // backend owns geometry semantics; the frontend paints this verbatim.
 export type SchematicPrimitive =
-  | { kind: "polyline"; points: [number, number][]; stroke: string; width: number; dash: string | null }
-  | { kind: "circle"; cx: number; cy: number; r: number; filled: boolean; stroke: string; width: number; dash: string | null }
-  | { kind: "arc"; cx: number; cy: number; r: number; start: number; end: number; stroke: string; width: number; dash: string | null }
-  | { kind: "polygon"; points: [number, number][]; filled: boolean; stroke: string; width: number; dash: string | null }
+  | {
+      kind: "polyline";
+      points: [number, number][];
+      stroke: string;
+      width: number;
+      dash: string | null;
+    }
+  | {
+      kind: "circle";
+      cx: number;
+      cy: number;
+      r: number;
+      filled: boolean;
+      stroke: string;
+      width: number;
+      dash: string | null;
+    }
+  | {
+      kind: "arc";
+      cx: number;
+      cy: number;
+      r: number;
+      start: number;
+      end: number;
+      stroke: string;
+      width: number;
+      dash: string | null;
+    }
+  | {
+      kind: "polygon";
+      points: [number, number][];
+      filled: boolean;
+      stroke: string;
+      width: number;
+      dash: string | null;
+    }
   | SchematicText;
 
 export type SchematicText = {

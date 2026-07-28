@@ -83,10 +83,11 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
         }
         if (cancelled) return;
         setLoadState("loaded");
-        setPacks((prev) =>
-          prev?.map((pack) =>
-            pack.pack_id === selectedPackId ? { ...pack, loaded: true } : pack,
-          ) ?? prev,
+        setPacks(
+          (prev) =>
+            prev?.map((pack) =>
+              pack.pack_id === selectedPackId ? { ...pack, loaded: true } : pack,
+            ) ?? prev,
         );
       })
       .catch((error: unknown) => {
@@ -119,9 +120,7 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
       const results = (body.results ?? []).map((raw) =>
         ruleRunResultFromApi(raw, ruleTitleById.get(String(raw.rule_id)) ?? String(raw.rule_id)),
       );
-      const walkthrough = body.walkthrough
-        ? advisoryWalkthroughFromApi(body.walkthrough)
-        : null;
+      const walkthrough = body.walkthrough ? advisoryWalkthroughFromApi(body.walkthrough) : null;
       aui.thread().append({
         role: "assistant",
         content: [
@@ -135,9 +134,7 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
               trustNotice: pack.trust_notice,
               results,
               mode:
-                body.mode === "advisory_walkthrough"
-                  ? "advisory_walkthrough"
-                  : "rule_evaluation",
+                body.mode === "advisory_walkthrough" ? "advisory_walkthrough" : "rule_evaluation",
               walkthrough: walkthrough ?? undefined,
             }),
           },
@@ -230,10 +227,7 @@ export function RulePackPicker({ onRunPosted }: { onRunPosted: () => void }) {
                   data-testid="rule-pack-list-item"
                   data-pack-id={pack.pack_id}
                   aria-pressed={selectedPackId === pack.pack_id}
-                  className={cn(
-                    "rule-pack-list-item",
-                    selectedPackId === pack.pack_id && "active",
-                  )}
+                  className={cn("rule-pack-list-item", selectedPackId === pack.pack_id && "active")}
                   onClick={() => setSelectedPackId(pack.pack_id)}
                 >
                   <span className="rule-pack-list-item-title">{pack.title}</span>
@@ -279,7 +273,13 @@ function RulePackDetail({
   onRunOne: (rule: RulePackRule) => void;
 }) {
   const loadStatusText =
-    loadState === "loading" ? "Loading…" : pack.loaded ? "Loaded" : loadState === "error" ? "Load failed" : null;
+    loadState === "loading"
+      ? "Loading…"
+      : pack.loaded
+        ? "Loaded"
+        : loadState === "error"
+          ? "Load failed"
+          : null;
 
   return (
     <div className="rule-pack-detail-content">
@@ -302,9 +302,7 @@ function RulePackDetail({
           <p className="rule-pack-rule-title">Advisory guidance</p>
           {pack.advisory_guidance.map((section, index) => (
             <div key={`${section.title}-${index}`} className="rule-pack-rule">
-              {section.title ? (
-                <p className="rule-pack-rule-title">{section.title}</p>
-              ) : null}
+              {section.title ? <p className="rule-pack-rule-title">{section.title}</p> : null}
               <p data-testid="rule-pack-advisory-body">{section.body}</p>
             </div>
           ))}

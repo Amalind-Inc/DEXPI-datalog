@@ -106,9 +106,7 @@ test("packContentsLabel: distinguishes advisory guidance from rules", () => {
   assert.equal(
     packContentsLabel(
       pack({
-        advisory_guidance: [
-          { kind: "advisory_pack_guidance", title: "A", body: "B" },
-        ],
+        advisory_guidance: [{ kind: "advisory_pack_guidance", title: "A", body: "B" }],
         rules: [],
       }),
     ),
@@ -117,9 +115,7 @@ test("packContentsLabel: distinguishes advisory guidance from rules", () => {
   assert.equal(
     packContentsLabel(
       pack({
-        advisory_guidance: [
-          { kind: "advisory_pack_guidance", title: "A", body: "B" },
-        ],
+        advisory_guidance: [{ kind: "advisory_pack_guidance", title: "A", body: "B" }],
       }),
     ),
     "1 guidance · 1 rule",

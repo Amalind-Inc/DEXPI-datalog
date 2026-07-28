@@ -125,10 +125,7 @@ function readWalkthrough(value: unknown): AdvisoryWalkthrough | undefined {
   }
   return {
     kind: "advisory_pack_walkthrough",
-    packId:
-      typeof value.packId === "string"
-        ? value.packId
-        : String(value.pack_id),
+    packId: typeof value.packId === "string" ? value.packId : String(value.pack_id),
     title: value.title,
     disclaimer: value.disclaimer,
     steps,
