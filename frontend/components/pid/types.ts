@@ -207,6 +207,5 @@ export type PrepareResult = {
   schematicSceneKind: SchematicSceneKind;
   geometryReport: GeometryReport | null;
   sourceScopeIds: string[];
-  renderBundleKey?: string;
   serverMetrics?: ServerPipelineMetrics | null;
 };

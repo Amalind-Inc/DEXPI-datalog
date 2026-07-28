@@ -30,7 +30,6 @@ class RenderBundleApiTests(unittest.TestCase):
             same_source = client.get("/api/review/sessions/cache-session-two/render-bundle")
             self.assertEqual(same_source.headers["etag"], etag)
             self.assertEqual(same_source.json(), first.json())
-            self.assertTrue(first.json()["render_bundle_key"].endswith(":render-bundle.v1"))
             self.assertNotIn("session_id", same_source.json()["render_data"])
 
 

@@ -398,17 +398,13 @@ def create_review_api_app(
         session_id: str,
         ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
-        panel = _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
-        source_id = _call_ready(lambda: ws.flow._topology_for_session(session_id)["source_id"])
-        panel["render_bundle_key"] = f"{ws.principal.workspace}:{source_id}:{RENDER_BUNDLE_SCHEMA_VERSION}"
-        return panel
+        return _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
 
     @app.get("/api/review/sessions/{session_id}/render-bundle")
     def render_bundle(session_id: str, request: Request, ws: WorkspaceServices = Depends(_workspace)) -> JSONResponse:
         panel = _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
-        source_id = _call_ready(lambda: ws.flow._topology_for_session(session_id)["source_id"])
         render_data = {"nodes": panel["topology_view"]["nodes"], "edges": panel["topology_view"]["edges"], **{key: panel.get(key) for key in ("pid_view", "schematic_scene", "schematic_scene_kind", "geometry_report")}}
-        body = {"schema_version": RENDER_BUNDLE_SCHEMA_VERSION, "render_bundle_key": f"{ws.principal.workspace}:{source_id}:{RENDER_BUNDLE_SCHEMA_VERSION}", "render_data": render_data}
+        body = {"schema_version": RENDER_BUNDLE_SCHEMA_VERSION, "render_data": render_data}
         etag = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         headers = {"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"}
         if request.headers.get("if-none-match") == headers["ETag"]:
