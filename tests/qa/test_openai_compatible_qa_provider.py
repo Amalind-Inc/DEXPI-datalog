@@ -8,7 +8,10 @@ inspection beyond the request payload the provider actually sends.
 
 from __future__ import annotations
 
+import json
 import unittest
+
+import httpx
 from unittest.mock import patch
 
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
@@ -81,6 +84,35 @@ def _openai_provider() -> OpenAICompatibleQATurnProvider:
         base_url="https://api.openai.test/v1",
         credential="sk-test",
     )
+
+
+class ProviderResponseNormalizationTests(unittest.TestCase):
+    def test_malformed_json_response_raises_bounded_runtime_error(self) -> None:
+        provider = _openrouter_provider()
+
+        class MalformedResponse(_FakeResponse):
+            text = "<html>upstream gateway error</html>"
+
+            def json(self) -> dict:
+                raise json.JSONDecodeError("Expecting value", self.text, 0)
+
+        with patch("httpx.post", return_value=MalformedResponse({})):
+            with self.assertRaisesRegex(RuntimeError, "non-JSON response") as raised:
+                provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
+
+        self.assertIn("openrouter", str(raised.exception))
+        self.assertIn("anthropic/claude-sonnet-4", str(raised.exception))
+        self.assertNotIn("upstream gateway error", str(raised.exception))
+
+    def test_transport_failure_raises_bounded_runtime_error(self) -> None:
+        provider = _openrouter_provider()
+
+        with patch("httpx.post", side_effect=httpx.ConnectError("network is unreachable")):
+            with self.assertRaisesRegex(RuntimeError, "request failed") as raised:
+                provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
+
+        self.assertIn("openrouter", str(raised.exception))
+        self.assertNotIn("network is unreachable", str(raised.exception))
 
 
 class OpenRouterReasoningRequestTests(unittest.TestCase):

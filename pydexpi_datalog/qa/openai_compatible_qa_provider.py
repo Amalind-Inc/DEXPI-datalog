@@ -138,14 +138,26 @@ class OpenAICompatibleQATurnProvider:
         }
         if self.provider in _REASONING_REQUEST_PROVIDERS:
             payload["reasoning"] = {"enabled": True}
-        response = httpx.post(
-            f"{self._base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=120.0,
-        )
-        response.raise_for_status()
-        body = response.json()
+        try:
+            response = httpx.post(
+                f"{self._base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=120.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise RuntimeError(
+                f"Provider {self.provider}/{self.model} request failed."
+            ) from error
+        try:
+            body = response.json()
+        except (json.JSONDecodeError, ValueError) as error:
+            # Preserve the provider/model boundary without leaking an arbitrary
+            # upstream response body into transcripts, logs, or benchmark output.
+            raise RuntimeError(
+                f"Provider {self.provider}/{self.model} returned a non-JSON response."
+            ) from error
         self._record_usage(body)
         return self._interpret(body)
 
