@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -26,6 +27,7 @@ from ..qa.grounded_qa_harness import (
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
+from ..workflow.render_bundle import RENDER_BUNDLE_SCHEMA_VERSION
 from ..verification.authored_rule_pack import (
     AuthoredRulePackError,
     AuthoredRulePackStore,
@@ -397,6 +399,17 @@ def create_review_api_app(
         ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
         return _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
+
+    @app.get("/api/review/sessions/{session_id}/render-bundle")
+    def render_bundle(session_id: str, request: Request, ws: WorkspaceServices = Depends(_workspace)) -> JSONResponse:
+        panel = _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
+        render_data = {"nodes": panel["topology_view"]["nodes"], "edges": panel["topology_view"]["edges"], **{key: panel.get(key) for key in ("pid_view", "schematic_scene", "schematic_scene_kind", "geometry_report")}}
+        body = {"schema_version": RENDER_BUNDLE_SCHEMA_VERSION, "render_data": render_data}
+        etag = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        headers = {"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"}
+        if request.headers.get("if-none-match") == headers["ETag"]:
+            return JSONResponse(status_code=304, content=None, headers=headers)
+        return JSONResponse(content=body, headers=headers)
 
     @app.put("/api/review/sessions/{session_id}/source-scope")
     def update_source_scope(
