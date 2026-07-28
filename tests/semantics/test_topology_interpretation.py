@@ -130,4 +130,11 @@ def test_e06_equipment_reaches_piping_through_nozzles() -> None:
         item for item in result.reachable if item.topology_id == ids_by_tag["H-1009"]
     )
     assert "nozzles" in heat_exchanger.witness.relationships
+    assert all(
+        topology_id in topology["evidence_map"]
+        for topology_id in (
+            heat_exchanger.witness.topology_node_ids
+            + heat_exchanger.witness.topology_edge_ids
+        )
+    )
     assert result.truncated is False

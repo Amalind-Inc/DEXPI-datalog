@@ -507,7 +507,7 @@ class ForceScriptedProviderTests(unittest.TestCase):
             turn = client.post(
                 f"/api/review/sessions/{session_id}/turns",
                 json={
-                    "question": "What downstream process objects are reachable from the pump?",
+                    "question": "What equipment is in this PID?",
                     "request_id": "force-1",
                 },
             )

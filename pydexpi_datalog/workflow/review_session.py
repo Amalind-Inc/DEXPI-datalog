@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..export.pipeline import export_graph_facts_artifact_timed
 from ..semantics.derive_graph_semantics import (
+    PROCESS_PIPING_ATTR_NAMES,
     TOPOLOGY_ATTR_NAMES,
     build_derived_graph_semantics_datalog,
     build_graph_facts_datalog,
@@ -516,6 +517,9 @@ def build_topology_view_model(
             },
         }
 
+    # A review witness must be highlightable. Include every generic review edge
+    # plus the narrower canonical process-piping associations used by reachability.
+    review_topology_attr_names = TOPOLOGY_ATTR_NAMES | PROCESS_PIPING_ATTR_NAMES
     topology_edges = []
     for edge in sorted(
         fact_edges,
@@ -527,7 +531,7 @@ def build_topology_view_model(
         ),
     ):
         attr_name = edge["attributes"].get("attr_name")
-        if attr_name not in TOPOLOGY_ATTR_NAMES:
+        if attr_name not in review_topology_attr_names:
             continue
         edge_key = str(edge["edge_key"])
         source_id = node_ids_by_raw_id[edge["source_id"]]
