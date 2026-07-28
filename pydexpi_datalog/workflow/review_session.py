@@ -20,6 +20,7 @@ from .artifact_store import ArtifactStore
 from .geometry_gate import evaluate_geometry_gate
 from .pid_view import build_pid_view
 from .schematic_scene import build_schematic_scene_report, has_drawable_geometry
+from .source_preparation_cache import SourcePreparationCache
 from .topology_naming import derive_display_names
 
 
@@ -130,17 +131,20 @@ class ReviewSessionService:
         try:
             started_at = self._clock()
             phases_ms: dict[str, float] = {}
-            # The export pipeline writes graph_facts.json into a directory it
-            # is handed, so preparation borrows a real one from the store.
-            with self.store.local_dir(session_id) as session_dir:
-                export = export_graph_facts_artifact_timed(
-                    dexpi_xml_path=dexpi_xml_path,
-                    fixture_id=session_id,
-                    output_dir=session_dir,
-                    clock=self._clock,
-                )
-                graph_facts = export.artifact
-                phases_ms.update(export.phases_ms)
+            source_cache = SourcePreparationCache(store=self.store, source_digest=source_id.removeprefix("source-"))
+            cache_hit = source_cache.available()
+            if cache_hit:
+                restored = source_cache.materialize(session_id=session_id, source_id=source_id, source_path=str(dexpi_xml_path))
+                graph_facts = restored["graph_facts"]
+                topology_view = restored["topology"]
+                phases_ms["source_cache_materialize"] = (self._clock() - started_at) * 1000
+            else:
+                # The export pipeline writes graph_facts.json into a directory it
+                # is handed, so preparation borrows a real one from the store.
+                with self.store.local_dir(session_id) as session_dir:
+                    export = export_graph_facts_artifact_timed(dexpi_xml_path=dexpi_xml_path, fixture_id=session_id, output_dir=session_dir, clock=self._clock)
+                    graph_facts = export.artifact
+                    phases_ms.update(export.phases_ms)
 
             graph_limit_diagnostics = check_graph_size_limits(
                 graph=graph_facts["graph"], limits=self._limits
@@ -153,35 +157,22 @@ class ReviewSessionService:
                     diagnostics=graph_limit_diagnostics,
                 )
 
-            stage_history.append(stage("running", "deriving graph facts datalog"))
-            phase_started_at = self._clock()
-            graph_facts_datalog = build_graph_facts_datalog(graph_facts)
-            self.store.write_text(
-                f"{session_id}/graph_facts.dl", graph_facts_datalog
-            )
-            phases_ms["graph_datalog"] = (self._clock() - phase_started_at) * 1000
-
-            stage_history.append(stage("running", "deriving graph semantics"))
-            phase_started_at = self._clock()
-            derived_graph_semantics = build_derived_graph_semantics_datalog(graph_facts)
-            self.store.write_text(
-                f"{session_id}/derived_graph_semantics.dl", derived_graph_semantics
-            )
-            phases_ms["derived_semantics"] = (
-                self._clock() - phase_started_at
-            ) * 1000
-
-            stage_history.append(stage("running", "building topology view model"))
-            phase_started_at = self._clock()
-            topology_view = build_topology_view_model(
-                graph_facts=graph_facts,
-                session_id=session_id,
-                source_id=source_id,
-                dexpi_xml_path=dexpi_xml_path,
-            )
-            phases_ms["topology_scene"] = (
-                self._clock() - phase_started_at
-            ) * 1000
+            if not cache_hit:
+                stage_history.append(stage("running", "deriving graph facts datalog"))
+                phase_started_at = self._clock()
+                graph_facts_datalog = build_graph_facts_datalog(graph_facts)
+                self.store.write_text(f"{session_id}/graph_facts.dl", graph_facts_datalog)
+                phases_ms["graph_datalog"] = (self._clock() - phase_started_at) * 1000
+                stage_history.append(stage("running", "deriving graph semantics"))
+                phase_started_at = self._clock()
+                derived_graph_semantics = build_derived_graph_semantics_datalog(graph_facts)
+                self.store.write_text(f"{session_id}/derived_graph_semantics.dl", derived_graph_semantics)
+                phases_ms["derived_semantics"] = (self._clock() - phase_started_at) * 1000
+                stage_history.append(stage("running", "building topology view model"))
+                phase_started_at = self._clock()
+                topology_view = build_topology_view_model(graph_facts=graph_facts, session_id=session_id, source_id=source_id, dexpi_xml_path=dexpi_xml_path)
+                phases_ms["topology_scene"] = (self._clock() - phase_started_at) * 1000
+                source_cache.store(graph_facts=graph_facts, graph_facts_datalog=graph_facts_datalog, derived_semantics_datalog=derived_graph_semantics, topology=topology_view)
 
             artifact_paths = session_artifact_paths(self.store, session_id)
             phase_started_at = self._clock()
