@@ -114,6 +114,15 @@ class ProviderResponseNormalizationTests(unittest.TestCase):
         self.assertIn("openrouter", str(raised.exception))
         self.assertNotIn("network is unreachable", str(raised.exception))
 
+    def test_non_object_json_response_raises_bounded_runtime_error(self) -> None:
+        provider = _openrouter_provider()
+
+        with patch("httpx.post", return_value=_FakeResponse([])):
+            with self.assertRaisesRegex(RuntimeError, "invalid JSON object") as raised:
+                provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
+
+        self.assertIn("openrouter", str(raised.exception))
+
 
 class OpenRouterReasoningRequestTests(unittest.TestCase):
     def test_openrouter_requests_reasoning_tokens(self) -> None:

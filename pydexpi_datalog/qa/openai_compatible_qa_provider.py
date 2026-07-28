@@ -158,6 +158,10 @@ class OpenAICompatibleQATurnProvider:
             raise RuntimeError(
                 f"Provider {self.provider}/{self.model} returned a non-JSON response."
             ) from error
+        if not isinstance(body, dict):
+            raise RuntimeError(
+                f"Provider {self.provider}/{self.model} returned an invalid JSON object."
+            )
         self._record_usage(body)
         return self._interpret(body)
 
