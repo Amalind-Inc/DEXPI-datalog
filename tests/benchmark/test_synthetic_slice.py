@@ -297,8 +297,8 @@ def test_constructed_truth_matches_real_souffle_rule_output(
 
     dataset = load_question_manifest(manifest_path)
     rule_programs = {
-        "check-valve": (load_rule_datalog(), "walk_boundary"),
-        "diameter": (load_diameter_rule_datalog(), "diameter_violated"),
+        "check-valve": (load_rule_datalog(), "rule_result"),
+        "diameter": (load_diameter_rule_datalog(), "rule_result"),
     }
     relations_by_drawing: dict[tuple[Path, str], dict[str, list]] = {}
     for question in dataset.questions:
@@ -322,22 +322,28 @@ def test_constructed_truth_matches_real_souffle_rule_output(
         relations = relations_by_drawing[cache_key]
 
         if kind == "check-valve":
+            # walk_boundary is an internal rule predicate, not an emitted
+            # Souffle relation. Benchmark truth must use the pack's public
+            # executable outcome contract, rather than an unexported relation.
             engine_violators = sorted(
                 {
                     pump
-                    for pump, _step, _object, boundary_kind in relations.get(
-                        "walk_boundary", []
-                    )
-                    if boundary_kind == "terminal_object"
+                    for pump, result_type in relations.get("rule_result", [])
+                    if result_type == "hard_violation"
                 }
             )
         else:
             engine_violators = sorted(
-                {pump for pump, _object, _dn in relations.get("diameter_violated", [])}
+                {
+                    pump
+                    for pump, result_type in relations.get("rule_result", [])
+                    if result_type == "hard_violation"
+                }
             )
         assert engine_violators == sorted(question.ground_truth.witness_ids), (
             f"{question.question_id}: constructed truth disagrees with engine"
         )
-        assert not relations.get("rule_unresolved"), (
-            f"{question.question_id}: synthetic drawing must be rule-resolvable"
-        )
+        assert not any(
+            result_type == "evaluation_diagnostic"
+            for _subject_id, result_type in relations.get("rule_result", [])
+        ), f"{question.question_id}: synthetic drawing must be rule-resolvable"
