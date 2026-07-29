@@ -54,5 +54,10 @@ app.whenReady().then(async () => {
   createReviewWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createReviewWindow(); });
 });
-app.on("before-quit", () => { app.isQuiting = true; void stopSidecar(); });
+app.on("before-quit", (event) => {
+  if (app.isQuiting) return;
+  event.preventDefault();
+  app.isQuiting = true;
+  void stopSidecar().finally(() => app.exit(0));
+});
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
