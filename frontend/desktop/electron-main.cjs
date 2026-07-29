@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 const sidecarEndpoint = "http://127.0.0.1:8000";
@@ -40,6 +41,16 @@ async function stopSidecar() {
   await new Promise((resolve) => sidecar.once("exit", resolve));
 }
 
+function projectDirectory() { return path.join(app.getPath("userData"), "current-project"); }
+
+async function persistImportedProject(_event, payload) {
+  return persistLocalProject({ projectDirectory: projectDirectory(), ...payload });
+}
+
+async function loadCurrentProject() {
+  try { return await loadLocalProject(projectDirectory()); } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+}
+
 async function selectDexpiSource(window) {
   const result = await dialog.showOpenDialog(window, { title: "Import DEXPI source", properties: ["openFile"], filters: [{ name: "DEXPI XML", extensions: ["xml"] }] });
   if (result.canceled || !result.filePaths[0]) return null;
@@ -57,6 +68,8 @@ app.whenReady().then(async () => {
   if (!desktopUiUrl) { console.error("PORTLOG_DESKTOP_UI_URL is required; start the PortLog frontend before launching the desktop shell."); app.exit(1); return; }
   try { await startSidecar(); } catch (error) { console.error(error); app.exit(1); return; }
   ipcMain.handle("portlog:select-dexpi-source", (event) => selectDexpiSource(BrowserWindow.fromWebContents(event.sender)));
+  ipcMain.handle("portlog:persist-imported-project", persistImportedProject);
+  ipcMain.handle("portlog:load-current-project", loadCurrentProject);
   createReviewWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createReviewWindow(); });
 });

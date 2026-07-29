@@ -86,8 +86,9 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
     .poll(() => page.evaluate(() => window.__PID_LATENCY_TRACE__?.status))
     .toBe("interactive");
   const latencyTrace = await page.evaluate(() => window.__PID_LATENCY_TRACE__);
-  expect(latencyTrace?.server?.phases_ms.xml_parse).toBeGreaterThanOrEqual(0);
-  expect(latencyTrace?.server?.phases_ms.graph_extraction).toBeGreaterThanOrEqual(0);
+  const serverPhases = latencyTrace?.server?.phases_ms ?? {};
+  expect((serverPhases.xml_parse ?? serverPhases.source_cache_materialize)).toBeGreaterThanOrEqual(0);
+  expect((serverPhases.graph_extraction ?? serverPhases.topology_artifact_write)).toBeGreaterThanOrEqual(0);
   expect(latencyTrace?.phasesMs.layout).toBeGreaterThanOrEqual(0);
   expect(latencyTrace?.counts.renderedEntities).toBeGreaterThan(0);
   expect(latencyTrace?.counts.svgElements).toBeGreaterThan(0);

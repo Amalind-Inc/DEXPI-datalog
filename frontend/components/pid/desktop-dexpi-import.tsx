@@ -6,7 +6,7 @@ import type { PrepareResult } from "@/components/pid/types";
 
 declare global {
   interface Window {
-    portlogDesktop?: { selectDexpiSource(): Promise<{ path: string; filename: string; content: string } | null> };
+    portlogDesktop?: { selectDexpiSource(): Promise<{ path: string; filename: string; content: string } | null>; persistImportedProject(payload: { sourcePath: string; sourceContent: string; sessionId: string; filename: string; status: string; artifacts?: Record<string, string> }): Promise<unknown>; loadCurrentProject(): Promise<unknown>; };
   }
 }
 
@@ -23,6 +23,7 @@ export function DesktopDexpiImport() {
       const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: source.filename, content: source.content }) });
       if (!response.ok) throw new Error(`Import failed (${response.status})`);
       const result = await response.json() as PrepareResult;
+      await window.portlogDesktop?.persistImportedProject({ sourcePath: source.path, sourceContent: source.content, sessionId, filename: source.filename, status: result.status, artifacts: { topology: `backend:${sessionId}/topology` } });
       applyPrepareResult(result); setGraphOpen(true); setStatus(`Prepared ${source.filename}`);
     }
     catch (error) { setStatus(error instanceof Error ? error.message : "Import failed"); }
