@@ -13,7 +13,8 @@
     "format:fix": "oxfmt",
     "lint": "oxlint && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt",
-    "desktop:dev": "electron desktop/electron-main.cjs"
+    "desktop:dev": "electron desktop/electron-main.cjs",
+    "test:desktop-native": "node desktop/electron-native-acceptance.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
