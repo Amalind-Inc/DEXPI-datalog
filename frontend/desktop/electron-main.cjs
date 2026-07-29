@@ -5,6 +5,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
+if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR) app.setPath("userData", process.env.PORTLOG_DESKTOP_USER_DATA_DIR);
 const sidecarEndpoint = "http://127.0.0.1:8000";
 let sidecar;
 
