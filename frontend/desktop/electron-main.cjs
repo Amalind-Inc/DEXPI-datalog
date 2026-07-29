@@ -80,4 +80,4 @@ app.on("before-quit", (event) => {
   app.isQuiting = true;
   void stopSidecar().finally(() => app.exit(0));
 });
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("window-all-closed", () => { if (process.platform !== "darwin" || process.env.PORTLOG_QUIT_ON_WINDOW_ALL_CLOSED === "1") app.quit(); });
