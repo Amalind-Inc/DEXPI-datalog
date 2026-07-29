@@ -3,6 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
+const { resolveReviewSidecarPaths } = require("./electron-sidecar-paths.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR) app.setPath("userData", process.env.PORTLOG_DESKTOP_USER_DATA_DIR);
@@ -25,10 +26,7 @@ async function startSidecar() {
     if (error instanceof Error && error.message.includes("already in use")) throw error;
   }
   const artifactRoot = path.join(app.getPath("userData"), "reviews");
-  const python = app.isPackaged
-    ? path.join(process.resourcesPath, "review-sidecar", "python", "bin", "python")
-    : path.resolve(__dirname, "../../.venv/bin/python");
-  const cwd = app.isPackaged ? path.join(process.resourcesPath, "review-sidecar", "app") : path.resolve(__dirname, "../..");
+  const { python, cwd } = resolveReviewSidecarPaths({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, desktopDir: __dirname });
   sidecar = spawn(python, ["-m", "uvicorn", "pydexpi_datalog.web.asgi:app", "--host", "127.0.0.1", "--port", "8000"], {
     cwd, env: { ...process.env, HARBORFIELD_DEPLOYMENT_PROFILE: "local", HARBORFIELD_REVIEW_ARTIFACT_ROOT: artifactRoot }, stdio: "ignore",
   });
