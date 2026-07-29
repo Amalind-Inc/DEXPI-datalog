@@ -956,6 +956,7 @@ class ChainlitReviewFlow:
         model: str,
         credential: str,
         base_url: str | None = None,
+        credential_source: str = "browser",
     ) -> dict[str, object]:
         self._topology_for_session(session_id)
         require_native_tool_capable_model(provider=provider, model=model)
@@ -964,6 +965,7 @@ class ChainlitReviewFlow:
             "provider": provider,
             "model": model,
             "configured": provider == "ollama" or bool(credential),
+            "credential_source": credential_source,
         }
         if base_url is not None:
             settings["base_url"] = base_url

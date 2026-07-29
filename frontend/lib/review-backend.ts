@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadByokCatalog } from "./byok-catalog.ts";
+import { FIXED_OPENROUTER_MODEL, FIXED_OPENROUTER_PROVIDER } from "./local-openrouter.ts";
 import type {
   GeometryReport,
   PidGraph,
@@ -95,6 +96,7 @@ type BackendProviderSettings = {
   provider: string;
   model: string;
   credential: string;
+  credential_source?: "environment" | "browser";
   base_url?: string;
 };
 
@@ -1193,9 +1195,10 @@ function readProviderSettingsFromEnv(): BackendProviderSettings | null {
   }
   if (openrouterKey) {
     return {
-      provider: "openrouter",
-      model: readEnvValue("OPENROUTER_MODEL") ?? "anthropic/claude-sonnet-4",
+      provider: FIXED_OPENROUTER_PROVIDER,
+      model: FIXED_OPENROUTER_MODEL,
       credential: openrouterKey,
+      credential_source: "environment",
     };
   }
   if (openaiKey) {

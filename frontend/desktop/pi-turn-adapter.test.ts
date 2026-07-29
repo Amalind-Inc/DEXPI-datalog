@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -77,8 +77,9 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
 
   const abortController = new AbortController();
   let evidenceCalls = 0;
+  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
   try {
-    const review = await createGovernedPiReviewTurn({
+    review = await createGovernedPiReviewTurn({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -107,7 +108,8 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
       "aborting an evidence lookup prevents Pi from issuing another model request",
     );
   } finally {
-    server.close();
+    await review?.dispose();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(agentDir, { recursive: true, force: true });
   }
 });

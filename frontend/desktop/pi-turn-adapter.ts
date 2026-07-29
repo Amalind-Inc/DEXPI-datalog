@@ -4,6 +4,7 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
 export interface EvidenceRequest {
@@ -18,6 +19,7 @@ export interface GovernedPiReviewTurnOptions {
   provider: string;
   model: string;
   signal: AbortSignal;
+  apiKey?: string;
   getEvidence(request: EvidenceRequest): Promise<unknown>;
 }
 
@@ -30,9 +32,10 @@ export interface GovernedPiReviewTurnOptions {
  */
 export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOptions) {
   const modelRuntime = await ModelRuntime.create({
-    authPath: `${options.agentDir}/auth.json`,
+    credentials: new InMemoryCredentialStore(),
     modelsPath: `${options.agentDir}/models.json`,
   });
+  if (options.apiKey) modelRuntime.setRuntimeApiKey(options.provider, options.apiKey);
   const model = modelRuntime.getModel(options.provider, options.model);
   if (!model) {
     throw new Error(`Configured Pi model not found: ${options.provider}/${options.model}`);

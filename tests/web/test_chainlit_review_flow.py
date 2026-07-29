@@ -1079,6 +1079,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                 provider="openai",
                 model="gpt-4.1",
                 credential=sentinel,
+                credential_source="environment",
             )
 
             self.assertEqual(
@@ -1088,6 +1089,7 @@ class ChainlitReviewFlowTests(unittest.TestCase):
                     "provider": "openai",
                     "model": "gpt-4.1",
                     "configured": True,
+                    "credential_source": "environment",
                 },
             )
             self.assertEqual(flow.local_credential_for_test("byok-session"), sentinel)

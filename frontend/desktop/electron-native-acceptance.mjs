@@ -48,11 +48,11 @@ async function waitForExit(child, name) {
   });
 }
 
-async function launchElectron() {
+async function launchElectron(extraEnv = {}) {
   const app = await _electron.launch({
     cwd: frontend,
     args: ['desktop/electron-main.cjs'],
-    env: { ...process.env, PORTLOG_DESKTOP_UI_URL: 'http://127.0.0.1:3000', PORTLOG_DESKTOP_USER_DATA_DIR: userData, PORTLOG_QUIT_ON_WINDOW_ALL_CLOSED: '1' },
+    env: { ...process.env, OPENROUTER_API_KEY: 'sk-or-test-visible-status', ...extraEnv, PORTLOG_DESKTOP_UI_URL: 'http://127.0.0.1:3000', PORTLOG_DESKTOP_USER_DATA_DIR: userData, PORTLOG_QUIT_ON_WINDOW_ALL_CLOSED: '1' },
   });
   const window = await app.firstWindow();
   await window.getByRole('region', { name: 'Chat' }).waitFor({ state: 'visible', timeout: 30_000 });
@@ -76,6 +76,7 @@ const next = spawn('npm', ['run', 'dev', '--', '--hostname', '127.0.0.1', '--por
 try {
   await waitFor('http://127.0.0.1:3000/assistant');
   const first = await launchElectron();
+  await first.window.getByTestId('desktop-openrouter-status').getByText('OpenRouter / deepseek/deepseek-v4-flash / Configured').waitFor({ state: 'visible', timeout: 30_000 });
   await first.app.evaluate(({ dialog }, fixturePath) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixturePath] });
   }, fixture);
@@ -90,6 +91,10 @@ try {
   await second.window.getByRole('complementary', { name: 'Process document graph panel' }).getByText('plant.xml').waitFor({ state: 'visible', timeout: 30_000 });
   await second.window.getByTestId('auto-layout-schematic').waitFor({ state: 'visible', timeout: 30_000 });
   await closeElectron(second);
+
+  const missing = await launchElectron({ PORTLOG_IGNORE_LOCAL_OPENROUTER_ENV: '1', OPENROUTER_API_KEY: '' });
+  await missing.window.getByTestId('desktop-openrouter-status').getByText('OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.').waitFor({ state: 'visible', timeout: 30_000 });
+  await closeElectron(missing);
   console.log(JSON.stringify({ ok: true, manifest }));
 } finally {
   if (next.exitCode === null) next.kill('SIGTERM');

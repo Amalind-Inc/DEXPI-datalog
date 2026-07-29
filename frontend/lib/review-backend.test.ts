@@ -779,6 +779,63 @@ test("OLLAMA_MODEL env routes provider-settings PUT to ollama with base_url", as
   }
 });
 
+
+test("OPENROUTER_API_KEY env routes provider-settings PUT to DeepSeek V4 Flash without leaking the key elsewhere", async () => {
+  const prev = {
+    OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
+  };
+  delete process.env.OLLAMA_MODEL;
+  process.env.OPENROUTER_API_KEY = "sk-or-secret-local";
+  process.env.OPENROUTER_MODEL = "should-not-override-the-fixed-ticket-model";
+
+  const calls: Array<{ path: string; body: unknown }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsedUrl = new URL(String(url));
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ path: parsedUrl.pathname, body });
+    if (init?.method === "PUT" && parsedUrl.pathname.endsWith("/provider-settings")) {
+      return Response.json({ provider: body.provider, model: body.model, configured: true });
+    }
+    if (parsedUrl.pathname.endsWith("/qa-turns")) {
+      return Response.json({
+        status: "answered",
+        answer_text: "ok",
+        evidence_references: [],
+        evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+      });
+    }
+    return Response.json({});
+  };
+
+  try {
+    await answerChatWithReviewBackend(
+      { sessionId: "session-1", messages: [{ role: "user", content: "What is connected to the pump?" }] },
+      { baseUrl: "http://backend.test", fetcher: fetcher as typeof fetch },
+    );
+
+    const providerCall = calls.find((call) => call.path.endsWith("/provider-settings"));
+    assert.ok(providerCall);
+    assert.deepEqual(providerCall.body, {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+      credential: "sk-or-secret-local",
+      credential_source: "environment",
+    });
+    const turnCall = calls.find((call) => call.path.endsWith("/qa-turns"));
+    assert.deepEqual(turnCall?.body, { question: "What is connected to the pump?" });
+    assert.equal(JSON.stringify(turnCall), JSON.stringify(turnCall).replace("sk-or-secret-local", ""));
+  } finally {
+    if (prev.OLLAMA_MODEL === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = prev.OLLAMA_MODEL;
+    if (prev.OPENROUTER_API_KEY === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = prev.OPENROUTER_API_KEY;
+    if (prev.OPENROUTER_MODEL === undefined) delete process.env.OPENROUTER_MODEL;
+    else process.env.OPENROUTER_MODEL = prev.OPENROUTER_MODEL;
+  }
+});
+
 test("OLLAMA_MODEL takes precedence over OPENROUTER_API_KEY in env routing", async () => {
   const prev = {
     OLLAMA_MODEL: process.env.OLLAMA_MODEL,

@@ -4,11 +4,14 @@ const { spawn } = require("node:child_process");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
 const { resolveReviewSidecarPaths } = require("./electron-sidecar-paths.cjs");
+const { resolveOpenRouterEnv, redactedOpenRouterState } = require("./electron-openrouter-config.cjs");
+const { checkOpenRouterConnection: checkResolvedOpenRouterConnection } = require("./electron-openrouter-check.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR) app.setPath("userData", process.env.PORTLOG_DESKTOP_USER_DATA_DIR);
 const sidecarEndpoint = "http://127.0.0.1:8000";
 let sidecar;
+let openRouterEnv;
 
 async function waitForSidecar() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -17,6 +20,20 @@ async function waitForSidecar() {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error("PortLog local review sidecar did not become ready within 5 seconds");
+}
+
+function repoRootForLocalRuntime() {
+  return resolveReviewSidecarPaths({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, desktopDir: __dirname }).cwd;
+}
+
+function openRouterStatus() {
+  if (!openRouterEnv) openRouterEnv = resolveOpenRouterEnv({ appIsPackaged: app.isPackaged, repoRoot: repoRootForLocalRuntime(), env: process.env });
+  return redactedOpenRouterState(openRouterEnv);
+}
+
+async function checkOpenRouterConnection() {
+  if (!openRouterEnv) openRouterEnv = resolveOpenRouterEnv({ appIsPackaged: app.isPackaged, repoRoot: repoRootForLocalRuntime(), env: process.env });
+  return checkResolvedOpenRouterConnection({ resolved: openRouterEnv });
 }
 
 async function startSidecar() {
@@ -69,6 +86,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:select-dexpi-source", (event) => selectDexpiSource(BrowserWindow.fromWebContents(event.sender)));
   ipcMain.handle("portlog:persist-imported-project", persistImportedProject);
   ipcMain.handle("portlog:load-current-project", loadCurrentProject);
+  ipcMain.handle("portlog:openrouter-status", openRouterStatus);
+  ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   createReviewWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createReviewWindow(); });
 });

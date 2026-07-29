@@ -435,6 +435,7 @@ def create_review_api_app(
                 model=_required_string(body, "model"),
                 credential=body.get("credential", ""),
                 base_url=body.get("base_url") if isinstance(body.get("base_url"), str) else None,
+                credential_source=body.get("credential_source") if isinstance(body.get("credential_source"), str) else "browser",
             )
         )
 
