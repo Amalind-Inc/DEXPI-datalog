@@ -60,7 +60,7 @@ export function PidAssistantProviders({ children }: { children: ReactNode }) {
 
 function PidRuntimeProvider({ children }: { children: ReactNode }) {
   const [sessionId] = useState(readOrCreateSessionId);
-  const { applyPrepareResult, selectedNode, selectedNodeId, setHighlightedNodeIds } = usePidGraph();
+  const { beginDocumentImport, applyPrepareResult, selectedNode, selectedNodeId, setHighlightedNodeIds } = usePidGraph();
   const graphContextRef = useRef({ selectedNode, selectedNodeId });
 
   useEffect(() => {
@@ -216,6 +216,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
           }) satisfies PendingAttachment;
 
         yield uploading(6);
+        beginDocumentImport();
         beginPidLatencyTrace({
           filename: file.name,
           uploadBytes: file.size,
@@ -264,7 +265,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         return undefined;
       },
     }),
-    [applyPrepareResult, sessionId],
+    [beginDocumentImport, applyPrepareResult, sessionId],
   );
 
   const history = useMemo<ThreadHistoryAdapter>(() => createLocalHistory(sessionId), [sessionId]);

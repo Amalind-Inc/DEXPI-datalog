@@ -31,6 +31,7 @@ type GraphContextValue = {
   setSelectedNodeId: (nodeId: string | null) => void;
   setHighlightedNodeIds: (nodeIds: string[]) => void;
   setGraphOpen: (open: boolean) => void;
+  beginDocumentImport: () => void;
   applyPrepareResult: (result: PrepareResult) => void;
   selectDocument: (filename: string) => void;
   deleteDocument: (filename: string) => void;
@@ -65,6 +66,8 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
     setSelectedNodeId(result.sourceScopeIds[0] ?? result.graph.nodes[0]?.id ?? null);
     setHighlightedNodeIds(result.sourceScopeIds);
   }, []);
+
+  const beginDocumentImport = useCallback(() => { documentRevision.current += 1; }, []);
 
   const applyPrepareResult = useCallback(
     (result: PrepareResult) => {
@@ -138,11 +141,13 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
       setSelectedNodeId,
       setHighlightedNodeIds,
       setGraphOpen,
+      beginDocumentImport,
       applyPrepareResult,
       selectDocument,
       deleteDocument,
     }),
     [
+      beginDocumentImport,
       applyPrepareResult,
       deleteDocument,
       documentNames,

@@ -11,12 +11,13 @@ declare global {
 }
 
 export function DesktopDexpiImport() {
-  const { sessionId, applyPrepareResult, setGraphOpen } = usePidGraph();
+  const { sessionId, beginDocumentImport, applyPrepareResult, setGraphOpen } = usePidGraph();
   const [status, setStatus] = useState<string | null>(null);
   if (typeof window === "undefined" || !window.portlogDesktop) return null;
   return <button type="button" onClick={async () => {
     const source = await window.portlogDesktop?.selectDexpiSource();
     if (!source) return;
+    beginDocumentImport();
     setStatus("Preparing DEXPI review…");
     try {
       const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: source.filename, content: source.content }) });
