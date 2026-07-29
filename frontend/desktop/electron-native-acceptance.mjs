@@ -14,13 +14,14 @@ const logs = path.join(root, 'logs');
 const userData = path.join(root, 'userData');
 const fixture = path.join(repo, 'TrainingTestCases/dexpi 1.3/example pids/E06 Pump, HeatExchanger, Nozzles Connected With PNS/E06V01-VER.EX01.xml');
 
-async function killPort(port) {
+async function assertPortFree(port) {
   try {
     const { stdout } = await execFile('lsof', ['-ti', `tcp:${port}`]);
-    for (const pid of stdout.trim().split('\n').filter(Boolean)) {
-      try { process.kill(Number(pid), 'SIGTERM'); } catch {}
-    }
-  } catch {}
+    const pids = stdout.trim().split('\n').filter(Boolean);
+    if (pids.length > 0) throw new Error(`Port ${port} is already in use by PID(s) ${pids.join(', ')}; stop that process or choose a free development port before running test:desktop-native.`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('already in use')) throw error;
+  }
 }
 
 async function waitFor(url, attempts = 100) {
@@ -29,6 +30,14 @@ async function waitFor(url, attempts = 100) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function waitForUnavailable(url, attempts = 100) {
+  for (let i = 0; i < attempts; i += 1) {
+    try { await fetch(url); } catch { return; }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${url} to stop responding`);
 }
 
 async function waitForExit(child, name) {
@@ -55,7 +64,7 @@ async function closeElectron(instance) {
   await instance.app.close();
 }
 
-await Promise.all([killPort(3000), killPort(8000)]);
+await Promise.all([assertPortFree(3000), assertPortFree(8000)]);
 await rm(root, { recursive: true, force: true });
 await mkdir(logs, { recursive: true });
 const nextLog = openSync(path.join(logs, 'next.log'), 'a');
@@ -75,7 +84,7 @@ try {
   const manifest = path.join(userData, 'current-project', 'portlog-project.json');
   if (!existsSync(manifest)) throw new Error(`Manifest was not persisted: ${manifest}`);
   await closeElectron(first);
-  await waitFor('http://127.0.0.1:8000/openapi.json', 1).then(() => { throw new Error('Sidecar still running after Electron quit'); }, () => {});
+  await waitForUnavailable('http://127.0.0.1:8000/openapi.json');
 
   const second = await launchElectron();
   await second.window.getByRole('complementary', { name: 'Process document graph panel' }).getByText('plant.xml').waitFor({ state: 'visible', timeout: 30_000 });
