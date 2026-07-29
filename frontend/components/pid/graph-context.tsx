@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useCallback, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useCallback, useEffect, useMemo, useState } from "react";
 import { samplePidGraph } from "@/components/pid/sample-graph";
 import type {
   GeometryReport,
@@ -12,6 +12,7 @@ import type {
   SchematicSceneKind,
 } from "@/components/pid/types";
 import { readOrCreateSessionId } from "@/lib/session-id";
+import { restoreReviewSession } from "@/lib/review-backend";
 
 const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
 
@@ -75,6 +76,14 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
     },
     [activateDocument],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void restoreReviewSession(sessionId).then((restored) => {
+      if (!cancelled && restored) applyPrepareResult(restored);
+    }).catch(() => { /* A first launch has no durable review to restore. */ });
+    return () => { cancelled = true; };
+  }, [applyPrepareResult, sessionId]);
 
   const selectDocument = useCallback(
     (filename: string) => {
