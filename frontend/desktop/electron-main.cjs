@@ -14,7 +14,7 @@ function createReviewWindow() {
       sandbox: true,
     },
   });
-  void window.loadURL(desktopUiUrl);
+  void window.loadURL(new URL("/assistant", desktopUiUrl).toString());
 }
 
 app.whenReady().then(() => {
