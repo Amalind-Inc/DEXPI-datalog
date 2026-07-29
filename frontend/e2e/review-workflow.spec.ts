@@ -699,3 +699,12 @@ test("canceling mid-stream against the real scripted backend leaves the step tra
     pendingStepCountAfterCancel,
   );
 });
+
+test("restores a prepared DEXPI topology after the review workspace reloads", async ({ page }) => {
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.uploadPlantXml();
+  await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
+  await page.reload();
+  await workflow.expectPreparedTopology("plant.xml");
+});

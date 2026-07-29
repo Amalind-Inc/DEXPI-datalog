@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePidGraph } from "@/components/pid/graph-context";
-import { prepareReviewSession } from "@/lib/review-backend";
+import type { PrepareResult } from "@/components/pid/types";
 
 declare global {
   interface Window {
@@ -18,7 +18,12 @@ export function DesktopDexpiImport() {
     const source = await window.portlogDesktop?.selectDexpiSource();
     if (!source) return;
     setStatus("Preparing DEXPI review…");
-    try { const result = await prepareReviewSession(sessionId, { filename: source.filename, content: source.content }); applyPrepareResult(result); setGraphOpen(true); setStatus(`Prepared ${source.filename}`); }
+    try {
+      const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: source.filename, content: source.content }) });
+      if (!response.ok) throw new Error(`Import failed (${response.status})`);
+      const result = await response.json() as PrepareResult;
+      applyPrepareResult(result); setGraphOpen(true); setStatus(`Prepared ${source.filename}`);
+    }
     catch (error) { setStatus(error instanceof Error ? error.message : "Import failed"); }
   }}>Import DEXPI{status ? ` — ${status}` : ""}</button>;
 }

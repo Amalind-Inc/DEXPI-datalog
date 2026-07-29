@@ -12,7 +12,6 @@ import type {
   SchematicSceneKind,
 } from "@/components/pid/types";
 import { readOrCreateSessionId } from "@/lib/session-id";
-import { restoreReviewSession } from "@/lib/review-backend";
 
 const EMPTY_PID_VIEW: PidView = { units: [], lines: [], hiddenTopologyIds: [] };
 
@@ -79,7 +78,10 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    void restoreReviewSession(sessionId).then((restored) => {
+    void fetch(`/api/review/sessions/${sessionId}/restore`).then(async (response) => {
+      if (!response.ok) return null;
+      return await response.json() as PrepareResult;
+    }).then((restored) => {
       if (!cancelled && restored) applyPrepareResult(restored);
     }).catch(() => { /* A first launch has no durable review to restore. */ });
     return () => { cancelled = true; };
