@@ -7,6 +7,7 @@ import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panel
 import { cn } from "@/lib/utils";
 import { Thread } from "@/components/assistant-ui/thread";
 import { PidGraphPanel } from "@/components/pid/graph-panel";
+import { DesktopDexpiImport } from "@/components/pid/desktop-dexpi-import";
 import { usePidGraph } from "@/components/pid/graph-context";
 
 // react-resizable-panels' storage default resolves to window.localStorage,
@@ -97,6 +98,7 @@ export default function AssistantPage() {
               </button>
             </div>
           )}
+          <DesktopDexpiImport />
           <Thread />
         </section>
       </Panel>
