@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { samplePidGraph } from "@/components/pid/sample-graph";
 import type {
   GeometryReport,
@@ -45,6 +45,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
   const [isGraphOpen, setGraphOpen] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("pump-101");
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>(["pump-101"]);
+  const documentRevision = useRef(0);
 
   const activeDocument = useMemo(
     () => documents.find((document) => document.filename === activeDocumentName) ?? null,
@@ -67,6 +68,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
 
   const applyPrepareResult = useCallback(
     (result: PrepareResult) => {
+      documentRevision.current += 1;
       setDocuments((current) => [
         ...current.filter((document) => document.filename !== result.filename),
         result,
@@ -78,11 +80,12 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const restoreRevision = documentRevision.current;
     void fetch(`/api/review/sessions/${sessionId}/restore`).then(async (response) => {
       if (!response.ok) return null;
       return await response.json() as PrepareResult;
     }).then((restored) => {
-      if (!cancelled && restored) applyPrepareResult(restored);
+      if (!cancelled && restored && documentRevision.current === restoreRevision) applyPrepareResult(restored);
     }).catch(() => { /* A first launch has no durable review to restore. */ });
     return () => { cancelled = true; };
   }, [applyPrepareResult, sessionId]);
