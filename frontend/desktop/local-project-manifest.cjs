@@ -3,10 +3,26 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const MANIFEST_FILE = "portlog-project.json";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
-async function persistLocalProject({ projectDirectory, sourcePath, sourceContent, sessionId, filename, status, artifacts = {} }) {
+async function writeManifest(projectDirectory, manifest) {
   await fs.mkdir(projectDirectory, { recursive: true });
+  const target = path.join(projectDirectory, MANIFEST_FILE);
+  const temporary = path.join(projectDirectory, `.${MANIFEST_FILE}.${crypto.randomUUID()}.tmp`);
+  await fs.writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  await fs.rename(temporary, target);
+  return manifest;
+}
+
+async function persistLocalProject({
+  projectDirectory,
+  sourcePath,
+  sourceContent,
+  sessionId,
+  filename,
+  status,
+  artifacts = {},
+}) {
   const manifest = {
     schemaVersion: SCHEMA_VERSION,
     projectId: sessionId,
@@ -15,34 +31,64 @@ async function persistLocalProject({ projectDirectory, sourcePath, sourceContent
       filename,
       digest: `sha256:${crypto.createHash("sha256").update(sourceContent).digest("hex")}`,
     },
-    preparation: { status, digest: `sha256:${crypto.createHash("sha256").update(JSON.stringify(artifacts)).digest("hex")}` },
+    preparation: {
+      status,
+      digest: `sha256:${crypto.createHash("sha256").update(JSON.stringify(artifacts)).digest("hex")}`,
+    },
     artifacts,
     reviewIds: [sessionId],
+    turns: [],
   };
-  const target = path.join(projectDirectory, MANIFEST_FILE);
-  const temporary = path.join(projectDirectory, `.${MANIFEST_FILE}.${crypto.randomUUID()}.tmp`);
-  await fs.writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  await fs.rename(temporary, target);
-  return manifest;
+  return writeManifest(projectDirectory, manifest);
 }
 
-async function loadLocalProject(projectDirectory) {
+async function readManifest(projectDirectory) {
   const manifestPath = path.join(projectDirectory, MANIFEST_FILE);
   let manifest;
   try {
     manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   } catch (error) {
-    throw new Error(`PortLog project manifest is corrupt or unavailable; re-import the DEXPI source (${manifestPath}): ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `PortLog project manifest is corrupt or unavailable; re-import the DEXPI source (${manifestPath}): ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  if (!manifest || manifest.schemaVersion !== SCHEMA_VERSION || typeof manifest.projectId !== "string" || !manifest.source || typeof manifest.source.path !== "string") {
-    throw new Error(`PortLog project manifest is corrupt; re-import the DEXPI source (${manifestPath})`);
+  if (
+    !manifest ||
+    ![1, SCHEMA_VERSION].includes(manifest.schemaVersion) ||
+    typeof manifest.projectId !== "string" ||
+    !manifest.source ||
+    typeof manifest.source.path !== "string"
+  ) {
+    throw new Error(
+      `PortLog project manifest is corrupt; re-import the DEXPI source (${manifestPath})`,
+    );
   }
+  return manifest.schemaVersion === 1
+    ? { ...manifest, schemaVersion: SCHEMA_VERSION, turns: [] }
+    : { ...manifest, turns: Array.isArray(manifest.turns) ? manifest.turns : [] };
+}
+
+async function loadLocalProject(projectDirectory) {
+  const manifest = await readManifest(projectDirectory);
   try {
     await fs.access(manifest.source.path);
   } catch {
-    throw new Error(`PortLog original DEXPI source is missing; re-import it to recover this review (${manifest.source.path})`);
+    throw new Error(
+      `PortLog original DEXPI source is missing; re-import it to recover this review (${manifest.source.path})`,
+    );
   }
   return manifest;
 }
 
-module.exports = { MANIFEST_FILE, persistLocalProject, loadLocalProject };
+async function upsertLocalTurn(projectDirectory, turn) {
+  const manifest = await readManifest(projectDirectory);
+  const index = manifest.turns.findIndex(
+    (candidate) => candidate && candidate.turnId === turn.turnId,
+  );
+  const turns = [...manifest.turns];
+  if (index === -1) turns.push(turn);
+  else turns[index] = turn;
+  return writeManifest(projectDirectory, { ...manifest, schemaVersion: SCHEMA_VERSION, turns });
+}
+
+module.exports = { MANIFEST_FILE, persistLocalProject, loadLocalProject, upsertLocalTurn };

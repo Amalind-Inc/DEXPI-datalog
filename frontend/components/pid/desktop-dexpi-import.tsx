@@ -10,56 +10,292 @@ type OpenRouterState = {
   credentialSource: "environment";
   configured: boolean;
 };
+type InspectionEvent = {
+  sequence: number;
+  type: string;
+  text?: string;
+  tool?: string;
+  callId?: string;
+  arguments?: Record<string, unknown>;
+  result?: unknown;
+};
+type InspectionRecord = {
+  turnId: string;
+  posture: "inspect";
+  question: string;
+  status: "active" | "completed" | "cancelled" | "failed";
+  finalText: string;
+  evidenceIds: string[];
+  events: InspectionEvent[];
+  error?: string;
+};
+type InspectionMessage = { kind: "event"; turnId: string; event: InspectionEvent };
+type LocalProject = { turns?: InspectionRecord[]; error?: string };
 
 declare global {
   interface Window {
     portlogDesktop?: {
       selectDexpiSource(): Promise<{ path: string; filename: string; content: string } | null>;
-      persistImportedProject(payload: { sourcePath: string; sourceContent: string; sessionId: string; filename: string; status: string; artifacts?: Record<string, string> }): Promise<unknown>;
-      loadCurrentProject(): Promise<unknown>;
+      persistImportedProject(payload: {
+        sourcePath: string;
+        sourceContent: string;
+        sessionId: string;
+        filename: string;
+        status: string;
+        artifacts?: Record<string, string>;
+      }): Promise<unknown>;
+      loadCurrentProject(): Promise<LocalProject>;
       openRouterStatus(): Promise<OpenRouterState>;
       checkOpenRouter(): Promise<unknown>;
+      runLocalInspection(payload: {
+        sessionId: string;
+        turnId: string;
+        question: string;
+      }): Promise<InspectionRecord>;
+      cancelLocalInspection(turnId: string): Promise<{ cancelled: boolean }>;
+      onInspectionEvent(listener: (message: InspectionMessage) => void): () => void;
     };
   }
 }
 
 export function DesktopDexpiImport() {
-  const { sessionId, beginDocumentImport, applyPrepareResult, setGraphOpen } = usePidGraph();
+  const {
+    sessionId,
+    loadedFileName,
+    beginDocumentImport,
+    applyPrepareResult,
+    setGraphOpen,
+    setHighlightedNodeIds,
+    setSelectedNodeId,
+  } = usePidGraph();
   const [status, setStatus] = useState<string | null>(null);
   const [openRouter, setOpenRouter] = useState<OpenRouterState | null>(null);
+  const [question, setQuestion] = useState("What equipment and connections are around P4711?");
+  const [turns, setTurns] = useState<InspectionRecord[]>([]);
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const [liveEvents, setLiveEvents] = useState<InspectionEvent[]>([]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.portlogDesktop) return;
+    const desktop = typeof window === "undefined" ? undefined : window.portlogDesktop;
+    if (!desktop) return;
     let cancelled = false;
-    window.portlogDesktop.openRouterStatus().then((state) => {
-      if (!cancelled) setOpenRouter(state);
-    }).catch(() => {
-      if (!cancelled) setOpenRouter(null);
+    void Promise.all([desktop.openRouterStatus(), desktop.loadCurrentProject()])
+      .then(([provider, project]) => {
+        if (cancelled) return;
+        setOpenRouter(provider);
+        setTurns(Array.isArray(project.turns) ? project.turns : []);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenRouter(null);
+      });
+    const unsubscribe = desktop.onInspectionEvent((message) => {
+      setLiveEvents((current) =>
+        message.turnId === activeTurnId ? [...current, message.event] : current,
+      );
     });
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [activeTurnId]);
 
   if (typeof window === "undefined" || !window.portlogDesktop) return null;
   const openRouterText = openRouter?.configured
     ? "OpenRouter / deepseek/deepseek-v4-flash / Configured"
     : "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.";
+
+  const runInspection = async (retry?: InspectionRecord) => {
+    const trimmed = (retry?.question ?? question).trim();
+    if (!trimmed || !loadedFileName || !openRouter?.configured) return;
+    const turnId = retry?.turnId ?? crypto.randomUUID();
+    setActiveTurnId(turnId);
+    setLiveEvents([]);
+    setStatus("Inspecting prepared review…");
+    try {
+      const record = await window.portlogDesktop!.runLocalInspection({
+        sessionId,
+        turnId,
+        question: trimmed,
+      });
+      setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
+      setStatus(
+        record.status === "completed"
+          ? "Inspection complete"
+          : record.status === "cancelled"
+            ? "Inspection cancelled"
+            : (record.error ?? "Inspection failed"),
+      );
+      if (record.evidenceIds.length) {
+        setHighlightedNodeIds(record.evidenceIds);
+        setSelectedNodeId(record.evidenceIds[0]);
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Inspection failed");
+    } finally {
+      setActiveTurnId(null);
+    }
+  };
+
   return (
-    <div>
+    <div className="space-y-3">
       <p data-testid="desktop-openrouter-status">{openRouterText}</p>
-      <button type="button" onClick={async () => {
-        const source = await window.portlogDesktop?.selectDexpiSource();
-        if (!source) return;
-        beginDocumentImport();
-        setStatus("Preparing DEXPI review…");
-        try {
-          const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: source.filename, content: source.content }) });
-          if (!response.ok) throw new Error(`Import failed (${response.status})`);
-          const result = await response.json() as PrepareResult;
-          await window.portlogDesktop?.persistImportedProject({ sourcePath: source.path, sourceContent: source.content, sessionId, filename: source.filename, status: result.status, artifacts: { topology: `backend:${sessionId}/topology` } });
-          applyPrepareResult(result); setGraphOpen(true); setStatus(`Prepared ${source.filename}`);
-        }
-        catch (error) { setStatus(error instanceof Error ? error.message : "Import failed"); }
-      }}>Import DEXPI{status ? ` — ${status}` : ""}</button>
+      <button
+        type="button"
+        onClick={async () => {
+          const source = await window.portlogDesktop?.selectDexpiSource();
+          if (!source) return;
+          beginDocumentImport();
+          setStatus("Preparing DEXPI review…");
+          try {
+            const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ filename: source.filename, content: source.content }),
+            });
+            if (!response.ok) throw new Error(`Import failed (${response.status})`);
+            const result = (await response.json()) as PrepareResult;
+            await window.portlogDesktop?.persistImportedProject({
+              sourcePath: source.path,
+              sourceContent: source.content,
+              sessionId,
+              filename: source.filename,
+              status: result.status,
+              artifacts: { topology: `backend:${sessionId}/topology` },
+            });
+            applyPrepareResult(result);
+            setGraphOpen(true);
+            setTurns([]);
+            setStatus(`Prepared ${source.filename}`);
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Import failed");
+          }
+        }}
+      >
+        Import DEXPI{status ? ` — ${status}` : ""}
+      </button>
+
+      {loadedFileName ? (
+        <section aria-label="Local evidence inspection" className="space-y-2">
+          <label className="block text-sm" htmlFor="desktop-inspection-question">
+            Ask about this prepared P&amp;ID
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="desktop-inspection-question"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              disabled={Boolean(activeTurnId)}
+              className="min-w-0 flex-1 border px-2 py-1"
+            />
+            <button
+              type="button"
+              onClick={() => void runInspection()}
+              disabled={Boolean(activeTurnId) || !openRouter?.configured}
+            >
+              Inspect
+            </button>
+            {activeTurnId ? (
+              <button
+                type="button"
+                onClick={() => void window.portlogDesktop?.cancelLocalInspection(activeTurnId)}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+          {activeTurnId ? (
+            <InspectionTimeline
+              events={liveEvents}
+              onSelectEvidence={(ids) => {
+                setHighlightedNodeIds(ids);
+                setSelectedNodeId(ids[0] ?? null);
+              }}
+            />
+          ) : null}
+          {[...turns].reverse().map((turn) => (
+            <article key={turn.turnId} data-testid="desktop-inspection-turn" className="border p-2">
+              <p>
+                <strong>Inspect</strong> · {turn.status}
+              </p>
+              <p>{turn.question}</p>
+              {turn.finalText ? <p>{turn.finalText}</p> : null}
+              {turn.error ? <p role="alert">{turn.error}</p> : null}
+              <InspectionTimeline
+                events={turn.events}
+                onSelectEvidence={(ids) => {
+                  setHighlightedNodeIds(ids);
+                  setSelectedNodeId(ids[0] ?? null);
+                }}
+              />
+              {turn.status === "failed" || turn.status === "active" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuestion(turn.question);
+                    void runInspection(turn);
+                  }}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </article>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
+}
+
+function InspectionTimeline({
+  events,
+  onSelectEvidence,
+}: {
+  events: InspectionEvent[];
+  onSelectEvidence(ids: string[]): void;
+}) {
+  const streamedText = events
+    .filter((event) => event.type === "assistant_text_delta")
+    .map((event) => event.text ?? "")
+    .join("");
+  return (
+    <div>
+      {streamedText ? <p aria-live="polite">{streamedText}</p> : null}
+      <ol aria-label="Inspection activity">
+        {events
+          .filter((event) => event.type !== "assistant_text_delta")
+          .map((event) => {
+            const evidence = readEvidenceIds(event.result);
+            const hasDetails = event.arguments !== undefined || event.result !== undefined;
+            const label = `${event.type.replaceAll("_", " ")}${event.tool ? ` · ${event.tool}` : ""}`;
+            return (
+              <li key={`${event.sequence}-${event.type}`}>
+                {hasDetails ? (
+                  <details>
+                    <summary>{label}</summary>
+                    <pre>{JSON.stringify(event.arguments ?? event.result, null, 2)}</pre>
+                  </details>
+                ) : (
+                  <span>{label}</span>
+                )}
+                {evidence.length ? (
+                  <button type="button" onClick={() => onSelectEvidence(evidence)}>
+                    Select evidence ({evidence.length})
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+      </ol>
+    </div>
+  );
+}
+
+function readEvidenceIds(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(readEvidenceIds);
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  const direct = [record.citations, record.evidenceIds, record.evidence_ids]
+    .flatMap((candidate) => (Array.isArray(candidate) ? candidate : []))
+    .filter((candidate): candidate is string => typeof candidate === "string");
+  return Array.from(new Set([...direct, ...Object.values(record).flatMap(readEvidenceIds)]));
 }

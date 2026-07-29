@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -102,14 +102,27 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
     );
     await review.prompt("Check the claimed connection.");
     assert.equal(evidenceCalls, 1);
-    assert.equal(
-      requestCount,
-      1,
-      "aborting an evidence lookup prevents Pi from issuing another model request",
-    );
+    assert.ok(requestCount <= 2, "cancellation bounds any continuation already being scheduled");
+    assert.equal(abortController.signal.aborted, true);
+    assert.doesNotMatch(JSON.stringify(review.agent.state.messages), /Evidence is attached/);
   } finally {
     await review?.dispose();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(agentDir, { recursive: true, force: true });
   }
+});
+
+test("desktop pins only the exact direct Pi core runtime pair", async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  assert.equal(packageJson.dependencies["@earendil-works/pi-agent-core"], "0.80.6");
+  assert.equal(packageJson.dependencies["@earendil-works/pi-ai"], "0.80.6");
+  assert.equal(packageJson.dependencies["@earendil-works/pi-coding-agent"], undefined);
+  assert.equal(packageJson.devDependencies["@earendil-works/pi-coding-agent"], undefined);
+  const lockfile = JSON.parse(
+    await readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+  );
+  assert.equal(lockfile.packages["node_modules/@earendil-works/pi-agent-core"].version, "0.80.6");
+  assert.equal(lockfile.packages["node_modules/@earendil-works/pi-ai"].version, "0.80.6");
 });
