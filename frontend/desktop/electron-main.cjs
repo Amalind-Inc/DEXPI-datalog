@@ -9,6 +9,7 @@ let sidecar;
 
 async function waitForSidecar() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (sidecar?.exitCode !== null) throw new Error(`PortLog sidecar exited before readiness: ${sidecar?.exitCode}`);
     try { if ((await fetch(`${sidecarEndpoint}/openapi.json`)).ok) return; } catch { /* starting */ }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -16,6 +17,11 @@ async function waitForSidecar() {
 }
 
 async function startSidecar() {
+  try {
+    if ((await fetch(`${sidecarEndpoint}/openapi.json`)).ok) throw new Error(`PortLog sidecar port 8000 is already in use; refuse to attach to an unowned process`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("already in use")) throw error;
+  }
   const artifactRoot = path.join(app.getPath("userData"), "reviews");
   const python = app.isPackaged
     ? path.join(process.resourcesPath, "review-sidecar", "python", "bin", "python")
