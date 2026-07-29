@@ -16,13 +16,25 @@
   "build": {
     "appId": "org.portlog.desktop.spike",
     "productName": "PortLog Spike",
-    "files": ["src/electron-main.cjs", "src/electron-resource-path.cjs"],
-    "extraResources": [
-      { "from": "review-sidecar", "to": "review-sidecar" }
+    "files": [
+      "src/electron-main.cjs",
+      "src/electron-resource-path.cjs"
     ],
-    "mac": { "target": ["dir"] }
+    "extraResources": [
+      {
+        "from": "review-sidecar",
+        "to": "review-sidecar"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ]
+    }
   },
   "devDependencies": {
+    "@earendil-works/pi-agent-core": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.6",
     "@earendil-works/pi-coding-agent": "0.80.6",
     "@types/node": "^26.0.0",
     "electron": "^40.0.0",
