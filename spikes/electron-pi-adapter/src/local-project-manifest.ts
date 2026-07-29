@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { access, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 const MANIFEST_FILE = "portlog-project.json";
@@ -50,6 +50,7 @@ export async function loadLocalReviewProject(projectDirectory: string): Promise<
   if (!isProject(parsed)) {
     throw new Error(`PortLog project manifest is corrupt; restore from a backup or re-import the original DEXPI source (${manifestPath})`);
   }
+  try { await access(parsed.source.path); } catch { throw new Error(`PortLog original DEXPI source is missing; re-import it to recover this review (${parsed.source.path})`); }
   return parsed;
 }
 
