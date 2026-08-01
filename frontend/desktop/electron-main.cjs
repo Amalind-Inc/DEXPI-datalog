@@ -1,6 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const net = require("node:net");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
 const { resolveReviewSidecarPaths } = require("./electron-sidecar-paths.cjs");
@@ -16,11 +17,12 @@ const { createMacOSClaudeKeychain } = require("./claude-keychain.cjs");
 const { createCodexAuthController } = require("./codex-auth-controller.cjs");
 const { createMacOSCodexKeychain } = require("./codex-keychain.cjs");
 
-const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
+let desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR)
   app.setPath("userData", process.env.PORTLOG_DESKTOP_USER_DATA_DIR);
 const sidecarEndpoint = "http://127.0.0.1:8000";
 let sidecar;
+let uiServer;
 let openRouterEnv;
 let claudeAuth;
 let codexAuth;
@@ -38,6 +40,68 @@ async function waitForSidecar() {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error("PortLog local review sidecar did not become ready within 5 seconds");
+}
+
+
+async function availableLocalPort() {
+  const listener = net.createServer();
+  await new Promise((resolve, reject) => {
+    listener.once("error", reject);
+    listener.listen(0, "127.0.0.1", resolve);
+  });
+  const address = listener.address();
+  await new Promise((resolve) => listener.close(resolve));
+  if (!address || typeof address === "string") throw new Error("Could not allocate a local UI port");
+  return address.port;
+}
+
+async function startPackagedUi() {
+  if (!app.isPackaged) return;
+  const port = await availableLocalPort();
+  desktopUiUrl = "http://127.0.0.1:" + port;
+  const uiRoot = path.join(process.resourcesPath, "ui");
+  uiServer = spawn(process.execPath, [path.join(uiRoot, "server.js")], {
+    cwd: uiRoot,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      HOSTNAME: "127.0.0.1",
+      PORT: String(port),
+      HARBORFIELD_REVIEW_API_URL: sidecarEndpoint,
+      NODE_PATH: path.join(uiRoot, "runtime"),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  uiServer.stderr.on("data", (chunk) => console.error(String(chunk).slice(0, 4000)));
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (uiServer.exitCode !== null)
+      throw new Error("Packaged PortLog UI exited before readiness: " + uiServer.exitCode);
+    try {
+      if ((await fetch(desktopUiUrl + "/assistant")).ok) return;
+    } catch {
+      /* starting */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("Packaged PortLog UI did not become ready within 5 seconds");
+}
+
+async function terminateChild(child) {
+  if (!child || child.exitCode !== null) return;
+  child.stdin?.end();
+  child.kill("SIGTERM");
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    new Promise((resolve) => setTimeout(resolve, 2_000)),
+  ]);
+  if (child.exitCode === null) {
+    child.kill("SIGKILL");
+    await new Promise((resolve) => child.once("exit", resolve));
+  }
+}
+
+async function stopPackagedUi() {
+  await terminateChild(uiServer);
 }
 
 function repoRootForLocalRuntime() {
@@ -121,15 +185,28 @@ async function codexLogout() {
   return (await getCodexAuth()).logout();
 }
 
+async function assertSidecarPortFree() {
+  await new Promise((resolve, reject) => {
+    const probe = net.createConnection({ host: "127.0.0.1", port: 8000 });
+    const timer = setTimeout(() => {
+      probe.destroy();
+      reject(new Error("Timed out probing PortLog sidecar port 8000"));
+    }, 1_000);
+    probe.once("connect", () => {
+      clearTimeout(timer);
+      probe.destroy();
+      reject(new Error("PortLog sidecar port 8000 is already in use; refuse to attach to an unowned process"));
+    });
+    probe.once("error", (error) => {
+      clearTimeout(timer);
+      if (error && error.code === "ECONNREFUSED") resolve();
+      else reject(error);
+    });
+  });
+}
+
 async function startSidecar() {
-  try {
-    if ((await fetch(`${sidecarEndpoint}/openapi.json`)).ok)
-      throw new Error(
-        `PortLog sidecar port 8000 is already in use; refuse to attach to an unowned process`,
-      );
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("already in use")) throw error;
-  }
+  await assertSidecarPortFree();
   const artifactRoot = path.join(app.getPath("userData"), "reviews");
   const { python, cwd } = resolveReviewSidecarPaths({
     isPackaged: app.isPackaged,
@@ -138,27 +215,31 @@ async function startSidecar() {
   });
   sidecar = spawn(
     python,
-    ["-m", "uvicorn", "pydexpi_datalog.web.asgi:app", "--host", "127.0.0.1", "--port", "8000"],
+    app.isPackaged
+      ? ["--host", "127.0.0.1", "--port", "8000"]
+      : ["-m", "uvicorn", "pydexpi_datalog.web.asgi:app", "--host", "127.0.0.1", "--port", "8000"],
     {
       cwd,
       env: {
         ...process.env,
         HARBORFIELD_DEPLOYMENT_PROFILE: "local",
         HARBORFIELD_REVIEW_ARTIFACT_ROOT: artifactRoot,
+        ...(app.isPackaged ? { PATH: path.dirname(python) + ":" + (process.env.PATH ?? "") } : {}),
       },
-      stdio: "ignore",
+      stdio: app.isPackaged ? ["pipe", "ignore", "ignore"] : "ignore",
     },
   );
   sidecar.once("exit", (code) => {
-    if (code && !app.isQuiting) console.error(`PortLog sidecar exited: ${code}`);
+    if (app.isQuiting) return;
+    console.error(`PortLog sidecar exited unexpectedly: ${code}`);
+    for (const worker of activeInspections.values()) worker.kill("SIGTERM");
+    app.quit();
   });
   await waitForSidecar();
 }
 
 async function stopSidecar() {
-  if (!sidecar || sidecar.exitCode !== null) return;
-  sidecar.kill("SIGTERM");
-  await new Promise((resolve) => sidecar.once("exit", resolve));
+  await terminateChild(sidecar);
 }
 
 function projectDirectory() {
@@ -341,7 +422,7 @@ function createReviewWindow() {
 }
 
 app.whenReady().then(async () => {
-  if (!desktopUiUrl) {
+  if (!desktopUiUrl && !app.isPackaged) {
     console.error(
       "PORTLOG_DESKTOP_UI_URL is required; start the PortLog frontend before launching the desktop shell.",
     );
@@ -349,9 +430,12 @@ app.whenReady().then(async () => {
     return;
   }
   try {
+    await startPackagedUi();
     await startSidecar();
   } catch (error) {
     console.error(error);
+    await stopSidecar().catch(() => undefined);
+    await stopPackagedUi().catch(() => undefined);
     app.exit(1);
     return;
   }
@@ -382,7 +466,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   app.isQuiting = true;
   for (const worker of activeInspections.values()) worker.kill("SIGTERM");
-  void stopSidecar().finally(() => app.exit(0));
+  void stopSidecar().finally(() => stopPackagedUi()).finally(() => app.exit(0));
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin" || process.env.PORTLOG_QUIT_ON_WINDOW_ALL_CLOSED === "1")
