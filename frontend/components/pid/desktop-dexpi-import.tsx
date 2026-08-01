@@ -197,13 +197,25 @@ export function DesktopDexpiImport() {
     setActiveTurnId(turnId);
     setLiveEvents([]);
     setStatus("Inspecting prepared review…");
+    const selectedProvider = readSelectedDesktopProvider();
     try {
       const record = await window.portlogDesktop!.runLocalInspection({
         sessionId: projectSessionId ?? sessionId,
         turnId,
         question: trimmed,
         posture: selectedPosture,
-        provider: codexConnected ? "openai-codex" : claudeConnected ? "anthropic" : "openrouter",
+        provider:
+          selectedProvider === "openai-codex" && codexConnected
+            ? selectedProvider
+            : selectedProvider === "anthropic" && claudeConnected
+              ? selectedProvider
+              : openRouter?.configured
+                ? "openrouter"
+                : codexConnected
+                  ? "openai-codex"
+                  : claudeConnected
+                    ? "anthropic"
+                    : "openrouter",
       });
       setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
       setStatus(
@@ -487,6 +499,11 @@ export function DesktopDexpiImport() {
       ) : null}
     </div>
   );
+}
+
+function readSelectedDesktopProvider(): "anthropic" | "openai-codex" | null {
+  const value = window.localStorage.getItem(DESKTOP_CHAT_PROVIDER_KEY);
+  return value === "anthropic" || value === "openai-codex" ? value : null;
 }
 
 function selectDesktopChatProvider(provider: "anthropic" | "openai-codex") {

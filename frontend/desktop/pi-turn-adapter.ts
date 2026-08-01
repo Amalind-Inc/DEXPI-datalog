@@ -65,7 +65,8 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
   const evidenceTool = {
     name: "portlog_evidence",
     label: "PortLog evidence",
-    description: "Retrieve bounded, read-only evidence from the prepared PortLog review.",
+    description:
+      "Retrieve bounded, read-only evidence from the prepared PortLog review. artifactId must be exactly 'topology'; put equipment tags and identifiers in claim.",
     parameters: Type.Object({
       artifactId: Type.String(),
       claim: Type.String(),

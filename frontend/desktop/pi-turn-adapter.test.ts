@@ -100,6 +100,10 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
       review.session.agent.state.tools.map((tool) => tool.name),
       ["portlog_evidence"],
     );
+    assert.match(
+      review.session.agent.state.tools[0].description,
+      /artifactId must be exactly 'topology'/,
+    );
     await review.prompt("Check the claimed connection.");
     assert.equal(evidenceCalls, 1);
     assert.ok(requestCount <= 2, "cancellation bounds any continuation already being scheduled");

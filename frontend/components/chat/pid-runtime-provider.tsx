@@ -329,9 +329,11 @@ async function resolveDesktopProvider(desktop: DesktopBridge): Promise<DesktopPr
   const selected = readSelectedDesktopProvider();
   if (selected === "openai-codex" && codex?.state === "logged_in") return selected;
   if (selected === "anthropic" && claude?.state === "logged_in") return selected;
+  // OpenRouter remains the deterministic local default unless the user has
+  // explicitly selected a connected OAuth account in Account > API keys.
+  if (isConfiguredOpenRouter(openRouter)) return "openrouter";
   if (codex?.state === "logged_in") return "openai-codex";
   if (claude?.state === "logged_in") return "anthropic";
-  if (isConfiguredOpenRouter(openRouter)) return "openrouter";
   if (codex?.state === "refresh_failed" || claude?.state === "refresh_failed")
     throw new Error("Your desktop account needs to be reconnected before chatting.");
   throw new Error(

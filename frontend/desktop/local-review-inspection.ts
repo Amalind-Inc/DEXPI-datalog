@@ -287,7 +287,7 @@ function verifyPrompt(question: string) {
 }
 
 function inspectPrompt(question: string) {
-  return `You are in Inspect posture. Use only the available PortLog read-only evidence capability. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
+  return `You are in Inspect posture. Use only the available PortLog read-only evidence capability. Call portlog_evidence with artifactId exactly "topology"; put any equipment tag or identifier in claim. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
 }
 
 function readDeterministicChecks(value: unknown): Record<string, unknown>[] {
