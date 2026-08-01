@@ -1,7 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
 const { resolveReviewSidecarPaths } = require("./electron-sidecar-paths.cjs");
 const {
@@ -11,6 +11,8 @@ const {
 const {
   checkOpenRouterConnection: checkResolvedOpenRouterConnection,
 } = require("./electron-openrouter-check.cjs");
+const { createClaudeAuthController } = require("./claude-auth-controller.cjs");
+const { createMacOSClaudeKeychain } = require("./claude-keychain.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR)
@@ -18,6 +20,7 @@ if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR)
 const sidecarEndpoint = "http://127.0.0.1:8000";
 let sidecar;
 let openRouterEnv;
+let claudeAuth;
 const activeInspections = new Map();
 
 async function waitForSidecar() {
@@ -60,6 +63,32 @@ async function checkOpenRouterConnection() {
       env: process.env,
     });
   return checkResolvedOpenRouterConnection({ resolved: openRouterEnv });
+}
+
+async function getClaudeAuth() {
+  if (claudeAuth) return claudeAuth;
+  if (process.platform !== "darwin") throw new Error("Claude login is supported only on macOS.");
+  const { anthropicOAuthProvider } = await import("@earendil-works/pi-ai/oauth");
+  claudeAuth = createClaudeAuthController({
+    oauth: anthropicOAuthProvider,
+    keychain: createMacOSClaudeKeychain(),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  return claudeAuth;
+}
+
+async function claudeAuthStatus() {
+  return (await getClaudeAuth()).status();
+}
+async function claudeLogin() {
+  return (await getClaudeAuth()).login();
+}
+async function claudeCancelLogin() {
+  return (await getClaudeAuth()).cancel();
+}
+async function claudeLogout() {
+  for (const worker of activeInspections.values()) worker.kill("SIGTERM");
+  return (await getClaudeAuth()).logout();
 }
 
 async function startSidecar() {
@@ -122,14 +151,33 @@ async function runLocalInspection(event, payload) {
   const project = await loadLocalProject(projectDirectory());
   if (project.projectId !== payload.sessionId)
     throw new Error("The active review does not match the prepared local project");
+  const requestedProvider = payload.provider ?? "openrouter";
+  let runtime;
+  if (requestedProvider === "anthropic") {
+    const auth = await getClaudeAuth();
+    runtime = {
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      apiKey: await auth.getAccessToken(),
+      baseUrl: "https://api.anthropic.com",
+    };
+  }
   if (!openRouterEnv)
     openRouterEnv = resolveOpenRouterEnv({
       appIsPackaged: app.isPackaged,
       repoRoot: repoRootForLocalRuntime(),
       env: process.env,
     });
-  if (!openRouterEnv.configured || !openRouterEnv.credential)
-    throw new Error("OpenRouter is not configured");
+  if (!runtime) {
+    if (!openRouterEnv.configured || !openRouterEnv.credential)
+      throw new Error("OpenRouter is not configured");
+    runtime = {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+      apiKey: openRouterEnv.credential,
+      baseUrl: process.env.PORTLOG_OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+    };
+  }
   if (activeInspections.has(payload.turnId))
     throw new Error("This inspection turn is already active");
   const worker = spawn(
@@ -140,7 +188,10 @@ async function runLocalInspection(event, payload) {
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: "1",
-        PORTLOG_OPENROUTER_API_KEY: openRouterEnv.credential,
+        PORTLOG_RUNTIME_API_KEY: runtime.apiKey,
+        PORTLOG_RUNTIME_PROVIDER: runtime.provider,
+        PORTLOG_RUNTIME_MODEL: runtime.model,
+        PORTLOG_RUNTIME_BASE_URL: runtime.baseUrl,
       },
       stdio: ["pipe", "pipe", "pipe"],
     },
@@ -152,6 +203,9 @@ async function runLocalInspection(event, payload) {
       sessionId: payload.sessionId,
       turnId: payload.turnId,
       question: payload.question,
+      provider: runtime.provider,
+      model: runtime.model,
+      baseUrl: runtime.baseUrl,
       sidecarEndpoint,
     }),
   );
@@ -261,6 +315,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:persist-imported-project", persistImportedProject);
   ipcMain.handle("portlog:load-current-project", loadCurrentProject);
   ipcMain.handle("portlog:openrouter-status", openRouterStatus);
+  ipcMain.handle("portlog:claude-auth-status", claudeAuthStatus);
+  ipcMain.handle("portlog:claude-login", claudeLogin);
+  ipcMain.handle("portlog:claude-cancel-login", claudeCancelLogin);
+  ipcMain.handle("portlog:claude-logout", claudeLogout);
   ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   ipcMain.handle("portlog:run-local-inspection", runLocalInspection);
   ipcMain.handle("portlog:cancel-local-inspection", cancelLocalInspection);

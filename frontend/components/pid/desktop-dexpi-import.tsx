@@ -10,6 +10,19 @@ type OpenRouterState = {
   credentialSource: "environment";
   configured: boolean;
 };
+type ClaudeAuthState = {
+  provider: "anthropic";
+  state:
+    | "logged_out"
+    | "opening_browser"
+    | "waiting_for_authorization"
+    | "logged_in"
+    | "refresh_failed"
+    | "cancelled";
+  recoverable: boolean;
+  error?: string;
+  expiresAt?: number;
+};
 type InspectionEvent = {
   sequence: number;
   type: string;
@@ -46,11 +59,16 @@ declare global {
       }): Promise<unknown>;
       loadCurrentProject(): Promise<LocalProject>;
       openRouterStatus(): Promise<OpenRouterState>;
+      claudeAuthStatus(): Promise<ClaudeAuthState>;
+      claudeLogin(): Promise<ClaudeAuthState>;
+      claudeCancelLogin(): Promise<ClaudeAuthState>;
+      claudeLogout(): Promise<ClaudeAuthState>;
       checkOpenRouter(): Promise<unknown>;
       runLocalInspection(payload: {
         sessionId: string;
         turnId: string;
         question: string;
+        provider?: "openrouter" | "anthropic";
       }): Promise<InspectionRecord>;
       cancelLocalInspection(turnId: string): Promise<{ cancelled: boolean }>;
       onInspectionEvent(listener: (message: InspectionMessage) => void): () => void;
@@ -70,6 +88,7 @@ export function DesktopDexpiImport() {
   } = usePidGraph();
   const [status, setStatus] = useState<string | null>(null);
   const [openRouter, setOpenRouter] = useState<OpenRouterState | null>(null);
+  const [claude, setClaude] = useState<ClaudeAuthState | null>(null);
   const [question, setQuestion] = useState("What equipment and connections are around P4711?");
   const [turns, setTurns] = useState<InspectionRecord[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -79,10 +98,15 @@ export function DesktopDexpiImport() {
     const desktop = typeof window === "undefined" ? undefined : window.portlogDesktop;
     if (!desktop) return;
     let cancelled = false;
-    void Promise.all([desktop.openRouterStatus(), desktop.loadCurrentProject()])
-      .then(([provider, project]) => {
+    void Promise.all([
+      desktop.openRouterStatus(),
+      desktop.claudeAuthStatus(),
+      desktop.loadCurrentProject(),
+    ])
+      .then(([provider, claudeStatus, project]) => {
         if (cancelled) return;
         setOpenRouter(provider);
+        setClaude(claudeStatus);
         setTurns(Array.isArray(project.turns) ? project.turns : []);
       })
       .catch(() => {
@@ -103,10 +127,12 @@ export function DesktopDexpiImport() {
   const openRouterText = openRouter?.configured
     ? "OpenRouter / deepseek/deepseek-v4-flash / Configured"
     : "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.";
+  const claudeConnected = claude?.state === "logged_in";
+  const canInspect = claudeConnected || Boolean(openRouter?.configured);
 
   const runInspection = async (retry?: InspectionRecord) => {
     const trimmed = (retry?.question ?? question).trim();
-    if (!trimmed || !loadedFileName || !openRouter?.configured) return;
+    if (!trimmed || !loadedFileName || !canInspect) return;
     const turnId = retry?.turnId ?? crypto.randomUUID();
     setActiveTurnId(turnId);
     setLiveEvents([]);
@@ -116,6 +142,7 @@ export function DesktopDexpiImport() {
         sessionId,
         turnId,
         question: trimmed,
+        provider: claudeConnected ? "anthropic" : "openrouter",
       });
       setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
       setStatus(
@@ -138,6 +165,51 @@ export function DesktopDexpiImport() {
 
   return (
     <div className="space-y-3">
+      <section aria-label="Claude account" className="border p-2 space-y-2">
+        <p data-testid="desktop-claude-auth-status">
+          Claude: {claude?.state === "logged_in" ? "Connected" : (claude?.state ?? "Checking")}
+        </p>
+        <p className="text-sm">
+          A Claude Pro or Max subscription does not include PortLog usage; provider charges and
+          eligibility are determined by Claude.
+        </p>
+        {claudeConnected ? (
+          <button
+            type="button"
+            onClick={() => void window.portlogDesktop?.claudeLogout().then(setClaude)}
+          >
+            Log out
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() =>
+              void window.portlogDesktop
+                ?.claudeLogin()
+                .then(setClaude)
+                .catch((error) =>
+                  setStatus(error instanceof Error ? error.message : "Claude login failed."),
+                )
+            }
+            disabled={
+              claude?.state === "opening_browser" || claude?.state === "waiting_for_authorization"
+            }
+          >
+            {claude?.state === "opening_browser" || claude?.state === "waiting_for_authorization"
+              ? "Waiting for Claude authorization…"
+              : "Log in with Claude"}
+          </button>
+        )}
+        {claude?.state === "opening_browser" || claude?.state === "waiting_for_authorization" ? (
+          <button
+            type="button"
+            onClick={() => void window.portlogDesktop?.claudeCancelLogin().then(setClaude)}
+          >
+            Cancel login
+          </button>
+        ) : null}
+        {claude?.error ? <p role="alert">{claude.error}</p> : null}
+      </section>
       <p data-testid="desktop-openrouter-status">{openRouterText}</p>
       <button
         type="button"
@@ -190,7 +262,7 @@ export function DesktopDexpiImport() {
             <button
               type="button"
               onClick={() => void runInspection()}
-              disabled={Boolean(activeTurnId) || !openRouter?.configured}
+              disabled={Boolean(activeTurnId) || !canInspect}
             >
               Inspect
             </button>

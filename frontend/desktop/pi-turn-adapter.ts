@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { streamSimple as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
+import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-completions";
 import { Type } from "typebox";
 
 export interface EvidenceRequest {
@@ -31,7 +32,7 @@ type PortLogModelEntry = {
 };
 type PortLogProviderEntry = {
   baseUrl: string;
-  api: "openai-completions";
+  api: "openai-completions" | "anthropic-messages";
   apiKey?: string;
   models: PortLogModelEntry[];
 };
@@ -69,7 +70,13 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
     getApiKey: () => apiKey,
     streamFn: (selectedModel, context, streamOptions) => {
       if (options.signal.aborted) throw new DOMException("Inspection cancelled", "AbortError");
-      return streamSimple(selectedModel as Model<"openai-completions">, context, streamOptions);
+      if (selectedModel.api === "anthropic-messages")
+        return streamAnthropic(
+          selectedModel as Model<"anthropic-messages">,
+          context,
+          streamOptions,
+        );
+      return streamOpenAI(selectedModel as Model<"openai-completions">, context, streamOptions);
     },
   });
   const abort = async () => {
@@ -92,7 +99,10 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
 
 async function readPortLogModel(
   options: GovernedPiReviewTurnOptions,
-): Promise<{ value: Model<"openai-completions">; configuredApiKey?: string }> {
+): Promise<{
+  value: Model<"openai-completions"> | Model<"anthropic-messages">;
+  configuredApiKey?: string;
+}> {
   const raw = JSON.parse(await readFile(`${options.agentDir}/models.json`, "utf8")) as {
     providers?: Record<string, PortLogProviderEntry>;
   };

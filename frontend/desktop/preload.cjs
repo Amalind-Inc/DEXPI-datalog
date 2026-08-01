@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld("portlogDesktop", {
   loadCurrentProject: () => ipcRenderer.invoke("portlog:load-current-project"),
   openRouterStatus: () => ipcRenderer.invoke("portlog:openrouter-status"),
   checkOpenRouter: () => ipcRenderer.invoke("portlog:check-openrouter"),
+  claudeAuthStatus: () => ipcRenderer.invoke("portlog:claude-auth-status"),
+  claudeLogin: () => ipcRenderer.invoke("portlog:claude-login"),
+  claudeCancelLogin: () => ipcRenderer.invoke("portlog:claude-cancel-login"),
+  claudeLogout: () => ipcRenderer.invoke("portlog:claude-logout"),
   runLocalInspection: (payload) => ipcRenderer.invoke("portlog:run-local-inspection", payload),
   cancelLocalInspection: (turnId) => ipcRenderer.invoke("portlog:cancel-local-inspection", turnId),
   onInspectionEvent: (listener) => {

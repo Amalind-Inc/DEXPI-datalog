@@ -10,6 +10,9 @@ type WorkerRequest = {
   turnId: string;
   question: string;
   sidecarEndpoint: string;
+  provider?: "openrouter" | "anthropic";
+  model?: string;
+  baseUrl?: string;
 };
 
 const controller = new AbortController();
@@ -17,8 +20,20 @@ process.once("SIGTERM", () => controller.abort());
 process.once("SIGINT", () => controller.abort());
 
 const request = JSON.parse(await readStdin()) as WorkerRequest;
-const apiKey = process.env.PORTLOG_OPENROUTER_API_KEY;
-if (!apiKey) throw new Error("OpenRouter is not configured");
+const provider =
+  request.provider ??
+  (process.env.PORTLOG_RUNTIME_PROVIDER as "openrouter" | "anthropic" | undefined) ??
+  "openrouter";
+const model =
+  request.model ??
+  process.env.PORTLOG_RUNTIME_MODEL ??
+  (provider === "anthropic" ? "claude-sonnet-4-5" : "deepseek/deepseek-v4-flash");
+const baseUrl =
+  request.baseUrl ??
+  process.env.PORTLOG_RUNTIME_BASE_URL ??
+  (provider === "anthropic" ? "https://api.anthropic.com" : "https://openrouter.ai/api/v1");
+const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
+if (!apiKey) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
 
 try {
@@ -26,10 +41,10 @@ try {
     join(agentDir, "models.json"),
     JSON.stringify({
       providers: {
-        openrouter: {
-          baseUrl: process.env.PORTLOG_OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-          api: "openai-completions",
-          models: [{ id: "deepseek/deepseek-v4-flash", reasoning: false, input: ["text"] }],
+        [provider]: {
+          baseUrl,
+          api: provider === "anthropic" ? "anthropic-messages" : "openai-completions",
+          models: [{ id: model, reasoning: false, input: ["text"] }],
         },
       },
     }),
@@ -38,7 +53,7 @@ try {
     projectDirectory: request.projectDirectory,
     turnId: request.turnId,
     question: request.question,
-    model: { provider: "openrouter", id: "deepseek/deepseek-v4-flash" },
+    model: { provider, id: model },
     signal: controller.signal,
     agentDir,
     cwd: request.projectDirectory,

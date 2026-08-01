@@ -205,6 +205,16 @@ try {
       "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.",
     )
     .waitFor({ state: "visible", timeout: 30_000 });
+  await missing.window
+    .getByTestId("desktop-claude-auth-status")
+    .getByText("Claude: logged_out")
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await missing.window
+    .getByRole("button", { name: "Log in with Claude" })
+    .waitFor({ state: "visible" });
+  await missing.window
+    .getByText(/does not include PortLog usage/)
+    .waitFor({ state: "visible", timeout: 30_000 });
   await closeElectron(missing);
   console.log(JSON.stringify({ ok: true, manifest }));
 } finally {
