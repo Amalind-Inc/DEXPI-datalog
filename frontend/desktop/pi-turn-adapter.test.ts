@@ -126,3 +126,81 @@ test("desktop pins only the exact direct Pi core runtime pair", async () => {
   assert.equal(lockfile.packages["node_modules/@earendil-works/pi-agent-core"].version, "0.80.6");
   assert.equal(lockfile.packages["node_modules/@earendil-works/pi-ai"].version, "0.80.6");
 });
+
+test("Codex runtime uses the pinned Codex Responses transport and backend", async () => {
+  let requestPath = "";
+  const server = http.createServer((_request, response) => {
+    requestPath = _request.url ?? "";
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    sse(response, { type: "response.created", response: { id: "resp-1" } });
+    sse(response, {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { type: "message", id: "msg-1", role: "assistant", content: [] },
+    });
+    sse(response, { type: "response.output_text.delta", output_index: 0, delta: "Codex response" });
+    sse(response, {
+      type: "response.output_item.done",
+      output_index: 0,
+      item: {
+        type: "message",
+        id: "msg-1",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Codex response" }],
+      },
+    });
+    sse(response, {
+      type: "response.completed",
+      response: {
+        id: "resp-1",
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+      },
+    });
+    response.end("data: [DONE]\n\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-codex-agent-"));
+  await writeFile(
+    path.join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        "openai-codex": {
+          baseUrl: `http://127.0.0.1:${address.port}/backend-api`,
+          api: "openai-codex-responses",
+          models: [{ id: "gpt-5.4", reasoning: true, input: ["text"] }],
+        },
+      },
+    }),
+  );
+  const accountToken = [
+    "header",
+    Buffer.from(
+      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-test" } }),
+    ).toString("base64url"),
+    "signature",
+  ].join(".");
+  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  try {
+    review = await createGovernedPiReviewTurn({
+      agentDir,
+      cwd: agentDir,
+      provider: "openai-codex",
+      model: "gpt-5.4",
+      signal: new AbortController().signal,
+      apiKey: accountToken,
+      getEvidence: async () => ({ citations: [] }),
+    });
+    assert.equal(review.agent.state.model.api, "openai-codex-responses");
+    assert.equal(review.agent.state.model.baseUrl, `http://127.0.0.1:${address.port}/backend-api`);
+    await review.prompt("Say hello.");
+    assert.equal(requestPath, "/backend-api/codex/responses");
+  } finally {
+    await review?.dispose();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});

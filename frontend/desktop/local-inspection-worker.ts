@@ -10,7 +10,7 @@ type WorkerRequest = {
   turnId: string;
   question: string;
   sidecarEndpoint: string;
-  provider?: "openrouter" | "anthropic";
+  provider?: "openrouter" | "anthropic" | "openai-codex";
   model?: string;
   baseUrl?: string;
 };
@@ -22,16 +22,28 @@ process.once("SIGINT", () => controller.abort());
 const request = JSON.parse(await readStdin()) as WorkerRequest;
 const provider =
   request.provider ??
-  (process.env.PORTLOG_RUNTIME_PROVIDER as "openrouter" | "anthropic" | undefined) ??
+  (process.env.PORTLOG_RUNTIME_PROVIDER as
+    | "openrouter"
+    | "anthropic"
+    | "openai-codex"
+    | undefined) ??
   "openrouter";
 const model =
   request.model ??
   process.env.PORTLOG_RUNTIME_MODEL ??
-  (provider === "anthropic" ? "claude-sonnet-4-5" : "deepseek/deepseek-v4-flash");
+  (provider === "anthropic"
+    ? "claude-sonnet-4-5"
+    : provider === "openai-codex"
+      ? "gpt-5.4"
+      : "deepseek/deepseek-v4-flash");
 const baseUrl =
   request.baseUrl ??
   process.env.PORTLOG_RUNTIME_BASE_URL ??
-  (provider === "anthropic" ? "https://api.anthropic.com" : "https://openrouter.ai/api/v1");
+  (provider === "anthropic"
+    ? "https://api.anthropic.com"
+    : provider === "openai-codex"
+      ? "https://chatgpt.com/backend-api"
+      : "https://openrouter.ai/api/v1");
 const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
 if (!apiKey) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
@@ -43,8 +55,13 @@ try {
       providers: {
         [provider]: {
           baseUrl,
-          api: provider === "anthropic" ? "anthropic-messages" : "openai-completions",
-          models: [{ id: model, reasoning: false, input: ["text"] }],
+          api:
+            provider === "anthropic"
+              ? "anthropic-messages"
+              : provider === "openai-codex"
+                ? "openai-codex-responses"
+                : "openai-completions",
+          models: [{ id: model, reasoning: provider === "openai-codex", input: ["text"] }],
         },
       },
     }),

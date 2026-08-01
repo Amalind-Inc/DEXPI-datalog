@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld("portlogDesktop", {
   claudeLogin: () => ipcRenderer.invoke("portlog:claude-login"),
   claudeCancelLogin: () => ipcRenderer.invoke("portlog:claude-cancel-login"),
   claudeLogout: () => ipcRenderer.invoke("portlog:claude-logout"),
+  codexAuthStatus: () => ipcRenderer.invoke("portlog:codex-auth-status"),
+  codexLogin: (method) => ipcRenderer.invoke("portlog:codex-login", method),
+  codexCancelLogin: () => ipcRenderer.invoke("portlog:codex-cancel-login"),
+  codexLogout: () => ipcRenderer.invoke("portlog:codex-logout"),
   runLocalInspection: (payload) => ipcRenderer.invoke("portlog:run-local-inspection", payload),
   cancelLocalInspection: (turnId) => ipcRenderer.invoke("portlog:cancel-local-inspection", turnId),
   onInspectionEvent: (listener) => {

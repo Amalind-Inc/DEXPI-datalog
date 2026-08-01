@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { streamSimple as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
+import { streamSimple as streamCodex } from "@earendil-works/pi-ai/api/openai-codex-responses";
 import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-completions";
 import { Type } from "typebox";
 
@@ -32,10 +33,15 @@ type PortLogModelEntry = {
 };
 type PortLogProviderEntry = {
   baseUrl: string;
-  api: "openai-completions" | "anthropic-messages";
+  api: "openai-completions" | "openai-codex-responses" | "anthropic-messages";
   apiKey?: string;
   models: PortLogModelEntry[];
 };
+
+type PortLogModel =
+  | Model<"openai-completions">
+  | Model<"openai-codex-responses">
+  | Model<"anthropic-messages">;
 
 /**
  * Creates a direct, in-memory Pi core Agent for one PortLog turn.
@@ -76,6 +82,11 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
           context,
           streamOptions,
         );
+      if (selectedModel.api === "openai-codex-responses")
+        return streamCodex(selectedModel as Model<"openai-codex-responses">, context, {
+          ...streamOptions,
+          transport: "sse",
+        });
       return streamOpenAI(selectedModel as Model<"openai-completions">, context, streamOptions);
     },
   });
@@ -97,10 +108,8 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
   };
 }
 
-async function readPortLogModel(
-  options: GovernedPiReviewTurnOptions,
-): Promise<{
-  value: Model<"openai-completions"> | Model<"anthropic-messages">;
+async function readPortLogModel(options: GovernedPiReviewTurnOptions): Promise<{
+  value: PortLogModel;
   configuredApiKey?: string;
 }> {
   const raw = JSON.parse(await readFile(`${options.agentDir}/models.json`, "utf8")) as {
@@ -123,7 +132,7 @@ async function readPortLogModel(
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: entry.contextWindow ?? 128_000,
       maxTokens: entry.maxTokens ?? 8_192,
-    },
+    } as PortLogModel,
   };
 }
 

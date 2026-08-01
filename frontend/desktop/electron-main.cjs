@@ -13,6 +13,8 @@ const {
 } = require("./electron-openrouter-check.cjs");
 const { createClaudeAuthController } = require("./claude-auth-controller.cjs");
 const { createMacOSClaudeKeychain } = require("./claude-keychain.cjs");
+const { createCodexAuthController } = require("./codex-auth-controller.cjs");
+const { createMacOSCodexKeychain } = require("./codex-keychain.cjs");
 
 const desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR)
@@ -21,6 +23,7 @@ const sidecarEndpoint = "http://127.0.0.1:8000";
 let sidecar;
 let openRouterEnv;
 let claudeAuth;
+let codexAuth;
 const activeInspections = new Map();
 
 async function waitForSidecar() {
@@ -89,6 +92,33 @@ async function claudeCancelLogin() {
 async function claudeLogout() {
   for (const worker of activeInspections.values()) worker.kill("SIGTERM");
   return (await getClaudeAuth()).logout();
+}
+
+async function getCodexAuth() {
+  if (codexAuth) return codexAuth;
+  if (process.platform !== "darwin")
+    throw new Error("OpenAI Codex login is supported only on macOS.");
+  const { openaiCodexOAuthProvider } = await import("@earendil-works/pi-ai/oauth");
+  codexAuth = createCodexAuthController({
+    oauth: openaiCodexOAuthProvider,
+    keychain: createMacOSCodexKeychain(),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  return codexAuth;
+}
+
+async function codexAuthStatus() {
+  return (await getCodexAuth()).status();
+}
+async function codexLogin(method) {
+  return (await getCodexAuth()).login(method);
+}
+async function codexCancelLogin() {
+  return (await getCodexAuth()).cancel();
+}
+async function codexLogout() {
+  for (const worker of activeInspections.values()) worker.kill("SIGTERM");
+  return (await getCodexAuth()).logout();
 }
 
 async function startSidecar() {
@@ -160,6 +190,15 @@ async function runLocalInspection(event, payload) {
       model: "claude-sonnet-4-5",
       apiKey: await auth.getAccessToken(),
       baseUrl: "https://api.anthropic.com",
+    };
+  }
+  if (requestedProvider === "openai-codex") {
+    const auth = await getCodexAuth();
+    runtime = {
+      provider: "openai-codex",
+      model: "gpt-5.4",
+      apiKey: await auth.getAccessToken(),
+      baseUrl: "https://chatgpt.com/backend-api",
     };
   }
   if (!openRouterEnv)
@@ -243,11 +282,17 @@ async function runLocalInspection(event, payload) {
           new Error(
             code === 0
               ? "Inspection ended without a result"
-              : `Inspection worker failed (${code}): ${stderr.replace(openRouterEnv.credential, "[REDACTED]")}`,
+              : `Inspection worker failed (${code}): ${redactRuntimeSecrets(stderr, runtime)}`,
           ),
         );
     });
   });
+}
+
+function redactRuntimeSecrets(message, runtime) {
+  return [openRouterEnv?.credential, runtime?.apiKey]
+    .filter((secret) => typeof secret === "string" && secret.length > 0)
+    .reduce((text, secret) => text.split(secret).join("[REDACTED]"), message);
 }
 
 async function cancelLocalInspection(_event, turnId) {
@@ -319,6 +364,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:claude-login", claudeLogin);
   ipcMain.handle("portlog:claude-cancel-login", claudeCancelLogin);
   ipcMain.handle("portlog:claude-logout", claudeLogout);
+  ipcMain.handle("portlog:codex-auth-status", codexAuthStatus);
+  ipcMain.handle("portlog:codex-login", (_event, method) => codexLogin(method));
+  ipcMain.handle("portlog:codex-cancel-login", codexCancelLogin);
+  ipcMain.handle("portlog:codex-logout", codexLogout);
   ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   ipcMain.handle("portlog:run-local-inspection", runLocalInspection);
   ipcMain.handle("portlog:cancel-local-inspection", cancelLocalInspection);

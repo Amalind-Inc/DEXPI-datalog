@@ -23,6 +23,28 @@ type ClaudeAuthState = {
   error?: string;
   expiresAt?: number;
 };
+type CodexAuthState = {
+  provider: "openai-codex";
+  state:
+    | "logged_out"
+    | "opening_browser"
+    | "waiting_for_authorization"
+    | "logged_in"
+    | "refresh_failed"
+    | "cancelled";
+  recoverable: boolean;
+  loginMethod?: "browser" | "device_code";
+  verificationUri?: string;
+  userCode?: string;
+  deviceCode?: {
+    userCode: string;
+    verificationUri: string;
+    expiresInSeconds?: number;
+    intervalSeconds?: number;
+  };
+  error?: string;
+  expiresAt?: number;
+};
 type InspectionEvent = {
   sequence: number;
   type: string;
@@ -63,12 +85,16 @@ declare global {
       claudeLogin(): Promise<ClaudeAuthState>;
       claudeCancelLogin(): Promise<ClaudeAuthState>;
       claudeLogout(): Promise<ClaudeAuthState>;
+      codexAuthStatus(): Promise<CodexAuthState>;
+      codexLogin(method?: "browser" | "device_code"): Promise<CodexAuthState>;
+      codexCancelLogin(): Promise<CodexAuthState>;
+      codexLogout(): Promise<CodexAuthState>;
       checkOpenRouter(): Promise<unknown>;
       runLocalInspection(payload: {
         sessionId: string;
         turnId: string;
         question: string;
-        provider?: "openrouter" | "anthropic";
+        provider?: "openrouter" | "anthropic" | "openai-codex";
       }): Promise<InspectionRecord>;
       cancelLocalInspection(turnId: string): Promise<{ cancelled: boolean }>;
       onInspectionEvent(listener: (message: InspectionMessage) => void): () => void;
@@ -89,6 +115,7 @@ export function DesktopDexpiImport() {
   const [status, setStatus] = useState<string | null>(null);
   const [openRouter, setOpenRouter] = useState<OpenRouterState | null>(null);
   const [claude, setClaude] = useState<ClaudeAuthState | null>(null);
+  const [codex, setCodex] = useState<CodexAuthState | null>(null);
   const [question, setQuestion] = useState("What equipment and connections are around P4711?");
   const [turns, setTurns] = useState<InspectionRecord[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -101,12 +128,14 @@ export function DesktopDexpiImport() {
     void Promise.all([
       desktop.openRouterStatus(),
       desktop.claudeAuthStatus(),
+      desktop.codexAuthStatus(),
       desktop.loadCurrentProject(),
     ])
-      .then(([provider, claudeStatus, project]) => {
+      .then(([provider, claudeStatus, codexStatus, project]) => {
         if (cancelled) return;
         setOpenRouter(provider);
         setClaude(claudeStatus);
+        setCodex(codexStatus);
         setTurns(Array.isArray(project.turns) ? project.turns : []);
       })
       .catch(() => {
@@ -128,7 +157,31 @@ export function DesktopDexpiImport() {
     ? "OpenRouter / deepseek/deepseek-v4-flash / Configured"
     : "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.";
   const claudeConnected = claude?.state === "logged_in";
-  const canInspect = claudeConnected || Boolean(openRouter?.configured);
+  const codexConnected = codex?.state === "logged_in";
+  const canInspect = claudeConnected || codexConnected || Boolean(openRouter?.configured);
+
+  const startCodexLogin = (method: "browser" | "device_code") => {
+    const desktop = window.portlogDesktop;
+    if (!desktop) return;
+    setCodex((current) => ({
+      provider: "openai-codex",
+      recoverable: true,
+      ...current,
+      state: "opening_browser",
+      loginMethod: method,
+    }));
+    const poll = window.setInterval(() => {
+      void desktop
+        .codexAuthStatus()
+        .then(setCodex)
+        .catch(() => undefined);
+    }, 100);
+    void desktop
+      .codexLogin(method)
+      .then(setCodex)
+      .catch((error) => setStatus(error instanceof Error ? error.message : "Codex login failed."))
+      .finally(() => window.clearInterval(poll));
+  };
 
   const runInspection = async (retry?: InspectionRecord) => {
     const trimmed = (retry?.question ?? question).trim();
@@ -142,7 +195,7 @@ export function DesktopDexpiImport() {
         sessionId,
         turnId,
         question: trimmed,
-        provider: claudeConnected ? "anthropic" : "openrouter",
+        provider: codexConnected ? "openai-codex" : claudeConnected ? "anthropic" : "openrouter",
       });
       setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
       setStatus(
@@ -209,6 +262,61 @@ export function DesktopDexpiImport() {
           </button>
         ) : null}
         {claude?.error ? <p role="alert">{claude.error}</p> : null}
+      </section>
+      <section aria-label="OpenAI Codex account" className="border p-2 space-y-2">
+        <p data-testid="desktop-codex-auth-status">
+          OpenAI Codex: {codex?.state === "logged_in" ? "Connected" : (codex?.state ?? "Checking")}
+        </p>
+        <p className="text-sm">
+          Codex subscription access is separate from PortLog API-key usage; OpenAI determines
+          eligibility and billing.
+        </p>
+        {codexConnected ? (
+          <button
+            type="button"
+            onClick={() => void window.portlogDesktop?.codexLogout().then(setCodex)}
+          >
+            Log out of Codex
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => startCodexLogin("browser")}
+              disabled={
+                codex?.state === "opening_browser" || codex?.state === "waiting_for_authorization"
+              }
+            >
+              {codex?.state === "opening_browser" || codex?.state === "waiting_for_authorization"
+                ? "Waiting for Codex authorization…"
+                : "Log in with Codex"}
+            </button>
+            <button
+              type="button"
+              onClick={() => startCodexLogin("device_code")}
+              disabled={
+                codex?.state === "opening_browser" || codex?.state === "waiting_for_authorization"
+              }
+            >
+              Use device code
+            </button>
+          </div>
+        )}
+        {codex?.state === "opening_browser" || codex?.state === "waiting_for_authorization" ? (
+          <button
+            type="button"
+            onClick={() => void window.portlogDesktop?.codexCancelLogin().then(setCodex)}
+          >
+            Cancel Codex login
+          </button>
+        ) : null}
+        {codex?.deviceCode ? (
+          <p role="status">
+            Enter <strong>{codex.deviceCode.userCode}</strong> at {codex.deviceCode.verificationUri}
+            .
+          </p>
+        ) : null}
+        {codex?.error ? <p role="alert">{codex.error}</p> : null}
       </section>
       <p data-testid="desktop-openrouter-status">{openRouterText}</p>
       <button

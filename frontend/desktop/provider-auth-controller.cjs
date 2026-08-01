@@ -1,0 +1,281 @@
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function createProviderAuthController(options) {
+  const oauth = options.oauth;
+  const keychain = options.keychain;
+  const openExternal = options.openExternal;
+  const provider = options.provider;
+  const label = options.label ?? provider;
+  const now = options.now ?? (() => Date.now());
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const errorCode =
+    options.errorCode ?? `${provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_AUTH_RECOVERABLE`;
+
+  let credentials = null;
+  let loaded = false;
+  let state = "logged_out";
+  let error = null;
+  let deviceCode = null;
+  let loginRun = null;
+  let authGeneration = 0;
+
+  async function loadStoredCredentials() {
+    if (loaded) return;
+    loaded = true;
+    let raw;
+    try {
+      raw = await keychain.read();
+    } catch {
+      state = "logged_out";
+      error = `${label} credentials could not be read from Keychain.`;
+      return;
+    }
+    credentials = parseCredentials(raw);
+    if (credentials) state = "logged_in";
+  }
+
+  async function status() {
+    await loadStoredCredentials();
+    if (!loginRun && credentials) await refreshIfNeeded();
+    return publicStatus();
+  }
+
+  async function login(requestedLoginMethod) {
+    if (loginRun) return loginRun.promise;
+    const generation = ++authGeneration;
+    const controller = new AbortController();
+    let rejectCancellation;
+    const cancellation = new Promise((_, reject) => {
+      rejectCancellation = reject;
+    });
+    const cancellationError = () => abortError(`${label} login cancelled.`);
+    const run = {
+      controller,
+      promise: null,
+      cancel: () => {
+        if (controller.signal.aborted) return;
+        controller.abort();
+        rejectCancellation(cancellationError());
+      },
+    };
+    loginRun = run;
+    state = "opening_browser";
+    error = null;
+    deviceCode = null;
+
+    const providerLogin = Promise.resolve().then(() =>
+      oauth.login({
+        signal: controller.signal,
+        onAuth: (info) => {
+          if (controller.signal.aborted) return;
+          state = "waiting_for_authorization";
+          void Promise.resolve(openExternal(info.url)).catch(() => {
+            error = `${label} authorization page could not be opened.`;
+            run.cancel();
+          });
+        },
+        onDeviceCode: (info) => {
+          if (controller.signal.aborted) return;
+          state = "waiting_for_authorization";
+          deviceCode = sanitizeDeviceCode(info);
+          if (options.onDeviceCode) options.onDeviceCode(deviceCode);
+          if (deviceCode?.verificationUri) {
+            void Promise.resolve(openExternal(deviceCode.verificationUri)).catch(() => {
+              error = `${label} device authorization page could not be opened.`;
+              run.cancel();
+            });
+          }
+        },
+        onSelect: async (prompt) => {
+          if (controller.signal.aborted) return undefined;
+          if (options.selectLogin) return options.selectLogin(prompt, requestedLoginMethod);
+          return undefined;
+        },
+        onProgress: () => {},
+        onManualCodeInput: () => waitForAbort(controller.signal),
+        onPrompt: async () => {
+          if (controller.signal.aborted) throw cancellationError();
+          throw abortError(`${label} login requires browser authorization.`);
+        },
+      }),
+    );
+    void providerLogin.catch(() => {});
+
+    const timeout = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        error = `${label} login timed out. Try again.`;
+        run.cancel();
+      }
+    }, timeoutMs);
+
+    run.promise = (async () => {
+      try {
+        const result = await Promise.race([providerLogin, cancellation]);
+        if (controller.signal.aborted) throw cancellationError();
+        const next = parseCredentials(result);
+        if (!next) throw new Error(`Invalid credentials returned by ${label}.`);
+        await keychain.write(JSON.stringify(next));
+        if (controller.signal.aborted) return publicStatus();
+        credentials = next;
+        loaded = true;
+        state = "logged_in";
+        error = null;
+        deviceCode = null;
+        return publicStatus();
+      } catch (cause) {
+        if (generation !== authGeneration)
+          throw publicError(`${label} login cancelled.`, errorCode);
+        if (
+          controller.signal.aborted ||
+          isAbortError(cause) ||
+          /login cancelled/i.test(String(cause?.message ?? cause))
+        ) {
+          state = "cancelled";
+          error = error ?? `${label} login cancelled.`;
+        } else {
+          state = "logged_out";
+          error = `${label} login could not be completed.`;
+        }
+        throw publicError(error, errorCode);
+      } finally {
+        clearTimeout(timeout);
+        if (loginRun === run) loginRun = null;
+      }
+    })();
+    return run.promise;
+  }
+
+  async function cancel() {
+    if (!loginRun) return publicStatus();
+    loginRun.cancel();
+    return publicStatus();
+  }
+
+  async function logout() {
+    authGeneration += 1;
+    if (loginRun) loginRun.cancel();
+    credentials = null;
+    loaded = true;
+    deviceCode = null;
+    try {
+      await keychain.delete();
+    } catch {
+      state = "logged_in";
+      error = `${label} credentials could not be removed from Keychain.`;
+      throw publicError(error, errorCode);
+    }
+    state = "logged_out";
+    error = null;
+    return publicStatus();
+  }
+
+  async function getAccessToken() {
+    await loadStoredCredentials();
+    if (!credentials) throw publicError(error ?? `${label} is not connected.`, errorCode);
+    await refreshIfNeeded();
+    if (!credentials) throw publicError(error ?? `${label} is not connected.`, errorCode);
+    return oauth.getApiKey(credentials);
+  }
+
+  async function refreshIfNeeded() {
+    if (!credentials) return false;
+    if (credentials.expires > now()) {
+      state = "logged_in";
+      return true;
+    }
+    try {
+      const refreshed = parseCredentials(await oauth.refreshToken(credentials));
+      if (!refreshed) throw new Error(`Invalid refreshed ${label} credentials.`);
+      await keychain.write(JSON.stringify(refreshed));
+      credentials = refreshed;
+      state = "logged_in";
+      error = null;
+      return true;
+    } catch {
+      credentials = null;
+      state = "refresh_failed";
+      error = `${label} session expired or could not be refreshed. Log in again.`;
+      return false;
+    }
+  }
+
+  function publicStatus() {
+    return {
+      provider,
+      state,
+      recoverable: true,
+      ...(error ? { error } : {}),
+      ...(credentials && state === "logged_in" ? { expiresAt: credentials.expires } : {}),
+      ...(deviceCode && state === "waiting_for_authorization" ? { deviceCode } : {}),
+    };
+  }
+
+  return {
+    status,
+    login,
+    cancel,
+    logout,
+    getAccessToken,
+    constants: { provider, service: options.service, account: options.account },
+  };
+}
+
+function parseCredentials(value) {
+  let candidate = value;
+  if (typeof value === "string") {
+    try {
+      candidate = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!candidate || typeof candidate !== "object") return null;
+  const record = candidate;
+  if (
+    typeof record.access !== "string" ||
+    typeof record.refresh !== "string" ||
+    typeof record.expires !== "number" ||
+    !Number.isFinite(record.expires)
+  )
+    return null;
+  return { access: record.access, refresh: record.refresh, expires: record.expires };
+}
+
+function sanitizeDeviceCode(value) {
+  if (!value || typeof value !== "object") return null;
+  const info = value;
+  if (typeof info.userCode !== "string" || typeof info.verificationUri !== "string") return null;
+  return {
+    userCode: info.userCode,
+    verificationUri: info.verificationUri,
+    ...(typeof info.intervalSeconds === "number" ? { intervalSeconds: info.intervalSeconds } : {}),
+    ...(typeof info.expiresInSeconds === "number"
+      ? { expiresInSeconds: info.expiresInSeconds }
+      : {}),
+  };
+}
+
+function waitForAbort(signal) {
+  if (signal.aborted) return Promise.resolve("");
+  return new Promise((resolve) =>
+    signal.addEventListener("abort", () => resolve(""), { once: true }),
+  );
+}
+
+function abortError(message) {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortError(value) {
+  return value && typeof value === "object" && value.name === "AbortError";
+}
+
+function publicError(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+module.exports = { DEFAULT_TIMEOUT_MS, createProviderAuthController };
