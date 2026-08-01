@@ -362,6 +362,8 @@ async function* runDesktopInspection(
   }
 
   const provider = await resolveDesktopProvider(desktop);
+  const project = await desktop.loadCurrentProject().catch(() => null);
+  const preparedSessionId = project?.projectId;
   let abortRequested = false;
   let streamedText = "";
   const unsubscribe = desktop.onInspectionEvent((message) => {
@@ -376,13 +378,20 @@ async function* runDesktopInspection(
   input.signal.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const record = await desktop.runLocalInspection({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      question: input.question,
-      posture: "inspect",
-      provider,
-    });
+    const record = preparedSessionId
+      ? await desktop.runLocalInspection({
+          sessionId: preparedSessionId,
+          turnId: input.turnId,
+          question: input.question,
+          posture: "inspect",
+          provider,
+        })
+      : await desktop.runLocalChat({
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          question: input.question,
+          provider,
+        });
     if (abortRequested || input.signal.aborted || record.status === "cancelled") {
       yield { content: [{ type: "text", text: "" }] };
       return;

@@ -36,6 +36,7 @@ type InspectionRecord = {
   events: InspectionEvent[];
   error?: string;
 };
+type DesktopChatRecord = Omit<InspectionRecord, "posture"> & { posture: "chat" };
 type InspectionMessage = {
   kind: "event";
   turnId: string;
@@ -82,6 +83,12 @@ declare global {
         posture?: "inspect" | "verify";
         provider?: "openrouter" | "anthropic" | "openai-codex";
       }): Promise<InspectionRecord>;
+      runLocalChat(payload: {
+        sessionId: string;
+        turnId: string;
+        question: string;
+        provider?: "openrouter" | "anthropic" | "openai-codex";
+      }): Promise<DesktopChatRecord>;
       cancelLocalInspection(turnId: string): Promise<{ cancelled: boolean }>;
       onInspectionEvent(listener: (message: InspectionMessage) => void): () => void;
     };

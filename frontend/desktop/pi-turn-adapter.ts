@@ -26,7 +26,7 @@ export interface GovernedPiReviewTurnOptions {
   model: string;
   signal: AbortSignal;
   apiKey?: string;
-  getEvidence(request: EvidenceRequest): Promise<unknown>;
+  getEvidence?: (request: EvidenceRequest) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
 }
 
@@ -62,31 +62,33 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
   const apiKey = options.apiKey ?? model.configuredApiKey;
   if (!apiKey) throw new Error(`No PortLog runtime key for ${options.provider}`);
 
-  const evidenceTool = {
-    name: "portlog_evidence",
-    label: "PortLog evidence",
-    description:
-      "Retrieve bounded, read-only evidence from the prepared PortLog review. artifactId must be exactly 'topology'; put equipment tags and identifiers in claim.",
-    parameters: Type.Object({
-      artifactId: Type.String(),
-      claim: Type.String(),
-    }),
-    executionMode: "sequential" as const,
-    async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
-      if (!isEvidenceParams(params)) throw new Error("Invalid PortLog evidence arguments");
-      const result = await options.getEvidence({
-        ...params,
-        signal: options.signal,
-      });
-      if (options.signal.aborted || signal?.aborted)
-        throw new DOMException("Inspection cancelled", "AbortError");
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result) }],
-        details: {},
-      };
-    },
-  };
-
+  const getEvidence = options.getEvidence;
+  const evidenceTool = getEvidence
+    ? {
+        name: "portlog_evidence",
+        label: "PortLog evidence",
+        description:
+          "Retrieve bounded, read-only evidence from the prepared PortLog review. artifactId must be exactly 'topology'; put equipment tags and identifiers in claim.",
+        parameters: Type.Object({
+          artifactId: Type.String(),
+          claim: Type.String(),
+        }),
+        executionMode: "sequential" as const,
+        async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
+          if (!isEvidenceParams(params)) throw new Error("Invalid PortLog evidence arguments");
+          const result = await getEvidence({
+            ...params,
+            signal: options.signal,
+          });
+          if (options.signal.aborted || signal?.aborted)
+            throw new DOMException("Inspection cancelled", "AbortError");
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(result) }],
+            details: {},
+          };
+        },
+      }
+    : null;
   const ruleCheckTool = options.getRuleCheck
     ? {
         name: "portlog_rule_check",
@@ -114,7 +116,10 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
         },
       }
     : null;
-  const tools = ruleCheckTool ? [evidenceTool, ruleCheckTool] : [evidenceTool];
+  const tools = [
+    ...(evidenceTool ? [evidenceTool] : []),
+    ...(ruleCheckTool ? [ruleCheckTool] : []),
+  ];
   const agent = new Agent({
     initialState: { model: model.value, tools },
     toolExecution: "sequential",

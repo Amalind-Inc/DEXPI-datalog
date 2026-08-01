@@ -14,8 +14,12 @@ const frontend = path.join(repo, "frontend");
 const root = path.join(repo, ".tmp", "electron-native-acceptance-run");
 const logs = path.join(root, "logs");
 const userData = path.join(root, "userData");
-const packagedApp = process.env.PORTLOG_RELEASE_APP ? path.resolve(process.env.PORTLOG_RELEASE_APP) : "";
-const packagedExecutable = packagedApp ? path.join(packagedApp, "Contents", "MacOS", "PortLog") : "";
+const packagedApp = process.env.PORTLOG_RELEASE_APP
+  ? path.resolve(process.env.PORTLOG_RELEASE_APP)
+  : "";
+const packagedExecutable = packagedApp
+  ? path.join(packagedApp, "Contents", "MacOS", "PortLog")
+  : "";
 const cleanEnv = {
   PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
   HOME: process.env.HOME ?? "/tmp/portlog-clean-home",
@@ -36,40 +40,46 @@ const modelServer = http.createServer(async (request, response) => {
   if (/cancel this inspection/i.test(text)) return;
   response.writeHead(200, { "content-type": "text/event-stream" });
   const hasToolResult = (parsed.messages ?? []).some((message) => message.role === "tool");
+  const isGeneral = !Array.isArray(parsed.tools) || parsed.tools.length === 0;
   const isVerify = /check valve/i.test(text);
-  const delta = hasToolResult
+  const delta = isGeneral
     ? {
         role: "assistant",
-        content: isVerify
-          ? "The deterministic check completed; the PortLog-owned outcome is shown separately."
-          : "The prepared topology contains bounded evidence around P4711. See the selected evidence.",
+        content: "Hello from desktop chat without a prepared P&ID.",
       }
-    : {
-        role: "assistant",
-        tool_calls: [
-          {
-            id: isVerify ? "call-native-rule-1" : "call-native-1",
-            type: "function",
-            function: isVerify
-              ? {
-                  name: "portlog_rule_check",
-                  arguments: JSON.stringify({
-                    checkId: "pump_discharge_check_valve",
-                    scopeEntityId: "CentrifugalPump-1",
-                  }),
-                }
-              : {
-                  name: "portlog_evidence",
-                  arguments: JSON.stringify({
-                    artifactId: "topology",
-                    claim: "equipment and connections around P4711",
-                  }),
-                },
-          },
-        ],
-      };
+    : hasToolResult
+      ? {
+          role: "assistant",
+          content: isVerify
+            ? "The deterministic check completed; the PortLog-owned outcome is shown separately."
+            : "The prepared topology contains bounded evidence around P4711. See the selected evidence.",
+        }
+      : {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: isVerify ? "call-native-rule-1" : "call-native-1",
+              type: "function",
+              function: isVerify
+                ? {
+                    name: "portlog_rule_check",
+                    arguments: JSON.stringify({
+                      checkId: "pump_discharge_check_valve",
+                      scopeEntityId: "CentrifugalPump-1",
+                    }),
+                  }
+                : {
+                    name: "portlog_evidence",
+                    arguments: JSON.stringify({
+                      artifactId: "topology",
+                      claim: "equipment and connections around P4711",
+                    }),
+                  },
+            },
+          ],
+        };
   response.write(
-    `data: ${JSON.stringify({ id: "native", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: hasToolResult ? "stop" : "tool_calls" }] })}\n\n`,
+    `data: ${JSON.stringify({ id: "native", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: isGeneral || hasToolResult ? "stop" : "tool_calls" }] })}\n\n`,
   );
   response.end("data: [DONE]\n\n");
 });
@@ -182,6 +192,12 @@ try {
     .getByTestId("desktop-openrouter-status")
     .getByText("OpenRouter / deepseek/deepseek-v4-flash / Configured")
     .waitFor({ state: "visible", timeout: 30_000 });
+  const generalMessage = first.window.getByLabel("Message input");
+  await generalMessage.fill("Say hello without an uploaded P&ID.");
+  await first.window.getByRole("button", { name: "Send message" }).click();
+  await first.window
+    .getByText("Hello from desktop chat without a prepared P&ID.")
+    .waitFor({ state: "visible", timeout: 30_000 });
   const preparationStarted = Date.now();
   await first.app.evaluate(({ dialog }, fixturePath) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixturePath] });
@@ -282,14 +298,17 @@ try {
   const crashedQuestion = crashed.window.getByLabel("Ask about this prepared P&ID");
   await crashedQuestion.fill("Cancel this inspection while the model is active");
   await crashed.window.getByRole("button", { name: "Inspect", exact: true }).click();
-  await crashed.window.getByRole("button", { name: "Cancel", exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+  await crashed.window
+    .getByRole("button", { name: "Cancel", exact: true })
+    .waitFor({ state: "visible", timeout: 30_000 });
   const crashedProcess = crashed.app.process();
   const sidecarPids = (await execFile("lsof", ["-ti", "tcp:8000"])).stdout
     .trim()
     .split("\n")
     .filter(Boolean)
     .map((pid) => Number(pid));
-  if (!sidecarPids.length) throw new Error("Packaged sidecar did not expose a PID for crash cleanup");
+  if (!sidecarPids.length)
+    throw new Error("Packaged sidecar did not expose a PID for crash cleanup");
   for (const pid of sidecarPids) process.kill(pid, "SIGKILL");
   await waitForExit(crashedProcess, "Electron after sidecar crash");
   await waitForUnavailable("http://127.0.0.1:8000/openapi.json");
@@ -314,10 +333,24 @@ try {
   } finally {
     await new Promise((resolve) => blocker.close(resolve));
   }
-  if (!failedLaunchRejected) throw new Error("Packaged launch unexpectedly attached to an occupied sidecar port");
+  if (!failedLaunchRejected)
+    throw new Error("Packaged launch unexpectedly attached to an occupied sidecar port");
   await waitForUnavailable("http://127.0.0.1:8000/openapi.json");
 
-  const result = { ok: true, app: packagedApp || "development", clean_environment: Boolean(packagedApp), manifest, cleanup: { normal_quit: true, inspection_cancel: true, sidecar_crash: true, forced_termination: true, failed_launch: true }, timings };
+  const result = {
+    ok: true,
+    app: packagedApp || "development",
+    clean_environment: Boolean(packagedApp),
+    manifest,
+    cleanup: {
+      normal_quit: true,
+      inspection_cancel: true,
+      sidecar_crash: true,
+      forced_termination: true,
+      failed_launch: true,
+    },
+    timings,
+  };
   if (process.env.PORTLOG_RELEASE_RESULTS)
     await writeFile(process.env.PORTLOG_RELEASE_RESULTS, `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify(result));

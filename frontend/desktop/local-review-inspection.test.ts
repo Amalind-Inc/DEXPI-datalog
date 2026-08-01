@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
-import { runLocalReviewInspection } from "./local-review-inspection.ts";
+import { runLocalDesktopChat, runLocalReviewInspection } from "./local-review-inspection.ts";
 
 test("a governed Inspect turn is reconstructed from the durable PortLog project record", async () => {
   const root = await mkdtemp(join(tmpdir(), "portlog-local-inspection-"));
@@ -39,7 +39,7 @@ test("a governed Inspect turn is reconstructed from the durable PortLog project 
             tool: "portlog_evidence",
             arguments: { artifactId: "topology", claim: "equipment and connections around P-101" },
           });
-          const evidence = await getEvidence({
+          const evidence = await getEvidence!({
             artifactId: "topology",
             claim: "equipment and connections around P-101",
           });
@@ -87,6 +87,30 @@ test("a governed Inspect turn is reconstructed from the durable PortLog project 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a general desktop chat turn works without a project manifest or evidence bridge", async () => {
+  let promptText = "";
+  const record = await runLocalDesktopChat({
+    turnId: "chat-without-pid",
+    question: "Hello without an uploaded P&ID.",
+    model: { provider: "openai-codex", id: "gpt-5.4" },
+    signal: new AbortController().signal,
+    createTurn: async ({ emit, getEvidence }) => {
+      assert.equal(getEvidence, undefined);
+      return {
+        prompt: async (text) => {
+          promptText = text;
+          emit({ type: "assistant_text_delta", text: "Hello from desktop chat." });
+        },
+        abort: async () => {},
+        dispose: async () => {},
+      };
+    },
+  });
+  assert.equal(record.status, "completed");
+  assert.equal(record.finalText, "Hello from desktop chat.");
+  assert.match(promptText, /general conversation/i);
 });
 
 test("cancellation stops active work and persists one honest terminal record", async () => {

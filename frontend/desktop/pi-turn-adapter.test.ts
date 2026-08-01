@@ -116,6 +116,37 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
   }
 });
 
+test("general desktop turns expose no P&ID tools without an evidence bridge", async () => {
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-general-agent-"));
+  await writeFile(
+    path.join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: "http://127.0.0.1:1/v1",
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  try {
+    review = await createGovernedPiReviewTurn({
+      agentDir,
+      cwd: agentDir,
+      provider: "portlog-test",
+      model: "review-model",
+      signal: new AbortController().signal,
+    });
+    assert.deepEqual(review.session.agent.state.tools.map((tool) => tool.name), []);
+  } finally {
+    await review?.dispose();
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});
+
 test("desktop pins only the exact direct Pi core runtime pair", async () => {
   const packageJson = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8"),

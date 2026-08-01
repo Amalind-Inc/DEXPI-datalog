@@ -27,7 +27,7 @@ type StoredEvent = LocalInspectionEvent & {
 export interface LocalInspectionRecord {
   schemaVersion: 1;
   turnId: string;
-  posture: "inspect" | "verify";
+  posture: "inspect" | "verify" | "chat";
   question: string;
   status: "active" | "completed" | "cancelled" | "failed";
   model: { provider: string; id: string };
@@ -55,27 +55,38 @@ interface CreateTurnOptions {
       }
     >,
   ): void;
-  getEvidence(request: Omit<EvidenceRequest, "signal">): Promise<unknown>;
-  getRuleCheck?(request: RuleCheckRequest): Promise<unknown>;
+  getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
+  getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
 }
 
 type CreateTurn = (options: CreateTurnOptions) => Promise<TurnRuntime>;
 
 export interface RunLocalReviewInspectionOptions {
-  projectDirectory: string;
+  projectDirectory?: string;
   turnId: string;
   question: string;
-  posture?: "inspect" | "verify";
+  posture?: "inspect" | "verify" | "chat";
   model: { provider: string; id: string };
   signal: AbortSignal;
-  getEvidence(request: Omit<EvidenceRequest, "signal">): Promise<unknown>;
-  getRuleCheck?(request: RuleCheckRequest): Promise<unknown>;
+  getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
+  getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   createTurn?: CreateTurn;
   agentDir?: string;
   cwd?: string;
   apiKey?: string;
   now?: () => Date;
   onEvent?(event: StoredEvent): void;
+}
+
+export type RunLocalDesktopChatOptions = Omit<
+  RunLocalReviewInspectionOptions,
+  "getEvidence" | "getRuleCheck" | "posture" | "projectDirectory"
+>;
+
+export async function runLocalDesktopChat(
+  options: RunLocalDesktopChatOptions,
+): Promise<LocalInspectionRecord> {
+  return runLocalReviewInspection({ ...options, posture: "chat" });
 }
 
 export async function runLocalReviewInspection(
@@ -119,12 +130,14 @@ export async function runLocalReviewInspection(
     }
   };
   append({ type: "turn_started" });
-  await upsertLocalTurn(options.projectDirectory, record);
+  if (options.projectDirectory) await upsertLocalTurn(options.projectDirectory, record);
 
-  const getEvidence = async (request: Omit<EvidenceRequest, "signal">) => {
-    if (options.signal.aborted) throw abortError();
-    return options.getEvidence(request);
-  };
+  const getEvidence = options.getEvidence
+    ? async (request: Omit<EvidenceRequest, "signal">) => {
+        if (options.signal.aborted) throw abortError();
+        return options.getEvidence!(request);
+      }
+    : undefined;
   const createTurn = options.createTurn ?? ((bridge) => createPiRuntime(options, bridge));
   let runtime: TurnRuntime | undefined;
   const abort = () => {
@@ -141,9 +154,11 @@ export async function runLocalReviewInspection(
     else options.signal.addEventListener("abort", abort, { once: true });
 
     await runtime.prompt(
-      record.posture === "verify"
-        ? verifyPrompt(options.question)
-        : inspectPrompt(options.question),
+      record.posture === "chat"
+        ? chatPrompt(options.question)
+        : record.posture === "verify"
+          ? verifyPrompt(options.question)
+          : inspectPrompt(options.question),
     );
     if (options.signal.aborted) throw abortError();
     const deterministicCheck = record.deterministicChecks.at(-1);
@@ -184,7 +199,7 @@ export async function runLocalReviewInspection(
   } finally {
     options.signal.removeEventListener("abort", abort);
     await runtime?.dispose();
-    await upsertLocalTurn(options.projectDirectory, record);
+    if (options.projectDirectory) await upsertLocalTurn(options.projectDirectory, record);
   }
   return record;
 }
@@ -202,7 +217,9 @@ async function createPiRuntime(
     model: options.model.id,
     signal: options.signal,
     apiKey: options.apiKey,
-    getEvidence: ({ artifactId, claim }) => bridge.getEvidence({ artifactId, claim }),
+    getEvidence: bridge.getEvidence
+      ? ({ artifactId, claim }) => bridge.getEvidence!({ artifactId, claim })
+      : undefined,
     getRuleCheck: options.getRuleCheck ? (request) => options.getRuleCheck!(request) : undefined,
   });
   const unsubscribe = review.subscribe((event) => {
@@ -272,6 +289,10 @@ function isVerificationOutcome(
   value: unknown,
 ): value is "satisfied" | "violated" | "indeterminate" {
   return value === "satisfied" || value === "violated" || value === "indeterminate";
+}
+
+function chatPrompt(question: string) {
+  return `You are the PortLog desktop assistant in general conversation mode. Answer the user's question directly and helpfully. No P&ID has been prepared for this turn, so do not claim to have topology evidence or issue an engineering verification verdict.\n\nUser question: ${question}`;
 }
 
 function verifyPrompt(question: string) {

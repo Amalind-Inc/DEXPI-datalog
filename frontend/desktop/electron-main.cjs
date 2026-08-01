@@ -296,7 +296,14 @@ async function runLocalInspection(event, payload) {
   const project = await loadLocalProject(projectDirectory());
   if (project.projectId !== payload.sessionId)
     throw new Error("The active review does not match the prepared local project");
-  const requestedProvider = payload.provider ?? "openrouter";
+  return runLocalTurn(event, payload, "inspection");
+}
+
+async function runLocalChat(event, payload) {
+  return runLocalTurn(event, payload, "chat");
+}
+
+async function resolveLocalRuntime(requestedProvider) {
   let runtime;
   if (requestedProvider === "anthropic") {
     const auth = await getClaudeAuth();
@@ -332,8 +339,12 @@ async function runLocalInspection(event, payload) {
       baseUrl: process.env.PORTLOG_OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
     };
   }
-  if (activeInspections.has(payload.turnId))
-    throw new Error("This inspection turn is already active");
+  return runtime;
+}
+
+async function runLocalTurn(event, payload, mode) {
+  const runtime = await resolveLocalRuntime(payload.provider ?? "openrouter");
+  if (activeInspections.has(payload.turnId)) throw new Error("This desktop turn is already active");
   const worker = spawn(
     process.execPath,
     ["--experimental-strip-types", path.join(__dirname, "local-inspection-worker.ts")],
@@ -353,7 +364,9 @@ async function runLocalInspection(event, payload) {
   activeInspections.set(payload.turnId, worker);
   worker.stdin.end(
     JSON.stringify({
-      projectDirectory: projectDirectory(),
+      mode,
+      projectDirectory: mode === "chat" ? undefined : projectDirectory(),
+      cwd: repoRootForLocalRuntime(),
       sessionId: payload.sessionId,
       turnId: payload.turnId,
       question: payload.question,
@@ -382,7 +395,7 @@ async function runLocalInspection(event, payload) {
           }
           if (message.kind === "result") result = message.record;
         } catch {
-          stderr += "Invalid inspection worker output. ";
+          stderr += "Invalid desktop worker output. ";
         }
       }
     });
@@ -397,8 +410,8 @@ async function runLocalInspection(event, payload) {
         reject(
           new Error(
             code === 0
-              ? "Inspection ended without a result"
-              : `Inspection worker failed (${code}): ${redactRuntimeSecrets(stderr, runtime)}`,
+              ? "Desktop turn ended without a result"
+              : `Desktop worker failed (${code}): ${redactRuntimeSecrets(stderr, runtime)}`,
           ),
         );
     });
@@ -489,6 +502,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:codex-logout", codexLogout);
   ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   ipcMain.handle("portlog:run-local-inspection", runLocalInspection);
+  ipcMain.handle("portlog:run-local-chat", runLocalChat);
   ipcMain.handle("portlog:cancel-local-inspection", cancelLocalInspection);
   createReviewWindow();
   app.on("activate", () => {

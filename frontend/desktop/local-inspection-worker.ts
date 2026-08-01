@@ -5,11 +5,13 @@ import { join } from "node:path";
 import { runLocalReviewInspection } from "./local-review-inspection.ts";
 
 type WorkerRequest = {
-  projectDirectory: string;
-  sessionId: string;
+  projectDirectory?: string;
+  cwd?: string;
+  sessionId?: string;
   turnId: string;
   question: string;
   posture?: "inspect" | "verify";
+  mode?: "inspection" | "chat";
   sidecarEndpoint: string;
   provider?: "openrouter" | "anthropic" | "openai-codex";
   model?: string;
@@ -73,56 +75,70 @@ try {
       },
     }),
   );
+  const isChat = request.mode === "chat";
+  const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
+  const getEvidence = async ({ artifactId, claim }: { artifactId: string; claim: string }) => {
+    if (!request.sessionId) throw new Error("A prepared session is required for P&ID evidence.");
+    if (artifactId !== "topology")
+      return {
+        citations: [],
+        sourceScopeIds: [],
+        diagnostics: [
+          {
+            code: "unsupported_artifact",
+            message: "Only the prepared topology is available.",
+          },
+        ],
+        uncertainty: "Evidence is insufficient.",
+      };
+    const response = await fetch(
+      `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/topology`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) throw new Error(`Prepared topology is unavailable (${response.status})`);
+    return boundedTopologyEvidence(await response.json(), claim);
+  };
+  const getRuleCheck = async ({
+    checkId,
+    scopeEntityId,
+    signal,
+  }: {
+    checkId: string;
+    scopeEntityId: string;
+    signal?: AbortSignal;
+  }) => {
+    if (!request.sessionId) throw new Error("A prepared session is required for rule checks.");
+    const response = await fetch(
+      `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/governed-checks`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          check_id: checkId,
+          scope_entity_id: scopeEntityId,
+        }),
+        signal: signal ?? controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Governed rule check rejected (${response.status}): ${body.slice(0, 500)}`);
+    }
+    return await response.json();
+  };
   const record = await runLocalReviewInspection({
-    projectDirectory: request.projectDirectory,
+    projectDirectory: isChat ? undefined : request.projectDirectory,
     turnId: request.turnId,
     question: request.question,
-    posture: request.posture,
+    posture: isChat ? "chat" : request.posture,
     model: { provider, id: model },
     signal: controller.signal,
     agentDir,
-    cwd: request.projectDirectory,
+    cwd: workingDirectory,
     apiKey,
     onEvent: (event) => send({ kind: "event", turnId: request.turnId, event }),
-    getEvidence: async ({ artifactId, claim }) => {
-      if (artifactId !== "topology")
-        return {
-          citations: [],
-          sourceScopeIds: [],
-          diagnostics: [
-            {
-              code: "unsupported_artifact",
-              message: "Only the prepared topology is available.",
-            },
-          ],
-          uncertainty: "Evidence is insufficient.",
-        };
-      const response = await fetch(
-        `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/topology`,
-        { signal: controller.signal },
-      );
-      if (!response.ok) throw new Error(`Prepared topology is unavailable (${response.status})`);
-      return boundedTopologyEvidence(await response.json(), claim);
-    },
-    getRuleCheck: async ({ checkId, scopeEntityId, signal }) => {
-      const response = await fetch(
-        `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/governed-checks`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            check_id: checkId,
-            scope_entity_id: scopeEntityId,
-          }),
-          signal: signal ?? controller.signal,
-        },
-      );
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Governed rule check rejected (${response.status}): ${body.slice(0, 500)}`);
-      }
-      return await response.json();
-    },
+    getEvidence: isChat ? undefined : getEvidence,
+    getRuleCheck: isChat ? undefined : getRuleCheck,
   });
   send({ kind: "result", record });
 } finally {
