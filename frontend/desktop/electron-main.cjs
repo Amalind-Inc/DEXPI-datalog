@@ -86,18 +86,32 @@ async function startPackagedUi() {
   throw new Error("Packaged PortLog UI did not become ready within 5 seconds");
 }
 
+function childHasExited(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return true;
+  if (child.pid === null || child.pid === undefined) return true;
+  try {
+    process.kill(child.pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function terminateChild(child) {
-  if (!child || child.exitCode !== null) return;
+  if (childHasExited(child)) return;
+  const exit = new Promise((resolve) => child.once("exit", resolve));
   child.stdin?.end();
   child.kill("SIGTERM");
+  const terminated = await Promise.race([
+    exit.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 2_000)),
+  ]);
+  if (terminated || childHasExited(child)) return;
+  child.kill("SIGKILL");
   await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
+    exit,
     new Promise((resolve) => setTimeout(resolve, 2_000)),
   ]);
-  if (child.exitCode === null) {
-    child.kill("SIGKILL");
-    await new Promise((resolve) => child.once("exit", resolve));
-  }
 }
 
 async function stopPackagedUi() {
