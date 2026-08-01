@@ -2451,6 +2451,11 @@
   background: #1d211b;
 }
 
+.desktop-oauth-card--active {
+  background: #222a1d;
+  box-shadow: inset 0 2px 0 #a5d475;
+}
+
 .desktop-oauth-card-header {
   align-items: flex-start;
   display: flex;
@@ -2623,6 +2628,14 @@
   background: var(--calm-paper);
   border-color: var(--calm-paper);
   color: var(--calm-ink);
+}
+
+.desktop-oauth-card--active .desktop-oauth-button--primary:disabled {
+  background: #b7dc91;
+  border-color: #b7dc91;
+  color: var(--calm-ink);
+  cursor: default;
+  opacity: 1;
 }
 
 .desktop-oauth-button--primary:hover:not(:disabled) {

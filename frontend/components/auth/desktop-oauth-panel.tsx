@@ -3,11 +3,12 @@
 import { Loader2, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type {
-  ClaudeAuthState,
-  CodexAuthState,
-  DesktopOAuthState,
-  OAuthProviderId,
+import {
+  DESKTOP_CHAT_PROVIDER_KEY,
+  type ClaudeAuthState,
+  type CodexAuthState,
+  type DesktopOAuthState,
+  type OAuthProviderId,
 } from "@/lib/desktop-auth-types";
 
 type DesktopBridge = NonNullable<Window["portlogDesktop"]>;
@@ -26,6 +27,7 @@ export function DesktopOAuthPanel() {
   const [busy, setBusy] = useState<BusyProvider>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
 
   useEffect(() => {
     const desktop = getDesktop();
@@ -36,9 +38,18 @@ export function DesktopOAuthPanel() {
     let cancelled = false;
     void Promise.all([desktop.claudeAuthStatus(), desktop.codexAuthStatus()])
       .then(([claudeStatus, codexStatus]) => {
-        if (cancelled) return;
         setClaude(claudeStatus);
         setCodex(codexStatus);
+        const saved = readSelectedProvider();
+        setSelectedProvider(
+          saved && isLoggedIn(saved === "anthropic" ? claudeStatus : codexStatus)
+            ? saved
+            : codexStatus.state === "logged_in"
+              ? "openai-codex"
+              : claudeStatus.state === "logged_in"
+                ? "anthropic"
+                : null,
+        );
       })
       .catch((error: unknown) => {
         if (!cancelled) setMessage(errorMessage(error, "Could not read desktop account status."));
@@ -53,13 +64,25 @@ export function DesktopOAuthPanel() {
 
   if (typeof window === "undefined" || !window.portlogDesktop) return null;
 
+  const selectProvider = (provider: ProviderId) => {
+    window.localStorage.setItem(DESKTOP_CHAT_PROVIDER_KEY, provider);
+    setSelectedProvider(provider);
+  };
+  const forgetProvider = (provider: ProviderId) => {
+    if (selectedProvider !== provider) return;
+    window.localStorage.removeItem(DESKTOP_CHAT_PROVIDER_KEY);
+    setSelectedProvider(null);
+  };
+
   const loginClaude = async () => {
     const desktop = getDesktop();
     if (!desktop) return;
     setBusy("anthropic");
     setMessage(null);
     try {
-      setClaude(await desktop.claudeLogin());
+      const next = await desktop.claudeLogin();
+      setClaude(next);
+      if (isLoggedIn(next)) selectProvider("anthropic");
     } catch (error) {
       setMessage(errorMessage(error, "Claude login failed."));
     } finally {
@@ -79,7 +102,9 @@ export function DesktopOAuthPanel() {
         .catch(() => undefined);
     }, 250);
     try {
-      setCodex(await desktop.codexLogin(method));
+      const next = await desktop.codexLogin(method);
+      setCodex(next);
+      if (isLoggedIn(next)) selectProvider("openai-codex");
     } catch (error) {
       setMessage(errorMessage(error, "OpenAI Codex login failed."));
     } finally {
@@ -95,8 +120,12 @@ export function DesktopOAuthPanel() {
     setBusy(logoutBusy);
     setMessage(null);
     try {
-      if (provider === "anthropic") setClaude(await desktop.claudeLogout());
-      else setCodex(await desktop.codexLogout());
+      if (provider === "anthropic") {
+        setClaude(await desktop.claudeLogout());
+      } else {
+        setCodex(await desktop.codexLogout());
+      }
+      forgetProvider(provider);
     } catch (error) {
       setMessage(errorMessage(error, "Could not disconnect the account."));
     } finally {
@@ -119,8 +148,8 @@ export function DesktopOAuthPanel() {
           <p className="desktop-oauth-eyebrow">Desktop identity</p>
           <h2 id="desktop-oauth-title">Connected accounts</h2>
           <p>
-            Sign in with a provider account to run local inspections from the Electron app. OAuth
-            tokens stay in this Mac&apos;s Keychain.
+            Connect a provider account for local chat. Tokens stay in this Mac&apos;s Keychain;
+            choose which connected account PortLog should use below.
           </p>
         </div>
         <div className="desktop-oauth-privacy">
@@ -135,16 +164,20 @@ export function DesktopOAuthPanel() {
           state={claude}
           loading={loading}
           busy={busy}
+          selectedProvider={selectedProvider}
           onLogin={() => void loginClaude()}
           onLogout={() => void logout("anthropic")}
+          onSelect={() => selectProvider("anthropic")}
         />
         <OAuthCard
           provider="openai-codex"
           state={codex}
           loading={loading}
           busy={busy}
+          selectedProvider={selectedProvider}
           onLogin={(method = "browser") => void loginCodex(method)}
           onLogout={() => void logout("openai-codex")}
+          onSelect={() => selectProvider("openai-codex")}
         />
       </div>
 
@@ -162,17 +195,22 @@ function OAuthCard({
   state,
   loading,
   busy,
+  selectedProvider,
   onLogin,
   onLogout,
+  onSelect,
 }: {
   provider: ProviderId;
   state: AuthState | null;
   loading: boolean;
   busy: BusyProvider;
+  selectedProvider: ProviderId | null;
   onLogin: (method?: "browser" | "device_code") => void;
   onLogout: () => void;
+  onSelect: () => void;
 }) {
   const connected = state?.state === "logged_in";
+  const activeForChat = connected && selectedProvider === provider;
   const waiting =
     busy === provider ||
     state?.state === "opening_browser" ||
@@ -182,10 +220,9 @@ function OAuthCard({
   const organization = provider === "anthropic" ? "Anthropic" : "OpenAI";
   const monogram = provider === "anthropic" ? "CL" : "CX";
   const status = loading ? "Checking" : authStatusLabel(state);
-
   return (
     <article
-      className={`desktop-oauth-card${connected ? " desktop-oauth-card--connected" : ""}`}
+      className={`desktop-oauth-card${connected ? " desktop-oauth-card--connected" : ""}${activeForChat ? " desktop-oauth-card--active" : ""}`}
       data-testid={`desktop-oauth-${provider}`}
     >
       <header className="desktop-oauth-card-header">
@@ -230,19 +267,31 @@ function OAuthCard({
 
       <div className="desktop-oauth-actions">
         {connected ? (
-          <button
-            type="button"
-            className="desktop-oauth-button desktop-oauth-button--quiet"
-            onClick={onLogout}
-            disabled={logoutBusy}
-          >
-            {logoutBusy ? (
-              <Loader2 size={14} className="byok-spin" />
-            ) : (
-              <LogOut size={14} aria-hidden="true" />
-            )}
-            {logoutBusy ? "Disconnecting…" : "Disconnect"}
-          </button>
+          <>
+            <button
+              type="button"
+              className="desktop-oauth-button desktop-oauth-button--primary"
+              onClick={onSelect}
+              disabled={activeForChat}
+              aria-pressed={activeForChat}
+              data-testid={`desktop-oauth-select-${provider}`}
+            >
+              {activeForChat ? "Selected for local chat" : "Use for local chat"}
+            </button>
+            <button
+              type="button"
+              className="desktop-oauth-button desktop-oauth-button--quiet"
+              onClick={onLogout}
+              disabled={logoutBusy}
+            >
+              {logoutBusy ? (
+                <Loader2 size={14} className="byok-spin" />
+              ) : (
+                <LogOut size={14} aria-hidden="true" />
+              )}
+              {logoutBusy ? "Disconnecting…" : "Disconnect"}
+            </button>
+          </>
         ) : (
           <>
             <button
@@ -269,6 +318,18 @@ function OAuthCard({
       </div>
     </article>
   );
+}
+function readSelectedProvider(): ProviderId | null {
+  try {
+    const value = window.localStorage.getItem(DESKTOP_CHAT_PROVIDER_KEY);
+    return value === "anthropic" || value === "openai-codex" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLoggedIn(state: AuthState | null): boolean {
+  return state?.state === "logged_in";
 }
 
 function getDesktop(): DesktopBridge | null {

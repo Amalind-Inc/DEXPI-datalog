@@ -11,6 +11,7 @@
     "start": "next start",
     "format": "oxfmt --check",
     "format:fix": "oxfmt",
+    "postinstall": "node ../scripts/patch-pi-oauth-page.mjs",
     "lint": "oxlint && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt",
     "desktop:dev": "electron desktop/electron-main.cjs",

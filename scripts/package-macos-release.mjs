@@ -148,6 +148,10 @@ async function main() {
     cwd: electronApp,
     env: process.env,
   });
+  await command("node", [path.join(root, "scripts", "patch-pi-oauth-page.mjs"), electronApp], {
+    cwd: root,
+    env: process.env,
+  });
 
   const releaseManifest = {
     product: "PortLog",

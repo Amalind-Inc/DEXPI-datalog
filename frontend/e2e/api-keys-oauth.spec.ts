@@ -47,4 +47,7 @@ test("API keys page exposes desktop OAuth account controls", async ({ page }) =>
   await page.getByRole("button", { name: "Connect Claude" }).click();
   await expect(page.getByTestId("desktop-oauth-status-anthropic")).toContainText("Connected");
   await expect(page.getByRole("button", { name: "Disconnect" }).first()).toBeVisible();
+  await expect(page.getByTestId("desktop-oauth-select-anthropic")).toHaveText(
+    "Selected for local chat",
+  );
 });

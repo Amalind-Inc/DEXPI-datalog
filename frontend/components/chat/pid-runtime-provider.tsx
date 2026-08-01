@@ -13,6 +13,7 @@ import {
 } from "@assistant-ui/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PidGraphProvider, usePidGraph } from "@/components/pid/graph-context";
+import { DESKTOP_CHAT_PROVIDER_KEY, type OAuthProviderId } from "@/lib/desktop-auth-types";
 import type { PrepareResult } from "@/components/pid/types";
 import {
   cancelTurn,
@@ -60,7 +61,13 @@ export function PidAssistantProviders({ children }: { children: ReactNode }) {
 
 function PidRuntimeProvider({ children }: { children: ReactNode }) {
   const [sessionId] = useState(readOrCreateSessionId);
-  const { beginDocumentImport, applyPrepareResult, selectedNode, selectedNodeId, setHighlightedNodeIds } = usePidGraph();
+  const {
+    beginDocumentImport,
+    applyPrepareResult,
+    selectedNode,
+    selectedNodeId,
+    setHighlightedNodeIds,
+  } = usePidGraph();
   const graphContextRef = useRef({ selectedNode, selectedNodeId });
 
   useEffect(() => {
@@ -114,10 +121,20 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         ).slice(0, 32);
         const turnId = await computeTurnId(sessionId, requestId);
 
-        // Persist before the POST so a mid-flight refresh can recover the
+        const desktop = getDesktopBridge();
+        if (desktop) {
+          yield* runDesktopInspection(desktop, {
+            sessionId,
+            turnId,
+            question,
+            signal: abortSignal,
+          });
+          return;
+        }
+
+        // Persist before the web POST so a mid-flight refresh can recover the
         // turn via getTurn() on the next load(). Cleared in history.append().
         writeActiveTurn({ sessionId, requestId, turnId, question });
-
         // A signal already aborted before any request went out means this
         // turn (deterministic id) was started by an earlier run() and this
         // invocation only needs to tell the backend to cancel it. The
@@ -285,6 +302,103 @@ function sleep(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, ms);
   return promise;
+}
+
+type DesktopBridge = NonNullable<Window["portlogDesktop"]>;
+type DesktopProvider = "openrouter" | OAuthProviderId;
+
+function getDesktopBridge(): DesktopBridge | null {
+  return typeof window === "undefined" ? null : (window.portlogDesktop ?? null);
+}
+
+function readSelectedDesktopProvider(): OAuthProviderId | null {
+  try {
+    const value = window.localStorage.getItem(DESKTOP_CHAT_PROVIDER_KEY);
+    return value === "anthropic" || value === "openai-codex" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveDesktopProvider(desktop: DesktopBridge): Promise<DesktopProvider> {
+  const [codex, claude, openRouter] = await Promise.all([
+    desktop.codexAuthStatus().catch(() => null),
+    desktop.claudeAuthStatus().catch(() => null),
+    desktop.openRouterStatus().catch(() => null),
+  ]);
+  const selected = readSelectedDesktopProvider();
+  if (selected === "openai-codex" && codex?.state === "logged_in") return selected;
+  if (selected === "anthropic" && claude?.state === "logged_in") return selected;
+  if (codex?.state === "logged_in") return "openai-codex";
+  if (claude?.state === "logged_in") return "anthropic";
+  if (isConfiguredOpenRouter(openRouter)) return "openrouter";
+  if (codex?.state === "refresh_failed" || claude?.state === "refresh_failed")
+    throw new Error("Your desktop account needs to be reconnected before chatting.");
+  throw new Error(
+    "Connect Claude or OpenAI Codex in Account > API keys before starting a local chat.",
+  );
+}
+
+function isConfiguredOpenRouter(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || !("configured" in value)) return false;
+  return value.configured === true;
+}
+
+async function* runDesktopInspection(
+  desktop: DesktopBridge,
+  input: {
+    sessionId: string;
+    turnId: string;
+    question: string;
+    signal: AbortSignal;
+  },
+): AsyncGenerator<{ content: [{ type: "text"; text: string }] }, void> {
+  if (input.signal.aborted) {
+    await desktop.cancelLocalInspection(input.turnId).catch(() => {});
+    yield { content: [{ type: "text", text: "" }] };
+    return;
+  }
+
+  const provider = await resolveDesktopProvider(desktop);
+  let abortRequested = false;
+  let streamedText = "";
+  const unsubscribe = desktop.onInspectionEvent((message) => {
+    if (message.kind !== "event" || message.turnId !== input.turnId) return;
+    if (message.event.type === "assistant_text_delta" && message.event.text)
+      streamedText += message.event.text;
+  });
+  const onAbort = () => {
+    abortRequested = true;
+    void desktop.cancelLocalInspection(input.turnId).catch(() => {});
+  };
+  input.signal.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    const record = await desktop.runLocalInspection({
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      question: input.question,
+      posture: "inspect",
+      provider,
+    });
+    if (abortRequested || input.signal.aborted || record.status === "cancelled") {
+      yield { content: [{ type: "text", text: "" }] };
+      return;
+    }
+    if (record.status === "failed")
+      throw new Error(record.error ?? "The desktop inspection failed.");
+    yield {
+      content: [
+        {
+          type: "text",
+          text: record.finalText || streamedText || "The desktop inspection returned no answer.",
+        },
+      ],
+    };
+  } finally {
+    input.signal.removeEventListener("abort", onAbort);
+    unsubscribe();
+  }
 }
 
 /** Convert a resolved turn into the final yielded chunk, applying the same

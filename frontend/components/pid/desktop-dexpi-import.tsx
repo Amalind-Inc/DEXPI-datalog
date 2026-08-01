@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PrepareResult } from "@/components/pid/types";
 import { SESSION_KEY } from "@/lib/session-id";
-import type { ClaudeAuthState, CodexAuthState } from "@/lib/desktop-auth-types";
+import {
+  DESKTOP_CHAT_PROVIDER_KEY,
+  type ClaudeAuthState,
+  type CodexAuthState,
+} from "@/lib/desktop-auth-types";
 
 type OpenRouterState = {
   provider: "openrouter";
@@ -125,7 +129,9 @@ export function DesktopDexpiImport() {
         if (project.projectId) {
           window.localStorage.setItem(SESSION_KEY, project.projectId);
           void fetch(`/api/review/sessions/${encodeURIComponent(project.projectId)}/restore`)
-            .then(async (response) => (response.ok ? ((await response.json()) as PrepareResult) : null))
+            .then(async (response) =>
+              response.ok ? ((await response.json()) as PrepareResult) : null,
+            )
             .then((restored) => {
               if (restored && !cancelled)
                 applyPrepareResult({
@@ -175,7 +181,10 @@ export function DesktopDexpiImport() {
     }, 100);
     void desktop
       .codexLogin(method)
-      .then(setCodex)
+      .then((next) => {
+        setCodex(next);
+        if (next.state === "logged_in") selectDesktopChatProvider("openai-codex");
+      })
       .catch((error) => setStatus(error instanceof Error ? error.message : "Codex login failed."))
       .finally(() => window.clearInterval(poll));
   };
@@ -238,7 +247,10 @@ export function DesktopDexpiImport() {
             onClick={() =>
               void window.portlogDesktop
                 ?.claudeLogin()
-                .then(setClaude)
+                .then((next) => {
+                  setClaude(next);
+                  if (next.state === "logged_in") selectDesktopChatProvider("anthropic");
+                })
                 .catch((error) =>
                   setStatus(error instanceof Error ? error.message : "Claude login failed."),
                 )
@@ -475,6 +487,10 @@ export function DesktopDexpiImport() {
       ) : null}
     </div>
   );
+}
+
+function selectDesktopChatProvider(provider: "anthropic" | "openai-codex") {
+  window.localStorage.setItem(DESKTOP_CHAT_PROVIDER_KEY, provider);
 }
 
 function InspectionTimeline({

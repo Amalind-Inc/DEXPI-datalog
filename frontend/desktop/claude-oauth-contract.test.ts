@@ -84,6 +84,7 @@ test("pinned Anthropic callback exchanges a valid one-time code without putting 
     );
     assert.equal(callback.status, 200);
     const callbackBody = await callback.text();
+    assert.match(callbackBody, /PortLog is connected/);
     assert.doesNotMatch(callbackBody, /access-secret|refresh-secret/);
     const credentials = await login;
     assert.equal(credentials.access, "access-secret");

@@ -1,3 +1,4 @@
+export const DESKTOP_CHAT_PROVIDER_KEY = "portlog.desktop.chat-provider";
 export type OAuthProviderId = "anthropic" | "openai-codex";
 
 export type OAuthLifecycleState =
