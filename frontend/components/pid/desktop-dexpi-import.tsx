@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PrepareResult } from "@/components/pid/types";
+import { SESSION_KEY } from "@/lib/session-id";
 
 type OpenRouterState = {
   provider: "openrouter";
@@ -70,7 +71,12 @@ type InspectionMessage = {
   turnId: string;
   event: InspectionEvent;
 };
-type LocalProject = { turns?: InspectionRecord[]; error?: string };
+type LocalProject = {
+  projectId?: string;
+  source?: { filename?: string };
+  turns?: InspectionRecord[];
+  error?: string;
+};
 
 declare global {
   interface Window {
@@ -123,6 +129,7 @@ export function DesktopDexpiImport() {
     setSelectedNodeId,
   } = usePidGraph();
   const [status, setStatus] = useState<string | null>(null);
+  const [projectSessionId, setProjectSessionId] = useState<string | null>(null);
   const [openRouter, setOpenRouter] = useState<OpenRouterState | null>(null);
   const [claude, setClaude] = useState<ClaudeAuthState | null>(null);
   const [codex, setCodex] = useState<CodexAuthState | null>(null);
@@ -148,6 +155,19 @@ export function DesktopDexpiImport() {
         setClaude(claudeStatus);
         setCodex(codexStatus);
         setTurns(Array.isArray(project.turns) ? project.turns : []);
+        setProjectSessionId(project.projectId ?? null);
+        if (project.projectId) {
+          window.localStorage.setItem(SESSION_KEY, project.projectId);
+          void fetch(`/api/review/sessions/${encodeURIComponent(project.projectId)}/restore`)
+            .then(async (response) => (response.ok ? ((await response.json()) as PrepareResult) : null))
+            .then((restored) => {
+              if (restored && !cancelled)
+                applyPrepareResult({
+                  ...restored,
+                  filename: project.source?.filename ?? restored.filename,
+                });
+            });
+        }
       })
       .catch(() => {
         if (!cancelled) setOpenRouter(null);
@@ -204,7 +224,7 @@ export function DesktopDexpiImport() {
     setStatus("Inspecting prepared review…");
     try {
       const record = await window.portlogDesktop!.runLocalInspection({
-        sessionId,
+        sessionId: projectSessionId ?? sessionId,
         turnId,
         question: trimmed,
         posture: selectedPosture,
@@ -358,6 +378,7 @@ export function DesktopDexpiImport() {
               status: result.status,
               artifacts: { topology: `backend:${sessionId}/topology` },
             });
+            setProjectSessionId(sessionId);
             applyPrepareResult(result);
             setGraphOpen(true);
             setTurns([]);

@@ -77,6 +77,7 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
   // restore and must not be reported as a failure, and a session that cannot
   // be read must not overwrite the canvas with an empty plant.
   useEffect(() => {
+    if (typeof window !== "undefined" && window.portlogDesktop) return;
     let cancelled = false;
     void (async () => {
       try {

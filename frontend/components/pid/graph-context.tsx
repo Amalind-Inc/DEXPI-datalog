@@ -82,6 +82,7 @@ export function PidGraphProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.portlogDesktop) return;
     let cancelled = false;
     const restoreRevision = documentRevision.current;
     void fetch(`/api/review/sessions/${sessionId}/restore`).then(async (response) => {
