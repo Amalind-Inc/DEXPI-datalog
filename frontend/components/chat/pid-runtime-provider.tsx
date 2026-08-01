@@ -257,6 +257,16 @@ function PidRuntimeProvider({ children }: { children: ReactNode }) {
         }
         yield uploading(84);
         const result = JSON.parse(responseText) as PrepareResult;
+        const desktop = typeof window === "undefined" ? undefined : window.portlogDesktop;
+        if (desktop) {
+          await desktop.persistImportedProject({
+            sourceContent: content,
+            sessionId,
+            filename: file.name,
+            status: result.status,
+            artifacts: { topology: `backend:${sessionId}/topology` },
+          });
+        }
         endPidLatencyPhase("json_decode");
         setPidServerMetrics(result.serverMetrics ?? null);
         yield uploading(92);

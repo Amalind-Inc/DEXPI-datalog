@@ -58,7 +58,7 @@ declare global {
         content: string;
       } | null>;
       persistImportedProject(payload: {
-        sourcePath: string;
+        sourcePath?: string;
         sourceContent: string;
         sessionId: string;
         filename: string;

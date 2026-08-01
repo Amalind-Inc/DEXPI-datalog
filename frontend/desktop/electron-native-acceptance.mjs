@@ -198,6 +198,21 @@ try {
   await first.window
     .getByText("Hello from desktop chat without a prepared P&ID.")
     .waitFor({ state: "visible", timeout: 30_000 });
+  const uploadChooser = first.window.waitForEvent("filechooser");
+  await first.window.getByRole("button", { name: "Add Attachment" }).click();
+  await (await uploadChooser).setFiles(fixture);
+  await first.window
+    .getByText("Process document ready")
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await first.window
+    .getByLabel("Message input")
+    .fill("What equipment and connections are around P4711?");
+  await first.window.getByRole("button", { name: "Send message" }).click();
+  await first.window
+    .getByText(
+      "The prepared topology contains bounded evidence around P4711. See the selected evidence.",
+    )
+    .waitFor({ state: "visible", timeout: 30_000 });
   const preparationStarted = Date.now();
   await first.app.evaluate(({ dialog }, fixturePath) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixturePath] });

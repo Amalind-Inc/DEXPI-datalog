@@ -47,7 +47,6 @@ async function waitForSidecar() {
   throw new Error("PortLog local review sidecar did not become ready within 5 seconds");
 }
 
-
 async function availableLocalPort() {
   const listener = net.createServer();
   await new Promise((resolve, reject) => {
@@ -56,7 +55,8 @@ async function availableLocalPort() {
   });
   const address = listener.address();
   await new Promise((resolve) => listener.close(resolve));
-  if (!address || typeof address === "string") throw new Error("Could not allocate a local UI port");
+  if (!address || typeof address === "string")
+    throw new Error("Could not allocate a local UI port");
   return address.port;
 }
 
@@ -113,10 +113,7 @@ async function terminateChild(child) {
   ]);
   if (terminated || childHasExited(child)) return;
   child.kill("SIGKILL");
-  await Promise.race([
-    exit,
-    new Promise((resolve) => setTimeout(resolve, 2_000)),
-  ]);
+  await Promise.race([exit, new Promise((resolve) => setTimeout(resolve, 2_000))]);
 }
 
 async function stopPackagedUi() {
@@ -214,7 +211,11 @@ async function assertSidecarPortFree() {
     probe.once("connect", () => {
       clearTimeout(timer);
       probe.destroy();
-      reject(new Error("PortLog sidecar port 8000 is already in use; refuse to attach to an unowned process"));
+      reject(
+        new Error(
+          "PortLog sidecar port 8000 is already in use; refuse to attach to an unowned process",
+        ),
+      );
     });
     probe.once("error", (error) => {
       clearTimeout(timer);
@@ -279,7 +280,24 @@ async function migrateLegacyProjectIfNeeded() {
 }
 
 async function persistImportedProject(_event, payload) {
-  return persistLocalProject({ projectDirectory: projectDirectory(), ...payload });
+  const sourcePath =
+    typeof payload.sourcePath === "string" && payload.sourcePath.length > 0
+      ? payload.sourcePath
+      : await persistUploadedSource(payload);
+  return persistLocalProject({
+    projectDirectory: projectDirectory(),
+    ...payload,
+    sourcePath,
+  });
+}
+
+async function persistUploadedSource(payload) {
+  const filename =
+    String(payload.filename ?? "source.xml").replace(/[^a-zA-Z0-9._-]+/g, "_") || "source.xml";
+  const sourcePath = path.join(projectDirectory(), "sources", `${payload.sessionId}-${filename}`);
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await fs.writeFile(sourcePath, payload.sourceContent, { encoding: "utf8", mode: 0o600 });
+  return sourcePath;
 }
 
 async function loadCurrentProject() {
@@ -514,7 +532,9 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   app.isQuiting = true;
   for (const worker of activeInspections.values()) worker.kill("SIGTERM");
-  void stopSidecar().finally(() => stopPackagedUi()).finally(() => app.exit(0));
+  void stopSidecar()
+    .finally(() => stopPackagedUi())
+    .finally(() => app.exit(0));
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin" || process.env.PORTLOG_QUIT_ON_WINDOW_ALL_CLOSED === "1")
