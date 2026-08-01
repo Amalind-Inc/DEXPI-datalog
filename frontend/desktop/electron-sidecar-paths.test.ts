@@ -8,7 +8,7 @@ test("production Electron resolves packaged review sidecar resources", () => {
     resolveReviewSidecarPaths({ isPackaged: true, resourcesPath: "/Applications/PortLog.app/Contents/Resources", desktopDir: "/repo/frontend/desktop" }),
     {
       python: "/Applications/PortLog.app/Contents/Resources/review-sidecar/python/bin/python",
-      cwd: "/Applications/PortLog.app/Contents/Resources/review-sidecar/app",
+      cwd: "/Applications/PortLog.app/Contents/Resources/review-sidecar",
     },
   );
 });

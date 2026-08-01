@@ -14,7 +14,10 @@
     "lint": "oxlint && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt",
     "desktop:dev": "electron desktop/electron-main.cjs",
-    "test:desktop-native": "node desktop/electron-native-acceptance.mjs"
+    "test:desktop-native": "node desktop/electron-native-acceptance.mjs",
+    "desktop:package": "node ../scripts/package-macos-release.mjs",
+    "desktop:package:dir": "node ../scripts/package-macos-release.mjs",
+    "desktop:verify": "PORTLOG_RELEASE_STAGE=release/stage PORTLOG_ELECTRON_APP=release/electron-app node --test --experimental-strip-types desktop/electron-release.test.ts && node ../scripts/verify-macos-release.mjs && PORTLOG_RELEASE_APP=release/dist/mac-arm64/PortLog.app PORTLOG_RELEASE_RESULTS=release/journey-results.json node desktop/electron-native-acceptance.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
@@ -63,9 +66,11 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "oxfmt": "^0.55.0",
     "oxlint": "^1.70.0",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3"
-  }
+  },
+  "main": "desktop/electron-main.cjs"
 }
