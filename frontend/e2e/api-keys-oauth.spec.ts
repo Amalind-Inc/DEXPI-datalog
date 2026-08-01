@@ -1,12 +1,30 @@
 import { expect, test } from "@playwright/test";
 
-test("API keys page exposes desktop OAuth account controls", async ({ page }) => {
+test("API keys page exposes desktop OAuth account controls without hydration errors", async ({
+  page,
+}) => {
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (/(Hydration failed|Encountered a script tag)/i.test(message.text()))
+      hydrationErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    if (/(Hydration failed|Encountered a script tag)/i.test(error.message))
+      hydrationErrors.push(error.message);
+  });
   await page.addInitScript(() => {
     let claudeLoggedIn = false;
     let codexLoggedIn = false;
+    let selectedProvider: "anthropic" | "openai-codex" | null = null;
 
     Object.assign(window, {
+      __portlogSelectedProvider: () => selectedProvider,
       portlogDesktop: {
+        getSelectedChatProvider: async () => selectedProvider,
+        setSelectedChatProvider: async (provider: "anthropic" | "openai-codex" | null) => {
+          selectedProvider = provider;
+          return provider;
+        },
         claudeAuthStatus: async () => ({
           provider: "anthropic",
           state: claudeLoggedIn ? "logged_in" : "logged_out",
@@ -50,4 +68,19 @@ test("API keys page exposes desktop OAuth account controls", async ({ page }) =>
   await expect(page.getByTestId("desktop-oauth-select-anthropic")).toHaveText(
     "Selected for local chat",
   );
+  await page.getByRole("button", { name: "Connect OpenAI Codex" }).click();
+  await expect(page.getByTestId("desktop-oauth-status-openai-codex")).toContainText("Connected");
+  await expect(page.getByTestId("desktop-oauth-select-openai-codex")).toHaveText(
+    "Selected for local chat",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as Window & { __portlogSelectedProvider?: () => string | null }
+        ).__portlogSelectedProvider?.(),
+      ),
+    )
+    .toBe("openai-codex");
+  expect(hydrationErrors).toEqual([]);
 });

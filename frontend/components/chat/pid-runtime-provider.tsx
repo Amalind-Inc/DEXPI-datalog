@@ -331,12 +331,13 @@ function readSelectedDesktopProvider(): OAuthProviderId | null {
 }
 
 async function resolveDesktopProvider(desktop: DesktopBridge): Promise<DesktopProvider> {
-  const [codex, claude, openRouter] = await Promise.all([
+  const [codex, claude, openRouter, storedProvider] = await Promise.all([
     desktop.codexAuthStatus().catch(() => null),
     desktop.claudeAuthStatus().catch(() => null),
     desktop.openRouterStatus().catch(() => null),
+    desktop.getSelectedChatProvider?.().catch(() => null),
   ]);
-  const selected = readSelectedDesktopProvider();
+  const selected = storedProvider ?? readSelectedDesktopProvider();
   if (selected === "openai-codex" && codex?.state === "logged_in") return selected;
   if (selected === "anthropic" && claude?.state === "logged_in") return selected;
   // OpenRouter remains the deterministic local default unless the user has

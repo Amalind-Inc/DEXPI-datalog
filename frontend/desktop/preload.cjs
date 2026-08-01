@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld("portlogDesktop", {
     ipcRenderer.invoke("portlog:persist-imported-project", payload),
   loadCurrentProject: () => ipcRenderer.invoke("portlog:load-current-project"),
   openRouterStatus: () => ipcRenderer.invoke("portlog:openrouter-status"),
+  getSelectedChatProvider: () => ipcRenderer.invoke("portlog:get-selected-chat-provider"),
+  setSelectedChatProvider: (provider) =>
+    ipcRenderer.invoke("portlog:set-selected-chat-provider", provider),
   checkOpenRouter: () => ipcRenderer.invoke("portlog:check-openrouter"),
   claudeAuthStatus: () => ipcRenderer.invoke("portlog:claude-auth-status"),
   claudeLogin: () => ipcRenderer.invoke("portlog:claude-login"),

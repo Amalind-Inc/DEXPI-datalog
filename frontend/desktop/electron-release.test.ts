@@ -52,9 +52,10 @@ test("a completed release stage has no host-runtime dependency", { skip: !proces
   assert.ok(existsSync(join(stage, "review-sidecar", "python", "bin", "souffle")));
 });
 
-test("a completed Electron app stage includes both provider auth modules", { skip: !process.env.PORTLOG_ELECTRON_APP }, () => {
+test("a completed Electron app stage includes provider auth and chat-selection modules", { skip: !process.env.PORTLOG_ELECTRON_APP }, () => {
   const app = process.env.PORTLOG_ELECTRON_APP!;
   assert.ok(existsSync(join(app, "package.json")));
   assert.ok(existsSync(join(app, "desktop", "provider-auth-controller.cjs")));
   assert.ok(existsSync(join(app, "desktop", "provider-keychain.cjs")));
+  assert.ok(existsSync(join(app, "desktop", "desktop-chat-provider.cjs")));
 });

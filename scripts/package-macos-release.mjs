@@ -30,6 +30,7 @@ const runtimeFiles = [
   "claude-keychain.cjs",
   "codex-auth-controller.cjs",
   "codex-keychain.cjs",
+  "desktop-chat-provider.cjs",
   "provider-auth-controller.cjs",
   "provider-keychain.cjs",
   "local-project-manifest.cjs",

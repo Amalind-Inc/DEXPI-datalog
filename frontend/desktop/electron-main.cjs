@@ -20,6 +20,7 @@ const { createClaudeAuthController } = require("./claude-auth-controller.cjs");
 const { createMacOSClaudeKeychain } = require("./claude-keychain.cjs");
 const { createCodexAuthController } = require("./codex-auth-controller.cjs");
 const { createMacOSCodexKeychain } = require("./codex-keychain.cjs");
+const { createDesktopChatProviderStore } = require("./desktop-chat-provider.cjs");
 
 app.setName("PortLog");
 let desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
@@ -127,24 +128,21 @@ function repoRootForLocalRuntime() {
     desktopDir: __dirname,
   }).cwd;
 }
+function resolveCurrentOpenRouterEnv() {
+  return resolveOpenRouterEnv({
+    appIsPackaged: app.isPackaged,
+    repoRoot: repoRootForLocalRuntime(),
+    env: process.env,
+  });
+}
 
 function openRouterStatus() {
-  if (!openRouterEnv)
-    openRouterEnv = resolveOpenRouterEnv({
-      appIsPackaged: app.isPackaged,
-      repoRoot: repoRootForLocalRuntime(),
-      env: process.env,
-    });
+  openRouterEnv = resolveCurrentOpenRouterEnv();
   return redactedOpenRouterState(openRouterEnv);
 }
 
 async function checkOpenRouterConnection() {
-  if (!openRouterEnv)
-    openRouterEnv = resolveOpenRouterEnv({
-      appIsPackaged: app.isPackaged,
-      repoRoot: repoRootForLocalRuntime(),
-      env: process.env,
-    });
+  openRouterEnv = resolveCurrentOpenRouterEnv();
   return checkResolvedOpenRouterConnection({ resolved: openRouterEnv });
 }
 
@@ -299,6 +297,17 @@ async function persistUploadedSource(payload) {
   await fs.writeFile(sourcePath, payload.sourceContent, { encoding: "utf8", mode: 0o600 });
   return sourcePath;
 }
+function desktopChatProviderStore() {
+  return createDesktopChatProviderStore({ directory: app.getPath("userData") });
+}
+
+async function getSelectedChatProvider() {
+  return desktopChatProviderStore().load();
+}
+
+async function setSelectedChatProvider(_event, provider) {
+  return desktopChatProviderStore().save(provider ?? null);
+}
 
 async function loadCurrentProject() {
   try {
@@ -341,13 +350,8 @@ async function resolveLocalRuntime(requestedProvider) {
       baseUrl: "https://chatgpt.com/backend-api",
     };
   }
-  if (!openRouterEnv)
-    openRouterEnv = resolveOpenRouterEnv({
-      appIsPackaged: app.isPackaged,
-      repoRoot: repoRootForLocalRuntime(),
-      env: process.env,
-    });
   if (!runtime) {
+    openRouterEnv = resolveCurrentOpenRouterEnv();
     if (!openRouterEnv.configured || !openRouterEnv.credential)
       throw new Error("OpenRouter is not configured");
     runtime = {
@@ -518,6 +522,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:codex-login", (_event, method) => codexLogin(method));
   ipcMain.handle("portlog:codex-cancel-login", codexCancelLogin);
   ipcMain.handle("portlog:codex-logout", codexLogout);
+  ipcMain.handle("portlog:get-selected-chat-provider", getSelectedChatProvider);
+  ipcMain.handle("portlog:set-selected-chat-provider", setSelectedChatProvider);
   ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   ipcMain.handle("portlog:run-local-inspection", runLocalInspection);
   ipcMain.handle("portlog:run-local-chat", runLocalChat);

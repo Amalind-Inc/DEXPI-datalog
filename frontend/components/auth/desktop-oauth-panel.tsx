@@ -28,6 +28,7 @@ export function DesktopOAuthPanel() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
+  const [desktopReady, setDesktopReady] = useState(false);
 
   useEffect(() => {
     const desktop = getDesktop();
@@ -35,12 +36,20 @@ export function DesktopOAuthPanel() {
       setLoading(false);
       return;
     }
+    setDesktopReady(true);
     let cancelled = false;
-    void Promise.all([desktop.claudeAuthStatus(), desktop.codexAuthStatus()])
-      .then(([claudeStatus, codexStatus]) => {
+    const selectedProviderPromise =
+      desktop.getSelectedChatProvider?.().catch(() => null) ?? Promise.resolve(null);
+    void Promise.all([
+      desktop.claudeAuthStatus(),
+      desktop.codexAuthStatus(),
+      selectedProviderPromise,
+    ])
+      .then(([claudeStatus, codexStatus, storedProvider]) => {
+        if (cancelled) return;
         setClaude(claudeStatus);
         setCodex(codexStatus);
-        const saved = readSelectedProvider();
+        const saved = storedProvider ?? readSelectedProvider();
         setSelectedProvider(
           saved && isLoggedIn(saved === "anthropic" ? claudeStatus : codexStatus)
             ? saved
@@ -62,15 +71,19 @@ export function DesktopOAuthPanel() {
     };
   }, []);
 
-  if (typeof window === "undefined" || !window.portlogDesktop) return null;
+  if (!desktopReady) return null;
 
   const selectProvider = (provider: ProviderId) => {
     window.localStorage.setItem(DESKTOP_CHAT_PROVIDER_KEY, provider);
+    const persistence = getDesktop()?.setSelectedChatProvider?.(provider);
+    void persistence?.catch(() => undefined);
     setSelectedProvider(provider);
   };
   const forgetProvider = (provider: ProviderId) => {
     if (selectedProvider !== provider) return;
     window.localStorage.removeItem(DESKTOP_CHAT_PROVIDER_KEY);
+    const persistence = getDesktop()?.setSelectedChatProvider?.(null);
+    void persistence?.catch(() => undefined);
     setSelectedProvider(null);
   };
 

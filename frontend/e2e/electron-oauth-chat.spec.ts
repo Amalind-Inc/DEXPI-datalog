@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("Electron chat uses the authenticated local inspection bridge", async ({ page }) => {
+test("Electron chat routes a Codex OAuth account to the authenticated local inspection bridge", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const inspectionCalls: unknown[] = [];
     Object.assign(window, {
@@ -36,7 +38,7 @@ test("Electron chat uses the authenticated local inspection bridge", async ({ pa
         }),
         codexAuthStatus: async () => ({
           provider: "openai-codex",
-          state: "logged_out",
+          state: "logged_in",
           recoverable: true,
         }),
         codexLogin: async () => ({
@@ -46,7 +48,7 @@ test("Electron chat uses the authenticated local inspection bridge", async ({ pa
         }),
         codexCancelLogin: async () => ({
           provider: "openai-codex",
-          state: "logged_out",
+          state: "logged_in",
           recoverable: true,
         }),
         codexLogout: async () => ({
@@ -70,7 +72,7 @@ test("Electron chat uses the authenticated local inspection bridge", async ({ pa
             typeof payload.provider !== "string"
           )
             throw new Error("Unexpected local inspection payload");
-          if (payload.provider !== "anthropic")
+          if (payload.provider !== "openai-codex")
             throw new Error(`Unexpected desktop provider: ${payload.provider}`);
           return {
             turnId: payload.turnId,
@@ -78,9 +80,7 @@ test("Electron chat uses the authenticated local inspection bridge", async ({ pa
             question: payload.question,
             status: "completed",
             finalText: "Desktop inspection succeeded.",
-            evidenceIds: [],
-            events: [],
-            model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+            model: { provider: "openai-codex", id: "gpt-5.4" },
           };
         },
         cancelLocalInspection: async () => ({ cancelled: true }),

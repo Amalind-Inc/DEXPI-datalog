@@ -8,6 +8,7 @@ import {
   DESKTOP_CHAT_PROVIDER_KEY,
   type ClaudeAuthState,
   type CodexAuthState,
+  type OAuthProviderId,
 } from "@/lib/desktop-auth-types";
 
 type OpenRouterState = {
@@ -67,6 +68,8 @@ declare global {
       }): Promise<unknown>;
       loadCurrentProject(): Promise<LocalProject>;
       openRouterStatus(): Promise<OpenRouterState>;
+      getSelectedChatProvider?(): Promise<OAuthProviderId | null>;
+      setSelectedChatProvider?(provider: OAuthProviderId | null): Promise<OAuthProviderId | null>;
       claudeAuthStatus(): Promise<ClaudeAuthState>;
       claudeLogin(): Promise<ClaudeAuthState>;
       claudeCancelLogin(): Promise<ClaudeAuthState>;
