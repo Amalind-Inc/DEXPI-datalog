@@ -4,47 +4,13 @@ import { useEffect, useState } from "react";
 import { usePidGraph } from "@/components/pid/graph-context";
 import type { PrepareResult } from "@/components/pid/types";
 import { SESSION_KEY } from "@/lib/session-id";
+import type { ClaudeAuthState, CodexAuthState } from "@/lib/desktop-auth-types";
 
 type OpenRouterState = {
   provider: "openrouter";
   model: "deepseek/deepseek-v4-flash";
   credentialSource: "environment";
   configured: boolean;
-};
-type ClaudeAuthState = {
-  provider: "anthropic";
-  state:
-    | "logged_out"
-    | "opening_browser"
-    | "waiting_for_authorization"
-    | "logged_in"
-    | "refresh_failed"
-    | "cancelled";
-  recoverable: boolean;
-  error?: string;
-  expiresAt?: number;
-};
-type CodexAuthState = {
-  provider: "openai-codex";
-  state:
-    | "logged_out"
-    | "opening_browser"
-    | "waiting_for_authorization"
-    | "logged_in"
-    | "refresh_failed"
-    | "cancelled";
-  recoverable: boolean;
-  loginMethod?: "browser" | "device_code";
-  verificationUri?: string;
-  userCode?: string;
-  deviceCode?: {
-    userCode: string;
-    verificationUri: string;
-    expiresInSeconds?: number;
-    intervalSeconds?: number;
-  };
-  error?: string;
-  expiresAt?: number;
 };
 type InspectionEvent = {
   sequence: number;

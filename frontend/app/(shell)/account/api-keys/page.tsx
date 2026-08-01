@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DesktopOAuthPanel } from "@/components/auth/desktop-oauth-panel";
 import {
   type ByokStore,
   clearByokKey,
@@ -100,6 +101,7 @@ export default function ApiKeysPage() {
           Nothing is written to the server. Clearing your browser storage removes every key.
         </span>
       </p>
+      <DesktopOAuthPanel />
 
       {catalogError && (
         <p className="byok-message byok-message--bad" role="alert">
