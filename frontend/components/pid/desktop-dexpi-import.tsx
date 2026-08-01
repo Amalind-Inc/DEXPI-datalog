@@ -115,10 +115,12 @@ export function DesktopDexpiImport() {
   const [turns, setTurns] = useState<InspectionRecord[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<InspectionEvent[]>([]);
+  const [desktopReady, setDesktopReady] = useState(false);
 
   useEffect(() => {
     const desktop = typeof window === "undefined" ? undefined : window.portlogDesktop;
     if (!desktop) return;
+    setDesktopReady(true);
     let cancelled = false;
     void Promise.all([
       desktop.openRouterStatus(),
@@ -166,7 +168,7 @@ export function DesktopDexpiImport() {
     };
   }, [activeTurnId]);
 
-  if (typeof window === "undefined" || !window.portlogDesktop) return null;
+  if (!desktopReady) return null;
   const openRouterText = openRouter?.configured
     ? "OpenRouter / deepseek/deepseek-v4-flash / Configured"
     : "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.";

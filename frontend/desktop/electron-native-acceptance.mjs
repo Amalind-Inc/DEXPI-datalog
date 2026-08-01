@@ -72,7 +72,9 @@ const modelServer = http.createServer(async (request, response) => {
                     name: "portlog_evidence",
                     arguments: JSON.stringify({
                       artifactId: "topology",
-                      claim: "equipment and connections around P4711",
+                      claim: /what can you see/i.test(text)
+                        ? "overview of topology contents; list any visible equipment tags or identifiers"
+                        : "equipment and connections around P4711",
                     }),
                   },
             },
@@ -155,9 +157,22 @@ async function launchElectron(extraEnv = {}) {
       ? { executablePath: packagedExecutable, env }
       : { cwd: frontend, args: ["desktop/electron-main.cjs"], env },
   );
+  const hydrationErrors = [];
+  const observedPages = new WeakSet();
+  const observe = (page) => {
+    if (observedPages.has(page)) return;
+    observedPages.add(page);
+    const capture = (text) => {
+      if (/(Hydration failed|Encountered a script tag)/i.test(text)) hydrationErrors.push(text);
+    };
+    page.on("console", (message) => capture(message.text()));
+    page.on("pageerror", (error) => capture(error.message));
+  };
+  for (const page of app.windows()) observe(page);
+  app.on("window", observe);
   const window = await app.firstWindow();
   await window.getByRole("region", { name: "Chat" }).waitFor({ state: "visible", timeout: 30_000 });
-  return { app, window };
+  return { app, window, hydrationErrors };
 }
 
 async function closeElectron(instance) {
@@ -204,9 +219,7 @@ try {
   await first.window
     .getByText("Process document ready")
     .waitFor({ state: "visible", timeout: 30_000 });
-  await first.window
-    .getByLabel("Message input")
-    .fill("What equipment and connections are around P4711?");
+  await first.window.getByLabel("Message input").fill("What can you see?");
   await first.window.getByRole("button", { name: "Send message" }).click();
   await first.window
     .getByText(
@@ -352,6 +365,8 @@ try {
     throw new Error("Packaged launch unexpectedly attached to an occupied sidecar port");
   await waitForUnavailable("http://127.0.0.1:8000/openapi.json");
 
+  if (first.hydrationErrors.length > 0)
+    throw new Error(`Desktop assistant hydration errors: ${first.hydrationErrors.join(" | ")}`);
   const result = {
     ok: true,
     app: packagedApp || "development",

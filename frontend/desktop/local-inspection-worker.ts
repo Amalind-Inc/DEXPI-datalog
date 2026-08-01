@@ -153,13 +153,15 @@ function boundedTopologyEvidence(payload: unknown, claim: string) {
   const identifiers = Array.from(
     new Set(claim.match(/[A-Za-z]+[-_]?\d+(?:[-_.][A-Za-z0-9]+)*/g) ?? []),
   ).slice(0, 8);
-  const matched = nodes
-    .filter((node) =>
-      identifiers.some((identifier) =>
-        JSON.stringify(node).toLowerCase().includes(identifier.toLowerCase()),
-      ),
-    )
-    .slice(0, 12);
+  const matched = (
+    identifiers.length === 0
+      ? nodes
+      : nodes.filter((node) =>
+          identifiers.some((identifier) =>
+            JSON.stringify(node).toLowerCase().includes(identifier.toLowerCase()),
+          ),
+        )
+  ).slice(0, 12);
   const matchedIds = matched.map(readId).filter((id): id is string => id !== null);
   const relationships = edges
     .filter((edge) => matchedIds.some((id) => edgeTouches(edge, id)))

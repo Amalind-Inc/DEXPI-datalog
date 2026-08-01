@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/chat/app-shell";
 import {
@@ -24,10 +25,9 @@ const setSidebarWidthVarScript = `(function(){try{var raw=window.localStorage.ge
 export default function ShellLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <script
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: setSidebarWidthVarScript }}
-      />
+      <Script id="portlog-sidebar-width" strategy="beforeInteractive">
+        {setSidebarWidthVarScript}
+      </Script>
       <AppShell>{children}</AppShell>
     </>
   );
