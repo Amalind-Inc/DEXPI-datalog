@@ -242,6 +242,7 @@ async function runLocalInspection(event, payload) {
       sessionId: payload.sessionId,
       turnId: payload.turnId,
       question: payload.question,
+      posture: payload.posture,
       provider: runtime.provider,
       model: runtime.model,
       baseUrl: runtime.baseUrl,

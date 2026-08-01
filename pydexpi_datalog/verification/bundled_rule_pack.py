@@ -48,6 +48,7 @@ def evaluate_pack_rule(
     rule_id: str,
     direction_basis: str = "explicit",
     direction_review_status: str | None = None,
+    scope_entity_id: str | None = None,
 ) -> dict[str, object]:
     rule = next(
         (
@@ -61,7 +62,12 @@ def evaluate_pack_rule(
         raise ValueError(f"unknown rule: {pack['pack_id']}/{rule_id}")
 
     fence = str(rule["executable_logic"]["content"])
-    legacy = evaluate_rule_fence(graph_facts, rule_id=rule_id, fence=fence)
+    legacy = evaluate_rule_fence(
+        graph_facts,
+        rule_id=rule_id,
+        fence=fence,
+        scope_entity_id=scope_entity_id,
+    )
     outcome = {
         "pass": "satisfied",
         "hard_violation": "violated",

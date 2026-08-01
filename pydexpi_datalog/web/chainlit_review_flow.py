@@ -4,6 +4,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -38,6 +39,12 @@ from ..qa.topology_tools import TopologyTools
 from ..verification.bundled_rule_pack import (
     bundled_rule_packs,
     evaluate_pack_rule,
+)
+from ..verification.governed_check import (
+    CHECK_VERSION,
+    GovernedCheckExecutionError,
+    governed_check_cache_key,
+    run_governed_check,
 )
 from ..verification.pack_skill_context import (
     build_advisory_walkthrough,
@@ -176,6 +183,7 @@ class ChainlitReviewFlow:
         self._provider_settings_by_session: dict[str, dict[str, object]] = {}
         self._credentials_by_session: dict[str, str] = {}
         self._rule_pack_results_by_session: dict[str, list[dict[str, object]]] = {}
+        self._governed_check_cache: dict[str, dict[str, object]] = {}
         self._loaded_rule_packs_by_session: dict[str, set[str]] = {}
         self._loaded_rule_pack_data_by_session: dict[str, dict[str, dict[str, object]]] = (
             {}
@@ -671,6 +679,110 @@ class ChainlitReviewFlow:
         return {
             "session_id": session_id,
             "results": list(self._rule_pack_results_by_session.get(session_id, [])),
+        }
+
+    def execute_governed_check(
+        self,
+        *,
+        session_id: str,
+        check_id: str,
+        scope_entity_id: str,
+    ) -> dict[str, object]:
+        """Execute one scoped deterministic check and persist its audit result."""
+        topology = self._topology_for_session(session_id)
+        graph_facts = self._store.read_json(
+            session_artifact_keys(session_id)["graph_facts_json"]
+        )
+        readiness = self._store.read_json(f"{session_id}/readiness.json")
+        if not isinstance(graph_facts, dict) or not isinstance(readiness, dict):
+            raise ValueError("session.not_ready: prepared facts are unavailable")
+        document_digest = str(
+            readiness.get("source_id")
+            or topology.get("source_id")
+            or graph_facts.get("fixture_id")
+            or "unknown"
+        )
+        cache_key = governed_check_cache_key(
+            document_digest=document_digest,
+            check_id=check_id,
+            check_version=CHECK_VERSION,
+            parameters={"scope_entity_id": scope_entity_id},
+        )
+        cached = self._governed_check_cache.get(cache_key)
+        if cached is not None:
+            deterministic_result = deepcopy(cached)
+            deterministic_result["cache_provenance"] = {"hit": True, "key": cache_key}
+        else:
+            try:
+                deterministic_result = run_governed_check(
+                    graph_facts,
+                    check_id=check_id,
+                    scope_entity_id=scope_entity_id,
+                    document_digest=document_digest,
+                )
+            except GovernedCheckExecutionError as error:
+                raise ValueError(str(error)) from error
+            if deterministic_result.get("run_status") == "completed":
+                self._governed_check_cache[cache_key] = deepcopy(deterministic_result)
+
+        evidence = deterministic_result.get("evidence")
+        evidence = dict(evidence) if isinstance(evidence, dict) else {}
+        topology_ids_by_source = self._topology_ids_by_source_node_id(topology)
+        ordered_source_ids = [
+            str(item)
+            for item in evidence.get("ordered_entity_ids", [])
+            if isinstance(item, str)
+        ]
+        ordered_topology_ids = [
+            topology_ids_by_source[source_id]
+            for source_id in ordered_source_ids
+            if source_id in topology_ids_by_source
+        ]
+        evidence["ordered_topology_ids"] = ordered_topology_ids
+        deterministic_result["evidence"] = evidence
+        highlight = build_evidence_highlight_payload(
+            topology_view=topology,
+            source_scope_ids=ordered_topology_ids[:1],
+            matched_object_ids=ordered_topology_ids,
+            paths=([{"id": check_id, "node_ids": ordered_topology_ids, "edge_ids": []}] if ordered_topology_ids else []),
+        )
+        self._evidence_highlight_by_session[session_id] = highlight
+        evidence_items = [
+            {
+                "id": topology_id,
+                "source": "governed_check_result",
+                "check_id": check_id,
+                "label": _topology_object_label(topology=topology, topology_id=topology_id),
+                "topology_evidence": topology["evidence_map"][topology_id],
+            }
+            for topology_id in ordered_topology_ids
+        ]
+        result_artifact = {
+            "artifact_type": "governed_check_result",
+            "session_id": session_id,
+            "check_id": check_id,
+            "document_preparation_digest": deterministic_result.get("document_preparation_digest", document_digest),
+            "deterministic_result": deterministic_result,
+            "evidence": evidence_items,
+            "evidence_highlight": highlight,
+            "deterministic_inputs": self._artifacts_by_session[session_id],
+        }
+        result_path = self._write_result_artifact(
+            session_id=session_id,
+            result_artifact=result_artifact,
+            dirname="governed_check_results",
+            filename_prefix="governed_check_result",
+        )
+        return {
+            "status": "answered" if deterministic_result.get("run_status") == "completed" else "failed",
+            "session_id": session_id,
+            "check_id": check_id,
+            "deterministic_result": deterministic_result,
+            "evidence": {"display": "expandable", "items": evidence_items},
+            "evidence_highlight": highlight,
+            "model_interpretation": None,
+            "result_artifact": {"kind": "governed_check_result", "path": str(result_path)},
+            "diagnostics": deterministic_result.get("diagnostics", []),
         }
 
     def execute_selected_rule_pack_query(

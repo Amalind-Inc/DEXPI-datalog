@@ -53,6 +53,7 @@ def evaluate_rule_fence(
     *,
     rule_id: str,
     fence: str,
+    scope_entity_id: str | None = None,
 ) -> dict[str, object]:
     """Evaluate a Souffle fence that emits the rule outcome convention.
 
@@ -60,9 +61,22 @@ def evaluate_rule_fence(
     (displayed == executed). Outcomes and evidence are assembled only from the
     fixed convention relations — no per-rule_id Python adapter is consulted.
     """
+    scope_ids = (
+        [scope_entity_id]
+        if scope_entity_id is not None
+        else [
+            str(node["node_id"])
+            for node in graph_facts["facts"]["nodes"]
+            if node["attributes"].get("label") == "CentrifugalPump"
+        ]
+    )
+    scope_facts = ".decl portlog_scope(id:symbol)\n" + "\n".join(
+        f'portlog_scope("{scope_id}").' for scope_id in sorted(scope_ids)
+    ) + "\n"
     program = (
         build_graph_facts_datalog(graph_facts)
         + "\n"
+        + scope_facts
         + load_graph_topology_idb()
         + "\n"
         + fence

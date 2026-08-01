@@ -56,21 +56,30 @@ type InspectionEvent = {
 };
 type InspectionRecord = {
   turnId: string;
-  posture: "inspect";
+  posture: "inspect" | "verify";
   question: string;
   status: "active" | "completed" | "cancelled" | "failed";
   finalText: string;
   evidenceIds: string[];
+  deterministicChecks?: Record<string, unknown>[];
   events: InspectionEvent[];
   error?: string;
 };
-type InspectionMessage = { kind: "event"; turnId: string; event: InspectionEvent };
+type InspectionMessage = {
+  kind: "event";
+  turnId: string;
+  event: InspectionEvent;
+};
 type LocalProject = { turns?: InspectionRecord[]; error?: string };
 
 declare global {
   interface Window {
     portlogDesktop?: {
-      selectDexpiSource(): Promise<{ path: string; filename: string; content: string } | null>;
+      selectDexpiSource(): Promise<{
+        path: string;
+        filename: string;
+        content: string;
+      } | null>;
       persistImportedProject(payload: {
         sourcePath: string;
         sourceContent: string;
@@ -94,6 +103,7 @@ declare global {
         sessionId: string;
         turnId: string;
         question: string;
+        posture?: "inspect" | "verify";
         provider?: "openrouter" | "anthropic" | "openai-codex";
       }): Promise<InspectionRecord>;
       cancelLocalInspection(turnId: string): Promise<{ cancelled: boolean }>;
@@ -117,6 +127,7 @@ export function DesktopDexpiImport() {
   const [claude, setClaude] = useState<ClaudeAuthState | null>(null);
   const [codex, setCodex] = useState<CodexAuthState | null>(null);
   const [question, setQuestion] = useState("What equipment and connections are around P4711?");
+  const [posture, setPosture] = useState<"inspect" | "verify">("inspect");
   const [turns, setTurns] = useState<InspectionRecord[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<InspectionEvent[]>([]);
@@ -185,6 +196,7 @@ export function DesktopDexpiImport() {
 
   const runInspection = async (retry?: InspectionRecord) => {
     const trimmed = (retry?.question ?? question).trim();
+    const selectedPosture = retry?.posture ?? posture;
     if (!trimmed || !loadedFileName || !canInspect) return;
     const turnId = retry?.turnId ?? crypto.randomUUID();
     setActiveTurnId(turnId);
@@ -195,6 +207,7 @@ export function DesktopDexpiImport() {
         sessionId,
         turnId,
         question: trimmed,
+        posture: selectedPosture,
         provider: codexConnected ? "openai-codex" : claudeConnected ? "anthropic" : "openrouter",
       });
       setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
@@ -330,7 +343,10 @@ export function DesktopDexpiImport() {
             const response = await fetch(`/api/review/sessions/${sessionId}/prepare`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ filename: source.filename, content: source.content }),
+              body: JSON.stringify({
+                filename: source.filename,
+                content: source.content,
+              }),
             });
             if (!response.ok) throw new Error(`Import failed (${response.status})`);
             const result = (await response.json()) as PrepareResult;
@@ -367,6 +383,15 @@ export function DesktopDexpiImport() {
               disabled={Boolean(activeTurnId)}
               className="min-w-0 flex-1 border px-2 py-1"
             />
+            <select
+              aria-label="Review posture"
+              value={posture}
+              onChange={(event) => setPosture(event.target.value as "inspect" | "verify")}
+              disabled={Boolean(activeTurnId)}
+            >
+              <option value="inspect">Inspect</option>
+              <option value="verify">Verify</option>
+            </select>
             <button
               type="button"
               onClick={() => void runInspection()}
@@ -395,10 +420,48 @@ export function DesktopDexpiImport() {
           {[...turns].reverse().map((turn) => (
             <article key={turn.turnId} data-testid="desktop-inspection-turn" className="border p-2">
               <p>
-                <strong>Inspect</strong> · {turn.status}
+                <strong>{turn.posture === "verify" ? "Verify" : "Inspect"}</strong> · {turn.status}
               </p>
               <p>{turn.question}</p>
-              {turn.finalText ? <p>{turn.finalText}</p> : null}
+              {turn.deterministicChecks?.map((check, index) => (
+                <section
+                  key={`${turn.turnId}-check-${index}`}
+                  aria-label="Deterministic verification result"
+                  data-testid="deterministic-check-result"
+                  className="border p-2"
+                >
+                  <p>
+                    <strong>Deterministic result</strong> ·{" "}
+                    {String(check.check_id ?? "unknown check")}
+                  </p>
+                  <p>
+                    Status: {String(check.run_status ?? "unknown")} · Outcome:{" "}
+                    {String(check.outcome ?? "No outcome")}
+                  </p>
+                  {check.reason_code ? <p>Reason: {String(check.reason_code)}</p> : null}
+                  <details>
+                    <summary>Rule and evidence trace</summary>
+                    <pre>
+                      {JSON.stringify(
+                        {
+                          required_facts: check.required_facts,
+                          evidence: check.evidence,
+                        },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </details>
+                </section>
+              ))}
+              {turn.finalText ? (
+                <section aria-label="Model interpretation">
+                  <p>
+                    <strong>Model interpretation</strong>
+                  </p>
+                  <p>{turn.finalText}</p>
+                </section>
+              ) : null}
               {turn.error ? <p role="alert">{turn.error}</p> : null}
               <InspectionTimeline
                 events={turn.events}
@@ -412,6 +475,7 @@ export function DesktopDexpiImport() {
                   type="button"
                   onClick={() => {
                     setQuestion(turn.question);
+                    setPosture(turn.posture);
                     void runInspection(turn);
                   }}
                 >
@@ -474,7 +538,12 @@ function readEvidenceIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(readEvidenceIds);
   if (!value || typeof value !== "object") return [];
   const record = value as Record<string, unknown>;
-  const direct = [record.citations, record.evidenceIds, record.evidence_ids]
+  const direct = [
+    record.citations,
+    record.evidenceIds,
+    record.evidence_ids,
+    record.ordered_topology_ids,
+  ]
     .flatMap((candidate) => (Array.isArray(candidate) ? candidate : []))
     .filter((candidate): candidate is string => typeof candidate === "string");
   return Array.from(new Set([...direct, ...Object.values(record).flatMap(readEvidenceIds)]));

@@ -41,7 +41,7 @@ off_page_class("FlowOutPipeOffPageConnector").
 off_page_class("FlowInPipeOffPageConnector").
 
 .decl pump(id:symbol)
-pump(id) :- node_label(id, "CentrifugalPump").
+pump(id) :- node_label(id, "CentrifugalPump"), portlog_scope(id).
 
 // Nozzles composed on a pump, restricted to those referenced as a
 // segment's sourceItem (i.e. the discharge side).

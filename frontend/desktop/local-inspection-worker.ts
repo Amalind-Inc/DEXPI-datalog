@@ -9,6 +9,7 @@ type WorkerRequest = {
   sessionId: string;
   turnId: string;
   question: string;
+  posture?: "inspect" | "verify";
   sidecarEndpoint: string;
   provider?: "openrouter" | "anthropic" | "openai-codex";
   model?: string;
@@ -61,7 +62,13 @@ try {
               : provider === "openai-codex"
                 ? "openai-codex-responses"
                 : "openai-completions",
-          models: [{ id: model, reasoning: provider === "openai-codex", input: ["text"] }],
+          models: [
+            {
+              id: model,
+              reasoning: provider === "openai-codex",
+              input: ["text"],
+            },
+          ],
         },
       },
     }),
@@ -70,6 +77,7 @@ try {
     projectDirectory: request.projectDirectory,
     turnId: request.turnId,
     question: request.question,
+    posture: request.posture,
     model: { provider, id: model },
     signal: controller.signal,
     agentDir,
@@ -82,7 +90,10 @@ try {
           citations: [],
           sourceScopeIds: [],
           diagnostics: [
-            { code: "unsupported_artifact", message: "Only the prepared topology is available." },
+            {
+              code: "unsupported_artifact",
+              message: "Only the prepared topology is available.",
+            },
           ],
           uncertainty: "Evidence is insufficient.",
         };
@@ -92,6 +103,25 @@ try {
       );
       if (!response.ok) throw new Error(`Prepared topology is unavailable (${response.status})`);
       return boundedTopologyEvidence(await response.json(), claim);
+    },
+    getRuleCheck: async ({ checkId, scopeEntityId, signal }) => {
+      const response = await fetch(
+        `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/governed-checks`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            check_id: checkId,
+            scope_entity_id: scopeEntityId,
+          }),
+          signal: signal ?? controller.signal,
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Governed rule check rejected (${response.status}): ${body.slice(0, 500)}`);
+      }
+      return await response.json();
     },
   });
   send({ kind: "result", record });

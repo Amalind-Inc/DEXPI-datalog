@@ -149,3 +149,120 @@ test("controlled Pi model-tool-model journey becomes a reconstructable PortLog I
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("controlled Verify journey keeps the Soufflé outcome separate from model prose", async () => {
+  let modelRequests = 0;
+  const server = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    if (modelRequests === 1) {
+      sse(response, {
+        id: "verify-tool",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "check-1",
+                  type: "function",
+                  function: {
+                    name: "portlog_rule_check",
+                    arguments: JSON.stringify({
+                      checkId: "pump_discharge_check_valve",
+                      scopeEntityId: "CentrifugalPump-1",
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else {
+      sse(response, {
+        id: "verify-answer",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: "The model thinks the check is satisfied.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
+    response.end("data: [DONE]\n\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const root = await mkdtemp(join(tmpdir(), "portlog-local-verify-pi-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await writeFile(
+    join(root, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+  try {
+    await persistLocalProject({
+      projectDirectory,
+      sourcePath,
+      sourceContent: "<PlantModel />",
+      sessionId: "verify-c01",
+      filename: "C01.xml",
+      status: "ready",
+    });
+    const record = await runLocalReviewInspection({
+      projectDirectory,
+      turnId: "verify-pi-turn",
+      posture: "verify",
+      question: "Does pump P-101 have a check valve on its first discharge segment?",
+      model: { provider: "portlog-test", id: "review-model" },
+      signal: new AbortController().signal,
+      agentDir: root,
+      cwd: root,
+      getEvidence: async () => ({ citations: [] }),
+      getRuleCheck: async ({ checkId, scopeEntityId }) => ({
+        deterministic_result: {
+          check_id: checkId,
+          check_version: "1",
+          run_status: "completed",
+          outcome: "violated",
+          reason_code: "no_check_valve_on_complete_segment",
+          evidence: { ordered_topology_ids: [scopeEntityId, "N-1"] },
+        },
+      }),
+    });
+    assert.equal(modelRequests, 2);
+    assert.equal(record.posture, "verify");
+    assert.equal(record.deterministicChecks[0].outcome, "violated");
+    assert.match(record.finalText, /PortLog deterministic check.*violated/);
+    assert.doesNotMatch(record.finalText, /model thinks the check is satisfied/i);
+    assert.deepEqual(
+      record.events.filter((event) => event.type.startsWith("tool_")).map((event) => event.type),
+      ["tool_request", "tool_result"],
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});

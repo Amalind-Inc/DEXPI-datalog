@@ -13,6 +13,12 @@ export interface EvidenceRequest {
   signal: AbortSignal | undefined;
 }
 
+export interface RuleCheckRequest {
+  checkId: string;
+  scopeEntityId: string;
+  signal: AbortSignal | undefined;
+}
+
 export interface GovernedPiReviewTurnOptions {
   agentDir: string;
   cwd: string;
@@ -21,6 +27,7 @@ export interface GovernedPiReviewTurnOptions {
   signal: AbortSignal;
   apiKey?: string;
   getEvidence(request: EvidenceRequest): Promise<unknown>;
+  getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
 }
 
 type PortLogModelEntry = {
@@ -59,19 +66,56 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
     name: "portlog_evidence",
     label: "PortLog evidence",
     description: "Retrieve bounded, read-only evidence from the prepared PortLog review.",
-    parameters: Type.Object({ artifactId: Type.String(), claim: Type.String() }),
+    parameters: Type.Object({
+      artifactId: Type.String(),
+      claim: Type.String(),
+    }),
     executionMode: "sequential" as const,
     async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
       if (!isEvidenceParams(params)) throw new Error("Invalid PortLog evidence arguments");
-      const result = await options.getEvidence({ ...params, signal: options.signal });
+      const result = await options.getEvidence({
+        ...params,
+        signal: options.signal,
+      });
       if (options.signal.aborted || signal?.aborted)
         throw new DOMException("Inspection cancelled", "AbortError");
-      return { content: [{ type: "text" as const, text: JSON.stringify(result) }], details: {} };
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result) }],
+        details: {},
+      };
     },
   };
 
+  const ruleCheckTool = options.getRuleCheck
+    ? {
+        name: "portlog_rule_check",
+        label: "PortLog deterministic rule check",
+        description:
+          "Run the named PortLog verification check over one review entity. This tool cannot accept Datalog or change rule parameters.",
+        parameters: Type.Object({
+          checkId: Type.String(),
+          scopeEntityId: Type.String(),
+        }),
+        executionMode: "sequential" as const,
+        async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
+          if (!isRuleCheckParams(params)) throw new Error("Invalid PortLog rule-check arguments");
+          const result = await options.getRuleCheck?.({
+            checkId: params.checkId,
+            scopeEntityId: params.scopeEntityId,
+            signal: options.signal,
+          });
+          if (options.signal.aborted || signal?.aborted)
+            throw new DOMException("Inspection cancelled", "AbortError");
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(result) }],
+            details: {},
+          };
+        },
+      }
+    : null;
+  const tools = ruleCheckTool ? [evidenceTool, ruleCheckTool] : [evidenceTool];
   const agent = new Agent({
-    initialState: { model: model.value, tools: [evidenceTool] },
+    initialState: { model: model.value, tools },
     toolExecution: "sequential",
     getApiKey: () => apiKey,
     streamFn: (selectedModel, context, streamOptions) => {
@@ -134,6 +178,15 @@ async function readPortLogModel(options: GovernedPiReviewTurnOptions): Promise<{
       maxTokens: entry.maxTokens ?? 8_192,
     } as PortLogModel,
   };
+}
+
+function isRuleCheckParams(value: unknown): value is { checkId: string; scopeEntityId: string } {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).checkId === "string" &&
+    typeof (value as Record<string, unknown>).scopeEntityId === "string"
+  );
 }
 
 function isEvidenceParams(value: unknown): value is { artifactId: string; claim: string } {

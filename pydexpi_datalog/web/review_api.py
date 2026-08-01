@@ -27,7 +27,6 @@ from ..qa.grounded_qa_harness import (
 )
 from ..qa.ollama_qa_provider import OllamaQATurnProvider
 from ..qa.openai_compatible_qa_provider import OpenAICompatibleQATurnProvider
-from ..workflow.render_bundle import RENDER_BUNDLE_SCHEMA_VERSION
 from ..verification.authored_rule_pack import (
     AuthoredRulePackError,
     AuthoredRulePackStore,
@@ -36,6 +35,7 @@ from ..verification.bundled_rule_pack import bundled_rule_packs
 from ..workflow.artifact_store import ArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.provider_keys import ProviderKeyStore
+from ..workflow.render_bundle import RENDER_BUNDLE_SCHEMA_VERSION
 from ..workflow.review_session import PreparationLimits
 from .chainlit_review_flow import ChainlitReviewFlow
 from .deployment import (
@@ -578,6 +578,22 @@ def create_review_api_app(
                 session_id=session_id,
                 pack_id=str(body.get("pack_id", "demo-process-safety")),
                 rule_id=_required_string(body, "rule_id"),
+            )
+        )
+
+    @app.post("/api/review/sessions/{session_id}/governed-checks")
+    def execute_governed_check(
+        session_id: str,
+        body: dict[str, object],
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        check_id = _required_string(body, "check_id")
+        scope_entity_id = _required_string(body, "scope_entity_id")
+        return _call_ready(
+            lambda: ws.flow.execute_governed_check(
+                session_id=session_id,
+                check_id=check_id,
+                scope_entity_id=scope_entity_id,
             )
         )
 

@@ -1,21 +1,33 @@
-import { createGovernedPiReviewTurn, type EvidenceRequest } from "./pi-turn-adapter.ts";
+import {
+  createGovernedPiReviewTurn,
+  type EvidenceRequest,
+  type RuleCheckRequest,
+} from "./pi-turn-adapter.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
 
 export type LocalInspectionEvent =
   | { type: "turn_started" }
   | { type: "assistant_text_delta"; text: string }
-  | { type: "tool_request"; callId: string; tool: string; arguments: Record<string, unknown> }
+  | {
+      type: "tool_request";
+      callId: string;
+      tool: string;
+      arguments: Record<string, unknown>;
+    }
   | { type: "tool_result"; callId: string; tool: string; result: unknown }
   | { type: "turn_completed" }
   | { type: "turn_cancelled" }
   | { type: "turn_failed"; message: string };
 
-type StoredEvent = LocalInspectionEvent & { sequence: number; timestamp: string };
+type StoredEvent = LocalInspectionEvent & {
+  sequence: number;
+  timestamp: string;
+};
 
 export interface LocalInspectionRecord {
   schemaVersion: 1;
   turnId: string;
-  posture: "inspect";
+  posture: "inspect" | "verify";
   question: string;
   status: "active" | "completed" | "cancelled" | "failed";
   model: { provider: string; id: string };
@@ -23,6 +35,7 @@ export interface LocalInspectionRecord {
   completedAt?: string;
   finalText: string;
   evidenceIds: string[];
+  deterministicChecks: Record<string, unknown>[];
   events: StoredEvent[];
   error?: string;
 }
@@ -37,10 +50,13 @@ interface CreateTurnOptions {
   emit(
     event: Exclude<
       LocalInspectionEvent,
-      { type: "turn_started" | "turn_completed" | "turn_cancelled" | "turn_failed" }
+      {
+        type: "turn_started" | "turn_completed" | "turn_cancelled" | "turn_failed";
+      }
     >,
   ): void;
   getEvidence(request: Omit<EvidenceRequest, "signal">): Promise<unknown>;
+  getRuleCheck?(request: RuleCheckRequest): Promise<unknown>;
 }
 
 type CreateTurn = (options: CreateTurnOptions) => Promise<TurnRuntime>;
@@ -49,9 +65,11 @@ export interface RunLocalReviewInspectionOptions {
   projectDirectory: string;
   turnId: string;
   question: string;
+  posture?: "inspect" | "verify";
   model: { provider: string; id: string };
   signal: AbortSignal;
   getEvidence(request: Omit<EvidenceRequest, "signal">): Promise<unknown>;
+  getRuleCheck?(request: RuleCheckRequest): Promise<unknown>;
   createTurn?: CreateTurn;
   agentDir?: string;
   cwd?: string;
@@ -67,13 +85,14 @@ export async function runLocalReviewInspection(
   const record: LocalInspectionRecord = {
     schemaVersion: 1,
     turnId: options.turnId,
-    posture: "inspect",
+    posture: options.posture ?? "inspect",
     question: options.question,
     status: "active",
     model: options.model,
     startedAt: now().toISOString(),
     finalText: "",
     evidenceIds: [],
+    deterministicChecks: [],
     events: [],
   };
 
@@ -86,8 +105,18 @@ export async function runLocalReviewInspection(
     record.events.push(stored);
     options.onEvent?.(stored);
     if (event.type === "assistant_text_delta") record.finalText += event.text;
-    if (event.type === "tool_result")
+    if (event.type === "tool_result") {
       record.evidenceIds = unique([...record.evidenceIds, ...readEvidenceIds(event.result)]);
+      const checks = readDeterministicChecks(event.result);
+      for (const check of checks) {
+        if (
+          !record.deterministicChecks.some(
+            (existing) => JSON.stringify(existing) === JSON.stringify(check),
+          )
+        )
+          record.deterministicChecks.push(check);
+      }
+    }
   };
   append({ type: "turn_started" });
   await upsertLocalTurn(options.projectDirectory, record);
@@ -103,16 +132,36 @@ export async function runLocalReviewInspection(
   };
 
   try {
-    runtime = await createTurn({ emit: append, getEvidence });
+    runtime = await createTurn({
+      emit: append,
+      getEvidence,
+      getRuleCheck: options.getRuleCheck,
+    });
     if (options.signal.aborted) await runtime.abort();
     else options.signal.addEventListener("abort", abort, { once: true });
 
-    await runtime.prompt(inspectPrompt(options.question));
+    await runtime.prompt(
+      record.posture === "verify"
+        ? verifyPrompt(options.question)
+        : inspectPrompt(options.question),
+    );
     if (options.signal.aborted) throw abortError();
-    if (/\b(satisfied|violated)\b/i.test(record.finalText)) {
+    const deterministicCheck = record.deterministicChecks.at(-1);
+    if (record.posture === "inspect" && /\b(satisfied|violated)\b/i.test(record.finalText)) {
       record.finalText =
         "Evidence is insufficient to provide a verification verdict in Inspect posture.";
     } else if (
+      record.posture === "verify" &&
+      (!deterministicCheck ||
+        deterministicCheck.run_status !== "completed" ||
+        !isVerificationOutcome(deterministicCheck.outcome))
+    ) {
+      record.finalText =
+        "The deterministic verification check did not complete, so no engineering outcome is available.";
+    } else if (record.posture === "verify") {
+      record.finalText = restateDeterministicCheck(deterministicCheck!);
+    } else if (
+      record.posture === "inspect" &&
       record.evidenceIds.length === 0 &&
       !/evidence is insufficient/i.test(record.finalText)
     ) {
@@ -154,6 +203,7 @@ async function createPiRuntime(
     signal: options.signal,
     apiKey: options.apiKey,
     getEvidence: ({ artifactId, claim }) => bridge.getEvidence({ artifactId, claim }),
+    getRuleCheck: options.getRuleCheck ? (request) => options.getRuleCheck!(request) : undefined,
   });
   const unsubscribe = review.subscribe((event) => {
     const normalized = normalizePiEvent(event);
@@ -207,14 +257,57 @@ function readPiToolResult(value: unknown): unknown {
   }
 }
 
+function restateDeterministicCheck(check: Record<string, unknown>) {
+  const evidence = isRecord(check.evidence) ? check.evidence : {};
+  const evidenceIds = Array.isArray(evidence.ordered_topology_ids)
+    ? evidence.ordered_topology_ids.filter((id): id is string => typeof id === "string")
+    : [];
+  const checkId = typeof check.check_id === "string" ? check.check_id : "unknown";
+  const outcome = typeof check.outcome === "string" ? check.outcome : "indeterminate";
+  const reason = typeof check.reason_code === "string" ? " Reason: " + check.reason_code + "." : "";
+  const trace = evidenceIds.length ? " Evidence: " + evidenceIds.join(" -> ") + "." : "";
+  return "PortLog deterministic check " + checkId + ": " + outcome + "." + reason + trace;
+}
+function isVerificationOutcome(
+  value: unknown,
+): value is "satisfied" | "violated" | "indeterminate" {
+  return value === "satisfied" || value === "violated" || value === "indeterminate";
+}
+
+function verifyPrompt(question: string) {
+  return [
+    "You are in Verify posture. For the supported pump discharge check, use only the PortLog deterministic rule-check capability.",
+    'Call portlog_rule_check with checkId exactly "pump_discharge_check_valve" and scopeEntityId equal to the pump entity identifier from the question or prepared evidence.',
+    "Never write Datalog, choose a rule, infer an outcome, or alter deterministic fields.",
+    "After the tool returns, explain the PortLog-owned deterministic_result separately; do not present model prose as the outcome.",
+    "If the check fails or is indeterminate, say so honestly.",
+    "",
+    `User question: ${question}`,
+  ].join("\n");
+}
+
 function inspectPrompt(question: string) {
   return `You are in Inspect posture. Use only the available PortLog read-only evidence capability. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
+}
+
+function readDeterministicChecks(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.flatMap(readDeterministicChecks);
+  if (!isRecord(value)) return [];
+  const direct = value.deterministic_result;
+  return isRecord(direct) && typeof direct.check_id === "string"
+    ? [direct]
+    : Object.values(value).flatMap(readDeterministicChecks);
 }
 
 function readEvidenceIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(readEvidenceIds);
   if (!isRecord(value)) return [];
-  const direct = [value.citations, value.evidenceIds, value.evidence_ids]
+  const direct = [
+    value.citations,
+    value.evidenceIds,
+    value.evidence_ids,
+    value.ordered_topology_ids,
+  ]
     .flatMap((candidate) => (Array.isArray(candidate) ? candidate : []))
     .filter((candidate): candidate is string => typeof candidate === "string");
   return [...direct, ...Object.values(value).flatMap(readEvidenceIds)];
