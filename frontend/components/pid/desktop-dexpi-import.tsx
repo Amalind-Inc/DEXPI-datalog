@@ -126,6 +126,10 @@ export function DesktopDexpiImport() {
         setCodex(codexStatus);
         setTurns(Array.isArray(project.turns) ? project.turns : []);
         setProjectSessionId(project.projectId ?? null);
+        if (project.error)
+          setStatus(
+            "This prepared view has no local project manifest. Re-import the DEXPI file to enable inspection.",
+          );
         if (project.projectId) {
           window.localStorage.setItem(SESSION_KEY, project.projectId);
           void fetch(`/api/review/sessions/${encodeURIComponent(project.projectId)}/restore`)
@@ -161,8 +165,18 @@ export function DesktopDexpiImport() {
     : "OpenRouter is not configured. Add OPENROUTER_API_KEY to the local .env file and relaunch PortLog.";
   const claudeConnected = claude?.state === "logged_in";
   const codexConnected = codex?.state === "logged_in";
-  const canInspect = claudeConnected || codexConnected || Boolean(openRouter?.configured);
-
+  const projectReady = Boolean(projectSessionId);
+  const canInspect =
+    projectReady && (claudeConnected || codexConnected || Boolean(openRouter?.configured));
+  const selectedProvider = readSelectedDesktopProvider();
+  const activeLocalModel =
+    selectedProvider === "anthropic" && claudeConnected
+      ? "Claude / claude-sonnet-4-5"
+      : selectedProvider === "openai-codex" && codexConnected
+        ? "OpenAI Codex / gpt-5.4"
+        : openRouter?.configured
+          ? "OpenRouter / deepseek/deepseek-v4-flash"
+          : "No local model selected";
   const startCodexLogin = (method: "browser" | "device_code") => {
     const desktop = window.portlogDesktop;
     if (!desktop) return;
@@ -197,7 +211,6 @@ export function DesktopDexpiImport() {
     setActiveTurnId(turnId);
     setLiveEvents([]);
     setStatus("Inspecting prepared review…");
-    const selectedProvider = readSelectedDesktopProvider();
     try {
       const record = await window.portlogDesktop!.runLocalInspection({
         sessionId: projectSessionId ?? sessionId,
@@ -342,6 +355,15 @@ export function DesktopDexpiImport() {
         {codex?.error ? <p role="alert">{codex.error}</p> : null}
       </section>
       <p data-testid="desktop-openrouter-status">{openRouterText}</p>
+      <p data-testid="desktop-active-local-model">
+        Local chat model: <strong>{activeLocalModel}</strong>. Choose a connected account in{" "}
+        <a href="/account/api-keys">Account → API keys</a>.
+      </p>
+      {loadedFileName && !projectReady ? (
+        <p role="status">
+          Re-import the DEXPI file to create the local project manifest before inspecting it.
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={async () => {
