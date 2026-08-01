@@ -345,7 +345,12 @@ export function DesktopDexpiImport() {
       <button
         type="button"
         onClick={async () => {
-          const source = await window.portlogDesktop?.selectDexpiSource();
+          const desktop = window.portlogDesktop;
+          if (!desktop) {
+            setStatus("The PortLog desktop bridge is unavailable; restart the desktop app.");
+            return;
+          }
+          const source = await desktop.selectDexpiSource();
           if (!source) return;
           beginDocumentImport();
           setStatus("Preparing DEXPI review…");
@@ -360,7 +365,7 @@ export function DesktopDexpiImport() {
             });
             if (!response.ok) throw new Error(`Import failed (${response.status})`);
             const result = (await response.json()) as PrepareResult;
-            await window.portlogDesktop?.persistImportedProject({
+            await desktop.persistImportedProject({
               sourcePath: source.path,
               sourceContent: source.content,
               sessionId,

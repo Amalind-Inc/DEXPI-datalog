@@ -68,6 +68,34 @@ async function readManifest(projectDirectory) {
     : { ...manifest, turns: Array.isArray(manifest.turns) ? manifest.turns : [] };
 }
 
+async function migrateLegacyProject(projectDirectory, legacyProjectDirectories) {
+  const target = path.join(projectDirectory, MANIFEST_FILE);
+  try {
+    JSON.parse(await fs.readFile(target, "utf8"));
+    return false;
+  } catch {
+    /* The stable location is missing or invalid; try a legacy copy. */
+  }
+  for (const legacyDirectory of legacyProjectDirectories) {
+    const source = path.join(legacyDirectory, MANIFEST_FILE);
+    try {
+      const content = await fs.readFile(source, "utf8");
+      JSON.parse(content);
+      await fs.mkdir(projectDirectory, { recursive: true });
+      const temporary = path.join(
+        projectDirectory,
+        `.${MANIFEST_FILE}.${crypto.randomUUID()}.migration.tmp`,
+      );
+      await fs.writeFile(temporary, content, { mode: 0o600 });
+      await fs.rename(temporary, target);
+      return true;
+    } catch {
+      /* Try the next legacy location. */
+    }
+  }
+  return false;
+}
+
 async function loadLocalProject(projectDirectory) {
   const manifest = await readManifest(projectDirectory);
   try {
@@ -91,4 +119,10 @@ async function upsertLocalTurn(projectDirectory, turn) {
   return writeManifest(projectDirectory, { ...manifest, schemaVersion: SCHEMA_VERSION, turns });
 }
 
-module.exports = { MANIFEST_FILE, persistLocalProject, loadLocalProject, upsertLocalTurn };
+module.exports = {
+  MANIFEST_FILE,
+  migrateLegacyProject,
+  persistLocalProject,
+  loadLocalProject,
+  upsertLocalTurn,
+};

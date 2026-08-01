@@ -3,7 +3,11 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const net = require("node:net");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
-const { persistLocalProject, loadLocalProject } = require("./local-project-manifest.cjs");
+const {
+  migrateLegacyProject,
+  persistLocalProject,
+  loadLocalProject,
+} = require("./local-project-manifest.cjs");
 const { resolveReviewSidecarPaths } = require("./electron-sidecar-paths.cjs");
 const {
   resolveOpenRouterEnv,
@@ -17,6 +21,7 @@ const { createMacOSClaudeKeychain } = require("./claude-keychain.cjs");
 const { createCodexAuthController } = require("./codex-auth-controller.cjs");
 const { createMacOSCodexKeychain } = require("./codex-keychain.cjs");
 
+app.setName("PortLog");
 let desktopUiUrl = process.env.PORTLOG_DESKTOP_UI_URL;
 if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR)
   app.setPath("userData", process.env.PORTLOG_DESKTOP_USER_DATA_DIR);
@@ -260,12 +265,26 @@ function projectDirectory() {
   return path.join(app.getPath("userData"), "current-project");
 }
 
+function legacyProjectDirectories() {
+  if (process.env.PORTLOG_DESKTOP_USER_DATA_DIR) return [];
+  const appData = app.getPath("appData");
+  return [
+    path.join(appData, "portlog-ui", "current-project"),
+    path.join(appData, "Electron", "current-project"),
+  ];
+}
+
+async function migrateLegacyProjectIfNeeded() {
+  await migrateLegacyProject(projectDirectory(), legacyProjectDirectories());
+}
+
 async function persistImportedProject(_event, payload) {
   return persistLocalProject({ projectDirectory: projectDirectory(), ...payload });
 }
 
 async function loadCurrentProject() {
   try {
+    await migrateLegacyProjectIfNeeded();
     return await loadLocalProject(projectDirectory());
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
@@ -273,6 +292,7 @@ async function loadCurrentProject() {
 }
 
 async function runLocalInspection(event, payload) {
+  await migrateLegacyProjectIfNeeded();
   const project = await loadLocalProject(projectDirectory());
   if (project.projectId !== payload.sessionId)
     throw new Error("The active review does not match the prepared local project");
