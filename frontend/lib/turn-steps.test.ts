@@ -205,3 +205,49 @@ test("deriveTurnSteps: preserves governed trace lifecycle statuses", () => {
     ["blocked", "canceled", "failed", "pending"],
   );
 });
+
+test("deriveTurnSteps: standard retrieval names tools and detailed data stays sanitized", () => {
+  const turn = {
+    events: [
+      { type: "tool-progress", data: { status: "started" } },
+      {
+        type: "tool-progress",
+        data: {
+          status: "round",
+          round: 1,
+          max_rounds: 2,
+          tool_name: "get_reachable_equipment",
+          tool_input: {
+            equipment_id: "pump-1",
+            api_key: "must-not-render",
+          },
+        },
+      },
+      {
+        type: "evidence",
+        data: { evidence_references: ["connection-n1"] },
+      },
+    ],
+  };
+
+  const steps = deriveTurnSteps(turn, {
+    kind: "answered" as const,
+    evidenceReferences: ["connection-n1"],
+  });
+
+  assert.equal(steps[0].label, "Retrieval — get_reachable_equipment");
+  assert.deepEqual(steps[0].detail, {
+    kind: "retrieval",
+    resumed: false,
+    toolNames: ["get_reachable_equipment"],
+    rounds: [
+      {
+        round: 1,
+        maxRounds: 2,
+        toolName: "get_reachable_equipment",
+        toolInput: { equipment_id: "pump-1" },
+      },
+    ],
+    outputReferences: ["connection-n1"],
+  });
+});

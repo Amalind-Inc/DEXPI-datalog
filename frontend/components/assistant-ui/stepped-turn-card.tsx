@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import type { ExecutionDetailLevel } from "@/lib/execution-detail.ts";
 import type { TurnStep } from "@/lib/turn-steps.ts";
 
 const GLYPH: Record<TurnStep["status"], string> = {
@@ -18,10 +19,18 @@ const GLYPH: Record<TurnStep["status"], string> = {
 // GroundedQAAnswerCard/GroundedLogicAnswerCard) -- those components are not
 // re-implemented here, only wrapped, so every existing testid/aria-label/
 // button stays exactly where Playwright already expects it.
-export function SteppedTurnCard({ steps, children }: { steps: TurnStep[]; children: ReactNode }) {
-  // Legacy (non-turn-lifecycle) response paths carry no step data -- render
-  // the card as-is rather than fabricate a step list with nothing real in it.
-  if (steps.length === 0) return <>{children}</>;
+export function SteppedTurnCard({
+  steps,
+  children,
+  detailLevel = "standard",
+}: {
+  steps: TurnStep[];
+  children: ReactNode;
+  detailLevel?: ExecutionDetailLevel;
+}) {
+  // Concise mode keeps the answer card and its evidence summary, while
+  // omitting the execution walk entirely.
+  if (detailLevel === "concise" || steps.length === 0) return <>{children}</>;
 
   return (
     <section className="calm-step-card" data-testid="stepped-turn-card">
@@ -41,7 +50,44 @@ export function SteppedTurnCard({ steps, children }: { steps: TurnStep[]; childr
               </span>
               <div className={cn("calm-step-content", isLast && "calm-step-content--body")}>
                 <p className="calm-step-label">{step.label}</p>
-                {step.detail?.kind === "execution-trace" && (
+                {detailLevel === "detailed" &&
+                  step.detail?.kind === "retrieval-progress" &&
+                  step.detail.toolInput && (
+                    <details className="calm-step-detail" data-testid="retrieval-detail">
+                      <summary>Sanitized tool input</summary>
+                      <pre>
+                        <code>{formatDetailValue(step.detail.toolInput)}</code>
+                      </pre>
+                    </details>
+                  )}
+                {detailLevel === "detailed" &&
+                  step.detail?.kind === "retrieval" &&
+                  step.detail.rounds &&
+                  step.detail.rounds.length > 0 && (
+                    <details className="calm-step-detail" data-testid="retrieval-detail">
+                      <summary>Sanitized tool inputs and outputs</summary>
+                      <div className="calm-step-detail-list">
+                        {step.detail.rounds.map((round) => (
+                          <div key={`${round.round}-${round.toolName ?? "tool"}`}>
+                            <p>
+                              Round {round.round} of {round.maxRounds}
+                              {round.toolName ? ` — ${round.toolName}` : ""}
+                            </p>
+                            {round.toolInput && (
+                              <pre>
+                                <code>{formatDetailValue(round.toolInput)}</code>
+                              </pre>
+                            )}
+                          </div>
+                        ))}
+                        {step.detail.outputReferences &&
+                          step.detail.outputReferences.length > 0 && (
+                            <p>Evidence output: {step.detail.outputReferences.join(", ")}</p>
+                          )}
+                      </div>
+                    </details>
+                  )}
+                {detailLevel === "detailed" && step.detail?.kind === "execution-trace" && (
                   <details className="calm-step-trace-detail" data-testid="execution-trace-detail">
                     <summary>Details</summary>
                     <dl>
@@ -89,4 +135,12 @@ export function SteppedTurnCard({ steps, children }: { steps: TurnStep[]; childr
       </ol>
     </section>
   );
+}
+
+function formatDetailValue(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "Detail unavailable.";
+  }
 }

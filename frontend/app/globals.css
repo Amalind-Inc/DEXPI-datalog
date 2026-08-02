@@ -1103,6 +1103,29 @@
   font-size: 0.78rem;
 }
 
+.execution-detail-control {
+  align-items: center;
+  color: var(--calm-ink-muted);
+  display: flex;
+  font-size: 0.72rem;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+
+.execution-detail-control label {
+  font-weight: 700;
+}
+
+.execution-detail-control select {
+  background: var(--calm-paper);
+  border: 1px solid var(--calm-line);
+  border-radius: 999px;
+  color: var(--calm-ink);
+  font: inherit;
+  padding: 5px 8px;
+}
+
 /* Stepped turn presentation (bead pydexpi-datalog-1-2ki.11): the outer frame
    is now .calm-step-card -- these card classes are content-only (no border/
    shadow/radius of their own) since they're nested one level inside it. */
@@ -1196,6 +1219,37 @@
   width: fit-content;
 }
 
+.calm-step-detail {
+  color: var(--calm-ink-muted);
+  font-size: 0.78rem;
+  margin-top: 5px;
+}
+
+.calm-step-detail summary {
+  cursor: pointer;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.calm-step-detail pre {
+  background: var(--calm-soft);
+  border: 1px solid var(--calm-line);
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.calm-step-detail-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.calm-step-detail-list p {
+  margin: 0;
+}
 .calm-step-trace-detail dl {
   display: grid;
   gap: 5px;

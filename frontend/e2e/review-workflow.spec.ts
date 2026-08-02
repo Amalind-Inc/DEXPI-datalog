@@ -21,6 +21,26 @@ test("shows patterned progress while an XML document is prepared", async ({ page
   await expect(page.getByText("Process document ready")).toBeVisible();
 });
 
+test("execution detail preference persists and exposes concise, standard, and detailed levels", async ({
+  page,
+}) => {
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+
+  const preference = page.getByTestId("execution-detail-level");
+  await expect(preference).toHaveValue("standard");
+  await expect(preference.locator("option")).toHaveCount(3);
+
+  await preference.selectOption("detailed");
+  await expect(preference).toHaveValue("detailed");
+  await page.reload();
+  await expect(workflow.composer).toBeVisible();
+  await expect(page.getByTestId("execution-detail-level")).toHaveValue("detailed");
+
+  await page.getByTestId("execution-detail-level").selectOption("concise");
+  await expect(page.getByTestId("execution-detail-level")).toHaveValue("concise");
+});
+
 test("keeps multiple uploaded process documents available for topology review", async ({
   page,
 }) => {
@@ -87,8 +107,10 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
     .toBe("interactive");
   const latencyTrace = await page.evaluate(() => window.__PID_LATENCY_TRACE__);
   const serverPhases = latencyTrace?.server?.phases_ms ?? {};
-  expect((serverPhases.xml_parse ?? serverPhases.source_cache_materialize)).toBeGreaterThanOrEqual(0);
-  expect((serverPhases.graph_extraction ?? serverPhases.topology_artifact_write)).toBeGreaterThanOrEqual(0);
+  expect(serverPhases.xml_parse ?? serverPhases.source_cache_materialize).toBeGreaterThanOrEqual(0);
+  expect(
+    serverPhases.graph_extraction ?? serverPhases.topology_artifact_write,
+  ).toBeGreaterThanOrEqual(0);
   expect(latencyTrace?.phasesMs.layout).toBeGreaterThanOrEqual(0);
   expect(latencyTrace?.counts.renderedEntities).toBeGreaterThan(0);
   expect(latencyTrace?.counts.svgElements).toBeGreaterThan(0);

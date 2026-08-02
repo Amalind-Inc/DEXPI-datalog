@@ -1,3 +1,5 @@
+import { sanitizeExecutionDetailValue } from "./execution-detail.ts";
+
 // Synthesizes an ordered "step" view of a turn from the coarse backend event
 // log (bead pydexpi-datalog-1-2ki.11). Presentation-only: the backend event
 // stream has no per-tool-call granularity (just tool-progress/text/evidence/
@@ -7,9 +9,28 @@
 export type TurnStepId = "retrieval" | "validation" | "evidence-answer" | `trace:${string}`;
 export type TurnStepStatus = "done" | "blocked" | "canceled" | "failed" | "pending";
 
+export type RetrievalRoundDetail = {
+  round: number;
+  maxRounds: number;
+  toolName: string | null;
+  toolInput: Record<string, unknown> | null;
+};
+
 export type TurnStepDetail =
-  | { kind: "retrieval"; resumed: boolean }
-  | { kind: "retrieval-progress"; round: number; maxRounds: number; toolName: string | null }
+  | {
+      kind: "retrieval";
+      resumed: boolean;
+      toolNames?: string[];
+      rounds?: RetrievalRoundDetail[];
+      outputReferences?: string[];
+    }
+  | {
+      kind: "retrieval-progress";
+      round: number;
+      maxRounds: number;
+      toolName: string | null;
+      toolInput: Record<string, unknown> | null;
+    }
   | { kind: "datalog-confirmation" }
   | { kind: "direction-review" }
   | { kind: "evidence"; evidenceReferences: string[] }
@@ -68,15 +89,13 @@ export function deriveTurnSteps(turn: TurnLike, reduced: ReducedTurnLike): TurnS
     );
     if (roundEvents.length > 0) {
       const last = roundEvents[roundEvents.length - 1];
-      const round = typeof last.data.round === "number" ? last.data.round : 0;
-      const maxRounds = typeof last.data.max_rounds === "number" ? last.data.max_rounds : 0;
-      const toolName = typeof last.data.tool_name === "string" ? last.data.tool_name : null;
+      const roundDetail = readRetrievalRound(last);
       return [
         {
           id: "retrieval",
-          label: `Retrieval — round ${round} of ${maxRounds}`,
+          label: `Retrieval — round ${roundDetail.round} of ${roundDetail.maxRounds}`,
           status: "pending",
-          detail: { kind: "retrieval-progress", round, maxRounds, toolName },
+          detail: { kind: "retrieval-progress", ...roundDetail },
         },
       ];
     }
@@ -91,11 +110,34 @@ export function deriveTurnSteps(turn: TurnLike, reduced: ReducedTurnLike): TurnS
     // message's own turnToMessage() call sees BOTH the original "started"
     // and the later "resumed" marker -- the last one wins.
     const last = toolProgressEvents[toolProgressEvents.length - 1];
+    const rounds = toolProgressEvents
+      .filter((event) => event.data.status === "round")
+      .map(readRetrievalRound);
+    const toolNames = Array.from(
+      new Set(
+        rounds.map((round) => round.toolName).filter((name): name is string => name !== null),
+      ),
+    );
+    const outputReferences = Array.from(
+      new Set(
+        turn.events
+          .filter((event) => event.type === "evidence")
+          .flatMap((event) => readStringArray(event.data.evidence_references)),
+      ),
+    );
+    const detail = {
+      kind: "retrieval" as const,
+      resumed: last.data.status === "resumed",
+      ...(toolNames.length > 0 ? { toolNames } : {}),
+      ...(rounds.length > 0 ? { rounds } : {}),
+      ...(outputReferences.length > 0 ? { outputReferences } : {}),
+    };
+    const retrievalLabel = last.data.status === "resumed" ? "Retrieval (resumed)" : "Retrieval";
     steps.push({
       id: "retrieval",
-      label: last.data.status === "resumed" ? "Retrieval (resumed)" : "Retrieval",
+      label: toolNames.length > 0 ? `${retrievalLabel} — ${toolNames.join(", ")}` : retrievalLabel,
       status: "done",
-      detail: { kind: "retrieval", resumed: last.data.status === "resumed" },
+      detail,
     });
   }
 
@@ -140,6 +182,21 @@ export function deriveTurnSteps(turn: TurnLike, reduced: ReducedTurnLike): TurnS
   }
 
   return steps;
+}
+
+function readRetrievalRound(event: TurnEventLike): RetrievalRoundDetail {
+  const rawToolInput = sanitizeExecutionDetailValue(event.data.tool_input);
+  return {
+    round: typeof event.data.round === "number" ? event.data.round : 0,
+    maxRounds: typeof event.data.max_rounds === "number" ? event.data.max_rounds : 0,
+    toolName: typeof event.data.tool_name === "string" ? event.data.tool_name.slice(0, 120) : null,
+    toolInput: isRecord(rawToolInput) ? rawToolInput : null,
+  };
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string").slice(0, 25);
 }
 
 function readExecutionTrace(event: TurnEventLike): {

@@ -65,65 +65,114 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import { type FC, useEffect, useState } from "react";
+import { createContext, type FC, useContext, useEffect, useState } from "react";
+import {
+  DEFAULT_EXECUTION_DETAIL_LEVEL,
+  EXECUTION_DETAIL_OPTIONS,
+  isExecutionDetailLevel,
+  readExecutionDetailLevel,
+  writeExecutionDetailLevel,
+  type ExecutionDetailLevel,
+} from "@/lib/execution-detail.ts";
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading);
 
+const ExecutionDetailContext = createContext<ExecutionDetailLevel>(DEFAULT_EXECUTION_DETAIL_LEVEL);
+
 export const Thread: FC = () => {
   const isEmpty = useAuiState(isNewChatView);
+  const [detailLevel, setDetailLevel] = useState<ExecutionDetailLevel>(
+    DEFAULT_EXECUTION_DETAIL_LEVEL,
+  );
+
+  useEffect(() => {
+    setDetailLevel(readExecutionDetailLevel());
+  }, []);
+
+  const handleDetailLevelChange = (value: string) => {
+    if (!isExecutionDetailLevel(value)) return;
+    setDetailLevel(value);
+    writeExecutionDetailLevel(undefined, value);
+  };
 
   return (
-    <ThreadPrimitive.Root
-      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
-      style={{
-        ["--thread-max-width" as string]: "52rem",
-        ["--composer-bg" as string]: "#0000",
-        ["--composer-radius" as string]: "0px",
-        ["--composer-padding" as string]: "10px",
-      }}
-    >
-      <ThreadPrimitive.Viewport
-        turnAnchor="top"
-        data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+    <ExecutionDetailContext.Provider value={detailLevel}>
+      <ThreadPrimitive.Root
+        className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+        style={{
+          ["--thread-max-width" as string]: "52rem",
+          ["--composer-bg" as string]: "#0000",
+          ["--composer-radius" as string]: "0px",
+          ["--composer-padding" as string]: "10px",
+        }}
       >
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center",
-          )}
+        <ThreadPrimitive.Viewport
+          turnAnchor="top"
+          data-slot="aui_thread-viewport"
+          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
         >
-          <AuiIf condition={isNewChatView}>
-            <ThreadWelcome />
-          </AuiIf>
-
-          <div data-slot="aui_message-group" className="mb-14 flex flex-col gap-y-6 empty:hidden">
-            <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
-          </div>
-
-          <ThreadPrimitive.ViewportFooter
+          <div
             className={cn(
-              "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
-              !isEmpty && "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+              isEmpty && "justify-center",
             )}
           >
-            <ThreadScrollToBottom />
-            <Composer />
             <AuiIf condition={isNewChatView}>
-              <p className="text-center text-xs text-[var(--calm-ink-muted)]">
-                Answers are grounded in the process document you upload here — nothing outside it.
-              </p>
+              <ThreadWelcome />
             </AuiIf>
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
-              <ThreadSuggestions />
-            </AuiIf>
-          </ThreadPrimitive.ViewportFooter>
-        </div>
-      </ThreadPrimitive.Viewport>
-    </ThreadPrimitive.Root>
+            <ExecutionDetailControl value={detailLevel} onChange={handleDetailLevelChange} />
+
+            <div data-slot="aui_message-group" className="mb-14 flex flex-col gap-y-6 empty:hidden">
+              <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
+            </div>
+
+            <ThreadPrimitive.ViewportFooter
+              className={cn(
+                "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+                !isEmpty && "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              )}
+            >
+              <ThreadScrollToBottom />
+              <Composer />
+              <AuiIf condition={isNewChatView}>
+                <p className="text-center text-xs text-[var(--calm-ink-muted)]">
+                  Answers are grounded in the process document you upload here — nothing outside it.
+                </p>
+              </AuiIf>
+              <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+                <ThreadSuggestions />
+              </AuiIf>
+            </ThreadPrimitive.ViewportFooter>
+          </div>
+        </ThreadPrimitive.Viewport>
+      </ThreadPrimitive.Root>
+    </ExecutionDetailContext.Provider>
+  );
+};
+
+const ExecutionDetailControl: FC<{
+  value: ExecutionDetailLevel;
+  onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+  return (
+    <div className="execution-detail-control" data-testid="execution-detail-control">
+      <label htmlFor="execution-detail-level">Execution detail</label>
+      <select
+        id="execution-detail-level"
+        data-testid="execution-detail-level"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {EXECUTION_DETAIL_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label} — {option.description}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 };
 
@@ -292,6 +341,7 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
+  const detailLevel = useContext(ExecutionDetailContext);
   const ACTION_BAR_PT = "pt-1.5";
   const ACTION_BAR_HEIGHT = `-mb-7.5 min-h-7.5 ${ACTION_BAR_PT}`;
 
@@ -312,7 +362,7 @@ const AssistantMessage: FC = () => {
               const confirmation = parseDatalogConfirmationMessage(part.text);
               if (confirmation) {
                 return (
-                  <SteppedTurnCard steps={confirmation.steps ?? []}>
+                  <SteppedTurnCard steps={confirmation.steps ?? []} detailLevel={detailLevel}>
                     {confirmation.raw.confirmation_kind === "temporary_datalog" ? (
                       <DatalogConfirmationWidget confirmation={confirmation} />
                     ) : (
@@ -324,7 +374,7 @@ const AssistantMessage: FC = () => {
               const directionReview = parseDirectionReviewMessage(part.text);
               if (directionReview) {
                 return (
-                  <SteppedTurnCard steps={directionReview.steps ?? []}>
+                  <SteppedTurnCard steps={directionReview.steps ?? []} detailLevel={detailLevel}>
                     <DirectionReviewCard review={directionReview} />
                   </SteppedTurnCard>
                 );
@@ -332,7 +382,7 @@ const AssistantMessage: FC = () => {
               const qaAnswer = parseGroundedQAAnswerMessage(part.text);
               if (qaAnswer) {
                 return (
-                  <SteppedTurnCard steps={qaAnswer.steps ?? []}>
+                  <SteppedTurnCard steps={qaAnswer.steps ?? []} detailLevel={detailLevel}>
                     <GroundedQAAnswerCard answer={qaAnswer} />
                   </SteppedTurnCard>
                 );
@@ -340,8 +390,8 @@ const AssistantMessage: FC = () => {
               const answer = parseGroundedLogicAnswerMessage(part.text);
               if (answer) {
                 return (
-                  <SteppedTurnCard steps={answer.steps ?? []}>
-                    <GroundedLogicAnswerCard answer={answer} />
+                  <SteppedTurnCard steps={answer.steps ?? []} detailLevel={detailLevel}>
+                    <GroundedLogicAnswerCard answer={answer} detailLevel={detailLevel} />
                   </SteppedTurnCard>
                 );
               }
@@ -360,7 +410,7 @@ const AssistantMessage: FC = () => {
                       }…`
                     : "Working…";
                 return (
-                  <SteppedTurnCard steps={inProgress.steps}>
+                  <SteppedTurnCard steps={inProgress.steps} detailLevel={detailLevel}>
                     <p className="calm-step-body">{bodyText}</p>
                   </SteppedTurnCard>
                 );
@@ -952,7 +1002,10 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
   );
 };
 
-const GroundedLogicAnswerCard: FC<{ answer: GroundedLogicAnswerState }> = ({ answer }) => {
+const GroundedLogicAnswerCard: FC<{
+  answer: GroundedLogicAnswerState;
+  detailLevel: ExecutionDetailLevel;
+}> = ({ answer, detailLevel }) => {
   return (
     <section
       className="grounded-logic-answer-card"
@@ -961,12 +1014,14 @@ const GroundedLogicAnswerCard: FC<{ answer: GroundedLogicAnswerState }> = ({ ans
     >
       <p className="pid-eyebrow">Grounded answer</p>
       <p data-testid="evidence-summary">{answer.summary}</p>
-      <details data-testid="raw-evidence-details">
-        <summary>Raw evidence details</summary>
-        <pre>
-          <code>{JSON.stringify(answer.rawEvidence, null, 2)}</code>
-        </pre>
-      </details>
+      {detailLevel === "detailed" && (
+        <details data-testid="raw-evidence-details">
+          <summary>Raw evidence details</summary>
+          <pre>
+            <code>{JSON.stringify(answer.rawEvidence, null, 2)}</code>
+          </pre>
+        </details>
+      )}
     </section>
   );
 };
