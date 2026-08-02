@@ -253,6 +253,66 @@ class QATurnsApiTests(unittest.TestCase):
             self.assertEqual(body["answer_text"], "Direct answer with no tool calls.")
             self.assertEqual(body["evidence_references"], [])
 
+    def test_qa_turn_redacts_internal_ids_from_answer_text(self) -> None:
+        """User-facing prose uses the source label, not the topology identity."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = create_review_api_app(
+                principal=fresh_principal(),
+                artifact_root=Path(tmp) / "sessions",
+            )
+            client = TestClient(app)
+            session_id = "qa-redaction-session"
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            graph_objects = client.get(
+                f"/api/review/sessions/{session_id}/topology"
+            ).json()["graph_objects"]
+            evidence = next(
+                item
+                for item in graph_objects
+                if str(item["id"]).startswith("node-")
+                and item.get("label")
+                and item["label"] != item["id"]
+            )
+            topology_id = str(evidence["id"])
+            source_label = str(evidence["label"])
+
+            class RawIdentifierProvider:
+                def complete_with_tools(self, *, messages, tools):
+                    return FinalAnswer(
+                        answer_text=f"The source contains {topology_id}.",
+                        evidence_references=[topology_id],
+                    )
+
+            app = create_review_api_app(
+                principal=fresh_principal(),
+                artifact_root=Path(tmp) / "sessions-raw",
+                qa_provider_factory=RawIdentifierProvider,
+            )
+            client = TestClient(app)
+            prepared = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "E06V01-VER.EX01.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            body = client.post(
+                f"/api/review/sessions/{session_id}/qa-turns",
+                json={"question": "What is in this P&ID?"},
+            ).json()
+
+            self.assertIn(source_label, body["answer_text"])
+            self.assertNotIn(topology_id, body["answer_text"])
+
     def test_template_backed_answer_payload_discloses_logic_program(self) -> None:
         """When a bundled template executed, the answered payload carries the
         route artifact including the exact logic the engine ran, so a client

@@ -5,6 +5,7 @@ import re
 import time
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -95,7 +96,12 @@ def _topology_ids_by_answer_symbol(topology: dict[str, object]) -> dict[str, str
 def _topology_object_label(*, topology: dict[str, object], topology_id: str) -> str:
     for node in topology["nodes"]:
         if node["id"] == topology_id:
-            label = node.get("tag_name") or node.get("label") or topology_id
+            label = (
+                node.get("display_name")
+                or node.get("tag_name")
+                or node.get("label")
+                or topology_id
+            )
             return str(label)
     for edge in topology["edges"]:
         if edge["id"] == topology_id:
@@ -117,6 +123,30 @@ def _topology_object_kind(*, topology: dict[str, object], topology_id: str) -> s
         if edge["id"] == topology_id:
             return "edge"
     return "topology_object"
+
+def _sanitize_topology_ids_from_answer(
+    *, topology: dict[str, object], answer_text: str
+) -> str:
+    """Keep internal topology identities out of user-facing answer prose."""
+    topology_ids: set[str] = set()
+    for collection_name in ("nodes", "edges"):
+        collection = topology.get(collection_name, [])
+        if not isinstance(collection, list):
+            continue
+        for item in collection:
+            if isinstance(item, dict) and item.get("id"):
+                topology_ids.add(str(item["id"]))
+
+    sanitized = answer_text
+    for topology_id in sorted(topology_ids, key=len, reverse=True):
+        label = _topology_object_label(
+            topology=topology, topology_id=topology_id
+        ).strip()
+        if not label or label == topology_id:
+            continue
+        pattern = rf"(?<![A-Za-z0-9_-]){re.escape(topology_id)}(?![A-Za-z0-9_-])"
+        sanitized = re.sub(pattern, label, sanitized)
+    return sanitized
 
 
 def _natural_logic_answer_summary(evidence_items: list[dict[str, object]]) -> str:
@@ -1653,6 +1683,12 @@ class ChainlitReviewFlow:
             steering=steering,
             constraints=constraints,
             provider_cost=_provider_cost,
+        )
+        result = replace(
+            result,
+            answer_text=_sanitize_topology_ids_from_answer(
+                topology=topology, answer_text=result.answer_text
+            ),
         )
         self._persist_automatic_datalog_audits(
             session_id=session_id,
