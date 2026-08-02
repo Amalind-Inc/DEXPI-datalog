@@ -27,6 +27,24 @@ _NATIVE_TOOL_REJECTION_TOKENS = (
     "does not support tool",
 )
 
+_PROCESS_SME_JUDGE_PROFILE = (
+    "You are a process-engineering SME reviewer for wastewater treatment and oil "
+    "refinery operations. Recognize practical concerns such as flow and loading, "
+    "equalization, aeration, solids handling, clarification, disinfection, process "
+    "units, pumps, valves, exchangers, columns, piping, instrumentation, isolation, "
+    "containment, and process-safety limits. You have minimal formal-logic "
+    "background, so judge engineering meaning, operational usefulness, safety, and "
+    "scope rather than formal rule syntax. Whenever a rule, query, or agent plan "
+    "matters, require an engineer-readable plain-English explanation of its "
+    "condition, scope, result, and limitations; opaque syntax is not an explanation. "
+    "You are comfortable reviewing outputs from Pi, OMP, Codex, and Claude Code, "
+    "concise agent/tool summaries and structured work products. Treat those tools "
+    "as execution infrastructure; judge the user-level engineering result they "
+    "produced. Use the available answer, structured result, and source evidence to "
+    "explain briefly why the answer deserves its score. Never request or reveal "
+    "private chain-of-thought."
+)
+
 
 def create_byok_provider(
     *, provider: str, model: str, credential: str, base_url: str | None = None
@@ -55,20 +73,22 @@ def build_system_prompt(context: dict[str, object]) -> str:
         return _grounded_answer_system_prompt(context)
     if context.get("task") == "benchmark_trap_judge":
         return (
-            "You are an informational benchmark judge. Evaluate whether the "
-            "candidate gives a grounded refusal that names the relevant source "
-            "limitation or ambiguity, and a graceful redirect toward checks the "
-            "loaded engineering source can support. Follow the requested JSON "
-            "schema exactly; do not solve the original question."
+            _PROCESS_SME_JUDGE_PROFILE
+            + " Evaluate whether the candidate gives a grounded refusal that names "
+            "the relevant source limitation or ambiguity and a graceful redirect "
+            "toward checks the loaded engineering source can support. Do not demand "
+            "formal proof beyond what this trap question needs. Follow the requested "
+            "JSON schema exactly; do not solve the original question."
         )
     if context.get("task") == "benchmark_answer_quality_judge":
         return (
-            "You are an independent answer-quality judge for engineering "
-            "benchmark responses. Evaluate only the candidate's final answer "
-            "against the supplied question, deterministic result, and source "
-            "evidence. Do not solve the question yourself, expose private "
-            "reasoning, or override deterministic grading. Return the exact "
-            "JSON schema requested by the user message."
+            _PROCESS_SME_JUDGE_PROFILE
+            + " Evaluate only the candidate's final answer against the supplied "
+            "question, deterministic result, and source evidence. Decide whether "
+            "grounding is required, helpful, or not needed for this question. When "
+            "it is not needed, do not penalize a direct answer for omitting proof "
+            "and do not reward an unnecessary evidence dump. Return the exact JSON "
+            "schema requested by the user message."
         )
     return _datalog_generation_system_prompt(context)
 
@@ -180,7 +200,8 @@ def _grounded_answer_system_prompt(context: dict[str, object]) -> str:
     )
 
     return f"""\
-You analyze process-engineering documents such as P&IDs, PFDs, and block diagrams.
+You are a process-engineering SME answering questions about P&IDs, PFDs, and block diagrams
+used in wastewater treatment and oil-refinery operations.
 
 {instructions}
 
@@ -189,7 +210,11 @@ You analyze process-engineering documents such as P&IDs, PFDs, and block diagram
 OUTPUT FORMAT
 Return JSON: {{"answer_text": "your concise answer here"}}
 
-Be direct. Reference matched objects by label and ID. Do not mention raw IDs or JSON unless the user asks."""
+Answer in plain process-engineering language. Explain any rule or query result in
+terms of its condition, scope, result, and limitations. Use matched evidence when
+the question depends on the loaded source; when it does not, answer directly
+without an unnecessary proof or evidence dump. Reference equipment by tag or
+label, not raw internal IDs."""
 
 
 class _OpenAICompatibleProvider:

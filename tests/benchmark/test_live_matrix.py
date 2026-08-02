@@ -186,6 +186,8 @@ def test_live_matrix_runs_every_configuration_and_model_then_computes_verdict(
         engineering_language=True,
         scope_honest=True,
         provenance_clear=True,
+        grounding_expectation="required",
+        grounding_fit=True,
         useful_next_step=False,
         overall_score=4,
         rationale="Clear source-grounded answer.",
@@ -215,6 +217,7 @@ def test_live_matrix_runs_every_configuration_and_model_then_computes_verdict(
     quality_entries = report["informational"]["answer_quality"]
     assert len(quality_entries) == 12
     assert all(entry["mean_overall_score"] == 4.0 for entry in quality_entries)
+    assert all(entry["criteria_passes"]["grounding_fit"] == 2 for entry in quality_entries)
     run_index = json.loads((output_dir / "runs.json").read_text(encoding="utf-8"))
     assert len(run_index["runs"]) == 12
     assert report["decision"]["verdict"] == "stand_down"

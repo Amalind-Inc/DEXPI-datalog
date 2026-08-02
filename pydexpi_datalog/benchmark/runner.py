@@ -17,7 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from pydexpi_datalog.benchmark.answer_quality import AnswerQualityJudge
+from pydexpi_datalog.benchmark.answer_quality import (
+    ANSWER_QUALITY_RUBRIC_VERSION,
+    AnswerQualityJudge,
+)
 from pydexpi_datalog.benchmark.contract import (
     POSTURES,
     TRAP_EXPECTED_POSTURES,
@@ -37,8 +40,8 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     load_scripted_trap_judgments,
 )
 
-# Version 6: reports optionally carry qualitative answer-quality judgments.
-BENCHMARK_REPORT_SCHEMA_VERSION = 6
+# Version 7: reports carry the conditional qualitative answer-quality rubric.
+BENCHMARK_REPORT_SCHEMA_VERSION = 7
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -244,7 +247,7 @@ def _run_episode(
         "grade": _grade_payload(episode_grade),
         "answer_quality": (
             {
-                "rubric_version": "answer-quality-v1",
+                "rubric_version": ANSWER_QUALITY_RUBRIC_VERSION,
                 "deterministic_grade_passed": episode_grade.passed,
                 "judgment": answer_quality_judgment.to_payload(),
             }

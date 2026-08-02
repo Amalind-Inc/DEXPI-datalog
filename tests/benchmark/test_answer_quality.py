@@ -18,10 +18,10 @@ from pydexpi_datalog.llm.byok_provider import build_system_prompt, create_byok_p
 from pydexpi_datalog.llm.model_access import FakeModelProvider
 
 
-def _question() -> BenchmarkQuestion:
+def _question(question_text: str = "Which pump is represented?") -> BenchmarkQuestion:
     return BenchmarkQuestion(
         question_id="quality-1",
-        question="Which pump is represented?",
+        question=question_text,
         slice="hand_authored",
         drawing_ref=Path("graph_facts.json"),
         ground_truth=GroundTruth(
@@ -37,6 +37,7 @@ def _answer() -> StructuredAnswer:
         witness_ids=("pump-1",),
         posture="source_grounded",
         answer_text="The represented pump is P-101.",
+        support={"basis": "source label P-101"},
         transcript=(
             {"role": "system", "content": "Do not expose this private message."},
         ),
@@ -58,11 +59,17 @@ def _facts() -> dict[str, object]:
     }
 
 
-def test_answer_quality_task_uses_a_judge_system_prompt() -> None:
-    prompt = build_system_prompt({"task": "benchmark_answer_quality_judge"})
+def test_judge_tasks_use_an_agent_literate_sme_system_prompt() -> None:
+    for task in ("benchmark_answer_quality_judge", "benchmark_trap_judge"):
+        prompt = build_system_prompt({"task": task})
 
-    assert "answer-quality" in prompt
-    assert "Datalog query generator" not in prompt
+        assert "wastewater" in prompt
+        assert "oil refinery" in prompt
+        assert "Pi" in prompt
+        assert "OMP" in prompt
+        assert "Codex" in prompt
+        assert "Claude Code" in prompt
+        assert "Datalog query generator" not in prompt
 
 
 def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> None:
@@ -74,6 +81,8 @@ def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> N
                 "engineering_language": True,
                 "scope_honest": True,
                 "provenance_clear": True,
+                "grounding_expectation": "required",
+                "grounding_fit": True,
                 "useful_next_step": False,
                 "overall_score": 4,
                 "rationale": "The answer identifies the pump and cites its source label.",
@@ -84,14 +93,56 @@ def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> N
 
     result = judge.judge(question=_question(), answer=_answer(), graph_facts=_facts())
 
+    assert result.grounding_expectation == "required"
+    assert result.grounding_fit is True
     assert result.overall_score == 4
     assert result.faithful_to_evidence is True
     assert judge.judge_id == "llm-answer-quality-judge:fake:fake-model"
     request = provider.requests[0]["request"]
+    assert "source label P-101" in request
     assert "Which pump is represented?" in request
     assert "The represented pump is P-101." in request
     assert "Do not expose this private message" not in request
     assert provider.requests[0]["context"]["task"] == "benchmark_answer_quality_judge"
+
+
+def test_sme_judge_allows_direct_answers_when_grounding_is_not_needed() -> None:
+    provider = FakeModelProvider(
+        json.dumps(
+            {
+                "answered_question": True,
+                "faithful_to_evidence": True,
+                "engineering_language": True,
+                "scope_honest": True,
+                "provenance_clear": True,
+                "grounding_expectation": "not_needed",
+                "grounding_fit": True,
+                "useful_next_step": False,
+                "overall_score": 5,
+                "rationale": (
+                    "The operator-facing recommendation is direct and does not "
+                    "need a source proof block."
+                ),
+            }
+        )
+    )
+    answer = StructuredAnswer(
+        verdict="unanswerable",
+        posture="general_knowledge",
+        answer_text="Keep equalization capacity available before peak inflow.",
+    )
+
+    result = ModelAnswerQualityJudge(provider=provider).judge(
+        question=_question(
+            "What is a practical operator consideration for peak inflow?"
+        ),
+        answer=answer,
+        graph_facts=_facts(),
+    )
+
+    assert result.grounding_expectation == "not_needed"
+    assert result.grounding_fit is True
+    assert "proof dump" in provider.requests[0]["request"]
 
 
 def test_openrouter_judge_requests_zero_temperature() -> None:
@@ -163,6 +214,8 @@ def test_runner_keeps_deterministic_grade_separate_from_quality_judgment(
         engineering_language=True,
         scope_honest=True,
         provenance_clear=True,
+        grounding_expectation="required",
+        grounding_fit=True,
         useful_next_step=False,
         overall_score=4,
         rationale="Clear and grounded.",
@@ -178,5 +231,7 @@ def test_runner_keeps_deterministic_grade_separate_from_quality_judgment(
     episode = report["episodes"][0]
     assert episode["grade"]["passed"] is True
     assert episode["answer_quality"]["judgment"]["overall_score"] == 4
+    assert episode["answer_quality"]["rubric_version"] == "answer-quality-v2"
+    assert episode["answer_quality"]["judgment"]["grounding_fit"] is True
     assert episode["answer_quality"]["deterministic_grade_passed"] is True
     assert report["answer_quality_judge_id"] == "scripted-answer-quality-judge"

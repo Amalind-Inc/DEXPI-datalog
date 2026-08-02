@@ -33,8 +33,10 @@ _PROVIDE_ANSWER_TOOL: dict[str, object] = {
     "function": {
         "name": "provide_answer",
         "description": (
-            "Provide your final answer to the engineer. Call this exactly once when "
-            "you are ready to answer. Cite the topology evidence you used."
+            "Provide your final process-engineering answer to the engineer. Call "
+            "this exactly once when ready. Cite topology evidence when the request "
+            "depends on the loaded source; omit proof and evidence IDs when they "
+            "are not needed."
         ),
         "parameters": {
             "type": "object",
@@ -42,8 +44,9 @@ _PROVIDE_ANSWER_TOOL: dict[str, object] = {
                 "answer_text": {
                     "type": "string",
                     "description": (
-                        "The natural-language answer. Reference equipment by tag or "
-                        "label, never raw node ids."
+                        "Plain process-engineering language. If a rule, query, or "
+                        "agent plan matters, explain its condition, scope, result, "
+                        "and limitations; never expose raw node ids."
                     ),
                 },
                 "evidence_object_ids": {

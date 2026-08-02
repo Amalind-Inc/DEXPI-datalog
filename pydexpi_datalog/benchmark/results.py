@@ -740,6 +740,7 @@ def _answer_quality(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
         "engineering_language",
         "scope_honest",
         "provenance_clear",
+        "grounding_fit",
         "useful_next_step",
     )
     for run in runs:
