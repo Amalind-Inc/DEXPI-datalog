@@ -42,9 +42,7 @@ def create_byok_provider(
             provider=provider, model=model, credential=credential, base_url=endpoint
         )
     if catalogued.wire == "anthropic":
-        return _AnthropicProvider(
-            model=model, credential=credential, base_url=endpoint
-        )
+        return _AnthropicProvider(model=model, credential=credential, base_url=endpoint)
     if catalogued.wire == "gemini":
         return _GeminiProvider(model=model, credential=credential, base_url=endpoint)
     raise ValueError(f"unsupported byok wire format: {catalogued.wire}")
@@ -62,6 +60,15 @@ def build_system_prompt(context: dict[str, object]) -> str:
             "limitation or ambiguity, and a graceful redirect toward checks the "
             "loaded engineering source can support. Follow the requested JSON "
             "schema exactly; do not solve the original question."
+        )
+    if context.get("task") == "benchmark_answer_quality_judge":
+        return (
+            "You are an independent answer-quality judge for engineering "
+            "benchmark responses. Evaluate only the candidate's final answer "
+            "against the supplied question, deterministic result, and source "
+            "evidence. Do not solve the question yourself, expose private "
+            "reasoning, or override deterministic grading. Return the exact "
+            "JSON schema requested by the user message."
         )
     return _datalog_generation_system_prompt(context)
 
@@ -197,19 +204,25 @@ class _OpenAICompatibleProvider:
 
     def complete(self, *, request: str, context: dict[str, object]) -> str:
         system_prompt = build_system_prompt(context)
+        request_payload: dict[str, object] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request},
+            ],
+        }
+        if context.get("task") in {
+            "benchmark_trap_judge",
+            "benchmark_answer_quality_judge",
+        }:
+            request_payload["temperature"] = 0
         response = httpx.post(
             f"{self._base_url}/chat/completions",
             headers={
                 "Authorization": f"Bearer {self._credential}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": request},
-                ],
-            },
+            json=request_payload,
             timeout=60.0,
         )
         _raise_for_status_with_native_tool_diagnostic(

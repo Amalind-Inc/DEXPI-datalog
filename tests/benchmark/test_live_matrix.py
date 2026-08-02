@@ -19,10 +19,23 @@ from pydexpi_datalog.benchmark.live_matrix import (
     LIVE_MATRIX_MODELS,
     LiveArmSpec,
     build_combined_manifest,
+    create_live_answer_quality_judge,
+    create_live_trap_judge,
     materialize_live_bundles,
     run_live_matrix,
 )
 from pydexpi_datalog.benchmark.runner import ScriptedArm
+
+
+def test_live_judges_use_deepseek_v4_flash() -> None:
+    judge = create_live_answer_quality_judge(environ={"OPENROUTER_API_KEY": "test-key"})
+
+    assert judge.provider.provider == "openrouter"
+    assert judge.provider.model == "deepseek/deepseek-v4-flash"
+
+    trap_judge = create_live_trap_judge(environ={"OPENROUTER_API_KEY": "test-key"})
+    assert trap_judge.provider.provider == "openrouter"
+    assert trap_judge.provider.model == "deepseek/deepseek-v4-flash"
 
 
 def _write_manifest(path: Path, *, question_id: str, category: str) -> None:

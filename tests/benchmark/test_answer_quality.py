@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from pydexpi_datalog.benchmark.answer_quality import (
     AnswerQualityJudgment,
@@ -13,6 +14,7 @@ from pydexpi_datalog.benchmark.answer_quality import (
 from pydexpi_datalog.benchmark.contract import GroundTruth, StructuredAnswer
 from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
 from pydexpi_datalog.benchmark.runner import ScriptedArm, run_benchmark
+from pydexpi_datalog.llm.byok_provider import build_system_prompt, create_byok_provider
 from pydexpi_datalog.llm.model_access import FakeModelProvider
 
 
@@ -56,6 +58,13 @@ def _facts() -> dict[str, object]:
     }
 
 
+def test_answer_quality_task_uses_a_judge_system_prompt() -> None:
+    prompt = build_system_prompt({"task": "benchmark_answer_quality_judge"})
+
+    assert "answer-quality" in prompt
+    assert "Datalog query generator" not in prompt
+
+
 def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> None:
     provider = FakeModelProvider(
         json.dumps(
@@ -83,6 +92,32 @@ def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> N
     assert "The represented pump is P-101." in request
     assert "Do not expose this private message" not in request
     assert provider.requests[0]["context"]["task"] == "benchmark_answer_quality_judge"
+
+
+def test_openrouter_judge_requests_zero_temperature() -> None:
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [{"message": {"content": "{}"}}],
+                "usage": {},
+            }
+
+    provider = create_byok_provider(
+        provider="openrouter",
+        model="deepseek/deepseek-v4-flash",
+        credential="test-key",
+        base_url="https://openrouter.test/api/v1",
+    )
+    with patch("httpx.post", return_value=Response()) as post:
+        provider.complete(
+            request="{}",
+            context={"task": "benchmark_answer_quality_judge"},
+        )
+
+    assert post.call_args.kwargs["json"]["temperature"] == 0
 
 
 def test_malformed_answer_quality_judgment_receives_no_qualitative_credit() -> None:

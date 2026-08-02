@@ -33,11 +33,12 @@ from pydexpi_datalog.llm.model_access import ModelProvider, supported_byok_provi
 DEGRADED_VERDICT = "malformed_model_output"
 
 # Friendly model keys -> (provider, model) through the existing provider
-# layer.  All three route through openrouter: one credential, one gateway.
+# layer. All routes use the OpenRouter credential and gateway.
 DIRECT_ARM_MODELS = {
     "sonnet": ("openrouter", "anthropic/claude-sonnet-4"),
     "gpt": ("openrouter", "openai/gpt-5.4"),
     "deepseek": ("openrouter", "deepseek/deepseek-v4-pro"),
+    "deepseek_flash": ("openrouter", "deepseek/deepseek-v4-flash"),
 }
 
 _SYSTEM_PROMPT = f"""\
@@ -189,10 +190,11 @@ def create_direct_arm(
     *,
     environ: dict[str, str] | None = None,
 ) -> DirectArm:
-    """Build a live DirectArm for a friendly model key (sonnet/gpt/deepseek).
+    """Build a live DirectArm for a configured model key.
 
-    Credentials come from the provider layer's declared environment
-    variable; a missing credential fails fast with the variable name.
+    The built-in keys include sonnet, gpt, deepseek, and deepseek_flash.
+    Credentials come from the provider layer's declared environment variable;
+    a missing credential fails fast with the variable name.
     """
     try:
         provider_name, model = DIRECT_ARM_MODELS[model_key]

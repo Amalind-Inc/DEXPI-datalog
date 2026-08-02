@@ -160,16 +160,16 @@ def default_live_arm_specs(
 def create_live_trap_judge(
     *, environ: Mapping[str, str] | None = None
 ) -> ModelTrapJudge:
-    """Use the fixed Sonnet route for informational trap-rubric judging."""
-    direct = create_direct_arm("sonnet", environ=dict(environ or os.environ))
+    """Use the fixed DeepSeek Flash route for informational trap judging."""
+    direct = create_direct_arm("deepseek_flash", environ=dict(environ or os.environ))
     return ModelTrapJudge(provider=direct.provider)
 
 
 def create_live_answer_quality_judge(
     *, environ: Mapping[str, str] | None = None
 ) -> ModelAnswerQualityJudge:
-    """Use a fixed judge route so prose scores are comparable across arms."""
-    direct = create_direct_arm("sonnet", environ=dict(environ or os.environ))
+    """Use the cheap fixed DeepSeek Flash route for qualitative judging."""
+    direct = create_direct_arm("deepseek_flash", environ=dict(environ or os.environ))
     return ModelAnswerQualityJudge(provider=direct.provider)
 
 
