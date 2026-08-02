@@ -25,12 +25,8 @@ _VALID_POSTURES = frozenset(
     }
 )
 
-_INTERNAL_MESSAGE_KEYS = frozenset({"grounded_evidence_ids"})
 
-# Providers whose OpenAI-compatible endpoint accepts the unified `reasoning`
-# request parameter (bead 3qo.9.12). Other providers reject unknown request
-# fields, so the parameter is only sent where it is advertised as supported.
-_REASONING_REQUEST_PROVIDERS = frozenset({"openrouter"})
+_INTERNAL_MESSAGE_KEYS = frozenset({"grounded_evidence_ids"})
 
 _PROVIDE_ANSWER_TOOL: dict[str, object] = {
     "type": "function",
@@ -136,8 +132,6 @@ class OpenAICompatibleQATurnProvider:
             "tools": [*tools, _PROVIDE_ANSWER_TOOL],
             "tool_choice": tool_choice,
         }
-        if self.provider in _REASONING_REQUEST_PROVIDERS:
-            payload["reasoning"] = {"enabled": True}
         try:
             response = httpx.post(
                 f"{self._base_url}/chat/completions",
@@ -183,29 +177,27 @@ class OpenAICompatibleQATurnProvider:
 
     def _interpret(self, body: dict[str, object]) -> ToolCall | FinalAnswer:
         message = self._first_message(body)
-        reasoning = _reasoning_text(message)
         tool_calls = message.get("tool_calls")
         if isinstance(tool_calls, list) and tool_calls:
             call = tool_calls[0]
             if not isinstance(call, dict):
-                return FinalAnswer(answer_text="", reasoning=reasoning)
-            function = call.get("function", {}) if isinstance(call, dict) else {}
+                return FinalAnswer(answer_text="")
+            function = call.get("function", {})
             if not isinstance(function, dict):
-                return FinalAnswer(answer_text="", reasoning=reasoning)
+                return FinalAnswer(answer_text="")
             name = str(function.get("name", ""))
             arguments = _parse_arguments(function.get("arguments"))
             call_id = str(call.get("id") or "call-0")
             if name == "provide_answer":
-                return _final_answer_from_args(arguments, reasoning=reasoning)
+                return _final_answer_from_args(arguments)
             return ToolCall(
                 tool_name=name,
                 tool_input=arguments,
                 tool_call_id=call_id,
-                reasoning=reasoning,
             )
 
         content = message.get("content")
-        return FinalAnswer(answer_text=str(content or "").strip(), reasoning=reasoning)
+        return FinalAnswer(answer_text=str(content or "").strip())
 
     @staticmethod
     def _first_message(body: dict[str, object]) -> dict[str, object]:
@@ -228,36 +220,7 @@ class OpenAICompatibleQATurnProvider:
         ]
 
 
-def _parse_arguments(raw: object) -> dict[str, object]:
-    if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str) and raw.strip():
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-    return {}
-
-
-def _reasoning_text(message: dict[str, object]) -> str | None:
-    """Reasoning text a model returned alongside its message, when present.
-
-    OpenAI-compatible gateways surface it as `reasoning` (OpenRouter) or
-    `reasoning_content` (several upstream engines). Anything that is not a
-    non-empty string is ignored -- never coerced or fabricated.
-    """
-    for key in ("reasoning", "reasoning_content"):
-        value = message.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def _final_answer_from_args(
-    arguments: dict[str, object], *, reasoning: str | None = None
-) -> FinalAnswer:
+def _final_answer_from_args(arguments: dict[str, object]) -> FinalAnswer:
     answer_text = str(arguments.get("answer_text", "")).strip()
     evidence = [
         str(x) for x in arguments.get("evidence_object_ids", []) if isinstance(x, str)
@@ -278,5 +241,17 @@ def _final_answer_from_args(
         evidence_references=evidence,
         interpreted_object_ids=interpreted,
         grounding_posture=posture,
-        reasoning=reasoning,
     )
+
+
+def _parse_arguments(raw: object) -> dict[str, object]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {}

@@ -68,6 +68,7 @@ const BLOCKED_DETAIL_KEY_PARTS = [
   "credential",
   "password",
   "private",
+  "reasoning",
   "secret",
   "system_prompt",
   "token",

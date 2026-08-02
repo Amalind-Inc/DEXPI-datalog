@@ -132,6 +132,121 @@ test("uploads E06 XML and a direct topology question gets a grounded QA answer w
   // validation step -- just retrieval and the final evidence/answer step.
   await expect(page.locator('[data-testid="turn-step"][data-step-id="validation"]')).toHaveCount(0);
 });
+test("grounded answers use engineering language and keep identifiers in expandable provenance", async ({
+  page,
+}) => {
+  const answerText = "Pump P-101 is connected to valve V-102 through the process line.";
+  const completedTurn = {
+    turn_id: "turn-answer-quality",
+    session_id: "session-answer-quality",
+    status: "completed",
+    question: "What is connected to pump P-101?",
+    request_id: "req-answer-quality",
+    events: [
+      { sequence: 1, type: "tool-progress", data: { status: "started" } },
+      { sequence: 2, type: "text", data: { text: answerText } },
+      {
+        sequence: 3,
+        type: "evidence",
+        data: {
+          evidence_references: ["node-p101", "node-v102", "edge-p101-v102"],
+          evidence_highlight: {
+            source_scope_ids: ["drawing-e06"],
+            matched_object_ids: ["node-p101", "node-v102"],
+            paths: [
+              {
+                id: "path-p101-v102",
+                node_ids: ["node-p101", "node-v102"],
+                edge_ids: ["edge-p101-v102"],
+              },
+            ],
+          },
+        },
+      },
+      { sequence: 4, type: "completion", data: { status: "completed" } },
+    ],
+    result: {
+      answer_text: answerText,
+      evidence_references: ["node-p101", "node-v102", "edge-p101-v102"],
+      interpreted_object_ids: ["node-p101"],
+      evidence_highlight: {
+        source_scope_ids: ["drawing-e06"],
+        matched_object_ids: ["node-p101", "node-v102"],
+        paths: [
+          {
+            id: "path-p101-v102",
+            node_ids: ["node-p101", "node-v102"],
+            edge_ids: ["edge-p101-v102"],
+          },
+        ],
+      },
+      api_key: "Bearer should never render",
+      reasoning_content: "Private chain of thought should never render",
+    },
+  };
+  await page.route("**/api/review/sessions/*/turns", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(completedTurn) });
+  });
+
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.sendPrompt("What is connected to pump P-101?");
+
+  const answer = page.getByTestId("grounded-qa-answer");
+  await expect(answer).toBeVisible();
+  await expect(answer.getByTestId("qa-answer-text")).toHaveText(answerText);
+  await expect(answer.getByTestId("qa-interpretation-chip")).toHaveText("Candidate 1");
+  await expect(answer.getByTestId("qa-evidence-chip")).toHaveText("Witness path 1");
+  await expect(answer.getByTestId("qa-provenance-raw")).toBeHidden();
+  await expect(answer).not.toContainText(/Bearer should never render|Private chain of thought/);
+
+  const provenance = answer.getByTestId("qa-evidence-provenance");
+  await provenance.locator("summary").click();
+  await expect(answer.getByTestId("qa-provenance-raw")).toBeVisible();
+  await expect(answer.getByTestId("qa-provenance-raw")).toContainText("node-p101");
+  await expect(answer.getByTestId("qa-provenance-raw")).not.toContainText(
+    /Bearer should never render|Private chain of thought/,
+  );
+});
+
+test("diagnostic grounded answers abstain clearly instead of showing generic failure text", async ({
+  page,
+}) => {
+  const answerText =
+    "I could not ground the requested conclusion. No equipment matching P-999 was found in the prepared P&ID. Which equipment tag or drawing area should I check next?";
+  const completedTurn = {
+    turn_id: "turn-diagnostic-answer",
+    session_id: "session-diagnostic-answer",
+    status: "completed",
+    question: "What is connected to equipment P-999?",
+    request_id: "req-diagnostic-answer",
+    events: [
+      { sequence: 1, type: "tool-progress", data: { status: "started" } },
+      { sequence: 2, type: "text", data: { text: answerText } },
+      { sequence: 3, type: "completion", data: { status: "completed" } },
+    ],
+    result: {
+      answer_text: answerText,
+      evidence_references: [],
+      interpreted_object_ids: [],
+      evidence_highlight: { source_scope_ids: [], matched_object_ids: [], paths: [] },
+    },
+  };
+  await page.route("**/api/review/sessions/*/turns", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(completedTurn) });
+  });
+
+  const workflow = reviewWorkflow(page);
+  await workflow.open();
+  await workflow.sendPrompt("What is connected to equipment P-999?");
+
+  const answer = page.getByTestId("grounded-qa-answer");
+  await expect(answer.getByTestId("qa-answer-text")).toContainText(
+    /could not ground|no equipment matching|which equipment tag/i,
+  );
+  await expect(answer).not.toContainText(/unexpected error|unable to process/i);
+  await expect(answer.getByTestId("qa-evidence-provenance")).toHaveCount(0);
+});
 
 test("QA answer evidence chips open the topology panel and highlight structural witnesses on click", async ({
   page,
@@ -164,6 +279,7 @@ test("bundled pump discharge check renders tri-state result and inspectable evid
   const workflow = reviewWorkflow(page);
 
   await workflow.open();
+  await page.getByTestId("execution-detail-level").selectOption("detailed");
   await workflow.uploadPlantXml();
   await workflow.expectPreparedTopology("E06V01-VER.EX01.xml");
   await workflow.sendPrompt("Run the bundled pump discharge check.");

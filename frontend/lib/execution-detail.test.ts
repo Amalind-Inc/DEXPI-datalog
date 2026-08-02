@@ -46,11 +46,12 @@ test("execution detail preference persists only supported values", () => {
   assert.equal(readExecutionDetailLevel(storage), "detailed");
 });
 
-test("execution detail sanitizer drops secrets and bounds disclosure values", () => {
+test("execution detail sanitizer drops secrets and private reasoning", () => {
   assert.deepEqual(
     sanitizeExecutionDetailValue({
       equipment_id: "pump-1",
       api_key: "secret",
+      reasoning_content: "private chain of thought",
       nested: { authorization: "Bearer secret", safe: "visible" },
     }),
     {

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest.mock import patch
 
 import httpx
-from unittest.mock import patch
 
 from pydexpi_datalog.qa.grounded_qa_harness import FinalAnswer, ToolCall
 from pydexpi_datalog.qa.openai_compatible_qa_provider import (
@@ -107,7 +107,9 @@ class ProviderResponseNormalizationTests(unittest.TestCase):
     def test_transport_failure_raises_bounded_runtime_error(self) -> None:
         provider = _openrouter_provider()
 
-        with patch("httpx.post", side_effect=httpx.ConnectError("network is unreachable")):
+        with patch(
+            "httpx.post", side_effect=httpx.ConnectError("network is unreachable")
+        ):
             with self.assertRaisesRegex(RuntimeError, "request failed") as raised:
                 provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
 
@@ -124,15 +126,15 @@ class ProviderResponseNormalizationTests(unittest.TestCase):
         self.assertIn("openrouter", str(raised.exception))
 
 
-class OpenRouterReasoningRequestTests(unittest.TestCase):
-    def test_openrouter_requests_reasoning_tokens(self) -> None:
+class PrivateReasoningBoundaryTests(unittest.TestCase):
+    def test_openrouter_does_not_request_private_reasoning_tokens(self) -> None:
         provider = _openrouter_provider()
 
         with patch("httpx.post", return_value=_tool_call_response()) as mock_post:
             provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
 
         payload = mock_post.call_args[1]["json"]
-        self.assertEqual(payload["reasoning"], {"enabled": True})
+        self.assertNotIn("reasoning", payload)
 
     def test_non_reasoning_providers_do_not_send_the_reasoning_parameter(self) -> None:
         provider = _openai_provider()
@@ -143,9 +145,7 @@ class OpenRouterReasoningRequestTests(unittest.TestCase):
         payload = mock_post.call_args[1]["json"]
         self.assertNotIn("reasoning", payload)
 
-
-class ReasoningCaptureTests(unittest.TestCase):
-    def test_tool_call_carries_returned_reasoning(self) -> None:
+    def test_tool_call_does_not_capture_returned_private_reasoning(self) -> None:
         provider = _openrouter_provider()
         response = _tool_call_response(reasoning="I should search for pumps first.")
 
@@ -155,9 +155,9 @@ class ReasoningCaptureTests(unittest.TestCase):
         assert isinstance(result, ToolCall)
         self.assertEqual(result.tool_name, "find_equipment")
         self.assertEqual(result.tool_input, {"pattern": "pump"})
-        self.assertEqual(result.reasoning, "I should search for pumps first.")
+        self.assertIsNone(result.reasoning)
 
-    def test_final_answer_carries_returned_reasoning_content(self) -> None:
+    def test_final_answer_does_not_capture_returned_private_reasoning(self) -> None:
         provider = _openrouter_provider()
         response = _final_answer_response(
             reasoning_content="The retrieved evidence answers the question."
@@ -167,9 +167,7 @@ class ReasoningCaptureTests(unittest.TestCase):
             result = provider.complete_with_tools(messages=[], tools=SAMPLE_TOOLS)
 
         assert isinstance(result, FinalAnswer)
-        self.assertEqual(
-            result.reasoning, "The retrieved evidence answers the question."
-        )
+        self.assertIsNone(result.reasoning)
 
     def test_missing_reasoning_degrades_to_none_without_fabrication(self) -> None:
         provider = _openrouter_provider()

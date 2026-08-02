@@ -71,6 +71,7 @@ import {
   EXECUTION_DETAIL_OPTIONS,
   isExecutionDetailLevel,
   readExecutionDetailLevel,
+  sanitizeExecutionDetailValue,
   writeExecutionDetailLevel,
   type ExecutionDetailLevel,
 } from "@/lib/execution-detail.ts";
@@ -383,7 +384,7 @@ const AssistantMessage: FC = () => {
               if (qaAnswer) {
                 return (
                   <SteppedTurnCard steps={qaAnswer.steps ?? []} detailLevel={detailLevel}>
-                    <GroundedQAAnswerCard answer={qaAnswer} />
+                    <GroundedQAAnswerCard answer={qaAnswer} detailLevel={detailLevel} />
                   </SteppedTurnCard>
                 );
               }
@@ -896,10 +897,20 @@ function readSessionIdFromRaw(raw: Record<string, unknown>) {
   return typeof raw.session_id === "string" ? raw.session_id : "local-session";
 }
 
-const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer }) => {
+const GroundedQAAnswerCard: FC<{
+  answer: GroundedQAAnswerState;
+  detailLevel: ExecutionDetailLevel;
+}> = ({ answer, detailLevel }) => {
   const { setHighlightedNodeIds, setGraphOpen } = usePidGraph();
   const hasEvidence =
-    answer.evidenceHighlight.paths.length > 0 || answer.evidenceReferences.length > 0;
+    answer.interpretedObjectIds.length > 0 ||
+    answer.evidenceHighlight.paths.length > 0 ||
+    answer.evidenceReferences.length > 0;
+  const provenance = sanitizeExecutionDetailValue({
+    evidence_references: answer.evidenceReferences,
+    interpreted_object_ids: answer.interpretedObjectIds,
+    evidence_highlight: answer.evidenceHighlight,
+  });
 
   // Auto-open the topology panel when this answer carries evidence (bead
   // 2ki.9). Runs once per card mount (i.e. once per new answer), so closing
@@ -934,10 +945,10 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
         <p className="qa-interpretation" data-testid="qa-interpretation">
           Interpreted as{" "}
           {answer.interpretedObjectIds.length === 1
-            ? "object"
-            : `${answer.interpretedObjectIds.length} objects`}
+            ? "one candidate"
+            : `${answer.interpretedObjectIds.length} candidates`}
           :{" "}
-          {answer.interpretedObjectIds.map((id) => (
+          {answer.interpretedObjectIds.map((id, index) => (
             <button
               key={id}
               type="button"
@@ -945,9 +956,9 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
               data-evidence-id={id}
               className="qa-evidence-chip qa-evidence-chip--interpretation"
               onClick={() => setHighlightedNodeIds([id])}
-              title={`Highlight ${id}`}
+              title={`Highlight candidate ${index + 1}`}
             >
-              {id}
+              Candidate {index + 1}
             </button>
           ))}
         </p>
@@ -955,7 +966,7 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
 
       {answer.evidenceHighlight.paths.length > 0 && (
         <div className="qa-evidence-chips" data-testid="qa-evidence-chips">
-          {answer.evidenceHighlight.paths.map((path) => (
+          {answer.evidenceHighlight.paths.map((path, index) => (
             <button
               key={path.id}
               type="button"
@@ -963,9 +974,9 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
               data-evidence-id={path.id}
               className="qa-evidence-chip"
               onClick={() => handleEvidenceChipClick(path)}
-              title={`Show witness path for ${path.id}`}
+              title={`Show witness path ${index + 1}`}
             >
-              {path.id}
+              Witness path {index + 1}
             </button>
           ))}
           {answer.evidenceHighlight.paths.length > 1 && (
@@ -983,7 +994,7 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
 
       {answer.evidenceHighlight.paths.length === 0 && answer.evidenceReferences.length > 0 && (
         <div className="qa-evidence-chips" data-testid="qa-evidence-chips">
-          {answer.evidenceReferences.map((ref) => (
+          {answer.evidenceReferences.map((ref, index) => (
             <button
               key={ref}
               type="button"
@@ -991,12 +1002,24 @@ const GroundedQAAnswerCard: FC<{ answer: GroundedQAAnswerState }> = ({ answer })
               data-evidence-id={ref}
               className="qa-evidence-chip qa-evidence-chip--generic"
               onClick={() => setHighlightedNodeIds([ref])}
-              title={`Inspect evidence: ${ref}`}
+              title={`Inspect evidence ${index + 1}`}
             >
-              {ref}
+              Evidence {index + 1}
             </button>
           ))}
         </div>
+      )}
+
+      {hasEvidence && (
+        <details
+          data-testid="qa-evidence-provenance"
+          open={detailLevel === "detailed" ? true : undefined}
+        >
+          <summary>Evidence provenance</summary>
+          <pre data-testid="qa-provenance-raw">
+            <code>{JSON.stringify(provenance, null, 2)}</code>
+          </pre>
+        </details>
       )}
     </section>
   );
