@@ -1740,6 +1740,7 @@ class TopologyTools:
             response: dict[str, object] = {
                 "error": result.error,
                 "source_id": equipment_id,
+                "source_label": self._node_label(equipment_id),
                 "reachable": [],
                 "coverage": {"complete": False},
                 "limitations": [],
@@ -1814,6 +1815,7 @@ class TopologyTools:
             )
         response: dict[str, object] = {
             "source_id": equipment_id,
+            "source_label": self._node_label(equipment_id),
             "reachable": reachable,
             "outcome": self._claim_outcome(
                 claim_type=claim_type,

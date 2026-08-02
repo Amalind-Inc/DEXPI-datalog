@@ -463,6 +463,357 @@ def _sufficiency_failure(intent: ReviewIntent) -> dict[str, object]:
     }
 
 
+_DIAGNOSTIC_TOOL_NAMES = frozenset(
+    {
+        "find_equipment",
+        "get_reachable_equipment",
+        "census_outgoing_edge_cardinality",
+        "execute_bundled_query_template",
+        "propose_temporary_datalog",
+    }
+)
+
+
+def _clean_diagnostic_value(value: object, *, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    cleaned = " ".join(value.split()).strip(" .?!")
+    return cleaned or fallback
+
+
+def _diagnostic_from_trace(
+    *,
+    question: str,
+    intent: ReviewIntent,
+    tool_call_trace: list[dict[str, object]],
+) -> dict[str, object]:
+    """Summarize the strongest deterministic reason a grounded claim failed.
+
+    This is deliberately derived from tool inputs and bounded result metadata,
+    never from the model's unsupported prose.
+    """
+
+    fallback_scope = _clean_diagnostic_value(
+        question, fallback="the requested P&ID scope"
+    )
+    for trace in reversed(tool_call_trace):
+        tool_name = trace.get("tool_name")
+        result = trace.get("tool_result")
+        if tool_name not in _DIAGNOSTIC_TOOL_NAMES or not isinstance(result, dict):
+            continue
+
+        if tool_name == "find_equipment":
+            tool_input = trace.get("tool_input")
+            pattern = (
+                tool_input.get("pattern")
+                if isinstance(tool_input, dict)
+                else fallback_scope
+            )
+            scope = _clean_diagnostic_value(pattern, fallback=fallback_scope)
+            raw_matches = result.get("matches")
+            matches = (
+                [item for item in raw_matches if isinstance(item, dict)]
+                if isinstance(raw_matches, list)
+                else []
+            )
+            labels = [
+                _clean_diagnostic_value(
+                    item.get("label") or item.get("node_class"),
+                    fallback="matching equipment",
+                )
+                for item in matches
+            ]
+            coverage = result.get("coverage")
+            complete = isinstance(coverage, dict) and coverage.get("complete") is True
+            total_matches = result.get("total_matches")
+            if complete and total_matches == 0:
+                return {
+                    "kind": "not_found",
+                    "attempted_scope": scope,
+                    "coverage": "Complete",
+                    "partial_matches": [],
+                    "summary": f"No equipment matching {scope} was found in the prepared P&ID.",
+                    "clarification_question": (
+                        "Which equipment tag or drawing area should I check next?"
+                    ),
+                }
+            if labels:
+                return {
+                    "kind": "partial_match" if not complete else "match_not_used",
+                    "attempted_scope": scope,
+                    "coverage": "Partial" if not complete else "Complete",
+                    "partial_matches": labels[:5],
+                    "summary": (
+                        f"I found {', '.join(labels[:5])} while checking {scope}, "
+                        "but the requested conclusion was not established."
+                    ),
+                    "clarification_question": (
+                        "Which candidate or next drawing should I inspect to complete the check?"
+                    ),
+                }
+            return {
+                "kind": "partial_match",
+                "attempted_scope": scope,
+                "coverage": "Partial" if not complete else "Insufficient",
+                "partial_matches": [],
+                "summary": (
+                    f"The search for {scope} did not return usable evidence for "
+                    "the requested conclusion."
+                ),
+                "clarification_question": (
+                    "Which equipment tag or drawing area should I check next?"
+                ),
+            }
+
+        if tool_name == "get_reachable_equipment":
+            tool_input = trace.get("tool_input")
+            requested_id = (
+                tool_input.get("equipment_id")
+                if isinstance(tool_input, dict)
+                else fallback_scope
+            )
+            scope = _clean_diagnostic_value(requested_id, fallback=fallback_scope)
+            source_label = _clean_diagnostic_value(
+                result.get("source_label") or requested_id,
+                fallback=scope,
+            )
+            error = _clean_diagnostic_value(result.get("error"), fallback="")
+            coverage = result.get("coverage")
+            complete = isinstance(coverage, dict) and coverage.get("complete") is True
+            raw_reachable = result.get("reachable")
+            reachable = (
+                [item for item in raw_reachable if isinstance(item, dict)]
+                if isinstance(raw_reachable, list)
+                else []
+            )
+            if error and "unknown equipment_id" in error.lower():
+                return {
+                    "kind": "not_found",
+                    "attempted_scope": scope,
+                    "coverage": "Complete",
+                    "partial_matches": [],
+                    "summary": (
+                        f"Equipment {scope} was not found in the prepared P&ID, "
+                        "so its connection was not evaluated."
+                    ),
+                    "clarification_question": (
+                        "Which equipment tag or drawing area should I check next?"
+                    ),
+                }
+            if reachable:
+                labels = [
+                    _clean_diagnostic_value(
+                        item.get("label") or item.get("node_class"),
+                        fallback="connected topology object",
+                    )
+                    for item in reachable[:5]
+                ]
+                return {
+                    "kind": "partial_match" if not complete else "match_not_used",
+                    "attempted_scope": source_label,
+                    "coverage": "Partial" if not complete else "Complete",
+                    "partial_matches": labels,
+                    "summary": (
+                        f"The trace from {source_label} reached {', '.join(labels)}, "
+                        "but the requested relationship was not established in the answer."
+                    ),
+                    "clarification_question": (
+                        "Which connection direction or drawing area should I inspect next?"
+                    ),
+                }
+            if not error and complete:
+                return {
+                    "kind": "found_not_traversable",
+                    "attempted_scope": source_label,
+                    "coverage": "Complete",
+                    "partial_matches": [],
+                    "summary": (
+                        f"Equipment {source_label} was found, but no represented object "
+                        "was reached through the requested topology relationship."
+                    ),
+                    "clarification_question": (
+                        "Which connection direction or drawing area should I inspect next?"
+                    ),
+                }
+            return {
+                "kind": "not_evaluated",
+                "attempted_scope": source_label,
+                "coverage": "Insufficient",
+                "partial_matches": [],
+                "summary": (
+                    f"The requested connection from {source_label} was not fully "
+                    "evaluated because the available topology trace was bounded."
+                ),
+                "clarification_question": (
+                    "Which connection direction or next drawing should I inspect?"
+                ),
+            }
+
+        result_coverage = result.get("coverage")
+        complete = (
+            isinstance(result_coverage, dict)
+            and result_coverage.get("complete") is True
+        )
+        if not complete:
+            return {
+                "kind": "partial_match",
+                "attempted_scope": fallback_scope,
+                "coverage": "Partial",
+                "partial_matches": [],
+                "summary": (
+                    f"The requested {intent.intent_type.replace('_', ' ')} check "
+                    "returned only partial evidence."
+                ),
+                "clarification_question": (
+                    "Which rule or acceptance criterion should I check next?"
+                ),
+            }
+        return {
+            "kind": "not_evaluated",
+            "attempted_scope": fallback_scope,
+            "coverage": "Insufficient",
+            "partial_matches": [],
+            "summary": (
+                f"The requested {intent.intent_type.replace('_', ' ')} check "
+                "was not evaluated to a usable conclusion."
+            ),
+            "clarification_question": (
+                "Which rule or acceptance criterion should I check?"
+            ),
+        }
+
+    return {
+        "kind": "no_evidence",
+        "attempted_scope": fallback_scope,
+        "coverage": "Insufficient",
+        "partial_matches": [],
+        "summary": (
+            "The request did not match a supported grounded evidence path, so the "
+            "prepared P&ID returned no validated topology evidence."
+        ),
+        "clarification_question": (
+            "Which equipment tag, relationship, or acceptance criterion should I check?"
+        ),
+    }
+
+
+def _diagnostic_answer_text(diagnostic: dict[str, object]) -> str:
+    summary = str(diagnostic["summary"])
+    coverage = str(diagnostic["coverage"])
+    clarification = str(diagnostic["clarification_question"])
+    partial_matches = diagnostic.get("partial_matches")
+    match_text = ""
+    if isinstance(partial_matches, list) and partial_matches:
+        match_text = f" Partial matches: {', '.join(str(item) for item in partial_matches)}."
+    return (
+        "I could not ground the requested conclusion. "
+        f"{summary}{match_text} "
+        f"Conclusion: Not established · Coverage: {coverage}. "
+        f"Next step: {clarification}"
+    )
+
+
+def _has_deterministic_answer(tool_call_trace: list[dict[str, object]]) -> bool:
+    for trace in tool_call_trace:
+        result = trace.get("tool_result")
+        if not isinstance(result, dict) or result.get("status") != "answered":
+            continue
+        if trace.get("tool_name") == "execute_bundled_query_template":
+            return True
+        if (
+            trace.get("tool_name") == "propose_temporary_datalog"
+            and result.get("executed") is True
+        ):
+            return True
+    return False
+
+
+def _needs_diagnostic_fallback(
+    *,
+    response: FinalAnswer,
+    intent: ReviewIntent,
+    known_ids: set[str],
+    tool_call_trace: list[dict[str, object]],
+) -> bool:
+    if intent.evidence_need == "none":
+        return False
+    if response.grounding_posture in {
+        POSTURE_GENERAL_KNOWLEDGE,
+        POSTURE_SOURCE_DATA_UNAVAILABLE,
+        POSTURE_OUT_OF_SCOPE,
+        POSTURE_NEEDS_CLARIFICATION,
+    }:
+        return False
+    if any(reference in known_ids for reference in response.evidence_references):
+        return False
+    if _has_deterministic_answer(tool_call_trace):
+        return False
+    return any(
+        trace.get("tool_name") in _DIAGNOSTIC_TOOL_NAMES
+        for trace in tool_call_trace
+    )
+
+
+def _diagnostic_insufficiency_result(
+    *,
+    question: str,
+    intent: ReviewIntent,
+    known_ids: set[str],
+    tool_call_trace: list[dict[str, object]],
+    response: FinalAnswer | None = None,
+) -> QATurnResult:
+    diagnostic = _diagnostic_from_trace(
+        question=question,
+        intent=intent,
+        tool_call_trace=tool_call_trace,
+    )
+    result = {
+        "status": "insufficient_evidence",
+        "code": "evidence.insufficient_for_claim",
+        "intent_type": intent.intent_type,
+        "evidence_need": intent.evidence_need,
+        "message": str(diagnostic["summary"]),
+        "diagnostic": diagnostic,
+        "suggested_next_tools": list(intent.suggested_next_tools),
+        "recoverable": True,
+    }
+    trace = list(tool_call_trace)
+    for index in range(len(trace) - 1, -1, -1):
+        if trace[index].get("tool_name") == "__evidence_sufficiency__":
+            trace[index] = {**trace[index], "tool_result": result}
+            break
+    else:
+        trace.append(
+            {
+                "tool_call_id": "evidence-sufficiency",
+                "tool_name": "__evidence_sufficiency__",
+                "tool_input": {"question": question},
+                "tool_result": result,
+            }
+        )
+    rejected = []
+    if response is not None:
+        rejected = [
+            reference
+            for reference in response.evidence_references
+            if reference not in known_ids
+        ]
+    return QATurnResult(
+        answer_text=_diagnostic_answer_text(diagnostic),
+        evidence_references=[],
+        rejected_references=rejected,
+        interpreted_object_ids=[],
+        tool_call_trace=trace,
+        grounding_posture=POSTURE_NEEDS_CLARIFICATION,
+        source_grounded=False,
+        disclosure=_POSTURE_DISCLOSURES[POSTURE_NEEDS_CLARIFICATION],
+        deterministic_verdict=None,
+        witnesses=[],
+        route_artifact=None,
+        trace_events=[],
+    )
+
+
 def _faithfulness_gate_attempt_count(tool_call_trace: list[dict[str, object]]) -> int:
     return sum(
         1
@@ -1322,6 +1673,19 @@ def run_grounded_qa_turn(
             )
 
         if isinstance(response, FinalAnswer):
+            if _needs_diagnostic_fallback(
+                response=response,
+                intent=intent,
+                known_ids=known_ids,
+                tool_call_trace=tool_call_trace,
+            ):
+                return _diagnostic_insufficiency_result(
+                    question=question,
+                    intent=intent,
+                    known_ids=known_ids,
+                    tool_call_trace=tool_call_trace,
+                    response=response,
+                )
             if _tool_trace_satisfies_intent(intent, tool_call_trace):
                 return _finalize(response, known_ids, tool_call_trace)
             gate_diagnostics = _faithfulness_gate_diagnostics(tool_call_trace)
@@ -1357,20 +1721,12 @@ def run_grounded_qa_turn(
                 }
             )
             if consecutive_insufficient_answers >= MAX_CONSECUTIVE_INSUFFICIENT_ANSWERS:
-                return _finalize(
-                    FinalAnswer(
-                        answer_text=(
-                            "I could not ground that answer with the required evidence. "
-                            "Please narrow the question or approve the suggested "
-                            "deterministic check."
-                        ),
-                        evidence_references=last_insufficient_answer.evidence_references,
-                        interpreted_object_ids=(
-                            last_insufficient_answer.interpreted_object_ids
-                        ),
-                    ),
-                    known_ids,
-                    tool_call_trace,
+                return _diagnostic_insufficiency_result(
+                    question=question,
+                    intent=intent,
+                    known_ids=known_ids,
+                    tool_call_trace=tool_call_trace,
+                    response=last_insufficient_answer,
                 )
             messages.append(
                 {
@@ -1490,17 +1846,12 @@ def run_grounded_qa_turn(
     if missing_capability is not None:
         return missing_capability
     if last_insufficient_answer is not None:
-        return _finalize(
-            FinalAnswer(
-                answer_text=(
-                    "I could not ground that answer with the required evidence. "
-                    "Please narrow the question or approve the suggested deterministic check."
-                ),
-                evidence_references=last_insufficient_answer.evidence_references,
-                interpreted_object_ids=last_insufficient_answer.interpreted_object_ids,
-            ),
-            known_ids,
-            tool_call_trace,
+        return _diagnostic_insufficiency_result(
+            question=question,
+            intent=intent,
+            known_ids=known_ids,
+            tool_call_trace=tool_call_trace,
+            response=last_insufficient_answer,
         )
     raise RuntimeError(
         f"QA harness exceeded {max_rounds} rounds without a final answer."

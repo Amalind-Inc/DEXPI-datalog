@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from pydexpi_datalog.qa.grounded_qa_harness import (
     DEFAULT_MAX_ROUNDS,
+    POSTURE_NEEDS_CLARIFICATION,
     FinalAnswer,
     ToolCall,
     run_grounded_qa_turn,
 )
-from pydexpi_datalog.qa.topology_tools import TopologyTools
+from pydexpi_datalog.qa.topology_tools import RetrievalBudgets, TopologyTools
 
 PUMP_ID = "node-pump-p101"
 NOZZLE_ID = "node-nozzle-n1"
@@ -170,6 +171,25 @@ def test_bare_final_answer_thrash_fails_closed_before_full_budget() -> None:
     )
 
 
+def test_no_evidence_fallback_is_diagnostic_and_asks_one_question() -> None:
+    provider = _BareFinalAnswerForever()
+    result = run_grounded_qa_turn(
+        question="What is downstream of pump P-101?",
+        topology_tools=_tools(),
+        provider=provider,
+    )
+
+    assert result.grounding_posture == POSTURE_NEEDS_CLARIFICATION
+    assert "could not ground" in result.answer_text.lower()
+    assert result.answer_text.count("?") == 1
+    assert any(
+        (entry.get("tool_result") or {}).get("diagnostic", {}).get("kind")
+        == "no_evidence"
+        for entry in result.tool_call_trace
+        if entry.get("tool_name") == "__evidence_sufficiency__"
+    )
+
+
 def test_after_insufficient_answer_next_round_requires_a_tool() -> None:
     """After one insufficient FinalAnswer, the harness forces tool_choice=required."""
 
@@ -202,3 +222,116 @@ def test_after_insufficient_answer_next_round_requires_a_tool() -> None:
     assert provider.tool_choices[1] == "required"
     assert result.source_grounded is True
     assert "node-exchanger-h1009" in result.evidence_references
+
+
+
+class _FindThenUnsupportedClaim:
+    def __init__(self, *, pattern: str, answer: str) -> None:
+        self.pattern = pattern
+        self.answer = answer
+        self.calls = 0
+
+    def complete_with_tools(self, *, messages, tools, tool_choice: str = "auto"):
+        self.calls += 1
+        if self.calls == 1:
+            return ToolCall(
+                tool_name="find_equipment",
+                tool_input={"pattern": self.pattern},
+                tool_call_id="diagnostic-find",
+            )
+        return FinalAnswer(
+            answer_text=self.answer,
+            grounding_posture="source_grounded",
+        )
+
+
+def test_empty_lookup_returns_deterministic_not_found_clarification() -> None:
+    result = run_grounded_qa_turn(
+        question="What is connected to equipment tagged P-999?",
+        topology_tools=_tools(),
+        provider=_FindThenUnsupportedClaim(
+            pattern="P-999",
+            answer="P-999 is connected to a downstream valve.",
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_NEEDS_CLARIFICATION
+    assert result.source_grounded is False
+    assert "P-999" in result.answer_text
+    assert "no equipment matching" in result.answer_text.lower()
+    assert result.answer_text.count("?") == 1
+    diagnostic = next(
+        entry["tool_result"]["diagnostic"]
+        for entry in result.tool_call_trace
+        if entry["tool_name"] == "__evidence_sufficiency__"
+    )
+    assert diagnostic["kind"] == "not_found"
+
+
+def test_empty_reachability_reports_found_but_unestablished_connection() -> None:
+    class ReachThenUnsupportedClaim:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete_with_tools(self, *, messages, tools, tool_choice: str = "auto"):
+            self.calls += 1
+            if self.calls == 1:
+                return ToolCall(
+                    tool_name="get_reachable_equipment",
+                    tool_input={"equipment_id": PUMP_ID, "max_hops": 6},
+                    tool_call_id="diagnostic-reachability",
+                )
+            return FinalAnswer(
+                answer_text="P-101 is connected to a downstream valve.",
+                grounding_posture="source_grounded",
+            )
+
+    result = run_grounded_qa_turn(
+        question="What is downstream of pump P-101?",
+        topology_tools=_tools(),
+        provider=ReachThenUnsupportedClaim(),
+    )
+
+    assert result.grounding_posture == POSTURE_NEEDS_CLARIFICATION
+    assert "P-101" in result.answer_text
+    assert "not established" in result.answer_text.lower()
+    assert "found" in result.answer_text.lower()
+    assert result.answer_text.count("?") == 1
+    diagnostic = next(
+        entry["tool_result"]["diagnostic"]
+        for entry in result.tool_call_trace
+        if entry["tool_name"] == "__evidence_sufficiency__"
+    )
+    assert diagnostic["kind"] == "found_not_traversable"
+
+
+def test_bounded_lookup_preserves_partial_matches_in_clarification() -> None:
+    topology = {
+        **MINIMAL_TOPOLOGY,
+        "nodes": [
+            *MINIMAL_TOPOLOGY["nodes"],
+            {"id": "node-pump-p102", "label": "Pump", "tag_name": "P-102"},
+        ],
+        "evidence_map": {
+            **MINIMAL_TOPOLOGY["evidence_map"],
+            "node-pump-p102": {"id": "node-pump-p102"},
+        },
+    }
+    result = run_grounded_qa_turn(
+        question="Which pump objects are present in the drawing?",
+        topology_tools=TopologyTools(
+            topology_view=topology,
+            session_id="partial-diagnostic",
+            retrieval_budgets=RetrievalBudgets(max_evidence_objects=1),
+        ),
+        provider=_FindThenUnsupportedClaim(
+            pattern="pump",
+            answer="Every pump has a downstream valve.",
+        ),
+    )
+
+    assert result.grounding_posture == POSTURE_NEEDS_CLARIFICATION
+    assert "partial match" in result.answer_text.lower()
+    assert "P-101" in result.answer_text
+    assert "coverage: partial" in result.answer_text.lower()
+    assert result.answer_text.count("?") == 1
