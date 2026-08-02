@@ -114,6 +114,12 @@ def test_low_path_and_path_length_limits_keep_explanatory_evidence() -> None:
         "retrieval.path_length_limit",
     }
 
+    narrative = result["narrative"]
+    assert narrative["claim"]["conclusion_status"] == "Established"
+    assert narrative["claim"]["coverage"] == "Partial"
+    assert narrative["relationship_phrases"] == ["a structural connection"]
+    assert narrative["evidence"][0]["provenance"]["topology_edge_ids"]
+
 
 def test_step_and_payload_limits_are_explicit() -> None:
     tools = TopologyTools(

@@ -15,6 +15,7 @@ from pydexpi_datalog.qa.capability_manifest import (
 from pydexpi_datalog.qa.counterfactual_probes import (
     run_mandatory_counterfactual_probes,
 )
+from pydexpi_datalog.qa.evidence_narratives import narrate_reachable_result
 from pydexpi_datalog.qa.faithfulness_gate import (
     evaluate_layered_faithfulness_gate,
 )
@@ -1736,11 +1737,18 @@ class TopologyTools:
             result_limit=self._retrieval_budgets.max_paths,
         )
         if result.error is not None:
-            return {
+            response: dict[str, object] = {
                 "error": result.error,
                 "source_id": equipment_id,
                 "reachable": [],
+                "coverage": {"complete": False},
+                "limitations": [],
             }
+            response["narrative"] = narrate_reachable_result(
+                source_label=self._node_label(equipment_id),
+                result=response,
+            )
+            return response
 
         eligible = [
             item
@@ -1774,6 +1782,7 @@ class TopologyTools:
                         }
                         for edge in item.witness.raw_edges
                     ],
+                    "relationships": list(item.witness.relationships),
                 },
             }
             for item in eligible
@@ -1822,6 +1831,10 @@ class TopologyTools:
         }
         if result.truncated:
             response["truncated"] = True
+        response["narrative"] = narrate_reachable_result(
+            source_label=self._node_label(equipment_id),
+            result=response,
+        )
         return response
 
     def _operation_budget_rejection(self) -> dict[str, object] | None:
