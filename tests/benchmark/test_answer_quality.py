@@ -106,6 +106,65 @@ def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> N
     assert provider.requests[0]["context"]["task"] == "benchmark_answer_quality_judge"
 
 
+def test_model_answer_quality_judge_accepts_nested_provider_schema() -> None:
+    provider = FakeModelProvider(
+        json.dumps(
+            {
+                "answer": {
+                    "answered_question": True,
+                    "faithful_to_evidence": True,
+                    "engineering_language": True,
+                    "scope_honest": True,
+                    "provenance_clear": True,
+                    "grounding_expectation": "required",
+                    "grounding_fit": True,
+                    "useful_next_step": False,
+                },
+                "overall_score": 5,
+                "rationale": "The answer is clear, grounded, and useful.",
+            }
+        )
+    )
+
+    result = ModelAnswerQualityJudge(provider=provider).judge(
+        question=_question(), answer=_answer(), graph_facts=_facts()
+    )
+
+    assert result.overall_score == 5
+    assert result.answered_question is True
+    assert result.grounding_expectation == "required"
+    assert result.rationale == "The answer is clear, grounded, and useful."
+
+def test_model_answer_quality_judge_accepts_answer_only_nested_schema() -> None:
+    provider = FakeModelProvider(
+        json.dumps(
+            {
+                "answer": {
+                    "answered_question": True,
+                    "faithful_to_evidence": True,
+                    "engineering_language": True,
+                    "scope_honest": True,
+                    "provenance_clear": True,
+                    "grounding_expectation": "required",
+                    "grounding_fit": True,
+                    "useful_next_step": False,
+                    "overall_score": 4,
+                    "rationale": "The answer is concise and source-grounded.",
+                }
+            }
+        )
+    )
+
+    result = ModelAnswerQualityJudge(provider=provider).judge(
+        question=_question(), answer=_answer(), graph_facts=_facts()
+    )
+
+    assert result.overall_score == 4
+    assert result.grounding_fit is True
+    assert result.rationale == "The answer is concise and source-grounded."
+
+
+
 def test_sme_judge_allows_direct_answers_when_grounding_is_not_needed() -> None:
     provider = FakeModelProvider(
         json.dumps(

@@ -200,6 +200,25 @@ def _parse_judgment(raw: object) -> AnswerQualityJudgment:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return malformed
+    # Some OpenRouter models wrap the requested rubric fields in an ``answer``
+    # object while keeping the aggregate score and rationale at the top level.
+    # Accept only these exact wrappers; the field validation below remains strict.
+    if (
+        isinstance(payload, dict)
+        and set(payload) == {"answer"}
+        and isinstance(payload["answer"], dict)
+    ):
+        payload = payload["answer"]
+    elif (
+        isinstance(payload, dict)
+        and set(payload) == {"answer", "overall_score", "rationale"}
+        and isinstance(payload["answer"], dict)
+    ):
+        payload = {
+            **payload["answer"],
+            "overall_score": payload["overall_score"],
+            "rationale": payload["rationale"],
+        }
     boolean_fields = {
         "answered_question",
         "faithful_to_evidence",
