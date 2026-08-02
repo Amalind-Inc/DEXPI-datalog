@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from pydexpi_datalog.benchmark.answer_quality import AnswerQualityJudge
 from pydexpi_datalog.benchmark.contract import (
     POSTURES,
     TRAP_EXPECTED_POSTURES,
@@ -36,8 +37,8 @@ from pydexpi_datalog.benchmark.trap_rubric import (
     load_scripted_trap_judgments,
 )
 
-# Version 5: answers carry their submitted claim-to-support graph.
-BENCHMARK_REPORT_SCHEMA_VERSION = 5
+# Version 6: reports optionally carry qualitative answer-quality judgments.
+BENCHMARK_REPORT_SCHEMA_VERSION = 6
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
 
 
@@ -87,6 +88,7 @@ def run_benchmark(
     arm: ArmAdapter,
     output_dir: Path,
     trap_judge: TrapJudge | None = None,
+    answer_quality_judge: AnswerQualityJudge | None = None,
     episode_workers: int = 1,
 ) -> dict[str, object]:
     """Run every manifest question through one arm and persist the report.
@@ -111,6 +113,7 @@ def run_benchmark(
             question=question,
             arm=arm,
             trap_judge=trap_judge,
+            answer_quality_judge=answer_quality_judge,
         )
 
     if episode_workers == 1:
@@ -121,14 +124,16 @@ def run_benchmark(
 
     gating_episodes = [episode for episode in episodes if episode["gating"]]
     informational_episodes = [episode for episode in episodes if not episode["gating"]]
-
     report: dict[str, object] = {
         "schema_version": BENCHMARK_REPORT_SCHEMA_VERSION,
         "manifest_path": str(manifest_path.resolve()),
         "arm_id": arm.arm_id,
         "trap_judge_id": trap_judge.judge_id if trap_judge is not None else None,
-        # The headline aggregate is deliberately gating-only. Trap scores
-        # cannot influence it even when every trap passes or fails.
+        "answer_quality_judge_id": (
+            answer_quality_judge.judge_id if answer_quality_judge is not None else None
+        ),
+        # Headline totals remain deterministic and cannot be influenced by
+        # trap or answer-quality judgments.
         "totals": _episode_totals(gating_episodes),
         "informational_totals": _episode_totals(informational_episodes),
         "human_spot_check": {
@@ -174,6 +179,7 @@ def _run_episode(
     question: BenchmarkQuestion,
     arm: ArmAdapter,
     trap_judge: TrapJudge | None,
+    answer_quality_judge: AnswerQualityJudge | None,
 ) -> dict[str, object]:
     graph_facts = _load_graph_facts(question.drawing_ref)
 
@@ -188,6 +194,15 @@ def _run_episode(
             rubric=question.trap_rubric,
         )
         if question.trap_rubric is not None and trap_judge is not None
+        else None
+    )
+    answer_quality_judgment = (
+        answer_quality_judge.judge(
+            question=question,
+            answer=answer,
+            graph_facts=graph_facts,
+        )
+        if answer_quality_judge is not None
         else None
     )
 
@@ -227,6 +242,15 @@ def _run_episode(
             else None
         ),
         "grade": _grade_payload(episode_grade),
+        "answer_quality": (
+            {
+                "rubric_version": "answer-quality-v1",
+                "deterministic_grade_passed": episode_grade.passed,
+                "judgment": answer_quality_judgment.to_payload(),
+            }
+            if answer_quality_judgment is not None
+            else None
+        ),
         "wall_time_seconds": wall_time_seconds,
         "tokens": _tokens_payload(answer.usage),
         "cost_usd": answer.usage.get("cost_usd"),

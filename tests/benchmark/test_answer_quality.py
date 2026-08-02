@@ -1,0 +1,147 @@
+"""Behavior tests for the qualitative answer-quality judge seam."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from pydexpi_datalog.benchmark.answer_quality import (
+    AnswerQualityJudgment,
+    ModelAnswerQualityJudge,
+    ScriptedAnswerQualityJudge,
+)
+from pydexpi_datalog.benchmark.contract import GroundTruth, StructuredAnswer
+from pydexpi_datalog.benchmark.dataset import BenchmarkQuestion
+from pydexpi_datalog.benchmark.runner import ScriptedArm, run_benchmark
+from pydexpi_datalog.llm.model_access import FakeModelProvider
+
+
+def _question() -> BenchmarkQuestion:
+    return BenchmarkQuestion(
+        question_id="quality-1",
+        question="Which pump is represented?",
+        slice="hand_authored",
+        drawing_ref=Path("graph_facts.json"),
+        ground_truth=GroundTruth(
+            verdict="violation_found",
+            witness_ids=("pump-1",),
+        ),
+    )
+
+
+def _answer() -> StructuredAnswer:
+    return StructuredAnswer(
+        verdict="violation_found",
+        witness_ids=("pump-1",),
+        posture="source_grounded",
+        answer_text="The represented pump is P-101.",
+        transcript=(
+            {"role": "system", "content": "Do not expose this private message."},
+        ),
+    )
+
+
+def _facts() -> dict[str, object]:
+    return {
+        "facts": {
+            "nodes": [
+                {
+                    "node_id": "pump-1",
+                    "fact_type": "node",
+                    "attributes": {"label": "CentrifugalPump", "proteusId": "P-101"},
+                }
+            ],
+            "edges": [],
+        }
+    }
+
+
+def test_model_answer_quality_judge_parses_rubric_and_excludes_transcript() -> None:
+    provider = FakeModelProvider(
+        json.dumps(
+            {
+                "answered_question": True,
+                "faithful_to_evidence": True,
+                "engineering_language": True,
+                "scope_honest": True,
+                "provenance_clear": True,
+                "useful_next_step": False,
+                "overall_score": 4,
+                "rationale": "The answer identifies the pump and cites its source label.",
+            }
+        )
+    )
+    judge = ModelAnswerQualityJudge(provider=provider)
+
+    result = judge.judge(question=_question(), answer=_answer(), graph_facts=_facts())
+
+    assert result.overall_score == 4
+    assert result.faithful_to_evidence is True
+    assert judge.judge_id == "llm-answer-quality-judge:fake:fake-model"
+    request = provider.requests[0]["request"]
+    assert "Which pump is represented?" in request
+    assert "The represented pump is P-101." in request
+    assert "Do not expose this private message" not in request
+    assert provider.requests[0]["context"]["task"] == "benchmark_answer_quality_judge"
+
+
+def test_malformed_answer_quality_judgment_receives_no_qualitative_credit() -> None:
+    judge = ModelAnswerQualityJudge(provider=FakeModelProvider("not-json"))
+
+    result = judge.judge(question=_question(), answer=_answer(), graph_facts=_facts())
+
+    assert result.overall_score == 1
+    assert result.answered_question is False
+    assert "malformed" in result.rationale.lower()
+
+
+def test_runner_keeps_deterministic_grade_separate_from_quality_judgment(
+    tmp_path: Path,
+) -> None:
+    graph_path = tmp_path / "graph_facts.json"
+    graph_path.write_text(json.dumps(_facts()), encoding="utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "questions": [
+                    {
+                        "id": "quality-1",
+                        "question": "Which pump is represented?",
+                        "slice": "hand_authored",
+                        "category": "retrieval_local",
+                        "drawing": str(graph_path),
+                        "ground_truth": {
+                            "verdict": "violation_found",
+                            "witness_ids": ["pump-1"],
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    quality = AnswerQualityJudgment(
+        answered_question=True,
+        faithful_to_evidence=True,
+        engineering_language=True,
+        scope_honest=True,
+        provenance_clear=True,
+        useful_next_step=False,
+        overall_score=4,
+        rationale="Clear and grounded.",
+    )
+
+    report = run_benchmark(
+        manifest_path=manifest_path,
+        arm=ScriptedArm(arm_id="scripted", answers={"quality-1": _answer()}),
+        output_dir=tmp_path / "report",
+        answer_quality_judge=ScriptedAnswerQualityJudge({"quality-1": quality}),
+    )
+
+    episode = report["episodes"][0]
+    assert episode["grade"]["passed"] is True
+    assert episode["answer_quality"]["judgment"]["overall_score"] == 4
+    assert episode["answer_quality"]["deterministic_grade_passed"] is True
+    assert report["answer_quality_judge_id"] == "scripted-answer-quality-judge"

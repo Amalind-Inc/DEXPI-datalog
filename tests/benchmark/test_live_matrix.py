@@ -7,6 +7,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from pydexpi_datalog.benchmark.agentic_arm import BUNDLE_FILES, EpisodeBudgets
+from pydexpi_datalog.benchmark.answer_quality import (
+    AnswerQualityJudgment,
+    ScriptedAnswerQualityJudge,
+)
 from pydexpi_datalog.benchmark.contract import (
     POSTURE_SOURCE_GROUNDED,
     StructuredAnswer,
@@ -163,6 +167,16 @@ def test_live_matrix_runs_every_configuration_and_model_then_computes_verdict(
         spec("b-incumbent", "arm_b"),
         spec("c-souffle", "arm_c"),
     )
+    quality_judgment = AnswerQualityJudgment(
+        answered_question=True,
+        faithful_to_evidence=True,
+        engineering_language=True,
+        scope_honest=True,
+        provenance_clear=True,
+        useful_next_step=False,
+        overall_score=4,
+        rationale="Clear source-grounded answer.",
+    )
     output_dir = tmp_path / "live"
 
     report = run_live_matrix(
@@ -171,6 +185,12 @@ def test_live_matrix_runs_every_configuration_and_model_then_computes_verdict(
         arm_specs=specs,
         models=LIVE_MATRIX_MODELS,
         budgets=EpisodeBudgets(max_turns=5, max_commands=6),
+        answer_quality_judge=ScriptedAnswerQualityJudge(
+            {
+                question_id: quality_judgment
+                for question_id in ("compliance", "retrieval")
+            }
+        ),
     )
 
     assert len(created) == 12
@@ -179,6 +199,9 @@ def test_live_matrix_runs_every_configuration_and_model_then_computes_verdict(
         for configuration in ("a-direct", "a-agentic", "b-incumbent", "c-souffle")
         for model in LIVE_MATRIX_MODELS
     }
+    quality_entries = report["informational"]["answer_quality"]
+    assert len(quality_entries) == 12
+    assert all(entry["mean_overall_score"] == 4.0 for entry in quality_entries)
     run_index = json.loads((output_dir / "runs.json").read_text(encoding="utf-8"))
     assert len(run_index["runs"]) == 12
     assert report["decision"]["verdict"] == "stand_down"

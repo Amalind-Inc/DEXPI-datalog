@@ -15,6 +15,13 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     create_agentic_arm,
     load_episode_budgets,
 )
+from pydexpi_datalog.benchmark.answer_quality import (
+    ANSWER_QUALITY_RUBRIC_VERSION,
+    AnswerQualityJudge,
+    AnswerQualityJudgment,
+    ModelAnswerQualityJudge,
+    ScriptedAnswerQualityJudge,
+)
 from pydexpi_datalog.benchmark.audit_trace import (
     AuditTraceReport,
     verify_audit_trace,
@@ -139,6 +146,11 @@ from pydexpi_datalog.benchmark.trap_rubric import (
 
 __all__ = [
     "AGENTIC_ARM_MODELS",
+    "ANSWER_QUALITY_RUBRIC_VERSION",
+    "AnswerQualityJudge",
+    "AnswerQualityJudgment",
+    "ModelAnswerQualityJudge",
+    "ScriptedAnswerQualityJudge",
     "AgenticArm",
     "AuditTraceReport",
     "ArmAdapter",

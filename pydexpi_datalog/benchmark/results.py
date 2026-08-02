@@ -631,6 +631,7 @@ def _informational(runs: Sequence[BenchmarkRun]) -> dict[str, object]:
         ),
         "latency": _latency(runs),
         "prose_quality": _prose_quality(runs),
+        "answer_quality": _answer_quality(runs),
         "usage_and_cost": _usage_and_cost(runs),
     }
 
@@ -725,6 +726,56 @@ def _prose_quality(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
                     for episode in trap_episodes
                     if episode.get("human_spot_check_required")
                 ],
+            }
+        )
+    return entries
+
+
+def _answer_quality(runs: Sequence[BenchmarkRun]) -> list[dict[str, object]]:
+    """Summarize judge scores without mixing them into decision accuracy."""
+    entries: list[dict[str, object]] = []
+    criteria = (
+        "answered_question",
+        "faithful_to_evidence",
+        "engineering_language",
+        "scope_honest",
+        "provenance_clear",
+        "useful_next_step",
+    )
+    for run in runs:
+        judgments: list[Mapping[str, object]] = []
+        deterministic_passes = 0
+        for episode in _episodes(run):
+            quality = episode.get("answer_quality")
+            if not isinstance(quality, Mapping):
+                continue
+            judgment = quality.get("judgment")
+            if not isinstance(judgment, Mapping):
+                continue
+            judgments.append(judgment)
+            deterministic_passes += int(bool(quality.get("deterministic_grade_passed")))
+        if not judgments:
+            continue
+        scores = [
+            int(judgment["overall_score"])
+            for judgment in judgments
+            if isinstance(judgment.get("overall_score"), int)
+            and not isinstance(judgment.get("overall_score"), bool)
+        ]
+        entries.append(
+            {
+                "configuration": run.configuration,
+                "arm": run.arm_id,
+                "model": run.model,
+                "episodes_judged": len(judgments),
+                "mean_overall_score": sum(scores) / len(scores) if scores else None,
+                "deterministic_grade_passes": deterministic_passes,
+                "criteria_passes": {
+                    criterion: sum(
+                        bool(judgment.get(criterion)) for judgment in judgments
+                    )
+                    for criterion in criteria
+                },
             }
         )
     return entries

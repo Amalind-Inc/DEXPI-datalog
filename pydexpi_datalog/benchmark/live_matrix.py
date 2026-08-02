@@ -22,6 +22,10 @@ from pydexpi_datalog.benchmark.agentic_arm import (
     EpisodeBudgets,
     create_agentic_arm,
 )
+from pydexpi_datalog.benchmark.answer_quality import (
+    AnswerQualityJudge,
+    ModelAnswerQualityJudge,
+)
 from pydexpi_datalog.benchmark.direct_arm import create_direct_arm
 from pydexpi_datalog.benchmark.incumbent_arm import create_incumbent_arm
 from pydexpi_datalog.benchmark.results import (
@@ -161,6 +165,14 @@ def create_live_trap_judge(
     return ModelTrapJudge(provider=direct.provider)
 
 
+def create_live_answer_quality_judge(
+    *, environ: Mapping[str, str] | None = None
+) -> ModelAnswerQualityJudge:
+    """Use a fixed judge route so prose scores are comparable across arms."""
+    direct = create_direct_arm("sonnet", environ=dict(environ or os.environ))
+    return ModelAnswerQualityJudge(provider=direct.provider)
+
+
 def materialize_live_bundles(*, manifest_path: Path, output_dir: Path) -> Path:
     """Expand facts-only real fixtures into self-contained live-arm bundles."""
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -222,6 +234,7 @@ def run_live_matrix(
     models: Sequence[str] = LIVE_MATRIX_MODELS,
     budgets: EpisodeBudgets = EpisodeBudgets(),
     trap_judge: TrapJudge | None = None,
+    answer_quality_judge: AnswerQualityJudge | None = None,
     materialize_bundles: bool = False,
     max_workers: int = 3,
 ) -> dict[str, object]:
@@ -263,6 +276,7 @@ def run_live_matrix(
                 arm=arm,
                 output_dir=run_dir,
                 trap_judge=trap_judge,
+                answer_quality_judge=answer_quality_judge,
                 episode_workers=(
                     2 if spec.configuration in {"a-agentic", "c-souffle"} else 1
                 ),
@@ -329,6 +343,7 @@ def run_default_live_matrix(
         arm_specs=default_live_arm_specs(kira_dir=kira_dir, environ=env),
         models=models,
         budgets=budgets,
+        answer_quality_judge=create_live_answer_quality_judge(environ=env),
         trap_judge=create_live_trap_judge(environ=env),
         materialize_bundles=True,
     )
