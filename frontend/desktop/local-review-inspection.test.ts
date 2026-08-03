@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { toIsolatedCommandToolResult } from "./isolated-command.ts";
 import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
 import { runLocalDesktopChat, runLocalReviewInspection } from "./local-review-inspection.ts";
 
@@ -110,7 +111,7 @@ test("optional isolated command results use the existing PortLog event path", as
     },
     exitCode: 0,
   };
-
+  const isolatedToolResult = toIsolatedCommandToolResult(isolatedResult);
   try {
     await persistLocalProject({
       projectDirectory,
@@ -141,15 +142,12 @@ test("optional isolated command results use the existing PortLog event path", as
             tool: "portlog_isolated_command",
             arguments: { profileId: "native-child-echo" },
           });
-          const result = await runIsolatedCommand!(
-            { profileId: "native-child-echo" },
-            controller.signal,
-          );
+          await runIsolatedCommand!({ profileId: "native-child-echo" }, controller.signal);
           emit({
             type: "tool_result",
             callId: "isolated-call",
             tool: "portlog_isolated_command",
-            result,
+            result: isolatedToolResult,
           });
           emit({ type: "assistant_text_delta", text: "The approved child completed." });
         },
@@ -173,7 +171,88 @@ test("optional isolated command results use the existing PortLog event path", as
     );
     const toolResult = record.events.find((event) => event.type === "tool_result");
     assert.ok(toolResult && "result" in toolResult);
-    assert.deepEqual(toolResult.result, isolatedResult);
+    assert.deepEqual(toolResult.result, isolatedToolResult);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("non-success isolated outcomes persist remediation without an admitted artifact", async () => {
+  const root = await mkdtemp(join(tmpdir(), "portlog-local-isolated-rejected-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  const rejectedResult = {
+    outcome: "rejected" as const,
+    diagnostic: "The requested command profile is not approved.",
+    provenance: {
+      runId: "rejected-turn",
+      backend: { id: "gondolin-qemu-hvf", version: "0.10.0" },
+      image: { id: "alpine-base", digest: "builtin:alpine-base" },
+      policy: { id: "qemu-hvf-deny-all", digest: "builtin:qemu-hvf-deny-all" },
+      commandProfile: { id: "unapproved-profile", version: "1" },
+      startedAt: "2026-08-03T00:00:00.000Z",
+      completedAt: "2026-08-03T00:00:00.001Z",
+      durationMs: 1,
+      outcome: "rejected" as const,
+    },
+  };
+  const rejectedToolResult = toIsolatedCommandToolResult(rejectedResult);
+
+  try {
+    await persistLocalProject({
+      projectDirectory,
+      sourcePath,
+      sourceContent: "<PlantModel />",
+      sessionId: "isolated-rejected-session",
+      filename: "C01.xml",
+      status: "ready",
+    });
+    const record = await runLocalReviewInspection({
+      projectDirectory,
+      turnId: "rejected-turn",
+      question: "Run the unapproved command profile.",
+      posture: "chat",
+      model: { provider: "test", id: "test" },
+      signal: new AbortController().signal,
+      runIsolatedCommand: async ({ profileId }) => {
+        assert.equal(profileId, "unapproved-profile");
+        return rejectedResult;
+      },
+      createTurn: async ({ emit, runIsolatedCommand }) => ({
+        prompt: async () => {
+          emit({
+            type: "tool_request",
+            callId: "rejected-call",
+            tool: "portlog_isolated_command",
+            arguments: { profileId: "unapproved-profile" },
+          });
+          const result = await runIsolatedCommand!(
+            { profileId: "unapproved-profile" },
+            new AbortController().signal,
+          );
+          emit({
+            type: "tool_result",
+            callId: "rejected-call",
+            tool: "portlog_isolated_command",
+            result: toIsolatedCommandToolResult(result),
+          });
+          emit({ type: "assistant_text_delta", text: "The command was not admitted." });
+        },
+        abort: async () => {},
+        dispose: async () => {},
+      }),
+    });
+
+    assert.equal(record.status, "completed");
+    const toolResult = record.events.find((event) => event.type === "tool_result");
+    assert.ok(toolResult && "result" in toolResult);
+    assert.deepEqual(toolResult.result, rejectedToolResult);
+    assert.match(JSON.stringify(toolResult.result), /approved profile/i);
+    assert.equal(
+      (toolResult.result as { provenance: { artifact?: unknown } }).provenance.artifact,
+      undefined,
+    );
     assert.deepEqual((await loadLocalProject(projectDirectory)).turns, [record]);
   } finally {
     await rm(root, { recursive: true, force: true });

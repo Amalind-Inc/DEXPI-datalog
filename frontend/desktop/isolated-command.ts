@@ -91,6 +91,98 @@ export type IsolatedCommandResult =
   | (IsolatedCommandResultBase & {
       readonly outcome: Exclude<IsolatedCommandOutcome, "admitted">;
     });
+export interface IsolatedCommandToolResult {
+  readonly outcome: IsolatedCommandOutcome;
+  readonly message: string;
+  readonly diagnostic: string;
+  readonly remediation?: string;
+  readonly provenance: IsolatedCommandProvenance;
+  readonly exitCode?: number;
+  readonly candidate?: IsolatedCommandCandidate;
+}
+
+const TOOL_RESULT_MESSAGES: Record<IsolatedCommandOutcome, string> = {
+  admitted: "The approved isolated command result was admitted.",
+  rejected: "The isolated command result was rejected; no artifact was admitted.",
+  unavailable: "Isolated execution is unavailable; no host fallback was used.",
+  failed: "The isolated command failed; no artifact was admitted.",
+  timed_out: "The isolated command timed out; no artifact was admitted.",
+  cancelled: "The isolated command was cancelled; no artifact was admitted.",
+};
+
+const TOOL_RESULT_REMEDIATIONS: Partial<Record<IsolatedCommandOutcome, string>> = {
+  rejected: "Retry with an approved profile that produces the bounded result contract.",
+  unavailable:
+    "Check the packaged isolation runtime and retry; do not run the command on the host.",
+  failed: "Review the bounded diagnostic and retry the approved profile.",
+  timed_out: "Retry with a bounded workload or an approved profile with a suitable limit.",
+  cancelled: "Retry when the review is ready.",
+};
+
+/**
+ * Projects an executor result into the bounded, host-authored shape exposed to
+ * Pi and persisted as the PortLog tool result. It intentionally copies only
+ * the declared result fields; guest transcripts and supervisor output are not
+ * part of this contract.
+ */
+export function toIsolatedCommandToolResult(
+  result: IsolatedCommandResult,
+): IsolatedCommandToolResult {
+  const remediation = TOOL_RESULT_REMEDIATIONS[result.outcome];
+  const artifact =
+    result.outcome === "admitted" && result.provenance.artifact
+      ? copyArtifactIdentity(result.provenance.artifact)
+      : undefined;
+  const candidate =
+    result.outcome === "admitted" && result.candidate
+      ? {
+          schemaVersion: result.candidate.schemaVersion,
+          status: result.candidate.status,
+          message: result.candidate.message,
+        }
+      : undefined;
+  return {
+    outcome: result.outcome,
+    message: TOOL_RESULT_MESSAGES[result.outcome],
+    diagnostic: result.diagnostic,
+    ...(remediation ? { remediation } : {}),
+    provenance: {
+      runId: result.provenance.runId,
+      backend: copyBackendIdentity(result.provenance.backend),
+      image: copyContentIdentity(result.provenance.image),
+      policy: copyContentIdentity(result.provenance.policy),
+      commandProfile: {
+        id: result.provenance.commandProfile.id,
+        version: result.provenance.commandProfile.version,
+      },
+      startedAt: result.provenance.startedAt,
+      completedAt: result.provenance.completedAt,
+      durationMs: result.provenance.durationMs,
+      outcome: result.outcome,
+      ...(artifact ? { artifact } : {}),
+    },
+    ...(result.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+    ...(candidate ? { candidate } : {}),
+  };
+}
+
+function copyBackendIdentity(
+  identity: IsolatedCommandBackendIdentity,
+): IsolatedCommandBackendIdentity {
+  return { id: identity.id, version: identity.version };
+}
+
+function copyContentIdentity(
+  identity: IsolatedCommandContentIdentity,
+): IsolatedCommandContentIdentity {
+  return { id: identity.id, digest: identity.digest };
+}
+
+function copyArtifactIdentity(
+  identity: IsolatedCommandArtifactIdentity,
+): IsolatedCommandArtifactIdentity {
+  return { id: identity.id, digest: identity.digest, byteLength: identity.byteLength };
+}
 
 export interface IsolatedCommandExecutor {
   runIsolatedCommand(request: IsolatedCommandRequest): Promise<IsolatedCommandResult>;

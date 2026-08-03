@@ -220,6 +220,10 @@ test("optional isolated command tool supports one model-tool-model continuation"
     await review.prompt("Run the approved native child.");
     assert.equal(isolatedCalls, 1);
     assert.equal(requestCount, 2);
+    assert.match(
+      JSON.stringify(review.agent.state.messages),
+      /approved isolated command result was admitted/i,
+    );
     assert.match(JSON.stringify(review.agent.state.messages), /Native guest child completed/);
     assert.match(JSON.stringify(review.agent.state.messages), /approved native child completed/);
   } finally {

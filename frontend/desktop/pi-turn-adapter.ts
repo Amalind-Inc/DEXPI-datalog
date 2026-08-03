@@ -7,7 +7,7 @@ import { streamSimple as streamCodex } from "@earendil-works/pi-ai/api/openai-co
 import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-completions";
 import { Type } from "typebox";
 
-import type { IsolatedCommandResult } from "./isolated-command.ts";
+import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
 
 export interface EvidenceRequest {
   artifactId: string;
@@ -146,7 +146,12 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
             const result = await options.runIsolatedCommand!(params, linked.signal);
             if (linked.signal.aborted) throw new DOMException("Inspection cancelled", "AbortError");
             return {
-              content: [{ type: "text" as const, text: JSON.stringify(result) }],
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(toIsolatedCommandToolResult(result)),
+                },
+              ],
               details: {},
             };
           } finally {
