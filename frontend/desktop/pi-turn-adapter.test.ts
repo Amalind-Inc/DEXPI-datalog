@@ -115,6 +115,222 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
     await rm(agentDir, { recursive: true, force: true });
   }
 });
+test("optional isolated command tool supports one model-tool-model continuation", async () => {
+  let requestCount = 0;
+  let isolatedCalls = 0;
+  const server = http.createServer((_request, response) => {
+    requestCount += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    if (requestCount === 1) {
+      sse(response, {
+        id: "isolated-tool-request",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "isolated-call-1",
+                  type: "function",
+                  function: {
+                    name: "portlog_isolated_command",
+                    arguments: JSON.stringify({ profileId: "native-child-echo" }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else {
+      sse(response, {
+        id: "isolated-answer",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: "The approved native child completed.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
+    response.end("data: [DONE]\n\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-isolated-agent-"));
+  await writeFile(
+    path.join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+
+  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  try {
+    review = await createGovernedPiReviewTurn({
+      agentDir,
+      cwd: agentDir,
+      provider: "portlog-test",
+      model: "review-model",
+      signal: new AbortController().signal,
+      runIsolatedCommand: async ({ profileId }, signal) => {
+        isolatedCalls += 1;
+        assert.equal(profileId, "native-child-echo");
+        assert.equal(signal.aborted, false);
+        return {
+          outcome: "admitted" as const,
+          diagnostic: "Native guest child completed.",
+          provenance: {
+            runId: "isolated-call-1",
+            backend: { id: "gondolin-qemu-hvf", version: "0.10.0" },
+            image: { id: "alpine-base", digest: "builtin:alpine-base" },
+            policy: { id: "qemu-hvf-deny-all", digest: "builtin:qemu-hvf-deny-all" },
+            commandProfile: { id: profileId, version: "1" },
+            startedAt: "2026-08-03T00:00:00.000Z",
+            completedAt: "2026-08-03T00:00:00.001Z",
+            durationMs: 1,
+            outcome: "admitted" as const,
+          },
+          exitCode: 0,
+        };
+      },
+    });
+    assert.deepEqual(
+      review.session.agent.state.tools.map((tool) => tool.name),
+      ["portlog_isolated_command"],
+    );
+    await review.prompt("Run the approved native child.");
+    assert.equal(isolatedCalls, 1);
+    assert.equal(requestCount, 2);
+    assert.match(JSON.stringify(review.agent.state.messages), /Native guest child completed/);
+    assert.match(JSON.stringify(review.agent.state.messages), /approved native child completed/);
+  } finally {
+    await review?.dispose();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});
+test("isolated command cancellation reaches the callback and ignores late completion", async () => {
+  const controller = new AbortController();
+  const started = Promise.withResolvers<AbortSignal>();
+  const release = Promise.withResolvers<void>();
+  let requestCount = 0;
+  const server = http.createServer((_request, response) => {
+    requestCount += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    sse(response, {
+      id: "isolated-cancel-request",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "isolated-cancel-call",
+                type: "function",
+                function: {
+                  name: "portlog_isolated_command",
+                  arguments: JSON.stringify({ profileId: "native-child-hold" }),
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    });
+    response.end("data: [DONE]\n\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-isolated-cancel-agent-"));
+  await writeFile(
+    path.join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+
+  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  try {
+    review = await createGovernedPiReviewTurn({
+      agentDir,
+      cwd: agentDir,
+      provider: "portlog-test",
+      model: "review-model",
+      signal: controller.signal,
+      runIsolatedCommand: async (_request, signal) => {
+        started.resolve(signal);
+        await release.promise;
+        return {
+          outcome: "admitted" as const,
+          diagnostic: "Late native child completion.",
+          provenance: {
+            runId: "isolated-cancel-call",
+            backend: { id: "gondolin-qemu-hvf", version: "0.10.0" },
+            image: { id: "alpine-base", digest: "builtin:alpine-base" },
+            policy: { id: "qemu-hvf-deny-all", digest: "builtin:qemu-hvf-deny-all" },
+            commandProfile: { id: "native-child-hold", version: "1" },
+            startedAt: "2026-08-03T00:00:00.000Z",
+            completedAt: "2026-08-03T00:00:01.000Z",
+            durationMs: 1_000,
+            outcome: "admitted" as const,
+          },
+          exitCode: 0,
+        };
+      },
+    });
+
+    const promptPromise = review.prompt("Run the held native child.");
+    const callbackSignal = await started.promise;
+    controller.abort();
+    assert.equal(callbackSignal.aborted, true);
+    release.resolve();
+    await promptPromise;
+    assert.equal(requestCount, 1);
+    assert.doesNotMatch(
+      JSON.stringify(review.agent.state.messages),
+      /Late native child completion/,
+    );
+  } finally {
+    release.resolve();
+    await review?.dispose();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});
 
 test("general desktop turns expose no P&ID tools without an evidence bridge", async () => {
   const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-general-agent-"));
@@ -140,7 +356,10 @@ test("general desktop turns expose no P&ID tools without an evidence bridge", as
       model: "review-model",
       signal: new AbortController().signal,
     });
-    assert.deepEqual(review.session.agent.state.tools.map((tool) => tool.name), []);
+    assert.deepEqual(
+      review.session.agent.state.tools.map((tool) => tool.name),
+      [],
+    );
   } finally {
     await review?.dispose();
     await rm(agentDir, { recursive: true, force: true });

@@ -88,6 +88,97 @@ test("a governed Inspect turn is reconstructed from the durable PortLog project 
     await rm(root, { recursive: true, force: true });
   }
 });
+test("optional isolated command results use the existing PortLog event path", async () => {
+  const root = await mkdtemp(join(tmpdir(), "portlog-local-isolated-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  const controller = new AbortController();
+  const isolatedResult = {
+    outcome: "admitted" as const,
+    diagnostic: "Native guest child completed.",
+    provenance: {
+      runId: "isolated-turn",
+      backend: { id: "gondolin-qemu-hvf", version: "0.10.0" },
+      image: { id: "alpine-base", digest: "builtin:alpine-base" },
+      policy: { id: "qemu-hvf-deny-all", digest: "builtin:qemu-hvf-deny-all" },
+      commandProfile: { id: "native-child-echo", version: "1" },
+      startedAt: "2026-08-03T00:00:00.000Z",
+      completedAt: "2026-08-03T00:00:00.001Z",
+      durationMs: 1,
+      outcome: "admitted" as const,
+    },
+    exitCode: 0,
+  };
+
+  try {
+    await persistLocalProject({
+      projectDirectory,
+      sourcePath,
+      sourceContent: "<PlantModel />",
+      sessionId: "isolated-session",
+      filename: "C01.xml",
+      status: "ready",
+    });
+    const record = await runLocalReviewInspection({
+      projectDirectory,
+      turnId: "isolated-turn",
+      question: "Run the approved native child.",
+      posture: "chat",
+      model: { provider: "test", id: "test" },
+      signal: controller.signal,
+      runIsolatedCommand: async ({ profileId }, signal) => {
+        assert.equal(profileId, "native-child-echo");
+        assert.equal(signal, controller.signal);
+        return isolatedResult;
+      },
+      createTurn: async ({ emit, runIsolatedCommand }) => ({
+        prompt: async () => {
+          emit({ type: "assistant_text_delta", text: "I will run the approved child. " });
+          emit({
+            type: "tool_request",
+            callId: "isolated-call",
+            tool: "portlog_isolated_command",
+            arguments: { profileId: "native-child-echo" },
+          });
+          const result = await runIsolatedCommand!(
+            { profileId: "native-child-echo" },
+            controller.signal,
+          );
+          emit({
+            type: "tool_result",
+            callId: "isolated-call",
+            tool: "portlog_isolated_command",
+            result,
+          });
+          emit({ type: "assistant_text_delta", text: "The approved child completed." });
+        },
+        abort: async () => {},
+        dispose: async () => {},
+      }),
+    });
+
+    assert.equal(record.status, "completed");
+    assert.equal(record.finalText, "I will run the approved child. The approved child completed.");
+    assert.deepEqual(
+      record.events.map((event) => event.type),
+      [
+        "turn_started",
+        "assistant_text_delta",
+        "tool_request",
+        "tool_result",
+        "assistant_text_delta",
+        "turn_completed",
+      ],
+    );
+    const toolResult = record.events.find((event) => event.type === "tool_result");
+    assert.ok(toolResult && "result" in toolResult);
+    assert.deepEqual(toolResult.result, isolatedResult);
+    assert.deepEqual((await loadLocalProject(projectDirectory)).turns, [record]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("a general desktop chat turn works without a project manifest or evidence bridge", async () => {
   let promptText = "";

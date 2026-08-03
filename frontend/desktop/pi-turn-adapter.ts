@@ -7,6 +7,8 @@ import { streamSimple as streamCodex } from "@earendil-works/pi-ai/api/openai-co
 import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-completions";
 import { Type } from "typebox";
 
+import type { IsolatedCommandResult } from "./isolated-command.ts";
+
 export interface EvidenceRequest {
   artifactId: string;
   claim: string;
@@ -19,6 +21,15 @@ export interface RuleCheckRequest {
   signal: AbortSignal | undefined;
 }
 
+export interface IsolatedCommandToolRequest {
+  readonly profileId: string;
+}
+
+export type RunGovernedPiIsolatedCommand = (
+  request: IsolatedCommandToolRequest,
+  signal: AbortSignal,
+) => Promise<IsolatedCommandResult>;
+
 export interface GovernedPiReviewTurnOptions {
   agentDir: string;
   cwd: string;
@@ -28,6 +39,7 @@ export interface GovernedPiReviewTurnOptions {
   apiKey?: string;
   getEvidence?: (request: EvidenceRequest) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
+  runIsolatedCommand?: RunGovernedPiIsolatedCommand;
 }
 
 type PortLogModelEntry = {
@@ -116,9 +128,38 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
         },
       }
     : null;
+  const isolatedCommandTool = options.runIsolatedCommand
+    ? {
+        name: "portlog_isolated_command",
+        label: "PortLog isolated command",
+        description:
+          "Run one approved isolated command profile. Supply only the approved profile identifier; arbitrary commands, host paths, credentials, and VM details are not accepted.",
+        parameters: Type.Object({
+          profileId: Type.String(),
+        }),
+        executionMode: "sequential" as const,
+        async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
+          if (!isIsolatedCommandParams(params))
+            throw new Error("Invalid PortLog isolated-command arguments");
+          const linked = linkAbortSignals(options.signal, signal);
+          try {
+            const result = await options.runIsolatedCommand!(params, linked.signal);
+            if (linked.signal.aborted) throw new DOMException("Inspection cancelled", "AbortError");
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify(result) }],
+              details: {},
+            };
+          } finally {
+            linked.dispose();
+          }
+        },
+      }
+    : null;
+
   const tools = [
     ...(evidenceTool ? [evidenceTool] : []),
     ...(ruleCheckTool ? [ruleCheckTool] : []),
+    ...(isolatedCommandTool ? [isolatedCommandTool] : []),
   ];
   const agent = new Agent({
     initialState: { model: model.value, tools },
@@ -202,4 +243,30 @@ function isEvidenceParams(value: unknown): value is { artifactId: string; claim:
     typeof (value as Record<string, unknown>).artifactId === "string" &&
     typeof (value as Record<string, unknown>).claim === "string"
   );
+}
+function isIsolatedCommandParams(value: unknown): value is IsolatedCommandToolRequest {
+  if (value === null || typeof value !== "object") return false;
+  const profileId = (value as Record<string, unknown>).profileId;
+  return typeof profileId === "string" && profileId.length > 0;
+}
+
+interface LinkedAbortSignal {
+  signal: AbortSignal;
+  dispose(): void;
+}
+
+function linkAbortSignals(...signals: Array<AbortSignal | undefined>): LinkedAbortSignal {
+  const controller = new AbortController();
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal !== undefined);
+  const abort = () => controller.abort();
+  for (const signal of activeSignals) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", abort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const signal of activeSignals) signal.removeEventListener("abort", abort);
+    },
+  };
 }

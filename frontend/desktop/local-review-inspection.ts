@@ -2,6 +2,7 @@ import {
   createGovernedPiReviewTurn,
   type EvidenceRequest,
   type RuleCheckRequest,
+  type RunGovernedPiIsolatedCommand,
 } from "./pi-turn-adapter.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
 
@@ -57,6 +58,7 @@ interface CreateTurnOptions {
   ): void;
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
+  runIsolatedCommand?: RunGovernedPiIsolatedCommand;
 }
 
 type CreateTurn = (options: CreateTurnOptions) => Promise<TurnRuntime>;
@@ -70,6 +72,7 @@ export interface RunLocalReviewInspectionOptions {
   signal: AbortSignal;
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
+  runIsolatedCommand?: RunGovernedPiIsolatedCommand;
   createTurn?: CreateTurn;
   agentDir?: string;
   cwd?: string;
@@ -80,7 +83,7 @@ export interface RunLocalReviewInspectionOptions {
 
 export type RunLocalDesktopChatOptions = Omit<
   RunLocalReviewInspectionOptions,
-  "getEvidence" | "getRuleCheck" | "posture" | "projectDirectory"
+  "getEvidence" | "getRuleCheck" | "runIsolatedCommand" | "posture" | "projectDirectory"
 >;
 
 export async function runLocalDesktopChat(
@@ -149,6 +152,7 @@ export async function runLocalReviewInspection(
       emit: append,
       getEvidence,
       getRuleCheck: options.getRuleCheck,
+      runIsolatedCommand: options.runIsolatedCommand,
     });
     if (options.signal.aborted) await runtime.abort();
     else options.signal.addEventListener("abort", abort, { once: true });
@@ -221,6 +225,7 @@ async function createPiRuntime(
       ? ({ artifactId, claim }) => bridge.getEvidence!({ artifactId, claim })
       : undefined,
     getRuleCheck: options.getRuleCheck ? (request) => options.getRuleCheck!(request) : undefined,
+    runIsolatedCommand: bridge.runIsolatedCommand,
   });
   const unsubscribe = review.subscribe((event) => {
     const normalized = normalizePiEvent(event);
