@@ -167,6 +167,185 @@ test("terminal review prints bounded PortLog events and persists the completed r
   }
 });
 
+test("terminal review completes the governed E06 evidence-check-isolation journey", async () => {
+  let modelRequests = 0;
+  const modelServer = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    const toolCalls = [
+      {
+        id: "e06-evidence",
+        name: "portlog_evidence",
+        arguments: {
+          artifactId: "topology",
+          claim: "E06 pump discharge path around P-101",
+        },
+      },
+      {
+        id: "e06-check",
+        name: "portlog_rule_check",
+        arguments: {
+          checkId: "pump_discharge_check_valve",
+          scopeEntityId: "P-101",
+        },
+      },
+      {
+        id: "e06-isolated",
+        name: "portlog_isolated_command",
+        arguments: { profileId: "review-bundle-candidate" },
+      },
+    ];
+    if (modelRequests <= toolCalls.length) {
+      const tool = toolCalls[modelRequests - 1];
+      sse(response, {
+        id: tool.id,
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: tool.id,
+                  type: "function",
+                  function: {
+                    name: tool.name,
+                    arguments: JSON.stringify(tool.arguments),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else {
+      sse(response, {
+        id: "e06-answer",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content:
+                "E06 review completed with cited topology, a deterministic check, and an admitted isolated candidate.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
+    response.end("data: [DONE]\n\n");
+  });
+  modelServer.listen(0, "127.0.0.1");
+  await once(modelServer, "listening");
+  const modelAddress = modelServer.address();
+  assert.ok(modelAddress && typeof modelAddress !== "string");
+
+  const sidecarServer = http.createServer((request, response) => {
+    if (request.url === "/openapi.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify(
+        request.url?.endsWith("/governed-checks")
+          ? {
+              deterministic_result: {
+                check_id: "pump_discharge_check_valve",
+                run_status: "completed",
+                outcome: "satisfied",
+              },
+            }
+          : {
+              topology_view: {
+                nodes: [
+                  { id: "P-101", kind: "CentrifugalPump" },
+                  { id: "E06-V-101", kind: "Valve" },
+                ],
+                edges: [{ source: "P-101", target: "E06-V-101", kind: "discharge" }],
+              },
+            },
+      ),
+    );
+  });
+  sidecarServer.listen(0, "127.0.0.1");
+  await once(sidecarServer, "listening");
+  const sidecarAddress = sidecarServer.address();
+  assert.ok(sidecarAddress && typeof sidecarAddress !== "string");
+
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-e06-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "E06.xml");
+  await writeFile(sourcePath, '<PlantModel id="E06" />');
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: '<PlantModel id="E06" />',
+    sessionId: "terminal-e06-session",
+    filename: "E06.xml",
+    status: "ready",
+  });
+
+  try {
+    const result = await runCommand(
+      [
+        "--project",
+        projectDirectory,
+        "--provider",
+        "openrouter",
+        "--model",
+        "review-model",
+        "--posture",
+        "review",
+        "--question",
+        "Review the E06 pump discharge path.",
+      ],
+      {
+        PORTLOG_RUNTIME_API_KEY: "test-key",
+        PORTLOG_RUNTIME_BASE_URL: `http://127.0.0.1:${modelAddress.port}/v1`,
+        PORTLOG_REVIEW_SIDECAR_ENDPOINT: `http://127.0.0.1:${sidecarAddress.port}`,
+        PORTLOG_QEMU_PATH: "/opt/homebrew/bin/qemu-system-aarch64",
+      },
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /TOOL REQUEST portlog_evidence/);
+    assert.match(result.stdout, /TOOL REQUEST portlog_rule_check/);
+    assert.match(result.stdout, /TOOL REQUEST portlog_isolated_command/);
+    assert.match(result.stdout, /FINAL PORTLOG RECORD/);
+    assert.match(result.stdout, /"posture": "review"/);
+    assert.match(result.stdout, /"outcome": "admitted"/);
+    assert.match(result.stdout, /E06 review completed/);
+    assert.equal(modelRequests, 4);
+
+    const project = await loadLocalProject(projectDirectory);
+    assert.equal(project.turns.length, 1);
+    assert.equal(project.turns[0].status, "completed");
+    assert.equal(project.turns[0].posture, "review");
+    assert.deepEqual(project.turns[0].evidenceIds, ["P-101", "E06-V-101"]);
+    assert.equal(project.turns[0].deterministicChecks[0].outcome, "satisfied");
+    assert.equal(
+      project.turns[0].events.find(
+        (event: { type: string; tool?: string; arguments?: { profileId?: string } }) =>
+          event.type === "tool_request" && event.tool === "portlog_isolated_command",
+      )?.arguments?.profileId,
+      "review-bundle-candidate",
+    );
+  } finally {
+    modelServer.closeAllConnections();
+    sidecarServer.closeAllConnections();
+    await Promise.all([
+      new Promise<void>((resolveClose) => modelServer.close(() => resolveClose())),
+      new Promise<void>((resolveClose) => sidecarServer.close(() => resolveClose())),
+    ]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("terminal review reports a missing provider credential before starting work", async () => {
   const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-config-test-"));
   const projectDirectory = join(root, "project");
@@ -202,6 +381,47 @@ test("terminal review reports a missing provider credential before starting work
     );
     assert.notEqual(result.code, 0);
     assert.match(result.stderr, /provider credential.*PORTLOG_RUNTIME_API_KEY/i);
+    assert.doesNotMatch(result.stdout, /TURN STARTED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("terminal review reports missing QEMU/HVF before starting a review posture", async () => {
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-qemu-config-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: "<PlantModel />",
+    sessionId: "terminal-qemu-config-session",
+    filename: "C01.xml",
+    status: "ready",
+  });
+
+  try {
+    const result = await runCommand(
+      [
+        "--project",
+        projectDirectory,
+        "--provider",
+        "openrouter",
+        "--model",
+        "review-model",
+        "--posture",
+        "review",
+        "--question",
+        "Review the E06 pump discharge path.",
+      ],
+      {
+        PORTLOG_RUNTIME_API_KEY: "test-key",
+        PORTLOG_QEMU_PATH: join(root, "missing-qemu"),
+      },
+    );
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /QEMU\/HVF runtime is unavailable/i);
     assert.doesNotMatch(result.stdout, /TURN STARTED/);
   } finally {
     await rm(root, { recursive: true, force: true });

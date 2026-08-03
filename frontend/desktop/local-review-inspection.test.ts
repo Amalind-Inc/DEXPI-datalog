@@ -89,6 +89,34 @@ test("a governed Inspect turn is reconstructed from the durable PortLog project 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("review posture asks Pi to run the governed E06 tool sequence", async () => {
+  let promptText = "";
+  const record = await runLocalReviewInspection({
+    turnId: "review-posture-turn",
+    question: "Review the E06 pump discharge path.",
+    posture: "review",
+    model: { provider: "test", id: "test" },
+    signal: new AbortController().signal,
+    createTurn: async ({ emit }) => ({
+      prompt: async (prompt) => {
+        promptText = prompt;
+        emit({ type: "assistant_text_delta", text: "Review complete." });
+      },
+      abort: async () => {},
+      dispose: async () => {},
+    }),
+  });
+
+  assert.equal(record.status, "completed");
+  assert.match(promptText, /portlog_evidence/);
+  assert.match(promptText, /portlog_rule_check/);
+  assert.match(promptText, /portlog_isolated_command/);
+  assert.ok(promptText.indexOf("portlog_evidence") < promptText.indexOf("portlog_rule_check"));
+  assert.ok(
+    promptText.indexOf("portlog_rule_check") < promptText.indexOf("portlog_isolated_command"),
+  );
+});
 test("optional isolated command results use the existing PortLog event path", async () => {
   const root = await mkdtemp(join(tmpdir(), "portlog-local-isolated-"));
   const projectDirectory = join(root, "project");

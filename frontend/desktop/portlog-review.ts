@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
+import { access, constants } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadLocalProject } from "./local-project-manifest.cjs";
 import { resolveReviewSidecarPaths } from "./electron-sidecar-paths.cjs";
 import { startLocalReviewRuntime, type LocalReviewRuntime } from "./local-review-runtime.ts";
 
-type Posture = "inspect" | "verify";
+type Posture = "inspect" | "verify" | "review";
 type Provider = "openrouter" | "anthropic" | "openai-codex";
 
 type CliOptions = {
@@ -46,7 +47,7 @@ const MAX_DISPLAYED_TOOL_VALUE_CHARS = 2_000;
 
 const USAGE = `Usage:
   npm run portlog:review -- --project PATH --provider PROVIDER --model MODEL \\
-    --posture inspect|verify --question QUESTION
+    --posture inspect|verify|review --question QUESTION
 
 Required environment:
   PORTLOG_RUNTIME_API_KEY       Provider credential kept in the host process.
@@ -57,6 +58,7 @@ Optional environment:
   PORTLOG_REVIEW_SIDECAR_ENDPOINT  Use an already-running trusted loopback sidecar.
   PORTLOG_REVIEW_ARTIFACT_ROOT  Default: PROJECT/.portlog-artifacts.
   PORTLOG_REVIEW_SIDECAR_PYTHON Default: repository .venv/bin/python.
+  PORTLOG_QEMU_PATH                 QEMU/HVF executable for --posture review.
 `;
 
 await run(process.argv.slice(2));
@@ -126,8 +128,8 @@ async function resolveConfig(options: CliOptions) {
     throw new Error(
       `Unsupported provider ${provider}; choose openrouter, anthropic, or openai-codex.`,
     );
-  if (posture !== "inspect" && posture !== "verify")
-    throw new Error(`Unsupported posture ${posture}; choose inspect or verify.`);
+  if (posture !== "inspect" && posture !== "verify" && posture !== "review")
+    throw new Error(`Unsupported posture ${posture}; choose inspect, verify, or review.`);
 
   const absoluteProjectDirectory = resolve(projectDirectory);
   let project: Awaited<ReturnType<typeof loadLocalProject>>;
@@ -168,7 +170,11 @@ async function resolveConfig(options: CliOptions) {
   } catch {
     throw new Error(`Model base URL is invalid: ${baseUrl}`);
   }
-
+  if (posture === "review") {
+    await checkQemuPrerequisite(
+      process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64",
+    );
+  }
   return {
     projectDirectory: absoluteProjectDirectory,
     sessionId: project.projectId,
@@ -247,6 +253,22 @@ async function checkSidecar(endpoint: string): Promise<void> {
       `PortLog review sidecar is unavailable at ${stripTrailingSlash(endpoint)}: ${
         error instanceof Error ? error.message : String(error)
       }`,
+    );
+  }
+}
+
+async function checkQemuPrerequisite(qemuPath: string): Promise<void> {
+  if (process.platform !== "darwin" || process.arch !== "arm64")
+    throw new Error(
+      `QEMU/HVF isolated review requires arm64 macOS; current host is ${process.platform}/${process.arch}.`,
+    );
+  if (!isAbsolute(qemuPath))
+    throw new Error(`QEMU/HVF path must be absolute: ${qemuPath}. Set PORTLOG_QEMU_PATH.`);
+  try {
+    await access(qemuPath, constants.X_OK);
+  } catch {
+    throw new Error(
+      `QEMU/HVF runtime is unavailable at ${qemuPath}; install the local development prerequisite or set PORTLOG_QEMU_PATH.`,
     );
   }
 }

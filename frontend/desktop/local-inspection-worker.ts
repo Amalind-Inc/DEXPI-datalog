@@ -1,7 +1,9 @@
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { GONDOLIN_REVIEW_CANDIDATE_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
 import { runLocalReviewInspection } from "./local-review-inspection.ts";
 
 type WorkerRequest = {
@@ -10,7 +12,7 @@ type WorkerRequest = {
   sessionId?: string;
   turnId: string;
   question: string;
-  posture?: "inspect" | "verify";
+  posture?: "inspect" | "verify" | "review";
   mode?: "inspection" | "chat";
   sidecarEndpoint: string;
   provider?: "openrouter" | "anthropic" | "openai-codex";
@@ -76,6 +78,31 @@ try {
     }),
   );
   const isChat = request.mode === "chat";
+  const isolatedExecutor =
+    !isChat && request.posture === "review"
+      ? createGondolinQemuExecutor({
+          qemuPath: process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64",
+        })
+      : undefined;
+  const runIsolatedCommand = isolatedExecutor
+    ? async ({ profileId }: { profileId: string }, signal: AbortSignal) =>
+        isolatedExecutor.runIsolatedCommand({
+          runId: randomUUID(),
+          inputBundle: createE06ReviewInputBundle(),
+          commandProfile: { id: profileId, version: GONDOLIN_REVIEW_CANDIDATE_PROFILE.version },
+          limits: {
+            maxDurationMs: 60_000,
+            maxMemoryBytes: 2 * 1024 * 1024 * 1024,
+            maxCpuSeconds: 30,
+            maxScratchBytes: 64 * 1024,
+            maxOutputCount: 1,
+            maxOutputBytes: 64 * 1024,
+            maxInputFiles: 16,
+            maxInputBytes: 4 * 1024 * 1024,
+          },
+          signal,
+        })
+    : undefined;
   const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
   const getEvidence = async ({ artifactId, claim }: { artifactId: string; claim: string }) => {
     if (!request.sessionId) throw new Error("A prepared session is required for P&ID evidence.");
@@ -139,12 +166,30 @@ try {
     onEvent: (event) => send({ kind: "event", turnId: request.turnId, event }),
     getEvidence: isChat ? undefined : getEvidence,
     getRuleCheck: isChat ? undefined : getRuleCheck,
+    runIsolatedCommand,
   });
   send({ kind: "result", record });
 } finally {
   await rm(agentDir, { recursive: true, force: true });
 }
 
+function createE06ReviewInputBundle() {
+  const bytes = new TextEncoder().encode(
+    '{"fixture":"E06 Pump, HeatExchanger, Nozzles Connected With PNS","purpose":"bounded native review"}',
+  );
+  const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  return {
+    bundleId: "e06-review-input",
+    digest,
+    files: [
+      {
+        relativePath: "review.json",
+        bytes,
+        digest,
+      },
+    ],
+  };
+}
 function boundedTopologyEvidence(payload: unknown, claim: string) {
   const panel = isRecord(payload) ? payload : {};
   const topology = isRecord(panel.topology_view) ? panel.topology_view : panel;

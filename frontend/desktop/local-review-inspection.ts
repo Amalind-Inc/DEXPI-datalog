@@ -28,7 +28,7 @@ type StoredEvent = LocalInspectionEvent & {
 export interface LocalInspectionRecord {
   schemaVersion: 1;
   turnId: string;
-  posture: "inspect" | "verify" | "chat";
+  posture: "inspect" | "verify" | "review" | "chat";
   question: string;
   status: "active" | "completed" | "cancelled" | "failed";
   model: { provider: string; id: string };
@@ -67,7 +67,7 @@ export interface RunLocalReviewInspectionOptions {
   projectDirectory?: string;
   turnId: string;
   question: string;
-  posture?: "inspect" | "verify" | "chat";
+  posture?: "inspect" | "verify" | "review" | "chat";
   model: { provider: string; id: string };
   signal: AbortSignal;
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
@@ -162,7 +162,9 @@ export async function runLocalReviewInspection(
         ? chatPrompt(options.question)
         : record.posture === "verify"
           ? verifyPrompt(options.question)
-          : inspectPrompt(options.question),
+          : record.posture === "review"
+            ? reviewPrompt(options.question)
+            : inspectPrompt(options.question),
     );
     if (options.signal.aborted) throw abortError();
     const deterministicCheck = record.deterministicChecks.at(-1);
@@ -314,6 +316,19 @@ function verifyPrompt(question: string) {
 
 function inspectPrompt(question: string) {
   return `You are in Inspect posture. Use only the available PortLog read-only evidence capability. Call portlog_evidence with artifactId exactly "topology"; put any equipment tag or identifier in claim. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
+}
+
+function reviewPrompt(question: string) {
+  return [
+    "You are in E06 terminal review posture. Complete one governed review using only the available PortLog tools.",
+    'First call portlog_evidence with artifactId exactly "topology" and a claim about the requested E06 equipment or connection.',
+    'Then call portlog_rule_check with checkId exactly "pump_discharge_check_valve" and scopeEntityId from the question or prepared evidence.',
+    'Then call portlog_isolated_command with profileId exactly "review-bundle-candidate". This runs one approved native command; never provide arbitrary commands, paths, credentials, or VM details.',
+    "Wait for each tool result before requesting the next tool. Keep deterministic results and isolated-command outcomes separate from model explanation.",
+    "After all three tools return, answer the question concisely and state any unavailable, rejected, failed, timed-out, or cancelled outcome honestly.",
+    "",
+    `User question: ${question}`,
+  ].join("\n");
 }
 
 function readDeterministicChecks(value: unknown): Record<string, unknown>[] {

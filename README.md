@@ -155,16 +155,60 @@ PORTLOG_RUNTIME_API_KEY="$PORTLOG_API_KEY" npm run portlog:review -- \
   --question "What equipment is around P-101?"
 ```
 
+Use `--posture verify` for a deterministic rule-check question. Use
+`--posture review` for the governed E06 journey: the host Pi retrieves bounded
+evidence, runs the deterministic check, and invokes one approved
+Gondolin/QEMU isolated command before it prints the grounded answer.
+
+On Apple Silicon macOS, use this development setup.
+Homebrew provides the tested QEMU reference executable:
+
+```bash
+brew install qemu
+```
+
+This is a local development prerequisite, not the production packaging or
+distribution plan.
+
+```bash
+PORTLOG_QEMU_PATH=/opt/homebrew/bin/qemu-system-aarch64 \
+PORTLOG_RUNTIME_API_KEY="$PORTLOG_API_KEY" npm run portlog:review -- \
+  --project /path/to/prepared-E06-project \
+  --provider openrouter \
+  --model deepseek/deepseek-v4-flash \
+  --posture review \
+  --question "Review the E06 pump discharge path."
+```
+
+`PORTLOG_QEMU_PATH` defaults to `/opt/homebrew/bin/qemu-system-aarch64`.
+Review posture fails before the turn starts when the host is not arm64 macOS,
+the path is not absolute, or the executable is missing. The command also
+fails before starting a turn when the project, model settings, provider
+credential, or sidecar is unavailable. These diagnostics are setup failures,
+not isolated-command outcomes.
+
 The command starts the local review sidecar on a loopback ephemeral port,
 forwards the provider credential only to the host-side review worker, and
 persists the normal turn record in the project manifest. It prints bounded
 `ASSISTANT`, `TOOL REQUEST`, and `TOOL RESULT` lines, then the final PortLog
-record. Use `--posture verify` for a deterministic rule-check question.
+record. Ctrl-C during the isolated hold point persists a cancelled turn and
+does not admit a guest result.
 
 For a trusted sidecar that is already running, set
-`PORTLOG_REVIEW_SIDECAR_ENDPOINT`. The command fails before starting a turn
-when the project, model settings, provider credential, or sidecar is
-unavailable.
+`PORTLOG_REVIEW_SIDECAR_ENDPOINT`.
+
+This quickstart is the backend/desktop development slice. Frontend integration,
+krun qualification, self-contained packaging, signing, and notarization remain
+deferred.
+
+Operator checklist:
+
+1. Confirm the prepared project is `ready` and the provider credential is set.
+2. Confirm `PORTLOG_QEMU_PATH` is executable on the arm64 macOS host.
+3. Run the command and confirm evidence, governed-check, and isolated-command
+   lines appear before the final record.
+4. On Ctrl-C during the isolated hold point, confirm the record is cancelled
+   and contains no admitted guest artifact.
 
 ## Validation
 
