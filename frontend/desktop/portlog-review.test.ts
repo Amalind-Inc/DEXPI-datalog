@@ -1,0 +1,209 @@
+import assert from "node:assert/strict";
+import { once } from "node:events";
+import http from "node:http";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+import test from "node:test";
+
+import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const commandPath = join(repoRoot, "frontend/desktop/portlog-review.ts");
+
+function sse(response: http.ServerResponse, payload: object) {
+  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function runCommand(args: string[], environment: Partial<NodeJS.ProcessEnv>) {
+  const child = spawn(process.execPath, ["--experimental-strip-types", commandPath, ...args], {
+    cwd: repoRoot,
+    env: { ...process.env, ...environment },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  const [code] = (await once(child, "exit")) as [number | null, NodeJS.Signals | null];
+  return { code, stdout, stderr };
+}
+
+test("terminal review prints bounded PortLog events and persists the completed record", async () => {
+  let modelRequests = 0;
+  const modelServer = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    if (modelRequests === 1) {
+      sse(response, {
+        id: "tool-turn",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "call-1",
+                  type: "function",
+                  function: {
+                    name: "portlog_evidence",
+                    arguments: JSON.stringify({
+                      artifactId: "topology",
+                      claim: "equipment around P-101",
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else {
+      sse(response, {
+        id: "answer-turn",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: "P-101 is present in the prepared topology.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
+    response.end("data: [DONE]\n\n");
+  });
+  modelServer.listen(0, "127.0.0.1");
+  await once(modelServer, "listening");
+  const modelAddress = modelServer.address();
+  assert.ok(modelAddress && typeof modelAddress !== "string");
+
+  const sidecarServer = http.createServer((request, response) => {
+    if (request.url === "/openapi.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        topology_view: {
+          nodes: [{ id: "P-101", kind: "CentrifugalPump" }],
+          edges: [],
+        },
+      }),
+    );
+  });
+  sidecarServer.listen(0, "127.0.0.1");
+  await once(sidecarServer, "listening");
+  const sidecarAddress = sidecarServer.address();
+  assert.ok(sidecarAddress && typeof sidecarAddress !== "string");
+
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: "<PlantModel />",
+    sessionId: "terminal-review-session",
+    filename: "C01.xml",
+    status: "ready",
+  });
+
+  try {
+    const result = await runCommand(
+      [
+        "--project",
+        projectDirectory,
+        "--provider",
+        "openrouter",
+        "--model",
+        "review-model",
+        "--posture",
+        "inspect",
+        "--question",
+        "What equipment is around P-101?",
+      ],
+      {
+        PORTLOG_RUNTIME_API_KEY: "test-key",
+        PORTLOG_RUNTIME_BASE_URL: `http://127.0.0.1:${modelAddress.port}/v1`,
+        PORTLOG_REVIEW_SIDECAR_ENDPOINT: `http://127.0.0.1:${sidecarAddress.port}`,
+      },
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /TURN STARTED/);
+    assert.match(result.stdout, /TOOL REQUEST portlog_evidence/);
+    assert.match(result.stdout, /TOOL RESULT portlog_evidence/);
+    assert.match(result.stdout, /FINAL PORTLOG RECORD/);
+    assert.match(result.stdout, /"status": "completed"/);
+    assert.match(result.stdout, /P-101 is present/);
+    assert.equal(modelRequests, 2);
+
+    const project = await loadLocalProject(projectDirectory);
+    assert.equal(project.turns.length, 1);
+    assert.equal(project.turns[0].status, "completed");
+    assert.deepEqual(project.turns[0].evidenceIds, ["P-101"]);
+  } finally {
+    modelServer.closeAllConnections();
+    sidecarServer.closeAllConnections();
+    await Promise.all([
+      new Promise<void>((resolveClose) => modelServer.close(() => resolveClose())),
+      new Promise<void>((resolveClose) => sidecarServer.close(() => resolveClose())),
+    ]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("terminal review reports a missing provider credential before starting work", async () => {
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-config-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: "<PlantModel />",
+    sessionId: "terminal-config-session",
+    filename: "C01.xml",
+    status: "ready",
+  });
+
+  try {
+    const result = await runCommand(
+      [
+        "--project",
+        projectDirectory,
+        "--provider",
+        "openrouter",
+        "--model",
+        "review-model",
+        "--posture",
+        "inspect",
+        "--question",
+        "What equipment is around P-101?",
+      ],
+      {
+        PORTLOG_RUNTIME_API_KEY: "",
+        PORTLOG_OPENROUTER_API_KEY: "",
+      },
+    );
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /provider credential.*PORTLOG_RUNTIME_API_KEY/i);
+    assert.doesNotMatch(result.stdout, /TURN STARTED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

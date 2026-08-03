@@ -15,6 +15,7 @@
     "lint": "oxlint && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt",
     "desktop:dev": "electron desktop/electron-main.cjs",
+    "portlog:review": "node --experimental-strip-types desktop/portlog-review.ts",
     "test:desktop-native": "node desktop/electron-native-acceptance.mjs",
     "desktop:package": "node ../scripts/package-macos-release.mjs",
     "desktop:package:dir": "node ../scripts/package-macos-release.mjs",

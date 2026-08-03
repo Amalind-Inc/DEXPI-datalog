@@ -141,6 +141,31 @@ python3 -m venv .venv
 python3 -m pydexpi_datalog dry-run path/to/manifest.json
 ```
 
+### Governed terminal review
+
+Run one bounded Inspect or Verify question against a prepared PortLog project:
+
+```bash
+cd frontend
+PORTLOG_RUNTIME_API_KEY="$PORTLOG_API_KEY" npm run portlog:review -- \
+  --project /path/to/prepared-project \
+  --provider openrouter \
+  --model deepseek/deepseek-v4-flash \
+  --posture inspect \
+  --question "What equipment is around P-101?"
+```
+
+The command starts the local review sidecar on a loopback ephemeral port,
+forwards the provider credential only to the host-side review worker, and
+persists the normal turn record in the project manifest. It prints bounded
+`ASSISTANT`, `TOOL REQUEST`, and `TOOL RESULT` lines, then the final PortLog
+record. Use `--posture verify` for a deterministic rule-check question.
+
+For a trusted sidecar that is already running, set
+`PORTLOG_REVIEW_SIDECAR_ENDPOINT`. The command fails before starting a turn
+when the project, model settings, provider credential, or sidecar is
+unavailable.
+
 ## Validation
 
 ```bash
