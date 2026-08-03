@@ -32,6 +32,8 @@ export interface IsolatedCommandLimits {
   readonly maxScratchBytes: number;
   readonly maxOutputCount: number;
   readonly maxOutputBytes: number;
+  readonly maxInputFiles?: number;
+  readonly maxInputBytes?: number;
 }
 
 export interface IsolatedCommandRequest {
@@ -54,6 +56,11 @@ export interface IsolatedCommandContentIdentity {
 
 export interface IsolatedCommandArtifactIdentity extends IsolatedCommandContentIdentity {
   readonly byteLength: number;
+}
+export interface IsolatedCommandCandidate {
+  readonly schemaVersion: 1;
+  readonly status: "ok";
+  readonly message: string;
 }
 
 export interface IsolatedCommandProvenance {
@@ -79,6 +86,7 @@ export type IsolatedCommandResult =
   | (IsolatedCommandResultBase & {
       readonly outcome: "admitted";
       readonly exitCode: number;
+      readonly candidate?: IsolatedCommandCandidate;
     })
   | (IsolatedCommandResultBase & {
       readonly outcome: Exclude<IsolatedCommandOutcome, "admitted">;
@@ -98,6 +106,7 @@ export interface InMemoryIsolatedCommandExecutorOptions {
   readonly image?: IsolatedCommandContentIdentity;
   readonly policy?: IsolatedCommandContentIdentity;
   readonly artifact?: IsolatedCommandArtifactIdentity;
+  readonly candidate?: IsolatedCommandCandidate;
   readonly now?: () => Date;
 }
 
@@ -164,6 +173,7 @@ export function createInMemoryIsolatedCommandExecutor(
           diagnostic,
           provenance,
           exitCode: options.exitCode ?? 0,
+          ...(options.candidate ? { candidate: options.candidate } : {}),
         };
       }
 

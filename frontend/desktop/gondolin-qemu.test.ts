@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { access, constants } from "node:fs/promises";
 import test from "node:test";
 
-import { GONDOLIN_QEMU_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
+import {
+  GONDOLIN_QEMU_PROFILE,
+  GONDOLIN_REVIEW_CANDIDATE_PROFILE,
+  createGondolinQemuExecutor,
+} from "./gondolin-qemu.ts";
 import type { IsolatedCommandRequest } from "./isolated-command.ts";
 
 const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64";
@@ -35,6 +39,27 @@ const request: IsolatedCommandRequest = {
     maxOutputBytes: 0,
   },
   signal: new AbortController().signal,
+};
+
+const candidateRequest: IsolatedCommandRequest = {
+  ...request,
+  runId: "qemu-e06-candidate-001",
+  inputBundle: {
+    bundleId: "review-bundle-001",
+    digest: "sha256:review-bundle",
+    files: [
+      {
+        relativePath: "review.json",
+        bytes: new TextEncoder().encode('{"review":"bounded"}'),
+        digest: "sha256:review",
+      },
+    ],
+  },
+  commandProfile: GONDOLIN_REVIEW_CANDIDATE_PROFILE,
+  limits: {
+    ...request.limits,
+    maxOutputBytes: 1_024,
+  },
 };
 
 test(
@@ -91,5 +116,52 @@ test(
 
     assert.equal(result.outcome, "unavailable");
     assert.equal(result.diagnostic, "Gondolin QEMU/HVF could not start.");
+  },
+);
+
+test(
+  "Gondolin admits one valid bounded result candidate after read-only review input",
+  { skip: hostPrerequisite },
+  async () => {
+    const executor = createGondolinQemuExecutor({ qemuPath });
+    const result = await executor.runIsolatedCommand(candidateRequest);
+
+    assert.equal(result.outcome, "admitted");
+    assert.deepEqual(result.candidate, {
+      schemaVersion: 1,
+      status: "ok",
+      message: "review bundle inspected",
+    });
+    assert.equal(result.provenance.artifact?.id, "result.json");
+    assert.equal(result.provenance.artifact?.byteLength, 69);
+    assert.equal(
+      new TextDecoder().decode(candidateRequest.inputBundle.files[0].bytes),
+      '{"review":"bounded"}',
+    );
+  },
+);
+
+test(
+  "Gondolin rejects malformed result candidates through the same executor interface",
+  { skip: hostPrerequisite },
+  async () => {
+    const executor = createGondolinQemuExecutor({
+      qemuPath,
+      createVm: async (vmOptions) => {
+        const scratch = vmOptions.vfs?.mounts?.["/review/scratch"];
+        if (!scratch?.writeFile) throw new Error("scratch mount is unavailable");
+        await scratch.writeFile("/result.json", Buffer.from('{"schemaVersion":1}'));
+        return {
+          exec: async () => ({ exitCode: 0, stdout: "" }),
+          close: async () => {},
+        };
+      },
+    });
+
+    const result = await executor.runIsolatedCommand(candidateRequest);
+
+    assert.equal(result.outcome, "rejected");
+    assert.match(result.diagnostic, /schema|candidate/i);
+    assert.equal(result.provenance.artifact, undefined);
   },
 );
