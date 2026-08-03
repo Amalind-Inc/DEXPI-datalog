@@ -27,6 +27,16 @@ export const GONDOLIN_REVIEW_CANDIDATE_PROFILE: ApprovedCommandProfile = Object.
   version: "1",
 });
 
+export const GONDOLIN_CONFINEMENT_PROFILE: ApprovedCommandProfile = Object.freeze({
+  id: "confinement-probes",
+  version: "1",
+});
+
+export const GONDOLIN_CANCELLATION_PROFILE: ApprovedCommandProfile = Object.freeze({
+  id: "native-child-hold",
+  version: "1",
+});
+
 export const GONDOLIN_QEMU_BACKEND: IsolatedCommandBackendIdentity = Object.freeze({
   id: "gondolin-qemu-hvf",
   version: "0.10.0",
@@ -42,6 +52,27 @@ const GONDOLIN_QEMU_POLICY: IsolatedCommandContentIdentity = Object.freeze({
 });
 const NATIVE_CHILD_MARKER = "portlog-native-child";
 const NATIVE_CHILD_COMMAND = ["/bin/sh", "-c", `/bin/echo ${NATIVE_CHILD_MARKER}`];
+const CONFINEMENT_MARKER = "confinement-probes-passed";
+const CONFINEMENT_COMMAND = [
+  "/bin/sh",
+  "-c",
+  [
+    "set -eu",
+    "test -x /bin/busybox",
+    "/bin/busybox wget --help >/dev/null 2>&1",
+    'probe() { if /bin/busybox wget -T 1 -q -O /dev/null "$1" 2>/dev/null; then exit 20; fi; }',
+    'probe "http://127.0.0.1:8000/api/review/sessions"',
+    'probe "http://10.0.2.2:8000/portlog-undeclared-host-service"',
+    'probe "http://203.0.113.1:443"',
+    "test ! -e /workspace/.portlog-host-sentinel",
+    "test ! -e /root/.pi",
+    "test ! -e /home/portlog/.pi",
+    "test ! -e /etc/portlog",
+    "if /bin/busybox env | /bin/busybox grep -Eq '^(PORTLOG_|OPENAI_|ANTHROPIC_|OPENROUTER_|PI_)'; then exit 21; fi",
+    `printf '%s' '${CONFINEMENT_MARKER}'`,
+  ].join("\n"),
+];
+const CANCELLATION_COMMAND = ["/bin/sh", "-c", "/bin/sleep 300"];
 const VALID_CANDIDATE_JSON =
   '{"schemaVersion":1,"status":"ok","message":"review bundle inspected"}';
 const REVIEW_CANDIDATE_COMMAND = [
@@ -72,6 +103,13 @@ export interface GondolinVm {
 }
 
 type CreateGondolinVm = (options: VMOptions) => Promise<GondolinVm>;
+type CommandPlan = {
+  command: string[];
+  candidate: boolean;
+  marker?: string;
+  hold?: boolean;
+};
+type TimeoutHandle = NodeJS.Timeout;
 type CandidateAdmission =
   | {
       accepted: true;
@@ -101,7 +139,7 @@ export function createGondolinQemuExecutor(
   return {
     async runIsolatedCommand(request): Promise<IsolatedCommandResult> {
       const startedAt = now();
-      const plan =
+      const plan: CommandPlan | undefined =
         request.commandProfile.id === GONDOLIN_QEMU_PROFILE.id &&
         request.commandProfile.version === GONDOLIN_QEMU_PROFILE.version
           ? {
@@ -112,7 +150,17 @@ export function createGondolinQemuExecutor(
           : request.commandProfile.id === GONDOLIN_REVIEW_CANDIDATE_PROFILE.id &&
               request.commandProfile.version === GONDOLIN_REVIEW_CANDIDATE_PROFILE.version
             ? { command: REVIEW_CANDIDATE_COMMAND, candidate: true }
-            : undefined;
+            : request.commandProfile.id === GONDOLIN_CONFINEMENT_PROFILE.id &&
+                request.commandProfile.version === GONDOLIN_CONFINEMENT_PROFILE.version
+              ? {
+                  command: CONFINEMENT_COMMAND,
+                  candidate: false,
+                  marker: CONFINEMENT_MARKER,
+                }
+              : request.commandProfile.id === GONDOLIN_CANCELLATION_PROFILE.id &&
+                  request.commandProfile.version === GONDOLIN_CANCELLATION_PROFILE.version
+                ? { command: CANCELLATION_COMMAND, candidate: false, hold: true }
+                : undefined;
       let outcome: IsolatedCommandResult["outcome"] = "unavailable";
       let diagnostic = "Gondolin QEMU/HVF is unavailable.";
       let exitCode: number | undefined;
@@ -120,6 +168,9 @@ export function createGondolinQemuExecutor(
       let artifact: IsolatedCommandArtifactIdentity | undefined;
       let vm: GondolinVm | undefined;
       let readOnlyInput: ReadonlyProvider | undefined;
+      let timedOut = false;
+      let timeoutId: TimeoutHandle | undefined;
+      let onAbort: (() => void) | undefined;
 
       if (!plan) {
         outcome = "rejected";
@@ -132,6 +183,14 @@ export function createGondolinQemuExecutor(
       } else if (!isAbsolute(options.qemuPath)) {
         diagnostic = "Gondolin QEMU/HVF requires an absolute QEMU path.";
       } else {
+        const executionController = new AbortController();
+        onAbort = () => executionController.abort();
+        request.signal.addEventListener("abort", onAbort, { once: true });
+        const maxDurationMs = Math.max(0, request.limits.maxDurationMs);
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          executionController.abort();
+        }, maxDurationMs);
         try {
           await access(options.qemuPath, constants.X_OK);
           const input = await buildReadonlyInputProvider(
@@ -167,9 +226,12 @@ export function createGondolinQemuExecutor(
           if (request.signal.aborted) {
             outcome = "cancelled";
             diagnostic = "Isolated command was cancelled.";
+          } else if (timedOut) {
+            outcome = "timed_out";
+            diagnostic = "Isolated command timed out.";
           } else {
             const execution = await vm.exec(plan.command, {
-              signal: request.signal,
+              signal: executionController.signal,
               pty: false,
               stdout: "buffer",
               stderr: "buffer",
@@ -179,6 +241,10 @@ export function createGondolinQemuExecutor(
               outcome = "cancelled";
               diagnostic = "Isolated command was cancelled.";
               exitCode = undefined;
+            } else if (timedOut) {
+              outcome = "timed_out";
+              diagnostic = "Isolated command timed out.";
+              exitCode = undefined;
             } else if (execution.exitCode !== 0) {
               outcome = "failed";
               diagnostic = plan.candidate
@@ -186,10 +252,18 @@ export function createGondolinQemuExecutor(
                 : `Native guest command failed with exit code ${execution.exitCode}.`;
             } else if (plan.marker && execution.stdout.trim() !== plan.marker) {
               outcome = "failed";
-              diagnostic = "Native guest child output was not observed.";
+              diagnostic = "Approved guest command did not return its expected marker.";
             } else if (plan.candidate) {
               const admission = await admitScratchCandidate(scratch, request.limits.maxOutputBytes);
-              if (admission.accepted) {
+              if (request.signal.aborted) {
+                outcome = "cancelled";
+                diagnostic = "Isolated command was cancelled.";
+                exitCode = undefined;
+              } else if (timedOut) {
+                outcome = "timed_out";
+                diagnostic = "Isolated command timed out.";
+                exitCode = undefined;
+              } else if (admission.accepted) {
                 outcome = "admitted";
                 diagnostic = "Review candidate admitted.";
                 candidate = admission.candidate;
@@ -201,13 +275,19 @@ export function createGondolinQemuExecutor(
               }
             } else {
               outcome = "admitted";
-              diagnostic = "Native guest child completed.";
+              diagnostic = plan.hold
+                ? "Native guest hold completed."
+                : "Native guest child completed.";
             }
           }
         } catch {
           if (request.signal.aborted) {
             outcome = "cancelled";
             diagnostic = "Isolated command was cancelled.";
+            exitCode = undefined;
+          } else if (timedOut) {
+            outcome = "timed_out";
+            diagnostic = "Isolated command timed out.";
             exitCode = undefined;
           } else if (vm) {
             outcome = "failed";
@@ -217,6 +297,8 @@ export function createGondolinQemuExecutor(
             diagnostic = "Gondolin QEMU/HVF could not start.";
           }
         } finally {
+          clearTimeout(timeoutId);
+          if (onAbort) request.signal.removeEventListener("abort", onAbort);
           if (vm) {
             try {
               await vm.close();
