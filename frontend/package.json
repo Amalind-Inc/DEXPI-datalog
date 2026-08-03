@@ -25,6 +25,7 @@
     "@assistant-ui/react": "latest",
     "@assistant-ui/react-ai-sdk": "latest",
     "@assistant-ui/react-markdown": "latest",
+    "@earendil-works/gondolin": "0.10.0",
     "@earendil-works/pi-agent-core": "0.80.6",
     "@earendil-works/pi-ai": "0.80.6",
     "@radix-ui/react-avatar": "^1.2.0",
