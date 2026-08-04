@@ -23,6 +23,50 @@ async function makeProject() {
   return { root, projectDirectory };
 }
 
+async function runVerifyResult(question: string, requestedEntityId: string) {
+  const { root, projectDirectory } = await makeProject();
+  try {
+    return await runLocalReviewInspection({
+      projectDirectory,
+      turnId: `verify-${requestedEntityId}`,
+      posture: "verify",
+      question,
+      model: { provider: "test", id: "test" },
+      signal: new AbortController().signal,
+      getEvidence: async () => ({ citations: [] }),
+      createTurn: async ({ emit }) => ({
+        prompt: async () => {
+          emit({ type: "assistant_text_delta", text: "The model thinks this is satisfied." });
+          emit({
+            type: "tool_result",
+            callId: "check-1",
+            tool: "portlog_rule_check",
+            result: {
+              deterministic_result: {
+                check_id: "pump_discharge_check_valve",
+                check_version: "1",
+                run_status: "completed",
+                outcome: "violated",
+                reason_code: "no_check_valve_on_complete_segment",
+                scope: {
+                  class: "CentrifugalPump",
+                  pump_id: "pump-1",
+                  requested_entity_id: requestedEntityId,
+                },
+                evidence: { ordered_topology_ids: [requestedEntityId, "N-1"] },
+              },
+            },
+          });
+        },
+        abort: async () => {},
+        dispose: async () => {},
+      }),
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 test("Verify fails closed when no PortLog deterministic result is returned", async () => {
   const { root, projectDirectory } = await makeProject();
   try {
@@ -57,7 +101,7 @@ test("Verify restates the PortLog outcome instead of trusting model verdict pros
       projectDirectory,
       turnId: "verify-owned-result",
       posture: "verify",
-      question: "Does P-101 have a check valve on its first discharge segment?",
+      question: "Does P-4713 have a check valve on its first discharge segment?",
       model: { provider: "test", id: "test" },
       signal: new AbortController().signal,
       getEvidence: async () => ({ citations: [] }),
@@ -78,7 +122,12 @@ test("Verify restates the PortLog outcome instead of trusting model verdict pros
                 run_status: "completed",
                 outcome: "violated",
                 reason_code: "no_check_valve_on_complete_segment",
-                evidence: { ordered_topology_ids: ["P-101", "N-1"] },
+                scope: {
+                  class: "CentrifugalPump",
+                  pump_id: "pump-1",
+                  requested_entity_id: "P-4713",
+                },
+                evidence: { ordered_topology_ids: ["P-4713", "N-1"] },
               },
             },
           });
@@ -94,4 +143,32 @@ test("Verify restates the PortLog outcome instead of trusting model verdict pros
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("Verify rejects universal questions instead of reusing a single pump result", async () => {
+  const record = await runVerifyResult(
+    "Must every connected object satisfy the temporary topology rule?",
+    "P-4713",
+  );
+  assert.match(record.finalText, /does not answer this question/i);
+  assert.doesNotMatch(record.finalText, /PortLog deterministic check/i);
+  assert.doesNotMatch(record.finalText, /\bviolated\b/i);
+});
+
+test("Verify rejects a deterministic pump result for non-pump equipment", async () => {
+  const record = await runVerifyResult(
+    "Does heat exchanger H-1009 have a downstream check valve?",
+    "P-4713",
+  );
+  assert.match(record.finalText, /does not answer this question/i);
+  assert.doesNotMatch(record.finalText, /P-4713.*violated/i);
+});
+
+test("Verify rejects a deterministic result whose scope differs from the question", async () => {
+  const record = await runVerifyResult(
+    "Does P-999 have a check valve on its first discharge segment?",
+    "P-4713",
+  );
+  assert.match(record.finalText, /does not answer this question/i);
+  assert.doesNotMatch(record.finalText, /PortLog deterministic check/i);
 });

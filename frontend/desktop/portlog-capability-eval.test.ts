@@ -48,6 +48,27 @@ test("inspect evidence capability passes without a VM", () => {
   assert.deepEqual(result.diagnostics, []);
 });
 
+test("inspect missing capability accepts an explicit evidence no-match", () => {
+  const capability = CAPABILITY_CASES.find((item) => item.id === "inspect-missing");
+  assert.ok(capability);
+  const result = evaluateCapabilityCase(
+    capability,
+    record("inspect", "completed", ["portlog_evidence"], {
+      evidenceIds: [],
+      events: [
+        {
+          type: "tool_result",
+          tool: "portlog_evidence",
+          result: { diagnostics: [{ code: "no_matching_evidence" }] },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(result.diagnostics, []);
+});
+
 test("inspect capability fails when an isolated tool appears", () => {
   const capability = CAPABILITY_CASES.find((item) => item.id === "inspect-evidence");
   assert.ok(capability);
@@ -102,6 +123,25 @@ test("cancelled review capability records VM use without requiring an artifact",
 
   assert.equal(result.passed, true);
   assert.equal(result.vmRequired, true);
+});
+
+test("automatic capability matrix rejects the manual cancellation case before execution", async () => {
+  let executeCalls = 0;
+  await assert.rejects(
+    () =>
+      runCapabilityMatrix({
+        project: "/tmp/prepared-project",
+        provider: "openrouter",
+        model: "test-model",
+        caseIds: ["review-cancelled"],
+        executeReview: async () => {
+          executeCalls += 1;
+          throw new Error("executeReview should not be called");
+        },
+      }),
+    /manual-only/i,
+  );
+  assert.equal(executeCalls, 0);
 });
 
 test("extracts the final PortLog record and writes an atomic capability report", async () => {

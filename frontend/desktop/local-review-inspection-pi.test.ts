@@ -220,7 +220,7 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
                     name: "portlog_rule_check",
                     arguments: JSON.stringify({
                       checkId: "pump_discharge_check_valve",
-                      scopeEntityId: "CentrifugalPump-1",
+                      scopeEntityId: "P-101",
                     }),
                   },
                 },
@@ -296,6 +296,11 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
           outcome: "violated",
           reason_code: "no_check_valve_on_complete_segment",
           evidence: { ordered_topology_ids: [scopeEntityId, "N-1"] },
+          scope: {
+            class: "CentrifugalPump",
+            pump_id: "pump-1",
+            requested_entity_id: "P-101",
+          },
         },
       }),
     });

@@ -180,6 +180,12 @@ export async function runLocalReviewInspection(
     ) {
       record.finalText =
         "The deterministic verification check did not complete, so no engineering outcome is available.";
+    } else if (
+      record.posture === "verify" &&
+      !isApplicableVerifyResult(options.question, deterministicCheck!)
+    ) {
+      record.finalText =
+        "The available deterministic check applies only to one centrifugal-pump discharge scope and does not answer this question.";
     } else if (record.posture === "verify") {
       record.finalText = restateDeterministicCheck(deterministicCheck!);
     } else if (
@@ -308,6 +314,30 @@ function isVerificationOutcome(
 ): value is "satisfied" | "violated" | "indeterminate" {
   return value === "satisfied" || value === "violated" || value === "indeterminate";
 }
+function isApplicableVerifyResult(question: string, check: Record<string, unknown>): boolean {
+  if (check.check_id !== "pump_discharge_check_valve") return false;
+  const scope = isRecord(check.scope) ? check.scope : {};
+  if (scope.class !== "CentrifugalPump") return false;
+
+  const normalizedQuestion = question.toLowerCase();
+  if (/\b(every|each|all|universal|plural|multiple)\b/.test(normalizedQuestion)) return false;
+
+  const identifiers = question.match(/[A-Za-z]+[-_]?\d+(?:[\\/._-][A-Za-z0-9]+)*/g) ?? [];
+  const asksAboutPump =
+    /\bpump\b/.test(normalizedQuestion) ||
+    identifiers.some((identifier) => /^p[-_]\d+/i.test(identifier));
+  const asksAboutSupportedCheck = /\b(discharge|check[\s-]?valve|rule|verification|verify)\b/.test(
+    normalizedQuestion,
+  );
+  if (!asksAboutPump || !asksAboutSupportedCheck) return false;
+
+  const requestedScope =
+    typeof scope.requested_entity_id === "string" ? scope.requested_entity_id.toLowerCase() : "";
+  return (
+    identifiers.length === 0 ||
+    identifiers.some((identifier) => identifier.toLowerCase() === requestedScope)
+  );
+}
 
 function chatPrompt(question: string) {
   return `You are the PortLog desktop assistant in general conversation mode. Answer the user's question directly and helpfully. No P&ID has been prepared for this turn, so do not claim to have topology evidence or issue an engineering verification verdict.\n\nUser question: ${question}`;
@@ -317,6 +347,7 @@ function verifyPrompt(question: string) {
   return [
     "You are in Verify posture. For the supported pump discharge check, use only the PortLog deterministic rule-check capability.",
     'Call portlog_rule_check with checkId exactly "pump_discharge_check_valve" and scopeEntityId equal to the pump entity identifier from the question or prepared evidence.',
+    "Do not invoke this pump rule for universal or plural questions, non-pump equipment, or a scope identifier that does not match the question. State that the supported check does not answer those questions.",
     "Never write Datalog, choose a rule, infer an outcome, or alter deterministic fields.",
     "After the tool returns, explain the PortLog-owned deterministic_result separately; do not present model prose as the outcome.",
     "If the check fails or is indeterminate, say so honestly.",

@@ -24,6 +24,7 @@ export type CapabilityCase = {
   requiredTools: readonly string[];
   forbiddenTools: readonly string[];
   requiresEvidence: boolean;
+  acceptsEvidenceNoMatch?: boolean;
   requiresDeterministicCheck: boolean;
   requiresAdmittedProvenance: boolean;
 };
@@ -87,6 +88,7 @@ export const CAPABILITY_CASES: readonly CapabilityCase[] = [
     requiredTools: ["portlog_evidence"],
     forbiddenTools: ["portlog_rule_check", "portlog_isolated_command"],
     requiresEvidence: true,
+    acceptsEvidenceNoMatch: true,
     requiresDeterministicCheck: false,
     requiresAdmittedProvenance: false,
   },
@@ -179,7 +181,11 @@ export function evaluateCapabilityCase(
       });
     }
   }
-  if (capability.requiresEvidence && !hasEvidence(record)) {
+  if (
+    capability.requiresEvidence &&
+    !hasEvidence(record) &&
+    !(capability.acceptsEvidenceNoMatch && hasEvidenceNoMatch(record))
+  ) {
     diagnostics.push({
       code: "missing_evidence",
       message: "The completed record has no persisted evidence identifier.",
@@ -321,6 +327,10 @@ export async function runCapabilityMatrix(
 }
 
 function selectCases(caseIds: readonly string[] | undefined): CapabilityCase[] {
+  if (caseIds?.includes("review-cancelled"))
+    throw new Error(
+      "Capability case review-cancelled is manual-only; run it with direct Ctrl-C validation instead of the automatic matrix.",
+    );
   if (!caseIds || caseIds.length === 0)
     return [...CAPABILITY_CASES].filter((item) => item.id !== "review-cancelled");
   const selected: CapabilityCase[] = [];
@@ -381,6 +391,18 @@ function hasEvidence(record: CapabilityRecord | null | undefined): boolean {
     Array.isArray(record?.evidenceIds) &&
     record.evidenceIds.some((value) => typeof value === "string")
   );
+}
+
+function hasEvidenceNoMatch(record: CapabilityRecord | null | undefined): boolean {
+  return containsDiagnosticCode(record?.events, "no_matching_evidence");
+}
+
+function containsDiagnosticCode(value: unknown, expectedCode: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => containsDiagnosticCode(item, expectedCode));
+  if (value === null || typeof value !== "object") return false;
+  const object = value as Record<string, unknown>;
+  if (object.code === expectedCode) return true;
+  return Object.values(object).some((item) => containsDiagnosticCode(item, expectedCode));
 }
 
 function hasCompletedDeterministicCheck(record: CapabilityRecord | null | undefined): boolean {
