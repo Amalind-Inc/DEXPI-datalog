@@ -87,6 +87,12 @@ class ArtifactStore(Protocol):
     def exists(self, key: str) -> bool:
         """Whether the store holds an artifact at this key."""
 
+    def delete(self, key: str) -> None:
+        """Delete one artifact. A missing artifact is already absent."""
+
+    def delete_tree(self, prefix: str) -> None:
+        """Delete every artifact below `prefix`. A missing prefix is already absent."""
+
     def size(self, key: str) -> int:
         """Size of the artifact in bytes."""
 
@@ -200,6 +206,19 @@ class LocalArtifactStore:
             if entry.is_file() and (suffix is None or entry.name.endswith(suffix))
         ]
         return sorted(keys)
+
+
+    def delete(self, key: str) -> None:
+        """Delete one artifact without making absence an error."""
+
+        self._resolve(key).unlink(missing_ok=True)
+
+    def delete_tree(self, prefix: str) -> None:
+        """Delete a contained artifact subtree without touching its siblings."""
+
+        path = self._resolve(prefix)
+        if path.is_dir():
+            shutil.rmtree(path)
 
     def copy(self, source_key: str, target_key: str) -> None:
         source = self._resolve(source_key)

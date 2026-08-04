@@ -168,6 +168,20 @@ class S3ArtifactStore:
             raise
         return True
 
+    def delete(self, key: str) -> None:
+        """Delete one artifact without making absence an error."""
+
+        self._client.delete_object(
+            Bucket=self._bucket,
+            Key=self._object_key(key),
+        )
+
+    def delete_tree(self, prefix: str) -> None:
+        """Delete every object below one contained artifact prefix."""
+
+        for key in self._all_keys_beneath(prefix):
+            self.delete(key)
+
     def size(self, key: str) -> int:
         try:
             head = self._client.head_object(

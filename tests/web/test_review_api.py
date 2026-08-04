@@ -351,6 +351,184 @@ class ReviewApiTests(unittest.TestCase):
             self.assertEqual(topology.status_code, 200)
             self.assertTrue(topology.json()["graph_objects"])
 
+    def test_multiple_sources_restore_by_id_and_delete_without_overwriting(
+        self,
+    ) -> None:
+        session_id = "api-multi-source-persistence"
+        e03_fixture = (
+            REPO_ROOT
+            / "TrainingTestCases"
+            / "dexpi 1.3"
+            / "example pids"
+            / "E03 Pump With Nozzles"
+            / "E03V01-VER.EX01.xml"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            principal = fresh_principal()
+            root = Path(tmp_dir) / "sessions"
+            client = TestClient(
+                create_review_api_app(principal=principal, artifact_root=root)
+            )
+
+            first = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "same-name.xml",
+                    "content": E06_FIXTURE.read_text(encoding="utf-8"),
+                },
+            )
+            second = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json={
+                    "filename": "same-name.xml",
+                    "content": e03_fixture.read_text(encoding="utf-8"),
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(second.status_code, 200)
+            first_body = first.json()
+            second_body = second.json()
+            first_source_id = first_body["source_id"]
+            second_source_id = second_body["source_id"]
+            self.assertNotEqual(first_source_id, second_source_id)
+            self.assertNotEqual(
+                first_body["topology_view"]["nodes"],
+                second_body["topology_view"]["nodes"],
+            )
+
+            sources = client.get(f"/api/review/sessions/{session_id}/sources")
+            self.assertEqual(sources.status_code, 200, sources.text)
+            self.assertEqual(
+                sources.json()["active_source_id"],
+                second_source_id,
+            )
+            self.assertEqual(
+                [item["source_id"] for item in sources.json()["sources"]],
+                [first_source_id, second_source_id],
+            )
+
+            first_topology = client.get(
+                f"/api/review/sessions/{session_id}/topology",
+                params={"source_id": first_source_id},
+            )
+            second_topology = client.get(
+                f"/api/review/sessions/{session_id}/topology",
+                params={"source_id": second_source_id},
+            )
+            self.assertEqual(first_topology.status_code, 200)
+            self.assertEqual(second_topology.status_code, 200)
+            self.assertEqual(first_topology.json()["source_id"], first_source_id)
+            self.assertEqual(second_topology.json()["source_id"], second_source_id)
+            self.assertNotEqual(
+                first_topology.json()["topology_view"]["nodes"],
+                second_topology.json()["topology_view"]["nodes"],
+            )
+
+            restarted = TestClient(
+                create_review_api_app(principal=principal, artifact_root=root)
+            )
+            restored = restarted.get(
+                f"/api/review/sessions/{session_id}/sources"
+            )
+            self.assertEqual(restored.status_code, 200)
+            self.assertEqual(
+                [item["source_id"] for item in restored.json()["sources"]],
+                [first_source_id, second_source_id],
+            )
+
+            deleted = restarted.delete(
+                f"/api/review/sessions/{session_id}/sources/{second_source_id}"
+            )
+            self.assertEqual(deleted.status_code, 200, deleted.text)
+            self.assertEqual(
+                deleted.json(),
+                {
+                    "deleted_source_id": second_source_id,
+                    "active_source_id": first_source_id,
+                },
+            )
+            self.assertEqual(
+                restarted.get(
+                    f"/api/review/sessions/{session_id}/topology",
+                    params={"source_id": first_source_id},
+                ).status_code,
+                200,
+            )
+            self.assertEqual(
+                restarted.get(
+                    f"/api/review/sessions/{session_id}/topology",
+                    params={"source_id": second_source_id},
+                ).status_code,
+                404,
+            )
+
+    def test_source_deletion_preserves_inactive_selection_and_handles_last_source(
+        self,
+    ) -> None:
+        session_id = "api-source-deletion-boundaries"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            client = TestClient(
+                create_review_api_app(
+                    principal=fresh_principal(),
+                    artifact_root=Path(tmp_dir) / "sessions",
+                )
+            )
+            payload = {
+                "filename": "same-name.xml",
+                "content": E06_FIXTURE.read_text(encoding="utf-8"),
+            }
+            first = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json=payload,
+            ).json()
+            second = client.post(
+                f"/api/review/sessions/{session_id}/prepare",
+                json=payload,
+            ).json()
+            first_source_id = first["source_id"]
+            second_source_id = second["source_id"]
+            self.assertNotEqual(first_source_id, second_source_id)
+
+            missing = client.delete(
+                f"/api/review/sessions/{session_id}/sources/source-missing"
+            )
+            self.assertEqual(missing.status_code, 404, missing.text)
+
+            inactive_deleted = client.delete(
+                f"/api/review/sessions/{session_id}/sources/{first_source_id}"
+            )
+            self.assertEqual(inactive_deleted.status_code, 200, inactive_deleted.text)
+            self.assertEqual(
+                inactive_deleted.json(),
+                {
+                    "deleted_source_id": first_source_id,
+                    "active_source_id": second_source_id,
+                },
+            )
+            self.assertEqual(
+                client.get(
+                    f"/api/review/sessions/{session_id}/topology",
+                    params={"source_id": second_source_id},
+                ).status_code,
+                200,
+            )
+
+            last_deleted = client.delete(
+                f"/api/review/sessions/{session_id}/sources/{second_source_id}"
+            )
+            self.assertEqual(last_deleted.status_code, 200, last_deleted.text)
+            self.assertEqual(
+                last_deleted.json(),
+                {
+                    "deleted_source_id": second_source_id,
+                    "active_source_id": None,
+                },
+            )
+            self.assertEqual(
+                client.get(f"/api/review/sessions/{session_id}/topology").status_code,
+                409,
+            )
+
     def test_configured_preparation_limit_is_enforced_through_http(self) -> None:
         session_id = "api-limit"
         with tempfile.TemporaryDirectory() as tmp_dir:

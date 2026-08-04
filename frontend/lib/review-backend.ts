@@ -89,6 +89,23 @@ type PrepareBody = {
   content?: string;
 };
 
+export type ReviewSourceSummary = {
+  sourceId: string;
+  filename: string;
+  preparedAt: string;
+};
+
+export type RestoredReviewSources = {
+  sessionId: string;
+  activeSourceId: string | null;
+  documents: PrepareResult[];
+};
+
+export type DeleteReviewSourceResult = {
+  deletedSourceId: string;
+  activeSourceId: string | null;
+};
+
 type BackendFetch = typeof fetch;
 type BackendProviderSettings = {
   // Open by construction: the provider set is the models.dev catalogue
@@ -121,6 +138,7 @@ export async function prepareReviewSession(
   return {
     status: "failed",
     filename: body.filename ?? "plant.xml",
+    sourceId: null,
     graph: { nodes: [], edges: [] },
     pidView: EMPTY_PID_VIEW,
     schematicScene: null,
@@ -250,6 +268,7 @@ async function prepareWithPythonBackend(
     const data = (await response.json()) as Record<string, unknown>;
     return {
       status: readStatus(data),
+      sourceId: readSourceId(data),
       filename: body.filename ?? "plant.xml",
       graph: readTopology(data),
       pidView: readPidView(data),
@@ -287,12 +306,110 @@ export async function restoreReviewSession(
     return {
       status: "ready",
       filename: typeof data.filename === "string" ? data.filename : "plant.xml",
+      sourceId: readSourceId(data),
       graph: readTopology(data),
       pidView: readPidView(data),
       schematicScene: readSchematicScene(data),
       schematicSceneKind: readSchematicSceneKind(data),
       geometryReport: readGeometryReport(data),
       sourceScopeIds: readVisibleSourceScopeIds(data.visible_source_scope),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreReviewSources(
+  sessionId: string,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
+): Promise<RestoredReviewSources | null> {
+  if (!baseUrl || !sessionId) return null;
+
+  try {
+    const manifestResponse = await fetcher(
+      `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/sources`,
+    );
+    if (!manifestResponse.ok) return null;
+    const manifest = (await manifestResponse.json()) as Record<string, unknown>;
+    const sources = readReviewSources(manifest.sources);
+    if (!sources) return null;
+    const activeSourceId =
+      typeof manifest.active_source_id === "string" ? manifest.active_source_id : null;
+    if (activeSourceId !== null && !sources.some((source) => source.sourceId === activeSourceId)) {
+      return null;
+    }
+
+    const documents = await Promise.all(sources.map(async (source) => {
+      const topologyResponse = await fetcher(
+        `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/topology?source_id=${encodeURIComponent(source.sourceId)}`,
+      );
+      if (!topologyResponse.ok) return null;
+      const topology = (await topologyResponse.json()) as Record<string, unknown>;
+      if (readSourceId(topology) !== source.sourceId) return null;
+      return {
+        status: "ready" as const,
+        filename: source.filename,
+        sourceId: source.sourceId,
+        graph: readTopology(topology),
+        pidView: readPidView(topology),
+        schematicScene: readSchematicScene(topology),
+        schematicSceneKind: readSchematicSceneKind(topology),
+        geometryReport: readGeometryReport(topology),
+        sourceScopeIds: readVisibleSourceScopeIds(topology.visible_source_scope),
+      };
+    }));
+    if (documents.some((document) => document === null)) return null;
+
+    return {
+      sessionId,
+      activeSourceId,
+      documents: documents as PrepareResult[],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function activateReviewSource(
+  sessionId: string,
+  sourceId: string,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
+): Promise<{ activeSourceId: string | null } | null> {
+  if (!baseUrl || !sessionId || !sourceId) return null;
+  try {
+    const response = await fetcher(
+      `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/sources/${encodeURIComponent(sourceId)}/active`,
+      { method: "PUT" },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    return {
+      activeSourceId:
+        typeof data.active_source_id === "string" ? data.active_source_id : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteReviewSource(
+  sessionId: string,
+  sourceId: string,
+  { baseUrl = backendBaseUrl(), fetcher = backendFetch }: BackendOptions = {},
+): Promise<DeleteReviewSourceResult | null> {
+  if (!baseUrl || !sessionId || !sourceId) return null;
+  try {
+    const response = await fetcher(
+      `${baseUrl}/api/review/sessions/${encodeURIComponent(sessionId)}/sources/${encodeURIComponent(sourceId)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    if (data.deleted_source_id !== sourceId) return null;
+    return {
+      deletedSourceId: sourceId,
+      activeSourceId:
+        typeof data.active_source_id === "string" ? data.active_source_id : null,
     };
   } catch {
     return null;
@@ -632,6 +749,36 @@ async function postJson(
 
 function readStatus(data: Record<string, unknown>) {
   return data.status === "failed" ? "failed" : "ready";
+}
+
+function readSourceId(data: Record<string, unknown>): string | null {
+  const sourceId = data.source_id;
+  if (typeof sourceId !== "string" || sourceId === "") return null;
+  return sourceId;
+}
+
+function readReviewSources(value: unknown): ReviewSourceSummary[] | null {
+  if (!Array.isArray(value)) return null;
+  const sources: ReviewSourceSummary[] = [];
+  const sourceIds = new Set<string>();
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    const sourceId = item.source_id;
+    const filename = item.filename;
+    const preparedAt = item.prepared_at;
+    if (
+      typeof sourceId !== "string"
+      || sourceId === ""
+      || sourceIds.has(sourceId)
+      || typeof filename !== "string"
+      || typeof preparedAt !== "string"
+    ) {
+      return null;
+    }
+    sourceIds.add(sourceId);
+    sources.push({ sourceId, filename, preparedAt });
+  }
+  return sources;
 }
 function readServerPipelineMetrics(data: Record<string, unknown>): PrepareResult["serverMetrics"] {
   if (!isRecord(data.timing) || !isRecord(data.timing.pipeline)) return null;

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,7 +37,7 @@ from ..workflow.artifact_store import ArtifactStore
 from ..workflow.principal import LOCAL_PRINCIPAL, Principal
 from ..workflow.provider_keys import ProviderKeyStore
 from ..workflow.render_bundle import RENDER_BUNDLE_SCHEMA_VERSION
-from ..workflow.review_session import PreparationLimits
+from ..workflow.review_session import PreparationLimits, ReviewSourceNotFound
 from .chainlit_review_flow import ChainlitReviewFlow
 from .deployment import (
     DeploymentProfile,
@@ -361,13 +362,15 @@ def create_review_api_app(
         filename = _filename(body, "filename")
         content = _required_string(body, "content")
         upload_store_started_at = time.perf_counter()
-        upload_key = f"_uploads/{session_id}/{filename}"
+        upload_key = f"_uploads/{session_id}/{uuid.uuid4().hex}/{filename}"
         ws.store.write_text(upload_key, content)
         upload_store_ms = (time.perf_counter() - upload_store_started_at) * 1000
         # pyDEXPI parses from a real file, so preparation borrows one.
         with ws.store.local_path(upload_key) as upload_path:
             state = ws.flow.prepare_upload(
-                dexpi_xml_path=upload_path, session_id=session_id
+                dexpi_xml_path=upload_path,
+                session_id=session_id,
+                source_filename=filename,
             )
         # Only a session that became ready is reopenable, so only that one is
         # worth offering back to the reviewer.
@@ -392,13 +395,51 @@ def create_review_api_app(
                     time.perf_counter() - request_started_at
                 ) * 1000
         return state
+    @app.get("/api/review/sessions/{session_id}/sources")
+    def sources(
+        session_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        return _call_ready(lambda: ws.flow.sources_state(session_id=session_id))
+
+    @app.put("/api/review/sessions/{session_id}/sources/{source_id}/active")
+    def activate_source(
+        session_id: str,
+        source_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        return _call_ready(
+            lambda: ws.flow.activate_source(
+                session_id=session_id,
+                source_id=source_id,
+            )
+        )
+
+    @app.delete("/api/review/sessions/{session_id}/sources/{source_id}")
+    def delete_source(
+        session_id: str,
+        source_id: str,
+        ws: WorkspaceServices = Depends(_workspace),
+    ) -> dict[str, object]:
+        return _call_ready(
+            lambda: ws.flow.delete_source(
+                session_id=session_id,
+                source_id=source_id,
+            )
+        )
 
     @app.get("/api/review/sessions/{session_id}/topology")
     def topology(
         session_id: str,
+        source_id: str | None = None,
         ws: WorkspaceServices = Depends(_workspace),
     ) -> dict[str, object]:
-        return _call_ready(lambda: ws.flow.topology_panel_state(session_id=session_id))
+        return _call_ready(
+            lambda: ws.flow.topology_panel_state(
+                session_id=session_id,
+                source_id=source_id,
+            )
+        )
 
     @app.get("/api/review/sessions/{session_id}/render-bundle")
     def render_bundle(session_id: str, request: Request, ws: WorkspaceServices = Depends(_workspace)) -> JSONResponse:
@@ -1043,6 +1084,16 @@ def _serialize_pack(pack: dict[str, object], *, source: str) -> dict[str, object
 def _call_ready(action: Callable[[], dict[str, object]]) -> dict[str, object]:
     try:
         return action()
+    except ReviewSourceNotFound as error:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "source.not_found",
+                    "message": str(error),
+                }
+            },
+        ) from error
     except ValueError as error:
         message = str(error)
         if message.startswith("No ready topology is known"):

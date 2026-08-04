@@ -55,6 +55,7 @@ from ..workflow.artifact_store import ArtifactStore, ArtifactStoreError
 from ..workflow.review_session import (
     PreparationLimits,
     ReviewSessionService,
+    ReviewSourceNotFound,
     build_evidence_highlight_payload,
     session_artifact_keys,
     session_artifact_paths,
@@ -264,12 +265,17 @@ class ChainlitReviewFlow:
         }
 
     def prepare_upload(
-        self, *, dexpi_xml_path: Path, session_id: str
+        self,
+        *,
+        dexpi_xml_path: Path,
+        session_id: str,
+        source_filename: str | None = None,
     ) -> dict[str, object]:
         started_at = self._clock()
         result = self._service.start_preparation(
             dexpi_xml_path=dexpi_xml_path,
             session_id=session_id,
+            source_filename=source_filename,
         )
         elapsed_seconds = self._clock() - started_at
         return self._state_from_preparation_result(
@@ -288,11 +294,74 @@ class ChainlitReviewFlow:
             elapsed_seconds=elapsed_seconds,
         )
 
+    def sources_state(self, *, session_id: str) -> dict[str, object]:
+        return self._service.sources_state(session_id=session_id)
+
+    def activate_source(
+        self, *, session_id: str, source_id: str
+    ) -> dict[str, object]:
+        state = self._service.activate_source(
+            session_id=session_id,
+            source_id=source_id,
+        )
+        topology = self._service.source_topology(
+            session_id=session_id,
+            source_id=source_id,
+        )
+        self._activate_ready_session(
+            session_id=session_id,
+            topology_view=topology,
+            artifacts=dict(
+                session_artifact_paths(self._store, session_id, source_id)
+            ),
+        )
+        return state
+
+    def delete_source(
+        self, *, session_id: str, source_id: str
+    ) -> dict[str, object]:
+        previous_active_source_id = self._service.active_source_id(
+            session_id=session_id
+        )
+        state = self._service.delete_source(
+            session_id=session_id,
+            source_id=source_id,
+        )
+        active_source_id = state["active_source_id"]
+        if previous_active_source_id == source_id and isinstance(
+            active_source_id, str
+        ):
+            topology = self._service.source_topology(
+                session_id=session_id,
+                source_id=active_source_id,
+            )
+            self._activate_ready_session(
+                session_id=session_id,
+                topology_view=topology,
+                artifacts=dict(
+                    session_artifact_paths(
+                        self._store, session_id, active_source_id
+                    )
+                ),
+            )
+        elif previous_active_source_id == source_id:
+            self._topology_by_session.pop(session_id, None)
+            self._artifacts_by_session.pop(session_id, None)
+            self._evidence_highlight_by_session.pop(session_id, None)
+            self._visible_source_scope_by_session.pop(session_id, None)
+            self._last_selected_by_session.pop(session_id, None)
+        return state
+
     def timing_records(self) -> list[dict[str, object]]:
         return list(self._timing_records)
 
-    def topology_panel_state(self, *, session_id: str) -> dict[str, object]:
-        topology = self._topology_for_session(session_id)
+    def topology_panel_state(
+        self, *, session_id: str, source_id: str | None = None
+    ) -> dict[str, object]:
+        topology = self._topology_for_session(
+            session_id,
+            source_id=source_id,
+        )
         graph_objects = [
             {
                 "id": node["id"],
@@ -315,8 +384,14 @@ class ChainlitReviewFlow:
             }
             for edge in topology["edges"]
         )
+        active_source_id = self._service.active_source_id(session_id=session_id)
+        is_active_source = (
+            active_source_id is None
+            or topology.get("source_id") == active_source_id
+        )
         return {
             "session_id": session_id,
+            "source_id": topology.get("source_id"),
             "graph_objects": graph_objects,
             # The nodes and edges as extracted, carried verbatim. graph_objects
             # above is a selection list: it flattens an edge to id/kind/label
@@ -330,15 +405,28 @@ class ChainlitReviewFlow:
                 "edges": topology["edges"],
             },
             # Compressed P&ID-like view (equipment units + collapsed lines).
-            "pid_view": topology.get("pid_view", {"units": [], "lines": [], "hidden_topology_ids": []}),
+            "pid_view": topology.get(
+                "pid_view",
+                {"units": [], "lines": [], "hidden_topology_ids": []},
+            ),
             # Drawing-faithful tier-1 scene (ADR 0004/0005); None when the
             # source carries no geometry, or fails the geometry sanity gate.
             "schematic_scene": topology.get("schematic_scene"),
             # "as-drawn" | "auto-layout" | "none" (bead pydexpi-datalog-1-2ki.5).
-            "schematic_scene_kind": topology.get("schematic_scene_kind", "none"),
+            "schematic_scene_kind": topology.get(
+                "schematic_scene_kind", "none"
+            ),
             "geometry_report": topology.get("geometry_report"),
-            "visible_source_scope": self._visible_source_scope(session_id),
-            "evidence_highlight": self._evidence_highlight(session_id),
+            "visible_source_scope": (
+                self._visible_source_scope(session_id)
+                if is_active_source
+                else {"ids": []}
+            ),
+            "evidence_highlight": (
+                self._evidence_highlight(session_id)
+                if is_active_source
+                else topology["evidence_highlight"]
+            ),
         }
 
     def select_topology_object(
@@ -2032,28 +2120,67 @@ class ChainlitReviewFlow:
         self._loaded_rule_pack_data_by_session[session_id] = {}
         self._missing_capabilities_by_session[session_id] = []
 
-    def _topology_for_session(self, session_id: str) -> dict[str, object]:
+    def _topology_for_session(
+        self, session_id: str, *, source_id: str | None = None
+    ) -> dict[str, object]:
+        active_source_id = self._service.active_source_id(session_id=session_id)
+        requested_source_id = (
+            source_id if source_id is not None else active_source_id
+        )
         topology = self._topology_by_session.get(session_id)
-        if topology is None:
-            # A session prepared before this process started is still on disk.
-            # Reload it rather than telling the reviewer their review is gone.
-            topology = self._rehydrate_ready_session(session_id)
+        if (
+            topology is not None
+            and (
+                requested_source_id is None
+                or topology.get("source_id") == requested_source_id
+            )
+        ):
+            return topology
+
+        # A session prepared before this process started is still on disk.
+        # Reload it rather than telling the reviewer their review is gone.
+        topology = self._rehydrate_ready_session(
+            session_id,
+            source_id=requested_source_id,
+            activate=source_id is None,
+        )
         if topology is None:
             raise ValueError(f"No ready topology is known for session: {session_id}")
         return topology
 
     def _rehydrate_ready_session(
-        self, session_id: str
+        self,
+        session_id: str,
+        *,
+        source_id: str | None = None,
+        activate: bool,
     ) -> dict[str, object] | None:
-        """Reload a previously ready session from its persisted artifacts.
+        """Reload a persisted source, preserving the active-source boundary."""
 
-        Returns None when the session was never prepared, never became ready,
-        or its artifacts are unreadable: callers then report it as unknown.
-        """
+        if source_id is not None:
+            try:
+                topology_view = self._service.source_topology(
+                    session_id=session_id,
+                    source_id=source_id,
+                )
+            except ReviewSourceNotFound:
+                # An explicit source selector must never fall back to the
+                # active document: callers use this distinction for tabs.
+                raise
+            except ValueError:
+                return None
+            if activate:
+                self._activate_ready_session(
+                    session_id=session_id,
+                    topology_view=topology_view,
+                    artifacts=dict(
+                        session_artifact_paths(self._store, session_id, source_id)
+                    ),
+                )
+            return topology_view
 
-        # session_id arrives from the request path; the store refuses a key
-        # that would leave this workspace, so a traversal attempt reads as an
-        # unknown session rather than someone else's artifacts.
+        # Legacy single-source artifacts remain readable for sessions prepared
+        # before source manifests existed. New sessions always resolve above.
         keys = session_artifact_keys(session_id)
         try:
             readiness = self._store.read_json(keys["readiness_metadata"])
@@ -2065,11 +2192,12 @@ class ChainlitReviewFlow:
         if not isinstance(topology_view, dict):
             return None
 
-        self._activate_ready_session(
-            session_id=session_id,
-            topology_view=topology_view,
-            artifacts=dict(session_artifact_paths(self._store, session_id)),
-        )
+        if activate:
+            self._activate_ready_session(
+                session_id=session_id,
+                topology_view=topology_view,
+                artifacts=dict(session_artifact_paths(self._store, session_id)),
+            )
         return topology_view
 
     def _ensure_known_topology_id(self, *, session_id: str, topology_id: str) -> None:

@@ -8,16 +8,19 @@ retryability, multiple-source behavior, and source-id provenance — not interna
 from __future__ import annotations
 
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
 
 from hosted_env import path_from_download_url
-
 from pydexpi_datalog.workflow.artifact_store import LocalArtifactStore
+
 from pydexpi_datalog.workflow.review_session import (
     PreparationLimits,
     ReviewSessionService,
     compute_source_id,
+    session_sources_manifest_key,
+    source_artifact_keys,
     validate_upload_input,
 )
 
@@ -54,6 +57,33 @@ def _service(tmp_dir: str, **limit_overrides: object) -> ReviewSessionService:
 
 def _first_diag_code(result: dict) -> str:
     return result["diagnostics"][0]["code"]
+
+
+class FaultInjectingArtifactStore(LocalArtifactStore):
+    """Small store double for observable source-transition failure cases."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.fail_manifest_write = False
+        self.fail_next_alias_copy = False
+        self.fail_delete_tree = False
+
+    def write_json(self, key: str, value: object) -> None:
+        if self.fail_manifest_write and key.endswith("/sources.json"):
+            raise OSError("manifest write failed")
+        super().write_json(key, value)
+
+    def copy(self, source_key: str, target_key: str) -> None:
+        is_legacy_alias = "/sources/" not in target_key
+        if is_legacy_alias and self.fail_next_alias_copy:
+            self.fail_next_alias_copy = False
+            raise OSError("legacy alias copy failed")
+        super().copy(source_key, target_key)
+
+    def delete_tree(self, prefix: str) -> None:
+        if self.fail_delete_tree:
+            raise OSError("source cleanup failed")
+        super().delete_tree(prefix)
 
 
 class ConfigurableLimitTests(unittest.TestCase):
@@ -151,7 +181,7 @@ class MultipleSourcesPerChatTests(unittest.TestCase):
             self.assertEqual(second["readiness"]["state"], "ready")
             self.assertNotEqual(first["source_id"], second["source_id"])
 
-    def test_re_preparing_identical_source_is_idempotent(self) -> None:
+    def test_re_preparing_identical_source_creates_independent_records(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             service = _service(tmp_dir)
             first = service.start_preparation(
@@ -161,7 +191,9 @@ class MultipleSourcesPerChatTests(unittest.TestCase):
                 dexpi_xml_path=E06_FIXTURE, session_id="same-chat"
             )
             self.assertEqual(second["readiness"]["state"], "ready")
-            self.assertEqual(first["source_id"], second["source_id"])
+            # Source-derived calculation may be cached, but each successful
+            # import is an independently restorable review source.
+            self.assertNotEqual(first["source_id"], second["source_id"])
 
     def test_failed_preparation_leaves_chat_eligible_for_corrected_retry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -195,6 +227,132 @@ class MultipleSourcesPerChatTests(unittest.TestCase):
             self.assertEqual(chat_a["readiness"]["state"], "ready")
             self.assertEqual(chat_b["readiness"]["state"], "ready")
             self.assertNotEqual(chat_a["source_id"], chat_b["source_id"])
+
+
+class SourceMutationSafetyTests(unittest.TestCase):
+    def test_concurrent_preparations_preserve_both_source_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "sessions"
+            services = [
+                ReviewSessionService(store=LocalArtifactStore(root)),
+                ReviewSessionService(store=LocalArtifactStore(root)),
+            ]
+            requests = [
+                (services[0], E06_FIXTURE),
+                (services[1], E03_FIXTURE),
+            ]
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(
+                    executor.map(
+                        lambda request: request[0].start_preparation(
+                            dexpi_xml_path=request[1],
+                            session_id="concurrent-session",
+                        ),
+                        requests,
+                    )
+                )
+
+            self.assertEqual(
+                [result["readiness"]["state"] for result in results],
+                ["ready", "ready"],
+            )
+            state = services[0].sources_state(session_id="concurrent-session")
+            self.assertEqual(
+                {item["source_id"] for item in state["sources"]},
+                {result["source_id"] for result in results},
+            )
+
+    def test_manifest_write_failure_preserves_source_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = FaultInjectingArtifactStore(Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=store)
+            session_id = "manifest-failure"
+            prepared = service.start_preparation(
+                dexpi_xml_path=E06_FIXTURE, session_id=session_id
+            )
+            source_id = str(prepared["source_id"])
+            manifest_key = session_sources_manifest_key(session_id)
+            manifest_before = store.read_json(manifest_key)
+            store.fail_manifest_write = True
+
+            with self.assertRaises(OSError):
+                service.delete_source(session_id=session_id, source_id=source_id)
+
+            store.fail_manifest_write = False
+            self.assertEqual(store.read_json(manifest_key), manifest_before)
+            self.assertTrue(
+                store.exists(
+                    source_artifact_keys(session_id, source_id)["readiness_metadata"]
+                )
+            )
+            self.assertEqual(
+                service.source_topology(
+                    session_id=session_id, source_id=source_id
+                )["source_id"],
+                source_id,
+            )
+
+    def test_alias_failure_preserves_the_previous_active_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = FaultInjectingArtifactStore(Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=store)
+            session_id = "alias-failure"
+            first = service.start_preparation(
+                dexpi_xml_path=E06_FIXTURE, session_id=session_id
+            )
+            second = service.start_preparation(
+                dexpi_xml_path=E03_FIXTURE, session_id=session_id
+            )
+            manifest_key = session_sources_manifest_key(session_id)
+            manifest_before = store.read_json(manifest_key)
+            store.fail_next_alias_copy = True
+
+            with self.assertRaises(OSError):
+                service.activate_source(
+                    session_id=session_id, source_id=str(first["source_id"])
+                )
+
+            self.assertEqual(store.read_json(manifest_key), manifest_before)
+            self.assertEqual(
+                service.active_source_id(session_id=session_id),
+                second["source_id"],
+            )
+
+    def test_cleanup_failure_commits_membership_without_resurrecting_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = FaultInjectingArtifactStore(Path(tmp_dir) / "sessions")
+            service = ReviewSessionService(store=store)
+            session_id = "cleanup-failure"
+            first = service.start_preparation(
+                dexpi_xml_path=E06_FIXTURE, session_id=session_id
+            )
+            second = service.start_preparation(
+                dexpi_xml_path=E03_FIXTURE, session_id=session_id
+            )
+            first_id = str(first["source_id"])
+            second_id = str(second["source_id"])
+            store.fail_delete_tree = True
+
+            deleted = service.delete_source(
+                session_id=session_id, source_id=first_id
+            )
+
+            self.assertTrue(deleted["cleanup_pending"])
+            self.assertEqual(
+                [item["source_id"] for item in service.sources_state(session_id=session_id)["sources"]],
+                [second_id],
+            )
+            self.assertTrue(
+                store.exists(
+                    source_artifact_keys(session_id, first_id)["readiness_metadata"]
+                )
+            )
+            self.assertEqual(
+                service.source_topology(
+                    session_id=session_id, source_id=second_id
+                )["source_id"],
+                second_id,
+            )
 
 
 class DrawingCountIsNotPageCountTests(unittest.TestCase):

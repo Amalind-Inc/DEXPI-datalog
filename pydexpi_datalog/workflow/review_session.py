@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from datetime import datetime, timezone
 import uuid
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from contextlib import contextmanager
+from threading import RLock
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,7 +19,7 @@ from ..semantics.derive_graph_semantics import (
     build_derived_graph_semantics_datalog,
     build_graph_facts_datalog,
 )
-from .artifact_store import ArtifactStore
+from .artifact_store import ArtifactNotFound, ArtifactStore
 from .geometry_gate import evaluate_geometry_gate
 from .pid_view import build_pid_view
 from .schematic_scene import build_schematic_scene_report, has_drawable_geometry
@@ -46,6 +49,49 @@ def compute_source_id(dexpi_xml_path: Path) -> str:
     return f"source-{digest}"
 
 
+class ReviewSourceNotFound(ValueError):
+    """A requested durable source record is not part of this review session."""
+
+
+class SessionMutationCoordinator:
+    """Serialize source-manifest mutations per session within this process.
+
+    The coordinator protects callers sharing a Python process. Hosted
+    deployments that permit multiple writer processes still need object-store
+    conditional writes or a distributed lease; this class does not claim to
+    solve that cross-process problem.
+    """
+
+    def __init__(self) -> None:
+        self._registry_lock = RLock()
+        self._locks: dict[str, tuple[RLock, int]] = {}
+
+    @contextmanager
+    def lock(self, session_id: str):
+        with self._registry_lock:
+            entry = self._locks.get(session_id)
+            session_lock = entry[0] if entry is not None else RLock()
+            self._locks[session_id] = (
+                session_lock,
+                (entry[1] if entry is not None else 0) + 1,
+            )
+        session_lock.acquire()
+        try:
+            yield
+        finally:
+            session_lock.release()
+            with self._registry_lock:
+                current = self._locks.get(session_id)
+                if current is not None and current[0] is session_lock:
+                    if current[1] <= 1:
+                        del self._locks[session_id]
+                    else:
+                        self._locks[session_id] = (session_lock, current[1] - 1)
+
+
+_SOURCE_MUTATIONS = SessionMutationCoordinator()
+
+
 class ReviewSessionService:
     """Prepare uploaded DEXPI source files for a web review session."""
 
@@ -55,21 +101,31 @@ class ReviewSessionService:
         store: ArtifactStore,
         limits: PreparationLimits | None = None,
         clock: Callable[[], float] = time.perf_counter,
+        mutation_coordinator: SessionMutationCoordinator | None = None,
     ) -> None:
         self.store = store
         self._limits = limits or PreparationLimits()
         self._clock = clock
+        self._mutation_coordinator = mutation_coordinator or _SOURCE_MUTATIONS
         self._requests_by_session: dict[str, Path] = {}
-        self._ready_source_by_session: dict[str, str] = {}
+        self._request_filename_by_session: dict[str, str] = {}
 
     def start_preparation(
-        self, *, dexpi_xml_path: Path, session_id: str | None = None
+        self,
+        *,
+        dexpi_xml_path: Path,
+        session_id: str | None = None,
+        source_filename: str | None = None,
     ) -> dict[str, object]:
         session_id = session_id or f"session-{uuid.uuid4().hex}"
         self._requests_by_session[session_id] = dexpi_xml_path
+        self._request_filename_by_session[session_id] = (
+            source_filename or dexpi_xml_path.name
+        )
         return self._run_preparation(
             dexpi_xml_path=dexpi_xml_path,
             session_id=session_id,
+            source_filename=self._request_filename_by_session[session_id],
             attempt=1,
         )
 
@@ -89,11 +145,35 @@ class ReviewSessionService:
         return self._run_preparation(
             dexpi_xml_path=dexpi_xml_path,
             session_id=session_id,
+            source_filename=self._request_filename_by_session.get(
+                session_id, dexpi_xml_path.name
+            ),
             attempt=2,
         )
 
     def _run_preparation(
-        self, *, dexpi_xml_path: Path, session_id: str, attempt: int
+        self,
+        *,
+        dexpi_xml_path: Path,
+        session_id: str,
+        source_filename: str,
+        attempt: int,
+    ) -> dict[str, object]:
+        with self._mutation_coordinator.lock(session_id):
+            return self._run_preparation_unlocked(
+                dexpi_xml_path=dexpi_xml_path,
+                session_id=session_id,
+                source_filename=source_filename,
+                attempt=attempt,
+            )
+
+    def _run_preparation_unlocked(
+        self,
+        *,
+        dexpi_xml_path: Path,
+        session_id: str,
+        source_filename: str,
+        attempt: int,
     ) -> dict[str, object]:
         if not dexpi_xml_path.exists():
             return self._failed_result(
@@ -110,7 +190,11 @@ class ReviewSessionService:
                 ],
             )
 
-        source_id = compute_source_id(dexpi_xml_path)
+        content_source_id = compute_source_id(dexpi_xml_path)
+        source_id = self._allocate_source_id(
+            session_id=session_id,
+            content_source_id=content_source_id,
+        )
 
         validation_diagnostics = validate_upload_input(
             dexpi_xml_path, limits=self._limits
@@ -131,18 +215,32 @@ class ReviewSessionService:
         try:
             started_at = self._clock()
             phases_ms: dict[str, float] = {}
-            source_cache = SourcePreparationCache(store=self.store, source_digest=source_id.removeprefix("source-"))
+            source_cache = SourcePreparationCache(
+                store=self.store,
+                source_digest=content_source_id.removeprefix("source-"),
+            )
             cache_hit = source_cache.available()
             if cache_hit:
-                restored = source_cache.materialize(session_id=session_id, source_id=source_id, source_path=str(dexpi_xml_path))
+                restored = source_cache.materialize(
+                    session_id=session_id,
+                    source_id=source_id,
+                    source_path=str(dexpi_xml_path),
+                )
                 graph_facts = restored["graph_facts"]
                 topology_view = restored["topology"]
-                phases_ms["source_cache_materialize"] = (self._clock() - started_at) * 1000
+                phases_ms["source_cache_materialize"] = (
+                    self._clock() - started_at
+                ) * 1000
             else:
                 # The export pipeline writes graph_facts.json into a directory it
                 # is handed, so preparation borrows a real one from the store.
                 with self.store.local_dir(session_id) as session_dir:
-                    export = export_graph_facts_artifact_timed(dexpi_xml_path=dexpi_xml_path, fixture_id=session_id, output_dir=session_dir, clock=self._clock)
+                    export = export_graph_facts_artifact_timed(
+                        dexpi_xml_path=dexpi_xml_path,
+                        fixture_id=session_id,
+                        output_dir=session_dir,
+                        clock=self._clock,
+                    )
                     graph_facts = export.artifact
                     phases_ms.update(export.phases_ms)
 
@@ -158,45 +256,91 @@ class ReviewSessionService:
                 )
 
             if not cache_hit:
-                stage_history.append(stage("running", "deriving graph facts datalog"))
+                stage_history.append(
+                    stage("running", "deriving graph facts datalog")
+                )
                 phase_started_at = self._clock()
                 graph_facts_datalog = build_graph_facts_datalog(graph_facts)
-                self.store.write_text(f"{session_id}/graph_facts.dl", graph_facts_datalog)
-                phases_ms["graph_datalog"] = (self._clock() - phase_started_at) * 1000
-                stage_history.append(stage("running", "deriving graph semantics"))
+                self.store.write_text(
+                    f"{session_id}/graph_facts.dl", graph_facts_datalog
+                )
+                phases_ms["graph_datalog"] = (
+                    self._clock() - phase_started_at
+                ) * 1000
+                stage_history.append(
+                    stage("running", "deriving graph semantics")
+                )
                 phase_started_at = self._clock()
-                derived_graph_semantics = build_derived_graph_semantics_datalog(graph_facts)
-                self.store.write_text(f"{session_id}/derived_graph_semantics.dl", derived_graph_semantics)
-                phases_ms["derived_semantics"] = (self._clock() - phase_started_at) * 1000
-                stage_history.append(stage("running", "building topology view model"))
+                derived_graph_semantics = build_derived_graph_semantics_datalog(
+                    graph_facts
+                )
+                self.store.write_text(
+                    f"{session_id}/derived_graph_semantics.dl",
+                    derived_graph_semantics,
+                )
+                phases_ms["derived_semantics"] = (
+                    self._clock() - phase_started_at
+                ) * 1000
+                stage_history.append(
+                    stage("running", "building topology view model")
+                )
                 phase_started_at = self._clock()
-                topology_view = build_topology_view_model(graph_facts=graph_facts, session_id=session_id, source_id=source_id, dexpi_xml_path=dexpi_xml_path)
-                phases_ms["topology_scene"] = (self._clock() - phase_started_at) * 1000
-                source_cache.store(graph_facts=graph_facts, graph_facts_datalog=graph_facts_datalog, derived_semantics_datalog=derived_graph_semantics, topology=topology_view)
+                topology_view = build_topology_view_model(
+                    graph_facts=graph_facts,
+                    session_id=session_id,
+                    source_id=source_id,
+                    dexpi_xml_path=dexpi_xml_path,
+                )
+                phases_ms["topology_scene"] = (
+                    self._clock() - phase_started_at
+                ) * 1000
+                source_cache.store(
+                    graph_facts=graph_facts,
+                    graph_facts_datalog=graph_facts_datalog,
+                    derived_semantics_datalog=derived_graph_semantics,
+                    topology=topology_view,
+                )
 
-            artifact_paths = session_artifact_paths(self.store, session_id)
+            source_keys = source_artifact_keys(session_id, source_id)
+            legacy_keys = session_artifact_keys(session_id)
             phase_started_at = self._clock()
-            self.store.write_json(f"{session_id}/topology_view.json", topology_view)
+            self.store.write_json(
+                legacy_keys["topology_view_model"], topology_view
+            )
+            for kind in (
+                "graph_facts_json",
+                "graph_facts_datalog",
+                "derived_graph_semantics_datalog",
+            ):
+                self.store.copy(legacy_keys[kind], source_keys[kind])
 
+            artifact_paths = session_artifact_paths(
+                self.store, session_id, source_id
+            )
             readiness = {
                 "state": "ready",
                 "session_id": session_id,
                 "source_id": source_id,
                 "graph": graph_facts["graph"],
                 "diagnostics": [],
-                "topology_view_model_path": artifact_paths["topology_view_model"],
+                "topology_view_model_path": artifact_paths[
+                    "topology_view_model"
+                ],
             }
-            self.store.write_json(f"{session_id}/readiness.json", readiness)
+            self.store.write_json(
+                source_keys["topology_view_model"], topology_view
+            )
+            self.store.write_json(source_keys["readiness_metadata"], readiness)
             phases_ms["topology_artifact_write"] = (
                 self._clock() - phase_started_at
             ) * 1000
 
-            artifacts = artifact_paths
             elapsed_seconds = self._clock() - started_at
             time_limit_diagnostics = check_preparation_time_limit(
                 elapsed_seconds=elapsed_seconds, limits=self._limits
             )
             if time_limit_diagnostics:
+                self.store.delete_tree(source_artifact_prefix(session_id, source_id))
                 return self._failed_result(
                     session_id=session_id,
                     attempt=attempt,
@@ -205,9 +349,13 @@ class ReviewSessionService:
                 )
 
             artifact_limit_diagnostics = check_artifact_size_limits(
-                store=self.store, session_id=session_id, limits=self._limits
+                store=self.store,
+                session_id=session_id,
+                source_id=source_id,
+                limits=self._limits,
             )
             if artifact_limit_diagnostics:
+                self.store.delete_tree(source_artifact_prefix(session_id, source_id))
                 return self._failed_result(
                     session_id=session_id,
                     attempt=attempt,
@@ -216,7 +364,7 @@ class ReviewSessionService:
                 )
 
             artifact_bytes = sum(
-                self.store.size(key) for key in self.store.list(session_id)
+                self.store.size(key) for key in source_keys.values()
             )
             metrics = {
                 "schema_version": 1,
@@ -229,14 +377,18 @@ class ReviewSessionService:
                     "topology_nodes": len(topology_view["nodes"]),
                     "topology_edges": len(topology_view["edges"]),
                     "topology_bytes": self.store.size(
-                        f"{session_id}/topology_view.json"
+                        source_keys["topology_view_model"]
                     ),
                     "artifact_bytes": artifact_bytes,
                 },
             }
 
+            self._record_ready_source(
+                session_id=session_id,
+                source_id=source_id,
+                filename=source_filename,
+            )
             stage_history.append(stage("succeeded", "ready"))
-            self._ready_source_by_session[session_id] = source_id
 
             return {
                 "session_id": session_id,
@@ -251,11 +403,12 @@ class ReviewSessionService:
                 },
                 "readiness": readiness,
                 "topology_view": topology_view,
-                "artifacts": artifacts,
+                "artifacts": artifact_paths,
                 "metrics": metrics,
                 "diagnostics": [],
             }
         except Exception as error:  # pyDEXPI has parser and conversion exceptions.
+            self.store.delete_tree(source_artifact_prefix(session_id, source_id))
             return self._failed_result(
                 session_id=session_id,
                 attempt=attempt,
@@ -263,11 +416,353 @@ class ReviewSessionService:
                 diagnostics=[
                     diagnostic(
                         code="preparation.failed",
-                        message="Session preparation failed while extracting or deriving artifacts.",
+                        message=(
+                            "Session preparation failed while extracting or "
+                            "deriving artifacts."
+                        ),
                         raw_details=str(error),
                     )
                 ],
             )
+
+    def sources_state(self, *, session_id: str) -> dict[str, object]:
+        """Return the durable, preparation-ordered source manifest."""
+
+        manifest = self._read_source_manifest(session_id)
+        if manifest is None:
+            return {
+                "session_id": session_id,
+                "active_source_id": None,
+                "sources": [],
+            }
+        return {
+            "session_id": session_id,
+            "active_source_id": manifest["active_source_id"],
+            "sources": [
+                {
+                    "source_id": record["source_id"],
+                    "filename": record["filename"],
+                    "prepared_at": record["prepared_at"],
+                }
+                for record in manifest["sources"]
+            ],
+        }
+
+    def active_source_id(self, *, session_id: str) -> str | None:
+        manifest = self._read_source_manifest(session_id)
+        if manifest is None:
+            return None
+        active_source_id = manifest["active_source_id"]
+        return active_source_id if isinstance(active_source_id, str) else None
+
+    def source_topology(
+        self, *, session_id: str, source_id: str
+    ) -> dict[str, object]:
+        """Load one ready topology without changing the session's active source."""
+
+        self._require_source_record(session_id=session_id, source_id=source_id)
+        keys = source_artifact_keys(session_id, source_id)
+        try:
+            readiness = self.store.read_json(keys["readiness_metadata"])
+            topology = self.store.read_json(keys["topology_view_model"])
+        except (ArtifactNotFound, ValueError) as error:
+            raise ValueError(
+                f"Prepared source artifacts are unavailable: {source_id}"
+            ) from error
+        if (
+            not isinstance(readiness, dict)
+            or readiness.get("state") != "ready"
+            or readiness.get("source_id") != source_id
+            or not isinstance(topology, dict)
+            or topology.get("source_id") != source_id
+        ):
+            raise ValueError(
+                f"Prepared source artifacts are unavailable: {source_id}"
+            )
+        return topology
+
+    def activate_source(
+        self, *, session_id: str, source_id: str
+    ) -> dict[str, object]:
+        """Persist a source selection and refresh legacy active-source artifacts."""
+
+        with self._mutation_coordinator.lock(session_id):
+            manifest = self._require_source_manifest(session_id)
+            self._require_source_record(
+                session_id=session_id,
+                source_id=source_id,
+                manifest=manifest,
+            )
+            previous_active_source_id = manifest["active_source_id"]
+            manifest["active_source_id"] = source_id
+            self._commit_manifest_with_aliases(
+                session_id=session_id,
+                previous_active_source_id=previous_active_source_id,
+                next_manifest=manifest,
+                next_active_source_id=source_id,
+            )
+        return {"session_id": session_id, "active_source_id": source_id}
+
+    def delete_source(
+        self, *, session_id: str, source_id: str
+    ) -> dict[str, object]:
+        """Delete one source, committing membership before physical cleanup."""
+
+        with self._mutation_coordinator.lock(session_id):
+            manifest = self._require_source_manifest(session_id)
+            record_index = self._source_record_index(
+                manifest=manifest,
+                source_id=source_id,
+            )
+            if record_index is None:
+                raise ReviewSourceNotFound(
+                    f"No prepared source is known for session: {session_id}"
+                )
+
+            sources = manifest["sources"]
+            remaining = [
+                record for index, record in enumerate(sources) if index != record_index
+            ]
+            active_source_id = manifest["active_source_id"]
+            if active_source_id == source_id:
+                # Match the existing tab close behavior: the last remaining tab
+                # becomes active, which makes deleting the active second of two
+                # sources select the first.
+                next_active_source_id = (
+                    remaining[-1]["source_id"] if remaining else None
+                )
+            else:
+                next_active_source_id = active_source_id
+
+            next_manifest = dict(manifest)
+            next_manifest["sources"] = remaining
+            next_manifest["active_source_id"] = next_active_source_id
+            self._commit_manifest_with_aliases(
+                session_id=session_id,
+                previous_active_source_id=active_source_id,
+                next_manifest=next_manifest,
+                next_active_source_id=next_active_source_id,
+            )
+
+            cleanup_pending = False
+            try:
+                self.store.delete_tree(source_artifact_prefix(session_id, source_id))
+            except Exception:
+                # Membership is already committed. Keep the source absent and
+                # let a later cleanup/reconciliation pass retry the orphaned
+                # tree rather than resurrecting it in the manifest.
+                cleanup_pending = True
+
+        result: dict[str, object] = {
+            "deleted_source_id": source_id,
+            "active_source_id": next_active_source_id,
+        }
+        if cleanup_pending:
+            result["cleanup_pending"] = True
+        return result
+
+    def _commit_manifest_with_aliases(
+        self,
+        *,
+        session_id: str,
+        previous_active_source_id: object,
+        next_manifest: dict[str, object],
+        next_active_source_id: object,
+    ) -> None:
+        """Commit aliases before metadata, rolling them back on failure.
+
+        Aliases are compatibility projections; the source manifest is the
+        authority. Before the manifest commit, all source trees remain intact,
+        so an alias or manifest failure can preserve the prior logical state.
+        """
+
+        try:
+            if isinstance(next_active_source_id, str):
+                self._sync_active_source_artifacts(
+                    session_id=session_id,
+                    source_id=next_active_source_id,
+                )
+            else:
+                self._clear_legacy_source_artifacts(session_id)
+            self._write_source_manifest(
+                session_id=session_id, manifest=next_manifest
+            )
+        except Exception as error:
+            try:
+                if isinstance(previous_active_source_id, str):
+                    self._sync_active_source_artifacts(
+                        session_id=session_id,
+                        source_id=previous_active_source_id,
+                    )
+                else:
+                    self._clear_legacy_source_artifacts(session_id)
+            except Exception as rollback_error:
+                raise RuntimeError(
+                    "source manifest transition failed and legacy alias "
+                    "rollback also failed; repair is required"
+                ) from rollback_error
+            raise error
+
+
+    def _allocate_source_id(
+        self, *, session_id: str, content_source_id: str
+    ) -> str:
+        manifest = self._read_source_manifest(session_id)
+        existing_ids = (
+            {
+                record["source_id"]
+                for record in manifest["sources"]
+                if isinstance(record.get("source_id"), str)
+            }
+            if manifest is not None
+            else set()
+        )
+        if content_source_id not in existing_ids:
+            return content_source_id
+        while True:
+            source_id = f"{content_source_id}-{uuid.uuid4().hex[:12]}"
+            if source_id not in existing_ids:
+                return source_id
+
+    def _record_ready_source(
+        self,
+        *,
+        session_id: str,
+        source_id: str,
+        filename: str,
+    ) -> None:
+        with self._mutation_coordinator.lock(session_id):
+            manifest = self._read_source_manifest(session_id) or {
+                "schema_version": 1,
+                "session_id": session_id,
+                "active_source_id": None,
+                "sources": [],
+            }
+            previous_active_source_id = manifest["active_source_id"]
+            next_manifest = dict(manifest)
+            next_manifest["sources"] = [
+                *manifest["sources"],
+                {
+                    "source_id": source_id,
+                    "filename": filename,
+                    "prepared_at": datetime.now(timezone.utc).isoformat(),
+                },
+            ]
+            next_manifest["active_source_id"] = source_id
+            self._commit_manifest_with_aliases(
+                session_id=session_id,
+                previous_active_source_id=previous_active_source_id,
+                next_manifest=next_manifest,
+                next_active_source_id=source_id,
+            )
+
+    def _sync_active_source_artifacts(
+        self, *, session_id: str, source_id: str
+    ) -> None:
+        source_keys = source_artifact_keys(session_id, source_id)
+        for kind, legacy_key in session_artifact_keys(session_id).items():
+            self.store.copy(source_keys[kind], legacy_key)
+
+    def _clear_legacy_source_artifacts(self, session_id: str) -> None:
+        for key in session_artifact_keys(session_id).values():
+            self.store.delete(key)
+
+    def _read_source_manifest(
+        self, session_id: str
+    ) -> dict[str, object] | None:
+        try:
+            raw = self.store.read_json(session_sources_manifest_key(session_id))
+        except ArtifactNotFound:
+            return None
+        if not isinstance(raw, dict):
+            raise ValueError(f"Invalid source manifest for session: {session_id}")
+        sources = raw.get("sources")
+        active_source_id = raw.get("active_source_id")
+        if (
+            raw.get("session_id") != session_id
+            or not isinstance(sources, list)
+            or (
+                active_source_id is not None
+                and not isinstance(active_source_id, str)
+            )
+        ):
+            raise ValueError(f"Invalid source manifest for session: {session_id}")
+
+        normalized_sources: list[dict[str, str]] = []
+        source_ids: set[str] = set()
+        for record in sources:
+            if not isinstance(record, dict):
+                raise ValueError(
+                    f"Invalid source manifest for session: {session_id}"
+                )
+            source_id = record.get("source_id")
+            filename = record.get("filename")
+            prepared_at = record.get("prepared_at")
+            if (
+                not isinstance(source_id, str)
+                or not source_id
+                or source_id in source_ids
+                or not isinstance(filename, str)
+                or not isinstance(prepared_at, str)
+            ):
+                raise ValueError(
+                    f"Invalid source manifest for session: {session_id}"
+                )
+            source_ids.add(source_id)
+            normalized_sources.append(
+                {
+                    "source_id": source_id,
+                    "filename": filename,
+                    "prepared_at": prepared_at,
+                }
+            )
+        if active_source_id is not None and active_source_id not in source_ids:
+            raise ValueError(f"Invalid source manifest for session: {session_id}")
+        return {
+            "schema_version": raw.get("schema_version"),
+            "session_id": session_id,
+            "active_source_id": active_source_id,
+            "sources": normalized_sources,
+        }
+
+    def _require_source_manifest(self, session_id: str) -> dict[str, object]:
+        manifest = self._read_source_manifest(session_id)
+        if manifest is None:
+            raise ValueError(f"No ready topology is known for session: {session_id}")
+        return manifest
+
+    def _write_source_manifest(
+        self, *, session_id: str, manifest: dict[str, object]
+    ) -> None:
+        self.store.write_json(session_sources_manifest_key(session_id), manifest)
+
+    def _require_source_record(
+        self,
+        *,
+        session_id: str,
+        source_id: str,
+        manifest: dict[str, object] | None = None,
+    ) -> dict[str, str]:
+        resolved_manifest = manifest or self._require_source_manifest(session_id)
+        index = self._source_record_index(
+            manifest=resolved_manifest,
+            source_id=source_id,
+        )
+        if index is None:
+            raise ReviewSourceNotFound(
+                f"No prepared source is known for session: {session_id}"
+            )
+        return resolved_manifest["sources"][index]
+
+    @staticmethod
+    def _source_record_index(
+        *, manifest: dict[str, object], source_id: str
+    ) -> int | None:
+        sources = manifest["sources"]
+        for index, record in enumerate(sources):
+            if record["source_id"] == source_id:
+                return index
+        return None
 
     def _failed_result(
         self,
@@ -283,7 +778,16 @@ class ReviewSessionService:
             "source_id": source_id,
             "diagnostics": diagnostics,
         }
-        self.store.write_json(f"{session_id}/readiness.json", readiness)
+        active_source_id = self.active_source_id(session_id=session_id)
+        if active_source_id is None:
+            self.store.write_json(f"{session_id}/readiness.json", readiness)
+        else:
+            # A failed new upload must not turn a previously prepared source
+            # into an apparently failed active review.
+            self._sync_active_source_artifacts(
+                session_id=session_id,
+                source_id=active_source_id,
+            )
         readiness_path = session_artifact_paths(self.store, session_id)[
             "readiness_metadata"
         ]
@@ -441,9 +945,13 @@ def check_preparation_time_limit(
 
 
 def check_artifact_size_limits(
-    *, store: ArtifactStore, session_id: str, limits: PreparationLimits
+    *,
+    store: ArtifactStore,
+    session_id: str,
+    limits: PreparationLimits,
+    source_id: str | None = None,
 ) -> list[dict[str, object]]:
-    for kind, key in sorted(session_artifact_keys(session_id).items()):
+    for kind, key in sorted(session_artifact_keys(session_id, source_id).items()):
         if not store.exists(key):
             continue
         artifact_bytes = store.size(key)
@@ -691,36 +1199,63 @@ def stage(status: str, text: str) -> dict[str, str]:
     return {"status": status, "text": text}
 
 
-def session_artifact_keys(session_id: str) -> dict[str, str]:
-    """The artifacts a ready session leaves in the store, keyed by their role.
+def session_sources_manifest_key(session_id: str) -> str:
+    """The durable source-record manifest for one review session."""
 
-    This is the single definition of that layout, so a session reloaded after
-    a restart resolves exactly the artifacts its preparation wrote.
+    return f"{session_id}/sources.json"
+
+
+def source_artifact_prefix(session_id: str, source_id: str) -> str:
+    """The contained artifact tree for one independently prepared source."""
+
+    return f"{session_id}/sources/{source_id}"
+
+
+def source_artifact_keys(session_id: str, source_id: str) -> dict[str, str]:
+    """The source-scoped counterparts to the legacy active-session artifacts."""
+
+    prefix = source_artifact_prefix(session_id, source_id)
+    return {
+        "graph_facts_json": f"{prefix}/graph_facts.json",
+        "graph_facts_datalog": f"{prefix}/graph_facts.dl",
+        "derived_graph_semantics_datalog": (
+            f"{prefix}/derived_graph_semantics.dl"
+        ),
+        "readiness_metadata": f"{prefix}/readiness.json",
+        "topology_view_model": f"{prefix}/topology_view.json",
+    }
+
+
+def session_artifact_keys(
+    session_id: str, source_id: str | None = None
+) -> dict[str, str]:
+    """Prepared artifact keys for a source, or legacy active-source aliases.
+
+    Callers that do not know about source records keep the established flat
+    layout and therefore continue to resolve the persisted active source.
+    New source-aware callers pass ``source_id`` and never share artifacts with
+    another document in the same review session.
     """
 
+    if source_id is not None:
+        return source_artifact_keys(session_id, source_id)
     return {
         "graph_facts_json": f"{session_id}/{session_id}/graph_facts.json",
         "graph_facts_datalog": f"{session_id}/graph_facts.dl",
-        "derived_graph_semantics_datalog": f"{session_id}/derived_graph_semantics.dl",
+        "derived_graph_semantics_datalog": (
+            f"{session_id}/derived_graph_semantics.dl"
+        ),
         "readiness_metadata": f"{session_id}/readiness.json",
         "topology_view_model": f"{session_id}/topology_view.json",
     }
 
 
-def session_artifact_paths(store: ArtifactStore, session_id: str) -> dict[str, str]:
-    """Where each of a session's artifacts can be fetched from.
-
-    A URL, not a path, and the same shape in both deployment profiles: a
-    `file://` URL locally, a presigned object-store URL when hosted
-    (bead 2afe.8). Before that, this read `store.root` and raised for any
-    store that had no directory behind it, which made a hosted deployment
-    fail at the end of a successful preparation.
-
-    The wire field names still say `path`. Renaming them is a client-visible
-    change worth making deliberately rather than folding into this one.
-    """
+def session_artifact_paths(
+    store: ArtifactStore, session_id: str, source_id: str | None = None
+) -> dict[str, str]:
+    """Where each source's artifacts can be fetched in every deployment."""
 
     return {
         role: store.download_url(key)
-        for role, key in session_artifact_keys(session_id).items()
+        for role, key in session_artifact_keys(session_id, source_id).items()
     }

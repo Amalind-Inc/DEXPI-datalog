@@ -27,7 +27,8 @@ export function PidGraphPanel() {
     geometryReport,
     highlightedNodeIds,
     loadedFileName,
-    documentNames,
+    documents,
+    activeSourceId,
     selectedNode,
     selectedNodeId,
     setSelectedNodeId,
@@ -113,30 +114,34 @@ export function PidGraphPanel() {
     <aside ref={panelRef} className="pid-panel" aria-label="Process document graph panel">
       <div className="pid-tabbar">
         <div className="pid-document-tabs" role="tablist" aria-label="Uploaded topologies">
-          {documentNames.map((filename) => (
-            <div
-              key={filename}
-              className={cn("pid-tab", filename === loadedFileName && "pid-tab--active")}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={filename === loadedFileName}
-                className="pid-tab-name"
-                onClick={() => selectDocument(filename)}
+          {documents.map((document) => {
+            const sourceIdentity = document.sourceId ?? document.filename;
+            const isActive = document.sourceId === activeSourceId;
+            return (
+              <div
+                key={sourceIdentity}
+                className={cn("pid-tab", isActive && "pid-tab--active")}
               >
-                {filename}
-              </button>
-              <button
-                type="button"
-                className="pid-tab-close"
-                aria-label={`Delete ${filename}`}
-                onClick={() => deleteDocument(filename)}
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className="pid-tab-name"
+                  onClick={() => selectDocument(sourceIdentity)}
+                >
+                  {document.filename}
+                </button>
+                <button
+                  type="button"
+                  className="pid-tab-close"
+                  aria-label={`Delete ${document.filename}`}
+                  onClick={() => deleteDocument(sourceIdentity)}
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
         </div>
         <button
           type="button"

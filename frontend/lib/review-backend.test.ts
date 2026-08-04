@@ -7,6 +7,7 @@ import {
   getTurnTraceDetailFromBackend,
   prepareReviewSession,
   restoreReviewSession,
+  restoreReviewSources,
   startTurnOnBackend,
   submitDirectionReview,
   submitTemporaryDatalogReview,
@@ -1075,4 +1076,53 @@ test("restoreReviewSession reports nothing rather than an empty review when the 
   });
 
   assert.equal(result, null);
+});
+test("restoreReviewSources restores every source by id and preserves the active tab", async () => {
+  const calls: Array<{ method: string; url: string }> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const parsed = new URL(String(url));
+    calls.push({ method: init?.method ?? "GET", url: parsed.pathname + parsed.search });
+    if (parsed.pathname.endsWith("/sources")) {
+      return Response.json({
+        session_id: "session-1",
+        active_source_id: "source-two",
+        sources: [
+          { source_id: "source-one", filename: "same-name.xml", prepared_at: "2026-08-04T00:00:00Z" },
+          { source_id: "source-two", filename: "same-name.xml", prepared_at: "2026-08-04T00:01:00Z" },
+        ],
+      });
+    }
+    const sourceId = parsed.searchParams.get("source_id");
+    return Response.json({
+      source_id: sourceId,
+      topology_view: {
+        nodes: [{ id: `${sourceId}-node`, label: sourceId }],
+        edges: [],
+      },
+      visible_source_scope: { ids: [] },
+    });
+  };
+
+  const result = await restoreReviewSources("session-1", {
+    baseUrl: "http://backend.test",
+    fetcher: fetcher as typeof fetch,
+  });
+
+  assert.deepEqual(calls, [
+    { method: "GET", url: "/api/review/sessions/session-1/sources" },
+    {
+      method: "GET",
+      url: "/api/review/sessions/session-1/topology?source_id=source-one",
+    },
+    {
+      method: "GET",
+      url: "/api/review/sessions/session-1/topology?source_id=source-two",
+    },
+  ]);
+  assert.equal(result?.activeSourceId, "source-two");
+  assert.deepEqual(result?.documents.map((document) => document.sourceId), [
+    "source-one",
+    "source-two",
+  ]);
+  assert.equal(result?.documents[1].graph.nodes[0].id, "source-two-node");
 });

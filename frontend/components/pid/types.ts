@@ -201,6 +201,7 @@ export type GeometryReport = {
 export type PrepareResult = {
   status: "ready" | "failed";
   filename: string;
+  sourceId: string | null;
   graph: PidGraph;
   pidView: PidView;
   schematicScene: SchematicScene | null;
