@@ -96,9 +96,16 @@ function summarize(
   unknowns: readonly string[],
   emptyDomain: boolean,
 ): string {
+  const domainLabel = input.domain?.replaceAll("_", " ");
   if (emptyDomain) {
-    const domainLabel = (input.domain ?? "scoped objects").replaceAll("_", " ");
-    return `No ${domainLabel} were found; the rule was not proven.`;
+    return `No ${domainLabel ?? "scoped objects"} were found; the rule was not proven.`;
+  }
+  if (input.domain) {
+    if (outcome === "violated")
+      return `The universal rule for all ${domainLabel} was disproved; counterexample(s): ${counterexamples.join(", ")}.`;
+    if (outcome === "indeterminate")
+      return `The universal rule for all ${domainLabel} is indeterminate; unknown member(s): ${unknowns.join(", ")}.`;
+    return `The universal rule was proved for all ${input.scopeEntityIds.length} ${domainLabel}.`;
   }
   if (outcome === "violated") return `The rule was violated for ${counterexamples.join(", ")}.`;
   if (outcome === "indeterminate")

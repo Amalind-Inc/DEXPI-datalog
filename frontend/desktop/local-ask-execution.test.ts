@@ -67,6 +67,19 @@ test("disproves a universal rule with a counterexample", () => {
   assert.deepEqual(derivation.counterexamples, ["P-4713"]);
 });
 
+test("explains a universal violation as a disproved quantified claim", () => {
+  const derivation = aggregateUniversalRule({
+    claim: "Do all centrifugal pumps have a downstream check valve?",
+    ruleId: "pump_discharge_check_valve",
+    domain: "centrifugal_pumps",
+    scopeEntityIds: ["P-4713"],
+    checks: [{ scopeEntityId: "P-4713", result: result("violated") }],
+  });
+
+  assert.match(derivation.summary, /universal rule.*disproved/i);
+  assert.match(derivation.summary, /counterexample.*P-4713/i);
+});
+
 test("returns indeterminate when a universal member is unknown", () => {
   const derivation = aggregateUniversalRule({
     claim: "Do all centrifugal pumps have a downstream check valve?",
