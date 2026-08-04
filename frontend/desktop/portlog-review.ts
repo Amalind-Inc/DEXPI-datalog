@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadLocalProject } from "./local-project-manifest.cjs";
 import { resolveReviewSidecarPaths } from "./electron-sidecar-paths.cjs";
+import { resolveReviewArtifactRoot } from "./portlog-review-paths.ts";
 import { startLocalReviewRuntime, type LocalReviewRuntime } from "./local-review-runtime.ts";
 
 type Posture = "inspect" | "verify" | "review";
@@ -56,7 +57,7 @@ Required environment:
 Optional environment:
   PORTLOG_RUNTIME_BASE_URL      Provider base URL override.
   PORTLOG_REVIEW_SIDECAR_ENDPOINT  Use an already-running trusted loopback sidecar.
-  PORTLOG_REVIEW_ARTIFACT_ROOT  Default: PROJECT/.portlog-artifacts.
+  PORTLOG_REVIEW_ARTIFACT_ROOT  Explicit root override; current-projects reuse PROJECT/../reviews when present.
   PORTLOG_REVIEW_SIDECAR_PYTHON Default: repository .venv/bin/python.
   PORTLOG_QEMU_PATH                 QEMU/HVF executable for --posture review.
 `;
@@ -215,8 +216,7 @@ async function connectSidecar(
     resourcesPath: "",
     desktopDir: join(REPO_ROOT, "frontend", "desktop"),
   });
-  const artifactRoot =
-    process.env.PORTLOG_REVIEW_ARTIFACT_ROOT ?? join(projectDirectory, ".portlog-artifacts");
+  const artifactRoot = await resolveReviewArtifactRoot(projectDirectory);
   await mkdir(artifactRoot, { recursive: true });
   try {
     return await startLocalReviewRuntime({

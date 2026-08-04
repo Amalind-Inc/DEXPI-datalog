@@ -155,6 +155,11 @@ PORTLOG_RUNTIME_API_KEY="$PORTLOG_API_KEY" npm run portlog:review -- \
   --question "What equipment is around P-101?"
 ```
 
+`PORTLOG_RUNTIME_API_KEY` must contain a real provider credential; the
+placeholder `"$PORTLOG_API_KEY"` is not a usable key. When the project was
+imported by Electron, the CLI automatically reuses its sibling `reviews`
+artifact store. Set `PORTLOG_REVIEW_ARTIFACT_ROOT` to override that location.
+
 Use `--posture verify` for a deterministic rule-check question. Use
 `--posture review` for the governed E06 journey: the host Pi retrieves bounded
 evidence, runs the deterministic check, and invokes one approved

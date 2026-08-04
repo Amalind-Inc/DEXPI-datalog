@@ -117,6 +117,68 @@ test("review posture asks Pi to run the governed E06 tool sequence", async () =>
     promptText.indexOf("portlog_rule_check") < promptText.indexOf("portlog_isolated_command"),
   );
 });
+
+test("an empty model completion is not reported as a completed turn", async () => {
+  const record = await runLocalReviewInspection({
+    turnId: "empty-model-turn",
+    question: "Review the E06 pump discharge path.",
+    posture: "review",
+    model: { provider: "test", id: "empty-model" },
+    signal: new AbortController().signal,
+    createTurn: async () => ({
+      prompt: async () => {},
+      abort: async () => {},
+      dispose: async () => {},
+    }),
+  });
+
+  assert.equal(record.status, "failed");
+  assert.match(record.error ?? "", /final answer/i);
+  assert.deepEqual(
+    record.events.map((event) => event.type),
+    ["turn_started", "turn_failed"],
+  );
+});
+
+test("cancellation wins when a late model completion follows an abort", async () => {
+  const controller = new AbortController();
+  let signalPromptStarted!: () => void;
+  let releasePrompt!: () => void;
+  const promptStarted = new Promise<void>((resolve) => {
+    signalPromptStarted = resolve;
+  });
+  const promptHeld = new Promise<void>((resolve) => {
+    releasePrompt = resolve;
+  });
+  const resultPromise = runLocalReviewInspection({
+    turnId: "late-model-turn",
+    question: "Review the E06 pump discharge path.",
+    posture: "review",
+    model: { provider: "test", id: "late-model" },
+    signal: controller.signal,
+    createTurn: async ({ emit }) => ({
+      prompt: async () => {
+        emit({ type: "assistant_text_delta", text: "Late answer." });
+        signalPromptStarted();
+        await promptHeld;
+      },
+      abort: async () => {},
+      dispose: async () => {},
+    }),
+  });
+
+  await promptStarted;
+  controller.abort();
+  releasePrompt();
+  const record = await resultPromise;
+
+  assert.equal(record.status, "cancelled");
+  assert.equal(record.finalText, "Late answer.");
+  assert.deepEqual(
+    record.events.map((event) => event.type),
+    ["turn_started", "assistant_text_delta", "turn_cancelled"],
+  );
+});
 test("optional isolated command results use the existing PortLog event path", async () => {
   const root = await mkdtemp(join(tmpdir(), "portlog-local-isolated-"));
   const projectDirectory = join(root, "project");

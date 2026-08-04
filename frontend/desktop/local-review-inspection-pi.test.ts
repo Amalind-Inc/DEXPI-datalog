@@ -150,6 +150,54 @@ test("controlled Pi model-tool-model journey becomes a reconstructable PortLog I
   }
 });
 
+test("provider failures persist an actionable failed turn instead of an empty success", async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(401, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: { message: "invalid api key" } }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const root = await mkdtemp(join(tmpdir(), "portlog-provider-error-"));
+  await writeFile(
+    join(root, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+
+  try {
+    const record = await runLocalReviewInspection({
+      turnId: "provider-error-turn",
+      question: "What equipment is around P-101?",
+      model: { provider: "portlog-test", id: "review-model" },
+      signal: new AbortController().signal,
+      agentDir: root,
+      cwd: root,
+    });
+    assert.equal(record.status, "failed");
+    assert.match(record.error ?? "", /invalid api key/i);
+    assert.equal(record.finalText, "");
+    assert.deepEqual(
+      record.events.map((event) => event.type),
+      ["turn_started", "turn_failed"],
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("controlled Verify journey keeps the Soufflé outcome separate from model prose", async () => {
   let modelRequests = 0;
   const server = http.createServer((_request, response) => {

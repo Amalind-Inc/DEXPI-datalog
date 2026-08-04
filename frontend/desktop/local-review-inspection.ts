@@ -167,6 +167,7 @@ export async function runLocalReviewInspection(
             : inspectPrompt(options.question),
     );
     if (options.signal.aborted) throw abortError();
+    if (!record.finalText.trim()) throw new Error("Model returned no final answer.");
     const deterministicCheck = record.deterministicChecks.at(-1);
     if (record.posture === "inspect" && /\b(satisfied|violated)\b/i.test(record.finalText)) {
       record.finalText =
@@ -229,12 +230,22 @@ async function createPiRuntime(
     getRuleCheck: options.getRuleCheck ? (request) => options.getRuleCheck!(request) : undefined,
     runIsolatedCommand: bridge.runIsolatedCommand,
   });
+  let modelError: string | undefined;
   const unsubscribe = review.subscribe((event) => {
+    if (event.type === "message_end" && isRecord(event.message)) {
+      if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim())
+        modelError = event.message.errorMessage;
+      else if (event.message.stopReason === "error")
+        modelError = "The provider returned a model error without details.";
+    }
     const normalized = normalizePiEvent(event);
     if (normalized) bridge.emit(normalized);
   });
   return {
-    prompt: review.prompt,
+    prompt: async (text) => {
+      await review.prompt(text);
+      if (modelError) throw new Error(`Model request failed: ${modelError}`);
+    },
     abort: review.abort,
     dispose: async () => {
       unsubscribe();
