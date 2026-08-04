@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, constants, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
 import { runLocalReviewInspection } from "./local-review-inspection.ts";
+import { routeCapabilities } from "./capability-routing.ts";
+import { boundedTopologyEvidence } from "./topology-evidence.ts";
 
 type WorkerRequest = {
   projectDirectory?: string;
@@ -78,12 +80,14 @@ try {
     }),
   );
   const isChat = request.mode === "chat";
-  const isolatedExecutor =
-    !isChat && request.posture === "review"
-      ? createGondolinQemuExecutor({
-          qemuPath: process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64",
-        })
-      : undefined;
+  const posture = isChat ? "chat" : (request.posture ?? "inspect");
+  const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64";
+  const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile(qemuPath));
+  const isolatedExecutor = qemuAvailable
+    ? createGondolinQemuExecutor({
+        qemuPath,
+      })
+    : undefined;
   const runIsolatedCommand = isolatedExecutor
     ? async ({ profileId }: { profileId: string }, signal: AbortSignal) =>
         isolatedExecutor.runIsolatedCommand({
@@ -153,24 +157,41 @@ try {
     }
     return await response.json();
   };
+  const capabilities = routeCapabilities({
+    mode: request.mode,
+    posture,
+    getEvidence,
+    getRuleCheck,
+    runIsolatedCommand,
+  });
   const record = await runLocalReviewInspection({
     projectDirectory: isChat ? undefined : request.projectDirectory,
     turnId: request.turnId,
     question: request.question,
-    posture: isChat ? "chat" : request.posture,
+    posture,
     model: { provider, id: model },
     signal: controller.signal,
     agentDir,
     cwd: workingDirectory,
     apiKey,
     onEvent: (event) => send({ kind: "event", turnId: request.turnId, event }),
-    getEvidence: isChat ? undefined : getEvidence,
-    getRuleCheck: isChat ? undefined : getRuleCheck,
-    runIsolatedCommand,
+    getEvidence: capabilities.getEvidence,
+    getRuleCheck: capabilities.getRuleCheck,
+    runIsolatedCommand: capabilities.runIsolatedCommand,
   });
   send({ kind: "result", record });
 } finally {
   await rm(agentDir, { recursive: true, force: true });
+}
+
+async function isExecutableFile(filePath: string): Promise<boolean> {
+  if (!isAbsolute(filePath)) return false;
+  try {
+    await access(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createE06ReviewInputBundle() {
@@ -189,62 +210,6 @@ function createE06ReviewInputBundle() {
       },
     ],
   };
-}
-function boundedTopologyEvidence(payload: unknown, claim: string) {
-  const panel = isRecord(payload) ? payload : {};
-  const topology = isRecord(panel.topology_view) ? panel.topology_view : panel;
-  const nodes = Array.isArray(topology.nodes) ? topology.nodes.filter(isRecord) : [];
-  const edges = Array.isArray(topology.edges) ? topology.edges.filter(isRecord) : [];
-  const identifiers = Array.from(
-    new Set(claim.match(/[A-Za-z]+[-_]?\d+(?:[-_.][A-Za-z0-9]+)*/g) ?? []),
-  ).slice(0, 8);
-  const matched = (
-    identifiers.length === 0
-      ? nodes
-      : nodes.filter((node) =>
-          identifiers.some((identifier) =>
-            JSON.stringify(node).toLowerCase().includes(identifier.toLowerCase()),
-          ),
-        )
-  ).slice(0, 12);
-  const matchedIds = matched.map(readId).filter((id): id is string => id !== null);
-  const relationships = edges
-    .filter((edge) => matchedIds.some((id) => edgeTouches(edge, id)))
-    .slice(0, 25);
-  const relatedIds = relationships.flatMap(edgeEndpointIds);
-  const citations = Array.from(new Set([...matchedIds, ...relatedIds])).slice(0, 25);
-  return {
-    artifactId: "topology",
-    claim,
-    entities: matched,
-    relationships,
-    citations,
-    sourceScopeIds: citations,
-    diagnostics: citations.length
-      ? []
-      : [
-          {
-            code: "no_matching_evidence",
-            message: "No bounded topology evidence matched the requested identifiers.",
-          },
-        ],
-    uncertainty: citations.length ? null : "Evidence is insufficient for this question.",
-  };
-}
-
-function readId(value: Record<string, unknown>) {
-  return typeof value.id === "string" ? value.id : null;
-}
-function edgeEndpointIds(edge: Record<string, unknown>) {
-  return [edge.source, edge.target, edge.source_id, edge.target_id, edge.from, edge.to].filter(
-    (value): value is string => typeof value === "string",
-  );
-}
-function edgeTouches(edge: Record<string, unknown>, id: string) {
-  return edgeEndpointIds(edge).includes(id);
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function send(value: unknown) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
