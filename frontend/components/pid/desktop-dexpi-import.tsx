@@ -28,13 +28,23 @@ type InspectionEvent = {
 };
 type InspectionRecord = {
   turnId: string;
-  posture: "inspect" | "verify";
+  posture: "inspect" | "verify" | "chat";
   question: string;
   status: "active" | "completed" | "cancelled" | "failed";
   finalText: string;
   evidenceIds: string[];
   deterministicChecks?: Record<string, unknown>[];
   events: InspectionEvent[];
+  route?: "evidence" | "rule" | "universal_rule" | "clarification";
+  clarification?: {
+    prompt: string;
+    choices: Array<{ id: string; label: string; question: string }>;
+  };
+  derivation?: {
+    outcome: string;
+    summary: string;
+    evaluations: Array<{ scopeEntityId: string; outcome: string; evidenceIds: string[] }>;
+  };
   error?: string;
 };
 type DesktopChatRecord = Omit<InspectionRecord, "posture"> & { posture: "chat" };
@@ -86,6 +96,12 @@ declare global {
         posture?: "inspect" | "verify";
         provider?: "openrouter" | "anthropic" | "openai-codex";
       }): Promise<InspectionRecord>;
+      runLocalAsk(payload: {
+        sessionId: string;
+        turnId: string;
+        question: string;
+        provider?: "openrouter" | "anthropic" | "openai-codex";
+      }): Promise<InspectionRecord>;
       runLocalChat(payload: {
         sessionId: string;
         turnId: string;
@@ -114,7 +130,6 @@ export function DesktopDexpiImport() {
   const [claude, setClaude] = useState<ClaudeAuthState | null>(null);
   const [codex, setCodex] = useState<CodexAuthState | null>(null);
   const [question, setQuestion] = useState("What equipment and connections are around P4711?");
-  const [posture, setPosture] = useState<"inspect" | "verify">("inspect");
   const [turns, setTurns] = useState<InspectionRecord[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<InspectionEvent[]>([]);
@@ -215,20 +230,18 @@ export function DesktopDexpiImport() {
       .finally(() => window.clearInterval(poll));
   };
 
-  const runInspection = async (retry?: InspectionRecord) => {
+  const runAsk = async (retry?: InspectionRecord) => {
     const trimmed = (retry?.question ?? question).trim();
-    const selectedPosture = retry?.posture ?? posture;
     if (!trimmed || !loadedFileName || !canInspect) return;
     const turnId = retry?.turnId ?? crypto.randomUUID();
     setActiveTurnId(turnId);
     setLiveEvents([]);
-    setStatus("Inspecting prepared review…");
+    setStatus("Answering prepared review…");
     try {
-      const record = await window.portlogDesktop!.runLocalInspection({
+      const record = await window.portlogDesktop!.runLocalAsk({
         sessionId: projectSessionId ?? sessionId,
         turnId,
         question: trimmed,
-        posture: selectedPosture,
         provider:
           selectedProvider === "openai-codex" && codexConnected
             ? selectedProvider
@@ -245,17 +258,17 @@ export function DesktopDexpiImport() {
       setTurns((current) => [...current.filter((turn) => turn.turnId !== record.turnId), record]);
       setStatus(
         record.status === "completed"
-          ? "Inspection complete"
+          ? "Answer complete"
           : record.status === "cancelled"
-            ? "Inspection cancelled"
-            : (record.error ?? "Inspection failed"),
+            ? "Answer cancelled"
+            : (record.error ?? "Answer failed"),
       );
       if (record.evidenceIds.length) {
         setHighlightedNodeIds(record.evidenceIds);
         setSelectedNodeId(record.evidenceIds[0]);
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Inspection failed");
+      setStatus(error instanceof Error ? error.message : "Answer failed");
     } finally {
       setActiveTurnId(null);
     }
@@ -421,7 +434,7 @@ export function DesktopDexpiImport() {
       </button>
 
       {loadedFileName ? (
-        <section aria-label="Local evidence inspection" className="space-y-2">
+        <section aria-label="Prepared P&amp;ID Ask" className="space-y-2">
           <label className="block text-sm" htmlFor="desktop-inspection-question">
             Ask about this prepared P&amp;ID
           </label>
@@ -433,21 +446,12 @@ export function DesktopDexpiImport() {
               disabled={Boolean(activeTurnId)}
               className="min-w-0 flex-1 border px-2 py-1"
             />
-            <select
-              aria-label="Review posture"
-              value={posture}
-              onChange={(event) => setPosture(event.target.value as "inspect" | "verify")}
-              disabled={Boolean(activeTurnId)}
-            >
-              <option value="inspect">Inspect</option>
-              <option value="verify">Verify</option>
-            </select>
             <button
               type="button"
-              onClick={() => void runInspection()}
+              onClick={() => void runAsk()}
               disabled={Boolean(activeTurnId) || !canInspect}
             >
-              Inspect
+              Ask
             </button>
             {activeTurnId ? (
               <button
@@ -470,9 +474,44 @@ export function DesktopDexpiImport() {
           {[...turns].reverse().map((turn) => (
             <article key={turn.turnId} data-testid="desktop-inspection-turn" className="border p-2">
               <p>
-                <strong>{turn.posture === "verify" ? "Verify" : "Inspect"}</strong> · {turn.status}
+                <strong>
+                  {turn.route === "clarification"
+                    ? "Clarification"
+                    : turn.route
+                      ? "Ask"
+                      : "Inspect"}
+                </strong>{" "}
+                · {turn.status}
               </p>
               <p>{turn.question}</p>
+              {turn.clarification ? (
+                <fieldset className="space-y-1">
+                  <legend>{turn.clarification.prompt}</legend>
+                  {turn.clarification.choices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      onClick={() => {
+                        setQuestion(choice.question);
+                        void runAsk({
+                          ...turn,
+                          turnId: crypto.randomUUID(),
+                          question: choice.question,
+                          status: "active",
+                        });
+                      }}
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </fieldset>
+              ) : null}
+              {turn.derivation ? (
+                <section aria-label="Deterministic derivation">
+                  <strong>Derivation</strong>
+                  <p>{turn.derivation.summary}</p>
+                </section>
+              ) : null}
               {turn.deterministicChecks?.map((check, index) => (
                 <section
                   key={`${turn.turnId}-check-${index}`}
@@ -525,8 +564,7 @@ export function DesktopDexpiImport() {
                   type="button"
                   onClick={() => {
                     setQuestion(turn.question);
-                    setPosture(turn.posture);
-                    void runInspection(turn);
+                    void runAsk(turn);
                   }}
                 >
                   Retry

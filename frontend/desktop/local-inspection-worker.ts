@@ -4,9 +4,15 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
-import { runLocalReviewInspection } from "./local-review-inspection.ts";
+import {
+  createClarificationAskRecord,
+  createDeterministicAskRecord,
+  runLocalReviewInspection,
+} from "./local-review-inspection.ts";
+import { enumerateCentrifugalPumpScopes, routeLocalAsk } from "./local-ask-routing.ts";
 import { routeCapabilities } from "./capability-routing.ts";
 import { boundedTopologyEvidence } from "./topology-evidence.ts";
+import { upsertLocalTurn } from "./local-project-manifest.cjs";
 
 type WorkerRequest = {
   projectDirectory?: string;
@@ -15,7 +21,7 @@ type WorkerRequest = {
   turnId: string;
   question: string;
   posture?: "inspect" | "verify" | "review";
-  mode?: "inspection" | "chat";
+  mode?: "inspection" | "chat" | "ask";
   sidecarEndpoint: string;
   provider?: "openrouter" | "anthropic" | "openai-codex";
   model?: string;
@@ -52,7 +58,13 @@ const baseUrl =
       ? "https://chatgpt.com/backend-api"
       : "https://openrouter.ai/api/v1");
 const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
-if (!apiKey) throw new Error("The selected model provider is not configured");
+const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
+const askRoute = request.mode === "ask" ? routeLocalAsk(request.question) : null;
+const modelFreeAsk =
+  askRoute?.kind === "clarification" ||
+  askRoute?.kind === "rule" ||
+  askRoute?.kind === "universal_rule";
+if (!apiKey && !modelFreeAsk) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
 
 try {
@@ -107,7 +119,6 @@ try {
           signal,
         })
     : undefined;
-  const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
   const getEvidence = async ({ artifactId, claim }: { artifactId: string; claim: string }) => {
     if (!request.sessionId) throw new Error("A prepared session is required for P&ID evidence.");
     if (artifactId !== "topology")
@@ -128,6 +139,15 @@ try {
     );
     if (!response.ok) throw new Error(`Prepared topology is unavailable (${response.status})`);
     return boundedTopologyEvidence(await response.json(), claim);
+  };
+  const getTopology = async () => {
+    if (!request.sessionId) throw new Error("A prepared session is required for topology checks.");
+    const response = await fetch(
+      `${request.sidecarEndpoint}/api/review/sessions/${encodeURIComponent(request.sessionId)}/topology`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) throw new Error(`Prepared topology is unavailable (${response.status})`);
+    return response.json();
   };
   const getRuleCheck = async ({
     checkId,
@@ -157,29 +177,88 @@ try {
     }
     return await response.json();
   };
-  const capabilities = routeCapabilities({
-    mode: request.mode,
-    posture,
-    getEvidence,
-    getRuleCheck,
-    runIsolatedCommand,
-  });
-  const record = await runLocalReviewInspection({
-    projectDirectory: isChat ? undefined : request.projectDirectory,
-    turnId: request.turnId,
-    question: request.question,
-    posture,
-    model: { provider, id: model },
-    signal: controller.signal,
-    agentDir,
-    cwd: workingDirectory,
-    apiKey,
-    onEvent: (event) => send({ kind: "event", turnId: request.turnId, event }),
-    getEvidence: capabilities.getEvidence,
-    getRuleCheck: capabilities.getRuleCheck,
-    runIsolatedCommand: capabilities.runIsolatedCommand,
-  });
-  send({ kind: "result", record });
+  let handledAsk = false;
+  if (request.mode === "ask") {
+    const route = routeLocalAsk(request.question);
+    if (route.kind === "clarification") {
+      const record = createClarificationAskRecord({
+        turnId: request.turnId,
+        question: request.question,
+        prompt: route.prompt,
+        choices: route.choices,
+        model: { provider, id: model },
+      });
+      if (request.projectDirectory) await upsertLocalTurn(request.projectDirectory, record);
+      send({ kind: "result", record });
+      handledAsk = true;
+    } else if (route.kind === "rule" || route.kind === "universal_rule") {
+      const scopeEntityIds =
+        route.kind === "rule"
+          ? [route.scopeEntityId]
+          : enumerateCentrifugalPumpScopes(await getTopology());
+      const checks: Array<{ scopeEntityId: string; result: unknown }> = [];
+      for (const scopeEntityId of scopeEntityIds) {
+        let result: unknown;
+        try {
+          result = await getRuleCheck({
+            checkId: route.checkId,
+            scopeEntityId,
+            signal: controller.signal,
+          });
+        } catch (error) {
+          result = {
+            deterministic_result: {
+              check_id: route.checkId,
+              run_status: "failed",
+              outcome: "indeterminate",
+              reason_code: "rule_check_unavailable",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          };
+        }
+        checks.push({ scopeEntityId, result });
+      }
+      const record = createDeterministicAskRecord({
+        turnId: request.turnId,
+        question: request.question,
+        route: route.kind,
+        ruleId: route.checkId,
+        scopeEntityIds,
+        checks,
+        domain: route.kind === "universal_rule" ? route.domain : undefined,
+        model: { provider, id: model },
+      });
+      if (request.projectDirectory) await upsertLocalTurn(request.projectDirectory, record);
+      send({ kind: "result", record });
+      handledAsk = true;
+    }
+  }
+  if (!handledAsk) {
+    const capabilityMode = request.mode === "ask" ? "inspection" : request.mode;
+    const capabilities = routeCapabilities({
+      mode: capabilityMode,
+      posture,
+      getEvidence,
+      getRuleCheck,
+      runIsolatedCommand,
+    });
+    const record = await runLocalReviewInspection({
+      projectDirectory: isChat ? undefined : request.projectDirectory,
+      turnId: request.turnId,
+      question: request.question,
+      posture,
+      model: { provider, id: model },
+      signal: controller.signal,
+      agentDir,
+      cwd: workingDirectory,
+      apiKey,
+      onEvent: (event) => send({ kind: "event", turnId: request.turnId, event }),
+      getEvidence: capabilities.getEvidence,
+      getRuleCheck: capabilities.getRuleCheck,
+      runIsolatedCommand: capabilities.runIsolatedCommand,
+    });
+    send({ kind: "result", record });
+  }
 } finally {
   await rm(agentDir, { recursive: true, force: true });
 }

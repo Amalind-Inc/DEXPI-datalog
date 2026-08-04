@@ -372,9 +372,11 @@ async function* runDesktopInspection(
     return;
   }
 
-  const provider = await resolveDesktopProvider(desktop);
   const project = await desktop.loadCurrentProject().catch(() => null);
   const preparedSessionId = project?.projectId;
+  const provider = preparedSessionId
+    ? await resolveDesktopProvider(desktop).catch(() => undefined)
+    : await resolveDesktopProvider(desktop);
   let abortRequested = false;
   let streamedText = "";
   const unsubscribe = desktop.onInspectionEvent((message) => {
@@ -390,11 +392,10 @@ async function* runDesktopInspection(
 
   try {
     const record = preparedSessionId
-      ? await desktop.runLocalInspection({
+      ? await desktop.runLocalAsk({
           sessionId: preparedSessionId,
           turnId: input.turnId,
           question: input.question,
-          posture: "inspect",
           provider,
         })
       : await desktop.runLocalChat({

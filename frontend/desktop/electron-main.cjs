@@ -326,6 +326,14 @@ async function runLocalInspection(event, payload) {
   return runLocalTurn(event, payload, "inspection");
 }
 
+async function runLocalAsk(event, payload) {
+  await migrateLegacyProjectIfNeeded();
+  const project = await loadLocalProject(projectDirectory());
+  if (project.projectId !== payload.sessionId)
+    throw new Error("The active review does not match the prepared local project");
+  return runLocalTurn(event, payload, "ask");
+}
+
 async function runLocalChat(event, payload) {
   return runLocalTurn(event, payload, "chat");
 }
@@ -365,7 +373,14 @@ async function resolveLocalRuntime(requestedProvider) {
 }
 
 async function runLocalTurn(event, payload, mode) {
-  const runtime = await resolveLocalRuntime(payload.provider ?? "openrouter");
+  const requestedProvider = payload.provider ?? "openrouter";
+  let runtime;
+  try {
+    runtime = await resolveLocalRuntime(requestedProvider);
+  } catch (error) {
+    if (mode !== "ask") throw error;
+    runtime = fallbackLocalRuntime(requestedProvider);
+  }
   if (activeInspections.has(payload.turnId)) throw new Error("This desktop turn is already active");
   const worker = spawn(
     process.execPath,
@@ -438,6 +453,25 @@ async function runLocalTurn(event, payload, mode) {
         );
     });
   });
+}
+
+function fallbackLocalRuntime(provider) {
+  return {
+    provider,
+    model:
+      provider === "anthropic"
+        ? "claude-sonnet-4-5"
+        : provider === "openai-codex"
+          ? "gpt-5.4"
+          : "deepseek/deepseek-v4-flash",
+    apiKey: "",
+    baseUrl:
+      provider === "anthropic"
+        ? "https://api.anthropic.com"
+        : provider === "openai-codex"
+          ? "https://chatgpt.com/backend-api"
+          : (process.env.PORTLOG_OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1"),
+  };
 }
 
 function redactRuntimeSecrets(message, runtime) {
@@ -526,6 +560,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("portlog:set-selected-chat-provider", setSelectedChatProvider);
   ipcMain.handle("portlog:check-openrouter", checkOpenRouterConnection);
   ipcMain.handle("portlog:run-local-inspection", runLocalInspection);
+  ipcMain.handle("portlog:run-local-ask", runLocalAsk);
   ipcMain.handle("portlog:run-local-chat", runLocalChat);
   ipcMain.handle("portlog:cancel-local-inspection", cancelLocalInspection);
   createReviewWindow();

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("portlogDesktop", {
   codexCancelLogin: () => ipcRenderer.invoke("portlog:codex-cancel-login"),
   codexLogout: () => ipcRenderer.invoke("portlog:codex-logout"),
   runLocalInspection: (payload) => ipcRenderer.invoke("portlog:run-local-inspection", payload),
+  runLocalAsk: (payload) => ipcRenderer.invoke("portlog:run-local-ask", payload),
   runLocalChat: (payload) => ipcRenderer.invoke("portlog:run-local-chat", payload),
   cancelLocalInspection: (turnId) => ipcRenderer.invoke("portlog:cancel-local-inspection", turnId),
   onInspectionEvent: (listener) => {

@@ -4,6 +4,7 @@ import {
   type RuleCheckRequest,
   type RunGovernedPiIsolatedCommand,
 } from "./pi-turn-adapter.ts";
+import { buildRuleDerivation, type AskDerivation } from "./local-ask-execution.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
 
 export type LocalInspectionEvent =
@@ -38,6 +39,12 @@ export interface LocalInspectionRecord {
   evidenceIds: string[];
   deterministicChecks: Record<string, unknown>[];
   events: StoredEvent[];
+  route?: "evidence" | "rule" | "universal_rule" | "clarification";
+  clarification?: {
+    prompt: string;
+    choices: Array<{ id: string; label: string; question: string }>;
+  };
+  derivation?: AskDerivation;
   error?: string;
 }
 
@@ -407,4 +414,108 @@ function abortError() {
 }
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+export function createDeterministicAskRecord(options: {
+  turnId: string;
+  question: string;
+  route: "rule" | "universal_rule";
+  ruleId: string;
+  scopeEntityIds: readonly string[];
+  checks: readonly { scopeEntityId: string; result: unknown }[];
+  domain?: string;
+  model?: { provider: string; id: string };
+  now?: () => Date;
+}): LocalInspectionRecord {
+  const now = options.now ?? (() => new Date());
+  const startedAt = now().toISOString();
+  const derivation = buildRuleDerivation({
+    claim: options.question,
+    ruleId: options.ruleId,
+    scopeEntityIds: options.scopeEntityIds,
+    checks: options.checks,
+    domain: options.domain,
+  });
+  const events: StoredEvent[] = [];
+  const append = (event: LocalInspectionEvent) => {
+    events.push({
+      ...event,
+      sequence: events.length + 1,
+      timestamp: now().toISOString(),
+    });
+  };
+  append({ type: "turn_started" });
+  for (const [index, check] of options.checks.entries()) {
+    const callId = `ask-rule-${index + 1}`;
+    append({
+      type: "tool_request",
+      callId,
+      tool: "portlog_rule_check",
+      arguments: { checkId: options.ruleId, scopeEntityId: check.scopeEntityId },
+    });
+    append({
+      type: "tool_result",
+      callId,
+      tool: "portlog_rule_check",
+      result: check.result,
+    });
+  }
+  append({ type: "turn_completed" });
+  const completedAt = now().toISOString();
+  return {
+    schemaVersion: 1,
+    turnId: options.turnId,
+    posture: "verify",
+    question: options.question,
+    status: "completed",
+    model: options.model ?? { provider: "portlog", id: "governed-rule-engine" },
+    startedAt,
+    completedAt,
+    finalText: derivation.summary,
+    evidenceIds: unique(options.checks.flatMap((check) => readEvidenceIds(check.result))),
+    deterministicChecks: options.checks.flatMap((check) => readDeterministicChecks(check.result)),
+    events,
+    route: options.route,
+    derivation,
+  };
+}
+
+export function createClarificationAskRecord(options: {
+  turnId: string;
+  question: string;
+  prompt: string;
+  choices: Array<{ id: string; label: string; question: string }>;
+  model?: { provider: string; id: string };
+  now?: () => Date;
+}): LocalInspectionRecord {
+  const now = options.now ?? (() => new Date());
+  const startedAt = now().toISOString();
+  const events: StoredEvent[] = [
+    {
+      type: "turn_started",
+      sequence: 1,
+      timestamp: startedAt,
+    },
+    {
+      type: "turn_completed",
+      sequence: 2,
+      timestamp: now().toISOString(),
+    },
+  ];
+  return {
+    schemaVersion: 1,
+    turnId: options.turnId,
+    posture: "inspect",
+    question: options.question,
+    status: "completed",
+    model: options.model ?? { provider: "portlog", id: "ask-router" },
+    startedAt,
+    completedAt: events[1].timestamp,
+    finalText: options.prompt,
+    evidenceIds: [],
+    deterministicChecks: [],
+    events,
+    route: "clarification",
+    clarification: { prompt: options.prompt, choices: options.choices },
+  };
 }

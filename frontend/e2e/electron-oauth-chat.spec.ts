@@ -58,7 +58,7 @@ test("Electron chat routes a Codex OAuth account to the authenticated local insp
         }),
         selectDexpiSource: async () => null,
         persistImportedProject: async () => undefined,
-        runLocalInspection: async (payload: unknown) => {
+        runLocalAsk: async (payload: unknown) => {
           inspectionCalls.push(payload);
           if (
             payload === null ||
@@ -80,6 +80,8 @@ test("Electron chat routes a Codex OAuth account to the authenticated local insp
             question: payload.question,
             status: "completed",
             finalText: "Desktop inspection succeeded.",
+            evidenceIds: [],
+            events: [],
             model: { provider: "openai-codex", id: "gpt-5.4" },
           };
         },
