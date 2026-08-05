@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createGovernedPiReviewTurn } from "./pi-turn-adapter.ts";
+import { createPortLogPiAgent } from "./pi-turn-adapter.ts";
 
 test("Pi exposes the deterministic rule-check tool only when PortLog provides the callback", async () => {
   const agentDir = await mkdtemp(join(tmpdir(), "portlog-rule-tool-"));
@@ -23,7 +23,7 @@ test("Pi exposes the deterministic rule-check tool only when PortLog provides th
   );
 
   try {
-    const withoutCheck = await createGovernedPiReviewTurn({
+    const withoutCheck = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -38,7 +38,7 @@ test("Pi exposes the deterministic rule-check tool only when PortLog provides th
     await withoutCheck.dispose();
 
     let received: { checkId: string; scopeEntityId: string } | undefined;
-    const withCheck = await createGovernedPiReviewTurn({
+    const withCheck = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",

@@ -10,9 +10,19 @@ import {
   runLocalReviewInspection,
 } from "./local-review-inspection.ts";
 import { enumerateCentrifugalPumpScopes, routeLocalAsk } from "./local-ask-routing.ts";
-import { routeCapabilities } from "./capability-routing.ts";
+import {
+  createPortLogToolProfile,
+  PORTLOG_HOST_POLICY,
+  routeCapabilities,
+} from "./capability-routing.ts";
 import { boundedTopologyEvidence } from "./topology-evidence.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
+import { loadLocalProject } from "./local-project-manifest.cjs";
+import {
+  PortLogPiSessionCoordinator,
+  PortLogSessionError,
+  type PortLogSessionIdentity,
+} from "./pi-session-coordinator.ts";
 
 type WorkerRequest = {
   projectDirectory?: string;
@@ -58,14 +68,59 @@ const baseUrl =
       ? "https://chatgpt.com/backend-api"
       : "https://openrouter.ai/api/v1");
 const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
+const NO_PROJECT_SOURCE_DIGEST = `sha256:${"0".repeat(64)}`;
 const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
 const askRoute = request.mode === "ask" ? routeLocalAsk(request.question) : null;
+const isChat = request.mode === "chat";
+const posture = isChat ? "chat" : (request.posture ?? "inspect");
+const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64";
+const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile(qemuPath));
+const preparedToolMode = request.mode === "inspection";
+const preparedToolPosture = posture === "inspect" || posture === "verify" || posture === "review";
+const toolProfile = createPortLogToolProfile({
+  hostEvidence: preparedToolMode && preparedToolPosture && Boolean(request.sessionId),
+  hostRules: preparedToolMode && preparedToolPosture && Boolean(request.sessionId),
+  isolatedExecution:
+    preparedToolMode && posture === "review" && qemuAvailable && Boolean(request.sessionId),
+});
+const projectManifest = request.projectDirectory
+  ? await loadLocalProject(request.projectDirectory)
+  : undefined;
+const sessionIdentity =
+  request.projectDirectory && request.sessionId && projectManifest
+    ? ({
+        workspaceRoot: request.projectDirectory,
+        projectId: projectManifest.projectId,
+        sourceDigest: projectManifest.source.digest,
+        policy: PORTLOG_HOST_POLICY,
+        toolProfile,
+      } satisfies PortLogSessionIdentity)
+    : undefined;
+const sessionRoot = request.projectDirectory
+  ? join(request.projectDirectory, ".portlog", "sessions")
+  : undefined;
+let session: PortLogPiSessionCoordinator | undefined;
 const modelFreeAsk =
   askRoute?.kind === "clarification" ||
   askRoute?.kind === "rule" ||
   askRoute?.kind === "universal_rule";
 if (!apiKey && !modelFreeAsk) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
+const sessionKey = request.sessionId ?? (isChat ? `chat-${request.turnId}` : undefined);
+const workerSessionIdentity =
+  sessionIdentity ??
+  (isChat
+    ? ({
+        workspaceRoot: workingDirectory,
+        projectId: sessionKey!,
+        sourceDigest: NO_PROJECT_SOURCE_DIGEST,
+        policy: PORTLOG_HOST_POLICY,
+        toolProfile,
+      } satisfies PortLogSessionIdentity)
+    : undefined);
+const workerSessionRoot = sessionRoot ?? (isChat ? join(agentDir, "sessions") : undefined);
+// Session identity and runtime setup are derived above so the coordinator sees
+// the same effective policy and capability profile used by the worker.
 
 try {
   await writeFile(
@@ -91,10 +146,6 @@ try {
       },
     }),
   );
-  const isChat = request.mode === "chat";
-  const posture = isChat ? "chat" : (request.posture ?? "inspect");
-  const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64";
-  const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile(qemuPath));
   const isolatedExecutor = qemuAvailable
     ? createGondolinQemuExecutor({
         qemuPath,
@@ -177,6 +228,19 @@ try {
     }
     return await response.json();
   };
+  if (workerSessionIdentity && workerSessionRoot && sessionKey && request.mode !== "ask") {
+    const sessionOptions = {
+      sessionRoot: workerSessionRoot,
+      sessionId: sessionKey,
+      identity: workerSessionIdentity,
+    };
+    try {
+      session = await PortLogPiSessionCoordinator.open(sessionOptions);
+    } catch (error) {
+      if (!(error instanceof PortLogSessionError) || error.code !== "not_found") throw error;
+      session = await PortLogPiSessionCoordinator.create(sessionOptions);
+    }
+  }
   let handledAsk = false;
   if (request.mode === "ask") {
     const route = routeLocalAsk(request.question);
@@ -256,10 +320,12 @@ try {
       getEvidence: capabilities.getEvidence,
       getRuleCheck: capabilities.getRuleCheck,
       runIsolatedCommand: capabilities.runIsolatedCommand,
+      session,
     });
     send({ kind: "result", record });
   }
 } finally {
+  await session?.close();
   await rm(agentDir, { recursive: true, force: true });
 }
 

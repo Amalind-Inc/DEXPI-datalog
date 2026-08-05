@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createGovernedPiReviewTurn } from "./pi-turn-adapter.ts";
+import { createPortLogPiAgent } from "./pi-turn-adapter.ts";
 
 const toolCall = {
   id: "call_evidence_1",
@@ -77,9 +77,9 @@ test("governed Pi turn exposes only PortLog tools and carries cancellation to ev
 
   const abortController = new AbortController();
   let evidenceCalls = 0;
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -183,9 +183,9 @@ test("optional isolated command tool supports one model-tool-model continuation"
     }),
   );
 
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -286,9 +286,9 @@ test("isolated command cancellation reaches the callback and ignores late comple
     }),
   );
 
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -351,9 +351,9 @@ test("general desktop turns expose no P&ID tools without an evidence bridge", as
       },
     }),
   );
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "portlog-test",
@@ -363,6 +363,45 @@ test("general desktop turns expose no P&ID tools without an evidence bridge", as
     assert.deepEqual(
       review.session.agent.state.tools.map((tool) => tool.name),
       [],
+    );
+  } finally {
+    await review?.dispose();
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});
+test("a workspace-bound Pi session exposes native read alongside PortLog tools", async () => {
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-workspace-agent-"));
+  await writeFile(
+    path.join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: "http://127.0.0.1:1/v1",
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
+  try {
+    review = await createPortLogPiAgent({
+      agentDir,
+      cwd: agentDir,
+      workspaceRoot: agentDir,
+      sessionId: "workspace-session",
+      provider: "portlog-test",
+      model: "review-model",
+      signal: new AbortController().signal,
+      getEvidence: async () => ({ citations: [] }),
+      initialMessages: [
+        { role: "user", content: [{ type: "text", text: "Earlier context." }], timestamp: 1 },
+      ],
+    });
+    assert.deepEqual(
+      review.session.agent.state.tools.map((tool) => tool.name),
+      ["read", "portlog_evidence"],
     );
   } finally {
     await review?.dispose();
@@ -441,9 +480,9 @@ test("Codex runtime uses the pinned Codex Responses transport and backend", asyn
     ).toString("base64url"),
     "signature",
   ].join(".");
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "openai-codex",

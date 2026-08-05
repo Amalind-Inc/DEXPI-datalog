@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createGovernedPiReviewTurn } from "./pi-turn-adapter.ts";
+import { createPortLogPiAgent } from "./pi-turn-adapter.ts";
 
 function sse(response: http.ServerResponse, payload: object) {
   response.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -45,9 +45,9 @@ test("injects the OpenRouter key as a runtime override without consulting Pi aut
     }),
   );
 
-  let review: Awaited<ReturnType<typeof createGovernedPiReviewTurn>> | null = null;
+  let review: Awaited<ReturnType<typeof createPortLogPiAgent>> | null = null;
   try {
-    review = await createGovernedPiReviewTurn({
+    review = await createPortLogPiAgent({
       agentDir,
       cwd: agentDir,
       provider: "openrouter",
@@ -76,4 +76,6 @@ test("injects the OpenRouter key as a runtime override without consulting Pi aut
 // Pi's runtime-key path leaves an internal provider handle open after the
 // observable session is disposed. This file has no post-test cleanup work; exit
 // the worker once the assertions above have completed so npm test can finish.
-test.after(() => { process.exit(0); });
+test.after(() => {
+  process.exit(0);
+});

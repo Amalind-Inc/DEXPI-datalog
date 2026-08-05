@@ -8,9 +8,31 @@ import test from "node:test";
 
 import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
 import { runLocalReviewInspection } from "./local-review-inspection.ts";
+import {
+  PortLogPiSessionCoordinator,
+  type PortLogSessionIdentity,
+} from "./pi-session-coordinator.ts";
 
 function sse(response: http.ServerResponse, payload: object) {
   response.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+async function createSession(
+  workspaceRoot: string,
+  sessionId: string,
+  sourceDigest: string,
+): Promise<PortLogPiSessionCoordinator> {
+  const identity: PortLogSessionIdentity = {
+    workspaceRoot,
+    projectId: sessionId,
+    sourceDigest,
+    policy: { id: "portlog-host-policy", version: "1", digest: "sha256:portlog-host-policy-v1" },
+    toolProfile: { id: "pi-portlog-v1", version: "1", digest: "sha256:pi-portlog-v1" },
+  };
+  return PortLogPiSessionCoordinator.create({
+    sessionRoot: join(workspaceRoot, ".portlog", "sessions"),
+    sessionId,
+    identity,
+  });
 }
 
 test("controlled Pi model-tool-model journey becomes a reconstructable PortLog Inspect trace", async () => {
@@ -100,6 +122,7 @@ test("controlled Pi model-tool-model journey becomes a reconstructable PortLog I
     }),
   );
 
+  let session: PortLogPiSessionCoordinator | undefined;
   try {
     await persistLocalProject({
       projectDirectory,
@@ -109,11 +132,14 @@ test("controlled Pi model-tool-model journey becomes a reconstructable PortLog I
       filename: "C01V04-VER.EX01.xml",
       status: "ready",
     });
+    const project = await loadLocalProject(projectDirectory);
+    session = await createSession(projectDirectory, project.projectId, project.source.digest);
     const record = await runLocalReviewInspection({
       projectDirectory,
       turnId: "real-pi-turn",
       question: "What equipment and connections are around P-101?",
       model: { provider: "portlog-test", id: "review-model" },
+      session,
       signal: new AbortController().signal,
       agentDir: root,
       cwd: root,
@@ -144,6 +170,7 @@ test("controlled Pi model-tool-model journey becomes a reconstructable PortLog I
     );
     assert.deepEqual((await loadLocalProject(projectDirectory)).turns, [record]);
   } finally {
+    await session?.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });
@@ -175,7 +202,9 @@ test("provider failures persist an actionable failed turn instead of an empty su
     }),
   );
 
+  let session: PortLogPiSessionCoordinator | undefined;
   try {
+    session = await createSession(root, "provider-error-turn", `sha256:${"0".repeat(64)}`);
     const record = await runLocalReviewInspection({
       turnId: "provider-error-turn",
       question: "What equipment is around P-101?",
@@ -183,6 +212,7 @@ test("provider failures persist an actionable failed turn instead of an empty su
       signal: new AbortController().signal,
       agentDir: root,
       cwd: root,
+      session,
     });
     assert.equal(record.status, "failed");
     assert.match(record.error ?? "", /invalid api key/i);
@@ -192,6 +222,7 @@ test("provider failures persist an actionable failed turn instead of an empty su
       ["turn_started", "turn_failed"],
     );
   } finally {
+    await session?.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });
@@ -269,6 +300,7 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
       },
     }),
   );
+  let session: PortLogPiSessionCoordinator | undefined;
   try {
     await persistLocalProject({
       projectDirectory,
@@ -278,12 +310,15 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
       filename: "C01.xml",
       status: "ready",
     });
+    const project = await loadLocalProject(projectDirectory);
+    session = await createSession(projectDirectory, project.projectId, project.source.digest);
     const record = await runLocalReviewInspection({
       projectDirectory,
       turnId: "verify-pi-turn",
       posture: "verify",
       question: "Does pump P-101 have a check valve on its first discharge segment?",
       model: { provider: "portlog-test", id: "review-model" },
+      session,
       signal: new AbortController().signal,
       agentDir: root,
       cwd: root,
@@ -314,6 +349,7 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
       ["tool_request", "tool_result"],
     );
   } finally {
+    await session?.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });

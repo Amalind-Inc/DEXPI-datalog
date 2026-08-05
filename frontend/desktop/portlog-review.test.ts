@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import test from "node:test";
 
+import { createPortLogToolProfile, PORTLOG_HOST_POLICY } from "./capability-routing.ts";
 import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
+import { PortLogPiSessionCoordinator } from "./pi-session-coordinator.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const commandPath = join(repoRoot, "frontend/desktop/portlog-review.ts");
@@ -40,6 +42,30 @@ test("terminal review prints bounded PortLog events and persists the completed r
     modelRequests += 1;
     response.writeHead(200, { "content-type": "text/event-stream" });
     if (modelRequests === 1) {
+      sse(response, {
+        id: "read-turn",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "read-call",
+                  type: "function",
+                  function: {
+                    name: "read",
+                    arguments: JSON.stringify({ path: "C01.xml" }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else if (modelRequests === 2) {
       sse(response, {
         id: "tool-turn",
         object: "chat.completion.chunk",
@@ -122,6 +148,7 @@ test("terminal review prints bounded PortLog events and persists the completed r
     filename: "C01.xml",
     status: "ready",
   });
+  await writeFile(join(projectDirectory, "C01.xml"), "<PlantModel />");
 
   try {
     const result = await runCommand(
@@ -144,18 +171,55 @@ test("terminal review prints bounded PortLog events and persists the completed r
       },
     );
     assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stdout, /TURN STARTED/);
+    assert.match(result.stdout, /TOOL REQUEST read/);
+    assert.match(result.stdout, /TOOL RESULT read/);
     assert.match(result.stdout, /TOOL REQUEST portlog_evidence/);
     assert.match(result.stdout, /TOOL RESULT portlog_evidence/);
     assert.match(result.stdout, /FINAL PORTLOG RECORD/);
     assert.match(result.stdout, /"status": "completed"/);
     assert.match(result.stdout, /P-101 is present/);
-    assert.equal(modelRequests, 2);
+    assert.equal(modelRequests, 3);
 
     const project = await loadLocalProject(projectDirectory);
     assert.equal(project.turns.length, 1);
     assert.equal(project.turns[0].status, "completed");
     assert.deepEqual(project.turns[0].evidenceIds, ["P-101"]);
+    const session = await PortLogPiSessionCoordinator.open({
+      sessionRoot: join(projectDirectory, ".portlog", "sessions"),
+      sessionId: project.projectId,
+      identity: {
+        workspaceRoot: projectDirectory,
+        projectId: project.projectId,
+        sourceDigest: project.source.digest,
+        policy: PORTLOG_HOST_POLICY,
+        toolProfile: createPortLogToolProfile({
+          hostEvidence: true,
+          hostRules: true,
+          isolatedExecution: false,
+        }),
+      },
+    });
+    try {
+      const entries = await session.getEntries();
+      const messages = entries.filter((entry) => (entry as { type?: string }).type === "message");
+      const nativeMessages = JSON.stringify(messages);
+      assert.match(nativeMessages, /P-101 is present/);
+      assert.match(nativeMessages, /Pi workspace read/);
+      assert.match(nativeMessages, /authority.*ordinary/);
+      assert.match(nativeMessages, /portlog_evidence/);
+      assert.ok(
+        entries.some(
+          (entry) => (entry as { customType?: string }).customType === "portlog_turn_started",
+        ),
+      );
+      assert.ok(
+        entries.some(
+          (entry) => (entry as { customType?: string }).customType === "portlog_turn_terminal",
+        ),
+      );
+    } finally {
+      await session.close();
+    }
   } finally {
     modelServer.closeAllConnections();
     sidecarServer.closeAllConnections();

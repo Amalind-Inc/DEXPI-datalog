@@ -90,6 +90,29 @@ test("a governed Inspect turn is reconstructed from the durable PortLog project 
   }
 });
 
+test("production review refuses to run without the persistent session coordinator", async () => {
+  const root = await mkdtemp(join(tmpdir(), "portlog-no-session-"));
+  try {
+    const record = await runLocalReviewInspection({
+      turnId: "missing-session-turn",
+      question: "What is around P-101?",
+      model: { provider: "test", id: "test" },
+      signal: new AbortController().signal,
+      agentDir: root,
+      cwd: root,
+    });
+
+    assert.equal(record.status, "failed");
+    assert.match(record.error ?? "", /persistent PortLog Pi session/i);
+    assert.deepEqual(
+      record.events.map((event) => event.type),
+      ["turn_started", "turn_failed"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("review posture asks Pi to run the governed E06 tool sequence", async () => {
   let promptText = "";
   const record = await runLocalReviewInspection({

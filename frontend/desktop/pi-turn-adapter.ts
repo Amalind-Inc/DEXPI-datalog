@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import { Agent } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { streamSimple as streamAnthropic } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as streamCodex } from "@earendil-works/pi-ai/api/openai-codex-responses";
@@ -8,6 +9,7 @@ import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-c
 import { Type } from "typebox";
 
 import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
+import { createPortLogWorkspaceReadTool } from "./pi-workspace-read.ts";
 
 export interface EvidenceRequest {
   artifactId: string;
@@ -29,7 +31,6 @@ export type RunGovernedPiIsolatedCommand = (
   request: IsolatedCommandToolRequest,
   signal: AbortSignal,
 ) => Promise<IsolatedCommandResult>;
-
 export interface GovernedPiReviewTurnOptions {
   agentDir: string;
   cwd: string;
@@ -37,6 +38,9 @@ export interface GovernedPiReviewTurnOptions {
   model: string;
   signal: AbortSignal;
   apiKey?: string;
+  workspaceRoot?: string;
+  initialMessages?: AgentMessage[];
+  sessionId?: string;
   getEvidence?: (request: EvidenceRequest) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
@@ -63,16 +67,21 @@ type PortLogModel =
   | Model<"anthropic-messages">;
 
 /**
- * Creates a direct, in-memory Pi core Agent for one PortLog turn.
+ * Constructs the Pi Agent used by the host-owned session coordinator.
  *
- * Pi supplies model streaming and sequential tool-call orchestration only.
- * PortLog owns credentials, evidence, cancellation, and durable trace state;
- * no coding-agent session, auth store, built-in tool, or Pi JSONL is created.
+ * This is a low-level construction helper. The coordinator owns the fenced
+ * session, prompt admission, native JSONL persistence, and terminal lifecycle.
  */
-export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOptions) {
+export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions) {
   const model = await readPortLogModel(options);
   const apiKey = options.apiKey ?? model.configuredApiKey;
   if (!apiKey) throw new Error(`No PortLog runtime key for ${options.provider}`);
+  const readTool = options.workspaceRoot
+    ? createPortLogWorkspaceReadTool({
+        workspaceRoot: options.workspaceRoot,
+        signal: options.signal,
+      })
+    : null;
 
   const getEvidence = options.getEvidence;
   const evidenceTool = getEvidence
@@ -162,12 +171,18 @@ export async function createGovernedPiReviewTurn(options: GovernedPiReviewTurnOp
     : null;
 
   const tools = [
+    ...(readTool ? [readTool] : []),
     ...(evidenceTool ? [evidenceTool] : []),
     ...(ruleCheckTool ? [ruleCheckTool] : []),
     ...(isolatedCommandTool ? [isolatedCommandTool] : []),
   ];
   const agent = new Agent({
-    initialState: { model: model.value, tools },
+    initialState: {
+      model: model.value,
+      tools,
+      ...(options.initialMessages ? { messages: options.initialMessages } : {}),
+    },
+    sessionId: options.sessionId,
     toolExecution: "sequential",
     getApiKey: () => apiKey,
     streamFn: (selectedModel, context, streamOptions) => {

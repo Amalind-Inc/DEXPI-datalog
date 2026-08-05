@@ -1,11 +1,11 @@
 import {
-  createGovernedPiReviewTurn,
   type EvidenceRequest,
   type RuleCheckRequest,
   type RunGovernedPiIsolatedCommand,
 } from "./pi-turn-adapter.ts";
 import { buildRuleDerivation, type AskDerivation } from "./local-ask-execution.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
+import type { PortLogPiSessionCoordinator } from "./pi-session-coordinator.ts";
 
 export type LocalInspectionEvent =
   | { type: "turn_started" }
@@ -69,7 +69,6 @@ interface CreateTurnOptions {
 }
 
 type CreateTurn = (options: CreateTurnOptions) => Promise<TurnRuntime>;
-
 export interface RunLocalReviewInspectionOptions {
   projectDirectory?: string;
   turnId: string;
@@ -80,6 +79,7 @@ export interface RunLocalReviewInspectionOptions {
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
+  session?: PortLogPiSessionCoordinator;
   createTurn?: CreateTurn;
   agentDir?: string;
   cwd?: string;
@@ -140,6 +140,14 @@ export async function runLocalReviewInspection(
     }
   };
   append({ type: "turn_started" });
+  if (options.session) {
+    await options.session.appendCustomEntry("portlog_turn_started", {
+      turnId: record.turnId,
+      posture: record.posture,
+      question: record.question,
+      startedAt: record.startedAt,
+    });
+  }
   if (options.projectDirectory) await upsertLocalTurn(options.projectDirectory, record);
 
   const getEvidence = options.getEvidence
@@ -219,6 +227,13 @@ export async function runLocalReviewInspection(
   } finally {
     options.signal.removeEventListener("abort", abort);
     await runtime?.dispose();
+    if (options.session)
+      await options.session.appendCustomEntry("portlog_turn_terminal", {
+        turnId: record.turnId,
+        status: record.status,
+        completedAt: record.completedAt,
+        error: record.error,
+      });
     if (options.projectDirectory) await upsertLocalTurn(options.projectDirectory, record);
   }
   return record;
@@ -230,7 +245,9 @@ async function createPiRuntime(
 ): Promise<TurnRuntime> {
   if (!options.agentDir || !options.cwd)
     throw new Error("A governed Pi turn requires agentDir and cwd");
-  const review = await createGovernedPiReviewTurn({
+  if (!options.session) throw new Error("A persistent PortLog Pi session is required.");
+  let modelError: string | undefined;
+  const runtime = await options.session.createPiTurn({
     agentDir: options.agentDir,
     cwd: options.cwd,
     provider: options.model.provider,
@@ -240,33 +257,30 @@ async function createPiRuntime(
     getEvidence: bridge.getEvidence
       ? ({ artifactId, claim }) => bridge.getEvidence!({ artifactId, claim })
       : undefined,
-    getRuleCheck: options.getRuleCheck ? (request) => options.getRuleCheck!(request) : undefined,
+    getRuleCheck: bridge.getRuleCheck ? (request) => bridge.getRuleCheck!(request) : undefined,
     runIsolatedCommand: bridge.runIsolatedCommand,
-  });
-  let modelError: string | undefined;
-  const unsubscribe = review.subscribe((event) => {
-    if (event.type === "message_end" && isRecord(event.message)) {
-      if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim())
-        modelError = event.message.errorMessage;
-      else if (event.message.stopReason === "error")
-        modelError = "The provider returned a model error without details.";
-    }
-    const normalized = normalizePiEvent(event);
-    if (normalized) bridge.emit(normalized);
+    onEvent: (event) => {
+      if (isRecord(event) && event.type === "message_end" && isRecord(event.message)) {
+        if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim())
+          modelError = event.message.errorMessage;
+        else if (event.message.stopReason === "error")
+          modelError = "The provider returned a model error without details.";
+      }
+      if (isRecord(event)) {
+        const normalized = normalizePiEvent(event);
+        if (normalized) bridge.emit(normalized);
+      }
+    },
   });
   return {
     prompt: async (text) => {
-      await review.prompt(text);
+      await runtime.prompt(text);
       if (modelError) throw new Error(`Model request failed: ${modelError}`);
     },
-    abort: review.abort,
-    dispose: async () => {
-      unsubscribe();
-      await review.dispose();
-    },
+    abort: runtime.abort,
+    dispose: runtime.dispose,
   };
 }
-
 function normalizePiEvent(
   event: Record<string, unknown>,
 ): Parameters<CreateTurnOptions["emit"]>[0] | null {
@@ -352,7 +366,7 @@ function chatPrompt(question: string) {
 
 function verifyPrompt(question: string) {
   return [
-    "You are in Verify posture. For the supported pump discharge check, use only the PortLog deterministic rule-check capability.",
+    "You are in Verify posture. You may use ordinary workspace read for context, but only the PortLog deterministic rule-check capability can establish a verification outcome.",
     'Call portlog_rule_check with checkId exactly "pump_discharge_check_valve" and scopeEntityId equal to the pump entity identifier from the question or prepared evidence.',
     "Do not invoke this pump rule for universal or plural questions, non-pump equipment, or a scope identifier that does not match the question. State that the supported check does not answer those questions.",
     "Never write Datalog, choose a rule, infer an outcome, or alter deterministic fields.",
@@ -364,16 +378,16 @@ function verifyPrompt(question: string) {
 }
 
 function inspectPrompt(question: string) {
-  return `You are in Inspect posture. Use only the available PortLog read-only evidence capability. Call portlog_evidence with artifactId exactly "topology"; put any equipment tag or identifier in claim. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
+  return `You are in Inspect posture. You may use ordinary workspace read for context, but read output is not PortLog evidence. Call portlog_evidence with artifactId exactly "topology" before making prepared-topology claims; put any equipment tag or identifier in claim. Cite stable evidence IDs for factual claims. If evidence is absent or insufficient, say so explicitly. Never issue or label a satisfied/violated verification verdict.\n\nUser question: ${question}`;
 }
 
 function reviewPrompt(question: string) {
   return [
-    "You are in E06 terminal review posture. Complete one governed review using only the available PortLog tools.",
+    "You are in E06 terminal review posture. You may use ordinary workspace read for context, but only the available PortLog tools establish PortLog-grounded or deterministic results.",
     'First call portlog_evidence with artifactId exactly "topology" and a claim about the requested E06 equipment or connection.',
     'Then call portlog_rule_check with checkId exactly "pump_discharge_check_valve" and scopeEntityId from the question or prepared evidence.',
     'Then call portlog_isolated_command with profileId exactly "review-bundle-candidate". This runs one approved native command; never provide arbitrary commands, paths, credentials, or VM details.',
-    "Wait for each tool result before requesting the next tool. Keep deterministic results and isolated-command outcomes separate from model explanation.",
+    "Wait for each tool result before requesting the next tool. Keep ordinary read results, deterministic results, and isolated-command outcomes separate from model explanation.",
     "After all three tools return, answer the question concisely and state any unavailable, rejected, failed, timed-out, or cancelled outcome honestly.",
     "",
     `User question: ${question}`,
