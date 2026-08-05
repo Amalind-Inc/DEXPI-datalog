@@ -2,6 +2,7 @@
   "name": "portlog-ui",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/electron-main.cjs",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
@@ -16,6 +17,7 @@
     "lint:fix": "oxlint --fix && oxfmt",
     "desktop:dev": "electron desktop/electron-main.cjs",
     "portlog:review": "node --experimental-strip-types desktop/portlog-review.ts",
+    "prototype:pi-read": "node --experimental-strip-types desktop/pi-read-evidence-prototype.ts",
     "test:desktop-native": "node desktop/electron-native-acceptance.mjs",
     "desktop:package": "node ../scripts/package-macos-release.mjs",
     "desktop:package:dir": "node ../scripts/package-macos-release.mjs",
@@ -74,6 +76,5 @@
     "oxlint": "^1.70.0",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3"
-  },
-  "main": "desktop/electron-main.cjs"
+  }
 }
