@@ -99,3 +99,50 @@ Model-selected:
 If every E06 review must execute the candidate command, the host-owned review coordinator should record an expected isolated-command obligation and mark the turn incomplete or failed unless the matching tool result is observed. The invariant should also require the exact expected profile, rather than relying only on the model prompt.
 
 The current implementation is suitable for the prototype and demonstrates the execution seam, but it should not yet be described as a mandatory VM execution guarantee for every review turn.
+
+## Read-tool and evidence-tool findings
+
+The separate Pi read/evidence prototype also tested the tool-registry seam relevant to the full PortLog harness:
+
+- `frontend/desktop/pi-read-evidence-prototype.ts:279-314` registers a custom `read` tool for ordinary workspace context.
+- `frontend/desktop/pi-read-evidence-prototype.ts:316-341` registers `portlog_evidence` in the same real Pi `Agent`.
+- `frontend/desktop/pi-read-evidence-prototype.ts:345-352` gives the agent both tools with sequential execution and explicit authority-separation guidance.
+
+### `read` tool
+
+The prototype read tool:
+
+- accepts a relative workspace path only;
+- rejects absolute paths, credential-like paths, protected paths, and paths that escape the workspace;
+- resolves and checks the real path to prevent symlink escape;
+- opens files with `O_NOFOLLOW`;
+- bounds returned UTF-8 output to `MAX_READ_BYTES` (12,000 bytes);
+- labels its result `authority: "ordinary"` and explicitly says it is not PortLog evidence.
+
+The tool is therefore ordinary model context, not an engineering-authority channel. Its security behavior is useful prototype evidence, but it is a custom simplified tool, not Pi's native full coding-agent read implementation. In particular, the prototype read interface only accepts `path`; it does not yet provide the native read tool's broader file/media behavior or offset/limit continuation semantics. It should not be absorbed into production as a replacement for Pi's normal tool bundle without a separate compatibility pass.
+
+### `portlog_evidence` tool
+
+The evidence tool:
+
+- accepts `artifactId` and `claim`;
+- requires `artifactId === "topology"`;
+- returns bounded, read-only topology evidence;
+- preserves citations, source scope IDs, diagnostics, and uncertainty;
+- labels its result `authority: "portlog"`;
+- explicitly does not authorize writes or replace deterministic rule checks.
+
+`boundedTopologyEvidence` limits the evidence neighborhood to 12 anchors, 32 entities, 32 relationships, and four hops. A no-match or partial result remains an explicit bounded evidence result rather than being silently converted into an ordinary model conclusion.
+
+### Combined finding
+
+The prototype demonstrated that ordinary workspace context and authoritative PortLog evidence can coexist in one Pi agent registry. The model can call both tools, but their authority metadata and system guidance keep the channels distinct:
+
+```text
+read               -> ordinary context; useful but not authoritative
+portlog_evidence   -> PortLog-authoritative bounded evidence
+```
+
+This coexistence does not by itself prove that the model will always choose the correct tool or preserve the distinction in prose. Production integration still needs the normal Pi tool bundle, explicit authority metadata, and host-owned verification of provenance and tool outcomes.
+
+The human evaluation also found that the prototype should be revised before production absorption: retain the Pi-plus-PortLog registry seam, but replace the custom prototype read behavior with Pi-native read semantics and preserve the separate PortLog evidence authority boundary.
