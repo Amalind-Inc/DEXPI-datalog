@@ -30,7 +30,11 @@ The model will receive familiar Pi-compatible tool shapes and result behavior. P
 
 The model may choose among registered tools. PortLog will not remove tools based on an intent classifier or let the model choose the trust boundary. Soft tool descriptions, model guidance, interceptor hints, and result feedback may improve tool selection, but hard policy evaluates every call independently.
 
-The first implementation slice is a persistent coordinator with one policy-enforced `read` capability. It must prove native Pi JSONL persistence, workspace and policy identity, single-writer fencing, cancellation, reopen, event streaming, and legacy-session handling before the remaining tools and replacement domain adapters are added.
+The first delivery is a human-in-the-loop experience prototype, not a persistence or migration slice. It uses a real Pi `Agent`, normal Pi-compatible `read`, and one real PortLog domain evidence capability in an ephemeral, clearly marked prototype harness. A human must be able to complete a useful task, see the tool calls and results, distinguish ordinary Pi context from PortLog evidence, and observe bounded failure and cancellation behavior through one runnable command or desktop entry point.
+
+The second delivery is a separate Gondolin execution spike. It uses one approved immutable command profile, staged input, deny-all network, no credentials, bounded output, cancellation, visible host/guest routing, and no host fallback. It does not begin with open-ended bash, mutation, PTY, background jobs, or a durable guest workspace.
+
+The first production slice follows the prototypes: a persistent coordinator with native Pi JSONL, workspace and policy identity, single-writer fencing, cancellation, reopen, event streaming, normal Pi `read`, and PortLog evidence. Later tools and replacement domain adapters attach only after this human-tested seam is accepted.
 
 The old per-turn interaction and domain-facing adapter path will be removed after an opt-in migration period and hard cutover gates. Validated pure domain engines and storage primitives may be reused. All production authority-producing operations must enter through the new capability registry and host authority seam before the old adapters are deleted.
 
@@ -105,6 +109,16 @@ The highest testable seam is one `PortLogAgentHarness`/session coordinator bound
 
 The capability registry is an internal part of that seam, not a second public runtime. It registers both normal Pi-compatible tools and PortLog domain capabilities. Every capability declares its request/result shape, policy effect, authority class, provenance origin, persistence behavior, cancellation behavior, idempotency, and reconciliation contract.
 
+### Human-in-the-loop delivery sequence
+
+Every delivery must end in a runnable experience that a person can use and evaluate. Infrastructure that cannot support a concrete human task is not considered a completed slice.
+
+The experience prototype answers one question: can a person naturally combine ordinary Pi file reading with PortLog-governed domain evidence in one conversation? It remains ephemeral, does not write `LocalInspectionRecord`, does not invent a durable session schema, and exposes normal `read` separately from an explicitly named PortLog evidence capability. Human acceptance requires a task that genuinely needs both tools, visible source identity for the evidence result, understandable tool/error states, and no false authority when evidence fails.
+
+The Gondolin spike answers a different question: can a person understand and verify that one approved command ran in a disposable guest under fail-closed policy? It must demonstrate immutable input, deny-all network, no credential visibility, bounded sole output, cancellation, and no host fallback. Its mechanics are disposable unless they already satisfy the later production interface.
+
+Only after both questions have human evidence does the work become the persistent production coordinator slice. Human observations are recorded as acceptance evidence alongside deterministic fixtures; they are not informal polish applied after the architecture is complete.
+
 ### Pi reuse preference
 
 Use `@earendil-works/pi-agent-core` and `@earendil-works/pi-ai` as the runtime foundation, preserving native `Agent` lifecycle, model streaming, tool-call continuation, abort behavior, steering/follow-up behavior, compaction, branching, child-session concepts, and JSONL session semantics wherever the current versions support them.
@@ -117,7 +131,7 @@ Use Oh My Pi documentation and source contracts as behavioral reference for fami
 
 Do not import the complete Oh My Pi coding-agent runtime merely to obtain normal tools. Do not treat Oh My Pi interceptors, allow patterns, model prompts, or shell heuristics as PortLog security boundaries. Interceptors may suggest a dedicated tool, but hard PortLog policy independently classifies every request.
 
-For hashline editing, perform the previously agreed compatibility probe against `pi-hashline-edit`. If compatible, use a thin PortLog policy/provenance adapter around its paired hashline `read` and `edit` mechanics. PortLog remains responsible for workspace identity, `.portlogignore`, credential/private-key denial, approval, snapshot identity, and result authority. A fresh read is required after session reopen. The first implementation slice remains read-only.
+For hashline editing, perform the previously agreed compatibility probe against `pi-hashline-edit`. If compatible, use a thin PortLog policy/provenance adapter around its paired hashline `read` and `edit` mechanics. PortLog remains responsible for workspace identity, `.portlogignore`, credential/private-key denial, approval, snapshot identity, and result authority. A fresh read is required after session reopen. The prototype and first production slice remain read-only.
 
 ### Codex and other harness preferences
 
@@ -194,7 +208,8 @@ The hard cutover removes the old per-turn API, active legacy record projection, 
 ## Testing Decisions
 
 - Tests must exercise observable behavior at the highest seam: the host-owned session coordinator and its authenticated request/event protocol. Tests should not assert private helper functions, internal Pi object layout, or incidental JSON serialization beyond the documented native/custom event contract.
-- The first slice should use a real Pi `Agent` with deterministic scripted model/provider fixtures, not a fake PortLog loop. The fixture must drive native model output, tool calls, tool results, cancellation, and completion through the coordinator.
+- The first experience prototype should use a real Pi `Agent` with deterministic scripted model/provider fixtures where repeatability is needed, plus a live provider mode for human evaluation. It should exercise native model output, normal Pi `read`, PortLog evidence, visible tool results, cancellation, and bounded failure without depending on persistence.
+- Every prototype must have one obvious launch path, a short human task script, visible current state after each action, and an explicit verdict: keep, revise, or delete. Prototype traces are disposable and must not become an accidental production schema.
 - The coordinator suite should cover session creation, native JSONL append order, writer fencing, observer attachment, queued prompt admission, event sequence gaps and resynchronization, cancellation, crash recovery, reopen compatibility, legacy read-only sessions, and explicit deletion cascade.
 - The capability-registry suite should verify that every registered capability has policy admission, structured result status, authority/provenance envelope, cancellation, persistence, and reconciliation behavior. A migration inventory test should fail if an authoritative operation has no registry entry or a production bypass remains.
 - The first `read` behavior test should verify workspace identity, bounded content, path denial, `.portlogignore` handling, truncation metadata, source digest, and native Pi result delivery through one full coordinator turn.
@@ -236,4 +251,4 @@ The architecture is intentionally upstream-first. PortLog-specific code should f
 
 The non-negotiable deletion gates are: one exhaustive authoritative capability registry; one fenced coordinator writer; host-owned authority promotion; end-to-end fail-closed routing; and packaged equivalence/data-safety evidence including opaque legacy records. Perfect live-model first-tool selection is an optimization metric, not a deletion gate.
 
-The first implementation deliverable is the persistent coordinator plus policy-enforced `read` vertical slice. All later capabilities must attach to that seam rather than create a parallel runtime.
+The first delivery is the human-in-the-loop Pi-read plus PortLog-evidence prototype, followed by the separate bounded Gondolin spike. The first production deliverable is the persistent coordinator plus the validated read/evidence seam. All later capabilities must attach to that seam rather than create a parallel runtime.
