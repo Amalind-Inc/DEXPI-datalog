@@ -149,6 +149,25 @@ Native Pi JSONL is the canonical conversation history. PortLog adds versioned cu
 
 Session identity includes canonical workspace root, project/manifest identity, source identity, policy and ignore digest, tool-profile version, and provider/model policy identity. Reopen requires compatibility validation. Moved workspaces, incompatible policies, or incompatible profiles require explicit rebind, migration, or a new session. Old sessions are read-only legacy views.
 
+### Pi-compatible session persistence contract
+
+PortLog adopts the append-only JSONL session paradigm documented by [Oh My Pi](https://github.com/can1357/oh-my-pi/blob/main/docs/session.md) as a behavioral reference. This is a reuse of the session model, not a dependency on the Oh My Pi runtime.
+
+The contract is:
+
+- a versioned session header records the session identity and storage context;
+- messages, lifecycle records, and PortLog custom entries are append-only;
+- Pi JSONL is canonical for conversation and resume context;
+- PortLog authority, evidence, deterministic outcomes, policy decisions, and provenance remain canonical in host-owned records linked by session, turn, and tool-call IDs;
+- custom entries are namespaced and carry enough lifecycle information to diagnose incomplete turns;
+- session reconstruction follows the latest valid history and never promotes ordinary model or tool output to PortLog authority;
+- an incomplete turn is resumed as `interrupted` or `outcome_unknown`, not silently replayed;
+- storage access is isolated behind a PortLog-owned adapter so an upstream Pi session API or storage migration remains local to one boundary.
+
+The first production slice implements the coordinator, native JSONL messages, identity validation, writer fencing, and PortLog turn lifecycle markers. Full postmortem recovery will add durable tool-start and session-exit markers, interrupted-turn reconstruction, and fault-injection coverage before side-effecting capabilities are enabled. Read-only turns may be retried only when their prior outcome is known; uncertain mutation or command outcomes are never automatically replayed.
+
+SQLite, a general event-sourcing framework, or a second canonical transcript is not introduced at this stage. A transactional host journal or distributed lease becomes appropriate only if PortLog adds concurrent writers, hosted/shared storage, cross-record atomicity requirements, or recovery/querying requirements that local fenced JSONL cannot satisfy.
+
 ### Normal Pi tool surface
 
 The base registry exposes familiar `read`, `write`, `edit`, `bash`, `web_search`, and `task` names where the corresponding PortLog capability is available. Tool availability is stable; missing context or disabled capability returns a structured result such as `unavailable` rather than silently changing the registry or creating a second tool profile.
