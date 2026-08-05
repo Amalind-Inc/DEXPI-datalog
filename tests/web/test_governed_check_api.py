@@ -63,6 +63,12 @@ class GovernedCheckApiTests(unittest.TestCase):
             self.assertEqual(result["run_status"], "completed")
             self.assertIn(result["outcome"], {"satisfied", "violated", "indeterminate"})
             self.assertEqual(result["check_id"], "pump_discharge_check_valve")
+            self.assertEqual(result["coverage"]["requested_entity_id"], scope_entity_id)
+            self.assertIn(result["coverage"]["complete"], {True, False})
+            self.assertEqual(
+                result["source_attestation"]["revision"],
+                result["document_preparation_digest"],
+            )
             self.assertTrue(result["evidence"]["ordered_topology_ids"])
             self.assertEqual(first_payload["model_interpretation"], None)
             self.assertTrue(first_payload["result_artifact"]["path"])

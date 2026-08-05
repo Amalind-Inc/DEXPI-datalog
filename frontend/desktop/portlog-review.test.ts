@@ -320,9 +320,37 @@ test("terminal review completes the governed E06 evidence-check-isolation journe
         request.url?.endsWith("/governed-checks")
           ? {
               deterministic_result: {
+                schema_version: 1,
                 check_id: "pump_discharge_check_valve",
+                check_version: 1,
+                rule: { pack_id: "demo-process-safety", pack_version: 1 },
+                scope: {
+                  requested_entity_id: "P-101",
+                  evaluated_entity_id: "P-101",
+                  pump_id: "P-101",
+                  class: "CentrifugalPump",
+                },
+                required_facts: ["discharge path"],
                 run_status: "completed",
                 outcome: "satisfied",
+                evidence: {
+                  scope_completeness: { complete: true, basis: "terminal_boundary_reached" },
+                  ordered_entity_ids: ["P-101", "E06-V-101"],
+                },
+                coverage: {
+                  requested_entity_id: "P-101",
+                  evaluated_entity_id: "P-101",
+                  required_facts: ["discharge path"],
+                  missing_facts: [],
+                  complete: true,
+                },
+                engine: { name: "souffle", status: "completed" },
+                document_preparation_digest: "sha256:portlog-review-e06",
+                source_attestation: {
+                  revision: "sha256:portlog-review-e06",
+                  kind: "prepared-review-source",
+                  authority: "governed-check-engine",
+                },
               },
             }
           : {

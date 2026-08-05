@@ -97,6 +97,7 @@ def run_governed_check(
             started=started,
             ended=ended,
             provenance=provenance,
+            document_digest=document_digest,
             error=error,
         )
 
@@ -110,6 +111,7 @@ def run_governed_check(
             started=started,
             ended=ended,
             provenance=provenance,
+            document_digest=document_digest,
             error=RuntimeError("rule engine returned an invalid outcome"),
         )
 
@@ -124,6 +126,28 @@ def run_governed_check(
     boundary = evidence.get("boundary")
     boundary_kind = boundary.get("kind") if isinstance(boundary, dict) else None
     reason_code = _reason_code(outcome=outcome, boundary_kind=boundary_kind)
+    scope_completeness = evidence.get("scope_completeness")
+    coverage_complete = (
+        isinstance(scope_completeness, dict)
+        and scope_completeness.get("complete") is True
+    )
+    coverage = {
+        "requested_entity_id": scope_entity_id,
+        "evaluated_entity_id": pump_id,
+        "required_facts": list(REQUIRED_FACTS),
+        "missing_facts": [] if coverage_complete else list(REQUIRED_FACTS),
+        "complete": coverage_complete,
+    }
+    limitations = (
+        []
+        if coverage_complete
+        else [
+            {
+                "code": "coverage.incomplete",
+                "message": "The prepared discharge scope is incomplete; no pass or fail is authoritative.",
+            }
+        ]
+    )
     evidence["ordered_entity_ids"] = ordered_ids
     evidence["source_references"] = [
         {
@@ -132,6 +156,9 @@ def run_governed_check(
         }
         for entity_id in ordered_ids
     ]
+    evaluated_source_revision = document_digest or str(
+        graph_facts.get("source_id", graph_facts.get("fixture_id", "unknown"))
+    )
 
     return {
         "schema_version": 1,
@@ -153,6 +180,8 @@ def run_governed_check(
             "class": "CentrifugalPump",
         },
         "required_facts": list(REQUIRED_FACTS),
+        "coverage": coverage,
+        "limitations": limitations,
         "run_status": "completed",
         "outcome": outcome,
         "reason_code": reason_code,
@@ -164,8 +193,12 @@ def run_governed_check(
             "runner": "pydexpi_datalog.semantics.souffle_runner",
             "rule_source": "demo-process-safety.md",
         },
-        "document_preparation_digest": document_digest
-        or str(graph_facts.get("source_id", graph_facts.get("fixture_id", "unknown"))),
+        "document_preparation_digest": evaluated_source_revision,
+        "source_attestation": {
+            "revision": evaluated_source_revision,
+            "kind": "prepared-review-source",
+            "authority": "governed-check-engine",
+        },
         "started_at": started.isoformat(),
         "ended_at": ended.isoformat(),
         "duration_ms": max(0.0, (ended - started).total_seconds() * 1000),
@@ -233,11 +266,13 @@ def _failed_result(
     started: datetime,
     ended: datetime,
     provenance: dict[str, object],
+    document_digest: str | None,
     error: Exception,
 ) -> dict[str, object]:
     error_code = str(getattr(error, "code", "engine.execution_failed"))
     if not error_code.startswith("engine."):
         error_code = "engine.execution_failed"
+    evaluated_source_revision = document_digest or "unknown"
     return {
         "schema_version": 1,
         "check_id": check_id,
@@ -248,15 +283,38 @@ def _failed_result(
             "class": "CentrifugalPump",
         },
         "required_facts": list(REQUIRED_FACTS),
+        "coverage": {
+            "requested_entity_id": scope_entity_id,
+            "evaluated_entity_id": pump_id,
+            "required_facts": list(REQUIRED_FACTS),
+            "missing_facts": list(REQUIRED_FACTS),
+            "complete": False,
+        },
+        "limitations": [
+            {
+                "code": "coverage.incomplete",
+                "message": "The deterministic engine did not complete; no pass or fail is authoritative.",
+            }
+        ],
         "run_status": "failed",
         "outcome": None,
         "reason_code": error_code,
         "message": "The deterministic check did not complete; no engineering outcome was produced.",
-        "evidence": {"ordered_entity_ids": [], "source_references": []},
+        "evidence": {
+            "ordered_entity_ids": [],
+            "source_references": [],
+            "scope_completeness": {"complete": False, "basis": "engine_failed"},
+        },
         "engine": {
             "name": "souffle",
             "status": "failed",
             "runner": "pydexpi_datalog.semantics.souffle_runner",
+        },
+        "document_preparation_digest": evaluated_source_revision,
+        "source_attestation": {
+            "revision": evaluated_source_revision,
+            "kind": "prepared-review-source",
+            "authority": "governed-check-engine",
         },
         "started_at": started.isoformat(),
         "ended_at": ended.isoformat(),

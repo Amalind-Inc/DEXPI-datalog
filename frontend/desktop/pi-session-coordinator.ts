@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/node";
 import { createPortLogPiAgent, type GovernedPiReviewTurnOptions } from "./pi-turn-adapter.ts";
+import { createPortLogCapabilityRegistry } from "./portlog-capability-registry.ts";
 
 type PiSessionMetadata = {
   id: string;
@@ -65,7 +66,7 @@ export interface PortLogPiSessionOptions {
 }
 export type PortLogPiTurnOptions = Omit<
   GovernedPiReviewTurnOptions,
-  "workspaceRoot" | "initialMessages" | "sessionId"
+  "workspaceRoot" | "initialMessages" | "sessionId" | "capabilityRegistry"
 > & {
   onEvent?: (event: unknown) => void;
 };
@@ -210,8 +211,14 @@ export class PortLogPiSessionCoordinator {
     await assertWriterFence(this.fence);
     const initialMessages = await this.getContextMessages();
     const { onEvent, ...agentOptions } = options;
+    const capabilityRegistry = options.getRuleCheck
+      ? createPortLogCapabilityRegistry({
+          getRuleCheck: options.getRuleCheck,
+        })
+      : undefined;
     const review = await createPortLogPiAgent({
       ...agentOptions,
+      capabilityRegistry,
       workspaceRoot: this.identityValue.workspaceRoot,
       initialMessages,
       sessionId: this.sessionId,

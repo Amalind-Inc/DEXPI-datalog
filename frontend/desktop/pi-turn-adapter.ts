@@ -8,6 +8,10 @@ import { streamSimple as streamCodex } from "@earendil-works/pi-ai/api/openai-co
 import { streamSimple as streamOpenAI } from "@earendil-works/pi-ai/api/openai-completions";
 import { Type } from "typebox";
 
+import {
+  createPortLogCapabilityRegistry,
+  type PortLogCapabilityRegistry,
+} from "./portlog-capability-registry.ts";
 import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
 import { createPortLogWorkspaceReadTool } from "./pi-workspace-read.ts";
 
@@ -31,6 +35,7 @@ export type RunGovernedPiIsolatedCommand = (
   request: IsolatedCommandToolRequest,
   signal: AbortSignal,
 ) => Promise<IsolatedCommandResult>;
+
 export interface GovernedPiReviewTurnOptions {
   agentDir: string;
   cwd: string;
@@ -43,6 +48,7 @@ export interface GovernedPiReviewTurnOptions {
   sessionId?: string;
   getEvidence?: (request: EvidenceRequest) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
+  capabilityRegistry?: PortLogCapabilityRegistry;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
 }
 
@@ -110,7 +116,12 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
         },
       }
     : null;
-  const ruleCheckTool = options.getRuleCheck
+  const capabilityRegistry =
+    options.capabilityRegistry ??
+    (options.getRuleCheck
+      ? createPortLogCapabilityRegistry({ getRuleCheck: options.getRuleCheck })
+      : undefined);
+  const ruleCheckTool = capabilityRegistry
     ? {
         name: "portlog_rule_check",
         label: "PortLog deterministic rule check",
@@ -123,10 +134,10 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
         executionMode: "sequential" as const,
         async execute(_toolCallId: string, params: unknown, signal?: AbortSignal) {
           if (!isRuleCheckParams(params)) throw new Error("Invalid PortLog rule-check arguments");
-          const result = await options.getRuleCheck?.({
+          const result = await capabilityRegistry.invoke("portlog_rule_check", {
             checkId: params.checkId,
             scopeEntityId: params.scopeEntityId,
-            signal: options.signal,
+            signal: signal ?? options.signal,
           });
           if (options.signal.aborted || signal?.aborted)
             throw new DOMException("Inspection cancelled", "AbortError");

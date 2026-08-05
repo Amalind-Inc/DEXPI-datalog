@@ -49,9 +49,33 @@ test("Pi exposes the deterministic rule-check tool only when PortLog provides th
         received = { checkId, scopeEntityId };
         return {
           deterministic_result: {
+            schema_version: 1,
             check_id: checkId,
+            check_version: 1,
+            rule: { pack_id: "demo-process-safety", pack_version: 1 },
+            scope: {
+              requested_entity_id: scopeEntityId,
+              pump_id: "CentrifugalPump-1",
+              class: "CentrifugalPump",
+            },
+            required_facts: ["discharge path"],
             run_status: "completed",
             outcome: "satisfied",
+            evidence: { scope_completeness: { complete: true } },
+            coverage: {
+              requested_entity_id: scopeEntityId,
+              evaluated_entity_id: "CentrifugalPump-1",
+              required_facts: ["discharge path"],
+              missing_facts: [],
+              complete: true,
+            },
+            engine: { name: "souffle", status: "completed" },
+            document_preparation_digest: "sha256:rule-tool-test",
+            source_attestation: {
+              revision: "sha256:rule-tool-test",
+              kind: "prepared-review-source",
+              authority: "governed-check-engine",
+            },
           },
         };
       },

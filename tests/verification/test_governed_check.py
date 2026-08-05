@@ -33,6 +33,10 @@ def test_scoped_pump_check_returns_typed_satisfied_result_with_ordered_evidence(
     assert result["outcome"] == "satisfied"
     assert result["reason_code"] == "check_valve_found"
     assert result["scope"]["pump_id"] == "CentrifugalPump-1"
+    assert result["coverage"]["requested_entity_id"] == "CentrifugalPump-1"
+    assert result["coverage"]["evaluated_entity_id"] == "CentrifugalPump-1"
+    assert result["coverage"]["complete"] is True
+    assert result["source_attestation"]["revision"] == result["document_preparation_digest"]
     assert result["evidence"]["ordered_entity_ids"]
     assert result["evidence"]["ordered_entity_ids"][0] == "CentrifugalPump-1"
     assert result["engine"]["name"] == "souffle"
@@ -63,6 +67,8 @@ def test_incomplete_segment_is_indeterminate_and_not_a_violation() -> None:
     assert result["run_status"] == "completed"
     assert result["outcome"] == "indeterminate"
     assert result["reason_code"] == "incomplete_discharge_segment"
+    assert result["coverage"]["complete"] is False
+    assert result["coverage"]["missing_facts"]
     assert result["evidence"]["scope_completeness"]["complete"] is False
 
 

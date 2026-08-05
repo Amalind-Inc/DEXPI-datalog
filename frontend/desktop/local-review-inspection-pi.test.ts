@@ -326,15 +326,33 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
       getRuleCheck: async ({ checkId, scopeEntityId }) => ({
         deterministic_result: {
           check_id: checkId,
-          check_version: "1",
+          check_version: 1,
+          rule: { pack_id: "demo-process-safety", pack_version: 1 },
           run_status: "completed",
           outcome: "violated",
           reason_code: "no_check_valve_on_complete_segment",
-          evidence: { ordered_topology_ids: [scopeEntityId, "N-1"] },
+          evidence: {
+            ordered_topology_ids: [scopeEntityId, "N-1"],
+            scope_completeness: { complete: true, basis: "terminal_boundary_reached" },
+          },
+          coverage: {
+            requested_entity_id: scopeEntityId,
+            evaluated_entity_id: "pump-1",
+            required_facts: ["discharge path"],
+            missing_facts: [],
+            complete: true,
+          },
           scope: {
             class: "CentrifugalPump",
             pump_id: "pump-1",
-            requested_entity_id: "P-101",
+            requested_entity_id: scopeEntityId,
+          },
+          engine: { name: "souffle", status: "completed" },
+          document_preparation_digest: "sha256:verify-pi-test",
+          source_attestation: {
+            revision: "sha256:verify-pi-test",
+            kind: "prepared-review-source",
+            authority: "governed-check-engine",
           },
         },
       }),
