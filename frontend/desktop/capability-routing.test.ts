@@ -32,16 +32,16 @@ function route(mode: "inspection" | "chat", posture?: "inspect" | "verify" | "re
   });
 }
 
-test("prepared inspect and verify routes keep analysis on the host", () => {
+test("prepared routes keep the stable PortLog capability surface", () => {
   for (const posture of ["inspect", "verify"] as const) {
     const result = route("inspection", posture);
     assert.equal(result.prepared, true);
     assert.equal(result.hostEvidence, true);
     assert.equal(result.hostRules, true);
-    assert.equal(result.isolatedExecution, false);
+    assert.equal(result.isolatedExecution, true);
     assert.equal(result.getEvidence, getEvidence);
     assert.equal(result.getRuleCheck, getRuleCheck);
-    assert.equal(result.runIsolatedCommand, undefined);
+    assert.equal(result.runIsolatedCommand, runIsolatedCommand);
   }
 });
 

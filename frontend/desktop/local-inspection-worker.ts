@@ -18,6 +18,7 @@ import {
 import { boundedTopologyEvidence } from "./topology-evidence.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
 import { loadLocalProject } from "./local-project-manifest.cjs";
+import type { IsolatedCommandResult } from "./isolated-command.ts";
 import {
   PortLogPiSessionCoordinator,
   PortLogSessionError,
@@ -77,11 +78,11 @@ const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system
 const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile(qemuPath));
 const preparedToolMode = request.mode === "inspection";
 const preparedToolPosture = posture === "inspect" || posture === "verify" || posture === "review";
+const preparedSession = preparedToolMode && preparedToolPosture && Boolean(request.sessionId);
 const toolProfile = createPortLogToolProfile({
-  hostEvidence: preparedToolMode && preparedToolPosture && Boolean(request.sessionId),
-  hostRules: preparedToolMode && preparedToolPosture && Boolean(request.sessionId),
-  isolatedExecution:
-    preparedToolMode && posture === "review" && qemuAvailable && Boolean(request.sessionId),
+  hostEvidence: preparedSession,
+  hostRules: preparedSession,
+  isolatedExecution: preparedSession,
 });
 const projectManifest = request.projectDirectory
   ? await loadLocalProject(request.projectDirectory)
@@ -151,9 +152,13 @@ try {
         qemuPath,
       })
     : undefined;
-  const runIsolatedCommand = isolatedExecutor
-    ? async ({ profileId }: { profileId: string }, signal: AbortSignal) =>
-        isolatedExecutor.runIsolatedCommand({
+  const runIsolatedCommand = preparedSession
+    ? async (
+        { profileId }: { profileId: string },
+        signal: AbortSignal,
+      ): Promise<IsolatedCommandResult> => {
+        if (!isolatedExecutor) return createUnavailableIsolatedCommandResult(profileId);
+        return isolatedExecutor.runIsolatedCommand({
           runId: randomUUID(),
           inputBundle: createE06ReviewInputBundle(),
           commandProfile: { id: profileId, version: GONDOLIN_REVIEW_CANDIDATE_PROFILE.version },
@@ -168,7 +173,8 @@ try {
             maxInputBytes: 4 * 1024 * 1024,
           },
           signal,
-        })
+        });
+      }
     : undefined;
   const getEvidence = async ({ artifactId, claim }: { artifactId: string; claim: string }) => {
     if (!request.sessionId) throw new Error("A prepared session is required for P&ID evidence.");
@@ -337,6 +343,27 @@ async function isExecutableFile(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+function createUnavailableIsolatedCommandResult(profileId: string): IsolatedCommandResult {
+  const timestamp = new Date().toISOString();
+  return {
+    outcome: "unavailable",
+    diagnostic: "Isolated execution is unavailable; no host fallback was used.",
+    provenance: {
+      runId: randomUUID(),
+      backend: { id: "portlog-isolated-command-unavailable", version: "1" },
+      image: { id: "none", digest: `sha256:${"0".repeat(64)}` },
+      policy: { id: PORTLOG_HOST_POLICY.id, digest: PORTLOG_HOST_POLICY.digest },
+      commandProfile: {
+        id: profileId,
+        version: GONDOLIN_REVIEW_CANDIDATE_PROFILE.version,
+      },
+      startedAt: timestamp,
+      completedAt: timestamp,
+      durationMs: 0,
+      outcome: "unavailable",
+    },
+  };
 }
 
 function createE06ReviewInputBundle() {

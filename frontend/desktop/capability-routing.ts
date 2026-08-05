@@ -71,8 +71,7 @@ export function routeCapabilities(options: CapabilityRoutingInput): CapabilityRo
     (options.posture === "inspect" || options.posture === "verify" || options.posture === "review");
   const hostEvidence = prepared && options.getEvidence !== undefined;
   const hostRules = prepared && options.getRuleCheck !== undefined;
-  const isolatedExecution =
-    prepared && options.posture === "review" && options.runIsolatedCommand !== undefined;
+  const isolatedExecution = prepared && options.runIsolatedCommand !== undefined;
 
   return {
     prepared,

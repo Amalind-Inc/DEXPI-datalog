@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -195,7 +195,7 @@ test("terminal review prints bounded PortLog events and persists the completed r
         toolProfile: createPortLogToolProfile({
           hostEvidence: true,
           hostRules: true,
-          isolatedExecution: false,
+          isolatedExecution: true,
         }),
       },
     });
@@ -427,6 +427,105 @@ test("terminal review completes the governed E06 evidence-check-isolation journe
       )?.arguments?.profileId,
       "review-bundle-candidate",
     );
+  } finally {
+    modelServer.closeAllConnections();
+    sidecarServer.closeAllConnections();
+    await Promise.all([
+      new Promise<void>((resolveClose) => modelServer.close(() => resolveClose())),
+      new Promise<void>((resolveClose) => sidecarServer.close(() => resolveClose())),
+    ]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("terminal review can reopen the same prepared session for verify posture", async () => {
+  let modelRequests = 0;
+  const modelServer = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    sse(response, {
+      id: `answer-${modelRequests}`,
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            content: "The prepared session remains available for this posture.",
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+    response.end("data: [DONE]\n\n");
+  });
+  modelServer.listen(0, "127.0.0.1");
+  await once(modelServer, "listening");
+  const modelAddress = modelServer.address();
+  assert.ok(modelAddress && typeof modelAddress !== "string");
+
+  const sidecarServer = http.createServer((request, response) => {
+    if (request.url === "/openapi.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  sidecarServer.listen(0, "127.0.0.1");
+  await once(sidecarServer, "listening");
+  const sidecarAddress = sidecarServer.address();
+  assert.ok(sidecarAddress && typeof sidecarAddress !== "string");
+
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-review-posture-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  const qemuPath = join(root, "qemu-system-aarch64");
+  await writeFile(sourcePath, "<PlantModel />");
+  await writeFile(qemuPath, "#!/bin/sh\nexit 0\n");
+  await chmod(qemuPath, 0o755);
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: "<PlantModel />",
+    sessionId: "terminal-posture-session",
+    filename: "C01.xml",
+    status: "ready",
+  });
+
+  const commandOptions = [
+    "--project",
+    projectDirectory,
+    "--provider",
+    "openrouter",
+    "--model",
+    "review-model",
+    "--question",
+    "Review the E06 pump discharge path.",
+  ];
+  const environment = {
+    PORTLOG_RUNTIME_API_KEY: "test-key",
+    PORTLOG_RUNTIME_BASE_URL: `http://127.0.0.1:${modelAddress.port}/v1`,
+    PORTLOG_REVIEW_SIDECAR_ENDPOINT: `http://127.0.0.1:${sidecarAddress.port}`,
+    PORTLOG_QEMU_PATH: qemuPath,
+  };
+
+  try {
+    const review = await runCommand(
+      [...commandOptions.slice(0, 6), "--posture", "review", ...commandOptions.slice(6)],
+      environment,
+    );
+    assert.equal(review.code, 0, review.stderr);
+    assert.match(review.stdout, /"posture": "review"/);
+
+    const verify = await runCommand(
+      [...commandOptions.slice(0, 6), "--posture", "verify", ...commandOptions.slice(6)],
+      environment,
+    );
+    assert.equal(verify.code, 0, verify.stderr);
+    assert.match(verify.stdout, /"posture": "verify"/);
+    assert.match(verify.stdout, /prepared session remains available/);
+    assert.equal(modelRequests, 2);
   } finally {
     modelServer.closeAllConnections();
     sidecarServer.closeAllConnections();
