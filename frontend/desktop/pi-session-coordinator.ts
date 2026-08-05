@@ -667,7 +667,7 @@ export class PortLogPiSessionCoordinator {
       return persistence;
     };
     const unsubscribe = review.subscribe(async (event) => {
-      if (event.type === "agent_end") await persistMessages(event.messages);
+      if (event.type === "agent_end") await persistMessages(review.agent.state.messages);
       onEvent?.(event);
     });
     return {

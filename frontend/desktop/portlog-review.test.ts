@@ -442,20 +442,49 @@ test("terminal review can reopen the same prepared session for verify posture", 
   const modelServer = http.createServer((_request, response) => {
     modelRequests += 1;
     response.writeHead(200, { "content-type": "text/event-stream" });
-    sse(response, {
-      id: `answer-${modelRequests}`,
-      object: "chat.completion.chunk",
-      choices: [
-        {
-          index: 0,
-          delta: {
-            role: "assistant",
-            content: "The prepared session remains available for this posture.",
+    if (modelRequests === 1) {
+      sse(response, {
+        id: "review-evidence-call",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "review-evidence-call",
+                  type: "function",
+                  function: {
+                    name: "portlog_evidence",
+                    arguments: JSON.stringify({
+                      artifactId: "topology",
+                      claim: "P-4713 pump",
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
           },
-          finish_reason: "stop",
-        },
-      ],
-    });
+        ],
+      });
+    } else {
+      sse(response, {
+        id: `answer-${modelRequests}`,
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: "The prepared session remains available for this posture.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
     response.end("data: [DONE]\n\n");
   });
   modelServer.listen(0, "127.0.0.1");
@@ -467,6 +496,18 @@ test("terminal review can reopen the same prepared session for verify posture", 
     if (request.url === "/openapi.json") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end("{}");
+      return;
+    }
+    if (request.url?.endsWith("/topology")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          topology_view: {
+            nodes: [{ id: "P-4713", kind: "CentrifugalPump" }],
+            edges: [],
+          },
+        }),
+      );
       return;
     }
     response.writeHead(404);
@@ -517,6 +558,7 @@ test("terminal review can reopen the same prepared session for verify posture", 
     );
     assert.equal(review.code, 0, review.stderr);
     assert.match(review.stdout, /"posture": "review"/);
+    assert.match(review.stdout, /TOOL REQUEST portlog_evidence/);
 
     const verify = await runCommand(
       [...commandOptions.slice(0, 6), "--posture", "verify", ...commandOptions.slice(6)],
@@ -525,7 +567,7 @@ test("terminal review can reopen the same prepared session for verify posture", 
     assert.equal(verify.code, 0, verify.stderr);
     assert.match(verify.stdout, /"posture": "verify"/);
     assert.match(verify.stdout, /prepared session remains available/);
-    assert.equal(modelRequests, 2);
+    assert.equal(modelRequests, 3);
   } finally {
     modelServer.closeAllConnections();
     sidecarServer.closeAllConnections();
