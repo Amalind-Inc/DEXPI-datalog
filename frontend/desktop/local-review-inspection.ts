@@ -3,6 +3,7 @@ import {
   type RuleCheckRequest,
   type RunGovernedPiIsolatedCommand,
 } from "./pi-turn-adapter.ts";
+import type { RunGovernedBash } from "./bash-capability.ts";
 import { buildRuleDerivation, type AskDerivation } from "./local-ask-execution.ts";
 import { upsertLocalTurn } from "./local-project-manifest.cjs";
 import type { PortLogPiSessionCoordinator } from "./pi-session-coordinator.ts";
@@ -66,6 +67,8 @@ interface CreateTurnOptions {
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
+  runHostSafeBash?: RunGovernedBash;
+  runGondolinBash?: RunGovernedBash;
 }
 
 type CreateTurn = (options: CreateTurnOptions) => Promise<TurnRuntime>;
@@ -76,10 +79,12 @@ export interface RunLocalReviewInspectionOptions {
   posture?: "inspect" | "verify" | "review" | "chat";
   model: { provider: string; id: string };
   signal: AbortSignal;
+  session?: PortLogPiSessionCoordinator;
   getEvidence?: (request: Omit<EvidenceRequest, "signal">) => Promise<unknown>;
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
-  session?: PortLogPiSessionCoordinator;
+  runHostSafeBash?: RunGovernedBash;
+  runGondolinBash?: RunGovernedBash;
   createTurn?: CreateTurn;
   agentDir?: string;
   cwd?: string;
@@ -90,7 +95,13 @@ export interface RunLocalReviewInspectionOptions {
 
 export type RunLocalDesktopChatOptions = Omit<
   RunLocalReviewInspectionOptions,
-  "getEvidence" | "getRuleCheck" | "runIsolatedCommand" | "posture" | "projectDirectory"
+  | "getEvidence"
+  | "getRuleCheck"
+  | "runIsolatedCommand"
+  | "runHostSafeBash"
+  | "runGondolinBash"
+  | "posture"
+  | "projectDirectory"
 >;
 
 export async function runLocalDesktopChat(
@@ -168,6 +179,8 @@ export async function runLocalReviewInspection(
       getEvidence,
       getRuleCheck: options.getRuleCheck,
       runIsolatedCommand: options.runIsolatedCommand,
+      runHostSafeBash: options.runHostSafeBash,
+      runGondolinBash: options.runGondolinBash,
     });
     if (options.signal.aborted) await runtime.abort();
     else options.signal.addEventListener("abort", abort, { once: true });
@@ -259,6 +272,8 @@ async function createPiRuntime(
       : undefined,
     getRuleCheck: bridge.getRuleCheck ? (request) => bridge.getRuleCheck!(request) : undefined,
     runIsolatedCommand: bridge.runIsolatedCommand,
+    runHostSafeBash: bridge.runHostSafeBash,
+    runGondolinBash: bridge.runGondolinBash,
     onEvent: (event) => {
       if (isRecord(event) && event.type === "message_end" && isRecord(event.message)) {
         if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim())

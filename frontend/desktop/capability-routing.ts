@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
+import type { RunGovernedBash } from "./bash-capability.ts";
 import type {
   EvidenceRequest,
   RuleCheckRequest,
   RunGovernedPiIsolatedCommand,
 } from "./pi-turn-adapter.ts";
-
 export type PreparedPosture = "inspect" | "verify" | "review";
 export type CapabilityMode = "inspection" | "chat" | undefined;
 
@@ -29,12 +29,14 @@ export function createPortLogToolProfile(options: {
   hostEvidence: boolean;
   hostRules: boolean;
   isolatedExecution: boolean;
+  policyRoutedBash?: boolean;
 }) {
   const tools = [
     "read",
     ...(options.hostEvidence ? ["portlog_evidence"] : []),
     ...(options.hostRules ? ["portlog_rule_check"] : []),
     ...(options.isolatedExecution ? ["portlog_isolated_command"] : []),
+    ...(options.policyRoutedBash ? ["bash"] : []),
   ];
   const manifest = { id: "pi-portlog", version: "1", tools };
   return Object.freeze({
@@ -53,6 +55,8 @@ export type CapabilityRoutingInput = {
   getEvidence?: EvidenceBridge;
   getRuleCheck?: RuleCheckBridge;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
+  runHostSafeBash?: RunGovernedBash;
+  runGondolinBash?: RunGovernedBash;
 };
 
 export type CapabilityRouting = {
@@ -60,9 +64,12 @@ export type CapabilityRouting = {
   hostEvidence: boolean;
   hostRules: boolean;
   isolatedExecution: boolean;
+  policyRoutedBash: boolean;
   getEvidence?: EvidenceBridge;
   getRuleCheck?: RuleCheckBridge;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
+  runHostSafeBash?: RunGovernedBash;
+  runGondolinBash?: RunGovernedBash;
 };
 
 export function routeCapabilities(options: CapabilityRoutingInput): CapabilityRouting {
@@ -72,14 +79,19 @@ export function routeCapabilities(options: CapabilityRoutingInput): CapabilityRo
   const hostEvidence = prepared && options.getEvidence !== undefined;
   const hostRules = prepared && options.getRuleCheck !== undefined;
   const isolatedExecution = prepared && options.runIsolatedCommand !== undefined;
+  const policyRoutedBash =
+    prepared && (options.runHostSafeBash !== undefined || options.runGondolinBash !== undefined);
 
   return {
     prepared,
     hostEvidence,
     hostRules,
     isolatedExecution,
+    policyRoutedBash,
     getEvidence: hostEvidence ? options.getEvidence : undefined,
     getRuleCheck: hostRules ? options.getRuleCheck : undefined,
     runIsolatedCommand: isolatedExecution ? options.runIsolatedCommand : undefined,
+    runHostSafeBash: policyRoutedBash ? options.runHostSafeBash : undefined,
+    runGondolinBash: policyRoutedBash ? options.runGondolinBash : undefined,
   };
 }

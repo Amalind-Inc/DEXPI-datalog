@@ -196,6 +196,7 @@ test("terminal review prints bounded PortLog events and persists the completed r
           hostEvidence: true,
           hostRules: true,
           isolatedExecution: true,
+          policyRoutedBash: true,
         }),
       },
     });

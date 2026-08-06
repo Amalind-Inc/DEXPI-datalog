@@ -34,6 +34,10 @@ function admittedResult() {
 
 async function createAgent(
   runIsolatedCommand: Parameters<typeof createPortLogPiAgent>[0]["runIsolatedCommand"],
+  extras: Pick<
+    Parameters<typeof createPortLogPiAgent>[0],
+    "workspaceRoot" | "runHostSafeBash" | "runGondolinBash"
+  > = {},
 ) {
   const agentDir = await mkdtemp(path.join(os.tmpdir(), "portlog-pi-bash-"));
   await writeFile(
@@ -56,6 +60,7 @@ async function createAgent(
     model: "review-model",
     signal: new AbortController().signal,
     runIsolatedCommand,
+    ...extras,
   });
   return { agentDir, review };
 }
@@ -184,6 +189,54 @@ test("bash reports isolated failures without a host fallback", async () => {
     assert.equal(value.outcome, "failed");
     assert.equal(value.route, "gondolin");
     assert.equal(value.authority, "ordinary");
+  } finally {
+    await review.dispose();
+    await rm(agentDir, { recursive: true, force: true });
+  }
+});
+test("familiar bash registers with whole-request policy routing", async () => {
+  let hostCalls = 0;
+  let guestCalls = 0;
+  const { agentDir, review } = await createAgent(undefined, {
+    runHostSafeBash: async () => {
+      hostCalls += 1;
+      return {
+        outcome: "admitted" as const,
+        stdout: "host output",
+        stderr: "",
+        diagnostic: "host-safe command completed",
+        exitCode: 0,
+      };
+    },
+    runGondolinBash: async () => {
+      guestCalls += 1;
+      return {
+        outcome: "admitted" as const,
+        stdout: "guest output",
+        stderr: "",
+        diagnostic: "gondolin command completed",
+        exitCode: 0,
+      };
+    },
+  });
+  try {
+    assert.deepEqual(
+      review.session.agent.state.tools.map((tool) => tool.name),
+      ["bash"],
+    );
+    const bash = review.session.agent.state.tools.find((tool) => tool.name === "bash");
+    assert.ok(bash);
+    const safe = toolText(await bash.execute("bash-host", { command: "pwd" }));
+    const risky = toolText(
+      await bash.execute("bash-guest", { command: "git status --short && cat review.json" }),
+    );
+
+    assert.equal(safe.route, "host-safe");
+    assert.equal(safe.stdout, "host output");
+    assert.equal(risky.route, "gondolin");
+    assert.equal(risky.stdout, "guest output");
+    assert.equal(hostCalls, 1);
+    assert.equal(guestCalls, 1);
   } finally {
     await review.dispose();
     await rm(agentDir, { recursive: true, force: true });

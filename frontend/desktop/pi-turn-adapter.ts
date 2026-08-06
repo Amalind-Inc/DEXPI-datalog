@@ -13,6 +13,7 @@ import {
   createPortLogCapabilityRegistry,
   type PortLogCapabilityRegistry,
 } from "./portlog-capability-registry.ts";
+import { createGovernedBashTool, type RunGovernedBash } from "./bash-capability.ts";
 import { PORTLOG_HOST_POLICY } from "./capability-routing.ts";
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE } from "./gondolin-qemu.ts";
 import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
@@ -65,6 +66,8 @@ export interface GovernedPiReviewTurnOptions {
   getRuleCheck?: (request: RuleCheckRequest) => Promise<unknown>;
   capabilityRegistry?: PortLogCapabilityRegistry;
   runIsolatedCommand?: RunGovernedPiIsolatedCommand;
+  runHostSafeBash?: RunGovernedBash;
+  runGondolinBash?: RunGovernedBash;
 }
 
 type PortLogModelEntry = {
@@ -196,95 +199,104 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
       }
     : null;
 
-  const bashTool = options.runIsolatedCommand
-    ? {
-        name: "bash",
-        label: "PortLog bash",
-        description:
-          "Run the one approved immutable PortLog bash profile in Gondolin. Supply only profileId 'review-bundle-candidate'. Arbitrary command strings, argv, paths, environment, PTY, and background execution are not supported.",
-        parameters: Type.Object(
-          {
-            profileId: Type.String(),
-          },
-          { additionalProperties: false },
-        ),
-        executionMode: "sequential" as const,
-        async execute(
-          _toolCallId: string,
-          params: unknown,
-          signal?: AbortSignal,
-          onUpdate?: (partialResult: {
-            content: Array<{ type: "text"; text: string }>;
-            details: Record<string, never>;
-          }) => void,
-        ) {
-          if (!isApprovedBashParams(params)) {
-            return bashToolResponse(
-              createBashPolicyResult(
-                "rejected",
-                "The requested bash profile is not approved; no command was executed.",
-              ),
-              "unavailable",
-            );
-          }
-          const linked = linkAbortSignals(options.signal, signal);
-          try {
-            onUpdate?.({
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({
-                    route: "gondolin",
-                    authority: "ordinary",
-                    profile: GONDOLIN_REVIEW_CANDIDATE_PROFILE,
-                    phase: "gondolin_started",
-                  }),
-                },
-              ],
-              details: {},
-            });
-            if (linked.signal.aborted) {
-              return bashToolResponse(
-                createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
-                "gondolin",
-              );
-            }
-            const result = await options.runIsolatedCommand!(
-              { profileId: GONDOLIN_REVIEW_CANDIDATE_PROFILE.id },
-              linked.signal,
-            );
-            if (linked.signal.aborted) {
-              return bashToolResponse(
-                createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
-                "gondolin",
-              );
-            }
-            if (!hasApprovedBashProfile(result)) {
+  const bashTool =
+    !options.runHostSafeBash && !options.runGondolinBash && options.runIsolatedCommand
+      ? {
+          name: "bash",
+          label: "PortLog bash",
+          description:
+            "Run the one approved immutable PortLog bash profile in Gondolin. Supply only profileId 'review-bundle-candidate'. Arbitrary command strings, argv, paths, environment, PTY, and background execution are not supported.",
+          parameters: Type.Object(
+            {
+              profileId: Type.String(),
+            },
+            { additionalProperties: false },
+          ),
+          executionMode: "sequential" as const,
+          async execute(
+            _toolCallId: string,
+            params: unknown,
+            signal?: AbortSignal,
+            onUpdate?: (partialResult: {
+              content: Array<{ type: "text"; text: string }>;
+              details: Record<string, never>;
+            }) => void,
+          ) {
+            if (!isApprovedBashParams(params)) {
               return bashToolResponse(
                 createBashPolicyResult(
                   "rejected",
-                  "The isolated executor did not preserve the approved bash profile identity.",
+                  "The requested bash profile is not approved; no command was executed.",
+                ),
+                "unavailable",
+              );
+            }
+            const linked = linkAbortSignals(options.signal, signal);
+            try {
+              onUpdate?.({
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({
+                      route: "gondolin",
+                      authority: "ordinary",
+                      profile: GONDOLIN_REVIEW_CANDIDATE_PROFILE,
+                      phase: "gondolin_started",
+                    }),
+                  },
+                ],
+                details: {},
+              });
+              if (linked.signal.aborted) {
+                return bashToolResponse(
+                  createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
+                  "gondolin",
+                );
+              }
+              const result = await options.runIsolatedCommand!(
+                { profileId: GONDOLIN_REVIEW_CANDIDATE_PROFILE.id },
+                linked.signal,
+              );
+              if (linked.signal.aborted) {
+                return bashToolResponse(
+                  createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
+                  "gondolin",
+                );
+              }
+              if (!hasApprovedBashProfile(result)) {
+                return bashToolResponse(
+                  createBashPolicyResult(
+                    "rejected",
+                    "The isolated executor did not preserve the approved bash profile identity.",
+                  ),
+                  "gondolin",
+                );
+              }
+              return bashToolResponse(result, "gondolin");
+            } catch {
+              return bashToolResponse(
+                createBashPolicyResult(
+                  linked.signal.aborted ? "cancelled" : "failed",
+                  linked.signal.aborted
+                    ? "The approved bash profile was cancelled."
+                    : "The approved bash profile failed before a result was available.",
                 ),
                 "gondolin",
               );
+            } finally {
+              linked.dispose();
             }
-            return bashToolResponse(result, "gondolin");
-          } catch {
-            return bashToolResponse(
-              createBashPolicyResult(
-                linked.signal.aborted ? "cancelled" : "failed",
-                linked.signal.aborted
-                  ? "The approved bash profile was cancelled."
-                  : "The approved bash profile failed before a result was available.",
-              ),
-              "gondolin",
-            );
-          } finally {
-            linked.dispose();
-          }
-        },
-      }
-    : null;
+          },
+        }
+      : null;
+  const governedBashTool =
+    options.runHostSafeBash || options.runGondolinBash
+      ? createGovernedBashTool({
+          workspaceRoot: options.workspaceRoot ?? options.cwd,
+          runHostSafe: options.runHostSafeBash,
+          runGondolin: options.runGondolinBash,
+        })
+      : null;
 
   const tools = [
     ...(readTool ? [readTool] : []),
@@ -292,6 +304,7 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
     ...(ruleCheckTool ? [ruleCheckTool] : []),
     ...(isolatedCommandTool ? [isolatedCommandTool] : []),
     ...(bashTool ? [bashTool] : []),
+    ...(governedBashTool ? [governedBashTool] : []),
   ];
   const agent = new Agent({
     initialState: {

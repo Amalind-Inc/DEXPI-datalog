@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
+import { runHostSafeBash } from "./host-safe-bash.ts";
 import {
   createClarificationAskRecord,
   createDeterministicAskRecord,
@@ -83,6 +84,7 @@ const toolProfile = createPortLogToolProfile({
   hostEvidence: preparedSession,
   hostRules: preparedSession,
   isolatedExecution: preparedSession,
+  policyRoutedBash: preparedSession,
 });
 const projectManifest = request.projectDirectory
   ? await loadLocalProject(request.projectDirectory)
@@ -311,6 +313,7 @@ try {
       getEvidence,
       getRuleCheck,
       runIsolatedCommand,
+      runHostSafeBash: preparedSession ? runHostSafeBash : undefined,
     });
     const record = await runLocalReviewInspection({
       projectDirectory: isChat ? undefined : request.projectDirectory,
@@ -326,6 +329,7 @@ try {
       getEvidence: capabilities.getEvidence,
       getRuleCheck: capabilities.getRuleCheck,
       runIsolatedCommand: capabilities.runIsolatedCommand,
+      runHostSafeBash: capabilities.runHostSafeBash,
       session,
     });
     send({ kind: "result", record });
