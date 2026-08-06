@@ -27,6 +27,8 @@ import {
 import { Editor, type EditorTheme } from "./vendor/oh-my-pi-tui/components/editor.ts";
 import { matchesKey } from "./vendor/oh-my-pi-tui/keys.ts";
 import { StdinBuffer } from "./vendor/oh-my-pi-tui/stdin-buffer.ts";
+import { CURSOR_MARKER } from "./vendor/oh-my-pi-tui/tui.ts";
+import { truncateToWidth, visibleWidth } from "./vendor/oh-my-pi-tui/utils.ts";
 import type { SymbolTheme } from "./vendor/oh-my-pi-tui/symbols.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -75,6 +77,8 @@ export type TuiChatIdentity = TuiWelcomeOptions;
 const CHAT_RULE = "─".repeat(66);
 const CHAT_ASSISTANT_COLOR = "\u001b[90m";
 const CHAT_TOOL_COLOR = "\u001b[2m";
+const CURSOR_SYNC_START = "\u001b[?2026h";
+const CURSOR_SYNC_END = "\u001b[?2026l";
 const CHAT_RESET = "\u001b[0m";
 
 const PORTLOG_EDITOR_BOX = {
@@ -119,11 +123,6 @@ const PORTLOG_EDITOR_THEME: EditorTheme = {
   hintStyle: stylePortLogEditorMuted,
 };
 
-function renderChatInputPrompt(identity: TuiChatIdentity): string {
-  return [CHAT_RESET, "", CHAT_RULE, renderChatIdentityHeader(identity, "PORTLOG"), "└─"].join(
-    "\n",
-  );
-}
 function renderChatUserMessage(identity: TuiChatIdentity, question: string): string {
   return [
     CHAT_RESET,
@@ -137,9 +136,8 @@ function renderChatUserMessage(identity: TuiChatIdentity, question: string): str
 }
 
 function closeChatInput(): string {
-  return `${CHAT_RESET}└${CHAT_RULE.slice(1)}\n`;
+  return `${CHAT_RESET}\n`;
 }
-
 function displayChatPath(projectDirectory: string): string {
   const absolute = resolve(projectDirectory);
   const home = homedir();
@@ -147,16 +145,9 @@ function displayChatPath(projectDirectory: string): string {
   return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
 }
 
-function renderChatIdentityHeader(identity: TuiChatIdentity, label: string): string {
+export function renderTuiWelcome(_options: TuiWelcomeOptions): string {
   return [
-    `┌─ [${label}] ${displayChatPath(identity.projectDirectory)}`,
-    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
-  ].join("\n");
-}
-
-export function renderTuiWelcome(options: TuiWelcomeOptions): string {
-  return [
-    renderChatIdentityHeader(options, "PORTLOG CHAT"),
+    `${CHAT_RESET}┌─ [PORTLOG CHAT]`,
     "└─",
     "",
     "Ask a question about the project, its diagrams, or its review evidence.",
@@ -190,6 +181,7 @@ export async function runPortLogTui(
 }
 export interface TuiPromptQuestionOptions {
   readonly multiline?: boolean;
+  readonly editorLabel?: string;
 }
 
 export type TuiPromptDataListener = (chunk: string | Buffer) => void;
@@ -216,12 +208,18 @@ export interface TuiChatPrompt extends TuiCommandPrompt {
   onInterrupt(listener: () => void): void;
 }
 
+function renderEditorLines(editor: Editor, columns = 80): string[] {
+  return editor
+    .render(Math.max(3, Math.floor(columns)))
+    .map((line) => line.replaceAll(CURSOR_MARKER, ""));
+}
+
 function renderChatInputBody(editor: Editor, columns = 80): string {
-  return editor.render(Math.max(3, Math.floor(columns))).join("\n");
+  return renderEditorLines(editor, columns).join("\n");
 }
 
 function renderPromptInputBody(editor: Editor, prompt: string, columns = 80): string {
-  return `${prompt}\n${editor.render(Math.max(3, Math.floor(columns))).join("\n")}`;
+  return `${prompt}\n${renderChatInputBody(editor, columns)}`;
 }
 
 function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): void {
@@ -280,10 +278,13 @@ export function createTuiChatPrompt(
     pending.reject(error);
   };
   const redraw = (pending: ActiveQuestion): void => {
+    output.write(CURSOR_SYNC_START);
     clearChatInputBody(output, pending.renderedBodyLines);
     const columns = Math.max(3, Math.floor(output.columns ?? 80));
-    output.write(renderChatInputBody(pending.editor, columns));
-    pending.renderedBodyLines = pending.editor.render(columns).length;
+    const lines = renderEditorLines(pending.editor, columns);
+    output.write(lines.join("\n"));
+    pending.renderedBodyLines = lines.length;
+    output.write(CURSOR_SYNC_END);
   };
   const isSubmitSequence = (sequence: string): boolean =>
     sequence === "\r" ||
@@ -301,17 +302,24 @@ export function createTuiChatPrompt(
       const hasChatSurface = multiline;
       const finalNewline = prompt.lastIndexOf("\n");
       const immutablePrefix = hasChatSurface
-        ? `${prompt}\n`
+        ? prompt.length > 0
+          ? `${prompt}\n`
+          : ""
         : finalNewline >= 0
           ? prompt.slice(0, finalNewline + 1)
           : "";
       const promptLabel = hasChatSurface ? "" : prompt.slice(finalNewline + 1);
       const editor = new Editor(PORTLOG_EDITOR_THEME);
       editor.focused = true;
+      const columns = Math.max(3, Math.floor(output.columns ?? 80));
       if (hasChatSurface) {
+        const availableWidth = editor.getTopBorderAvailableWidth(columns);
+        const labelWidth = Math.max(0, availableWidth - 2);
+        const label = truncateToWidth(options.editorLabel ?? "You", labelWidth);
+        const content = `${CHAT_TOOL_COLOR} ${label} ${CHAT_RESET}`;
         editor.setTopBorder({
-          content: `${CHAT_TOOL_COLOR} You ${CHAT_RESET}`,
-          width: 5,
+          content,
+          width: visibleWidth(content),
         });
       }
 
@@ -368,16 +376,12 @@ export function createTuiChatPrompt(
       input.setRawMode?.(true);
       input.on("data", inputListener);
       input.resume();
-      const columns = Math.max(3, Math.floor(output.columns ?? 80));
-      const editorBody = renderChatInputBody(editor, columns);
-      pending.renderedBodyLines = editor.render(columns).length;
-      output.write(
-        `${immutablePrefix}${
-          pending.hasChatSurface
-            ? editorBody
-            : renderPromptInputBody(editor, pending.prompt, columns)
-        }`,
-      );
+      const lines = renderEditorLines(editor, columns);
+      pending.renderedBodyLines = lines.length;
+      const initialBody = pending.hasChatSurface
+        ? lines.join("\n")
+        : renderPromptInputBody(editor, pending.prompt, columns);
+      output.write(`${CURSOR_SYNC_START}${immutablePrefix}${initialBody}${CURSOR_SYNC_END}`);
     });
   };
 
@@ -486,9 +490,17 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
     try {
       answer =
         nextQuestion ??
-        (await options.prompt.question(identity ? renderChatInputPrompt(identity) : "You: ", {
-          multiline: identity !== undefined,
-        }));
+        (await options.prompt.question(
+          identity ? "" : "You: ",
+          identity
+            ? {
+                multiline: true,
+                editorLabel: `You · ${displayChatPath(identity.projectDirectory)} · ${sanitizeSingleLineChatText(
+                  `${identity.provider}/${identity.model}`,
+                )}`,
+              }
+            : undefined,
+        ));
       if (identity && !providedQuestion) options.write(closeChatInput());
     } catch {
       return;

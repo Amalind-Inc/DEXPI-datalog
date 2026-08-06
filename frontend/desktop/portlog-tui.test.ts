@@ -136,17 +136,15 @@ test("CLI parsing opens the unified chat shell without a mode or model picker", 
     false,
   );
 });
-test("welcome shell names the workspace and model without asking for a mode", () => {
+test("welcome shell leaves workspace identity for the prompt border", () => {
   const welcome = renderTuiWelcome({
     projectDirectory: "/tmp/e06-review",
     provider: "openrouter",
     model: "deepseek/deepseek-v4-flash",
   });
-  assert.match(welcome, /PORTLOG/);
-  assert.match(welcome, /┌─ \[PORTLOG CHAT\] \/tmp\/e06-review/);
-  assert.match(welcome, /MODEL.*openrouter.*deepseek\/deepseek-v4-flash/);
+  assert.match(welcome, /PORTLOG CHAT/);
   assert.match(welcome, /Tips/);
-  assert.doesNotMatch(welcome, /Select a number|review or chat/);
+  assert.doesNotMatch(welcome, /\/tmp\/e06-review|MODEL/u);
 });
 test("inline chat boxes user input and keeps assistant output outside", async () => {
   const output: string[] = [];
@@ -180,14 +178,17 @@ test("inline chat boxes user input and keeps assistant output outside", async ()
   assert.doesNotMatch(transcript, /│ Assistant/);
   assert.match(output.join(""), /\u001b\[90mAssistant/);
 });
-test("interactive chat prompt places the user input inside the box", async () => {
+test("interactive chat prompt puts identity in the editor label", async () => {
   const answers = ["typed question", "/quit"];
-  const prompts: string[] = [];
+  const prompts: Array<{
+    message: string;
+    options?: { multiline?: boolean; editorLabel?: string };
+  }> = [];
   const output: string[] = [];
   await runTuiChatSession({
     prompt: {
-      question: async (message) => {
-        prompts.push(message);
+      question: async (message, options) => {
+        prompts.push({ message, options });
         return answers.shift() ?? "/quit";
       },
       close: () => {},
@@ -206,13 +207,14 @@ test("interactive chat prompt places the user input inside the box", async () =>
     write: (text) => output.push(text),
   });
 
-  const promptText = stripAnsi(prompts[0] ?? "");
-  assert.match(promptText, /─{66}/);
-  assert.match(
-    promptText,
-    /┌─ \[PORTLOG\] \/tmp\/e06-review\n│  MODEL openrouter\/deepseek\/deepseek-v4-flash\n└─$/,
-  );
-  assert.match(stripAnsi(output.join("")), /└─{2,}/);
+  assert.deepEqual(prompts[0], {
+    message: "",
+    options: {
+      multiline: true,
+      editorLabel: "You · /tmp/e06-review · openrouter/deepseek/deepseek-v4-flash",
+    },
+  });
+  assert.match(stripAnsi(output.join("")), /Assistant\nDone\./u);
 });
 function createRawPromptFixture(columns = 80) {
   const listeners = new Set<(chunk: string | Buffer) => void>();
@@ -259,6 +261,36 @@ function createRawPromptFixture(columns = 80) {
     },
   };
 }
+test("chat prompt combines identity with You and truncates the label to fit", async () => {
+  const fixture = createRawPromptFixture(32);
+  const question = fixture.prompt.question("", {
+    multiline: true,
+    editorLabel:
+      "You · ~/pydexpi-datalog-1/.tmp/portlog-user-data/current-project · openrouter/deepseek-v4-flash",
+  });
+  fixture.emit("\r");
+
+  assert.equal(await question, "");
+  const raw = fixture.output.join("");
+  const transcript = stripAnsi(raw);
+  assert.match(transcript, /╭─ You · .*….*╮/u);
+  assert.doesNotMatch(transcript, /PORTLOG|MODEL/u);
+  assert.doesNotMatch(raw, /\u001b_pi:c\u0007/u);
+});
+
+test("backspace after a multiline newline redraws without cursor artifacts", async () => {
+  const fixture = createRawPromptFixture(24);
+  const question = fixture.prompt.question("", { multiline: true });
+  fixture.emit("hello");
+  fixture.emit("\u001b[13;2u");
+  fixture.emit("\x7f");
+  fixture.emit("\r");
+
+  assert.equal(await question, "hello");
+  const raw = fixture.output.join("");
+  assert.doesNotMatch(raw, /\u001b_pi:c\u0007/u);
+  assert.doesNotMatch(raw, /\ufffd/u);
+});
 
 test("raw split shift+enter reassembles before reaching the upstream editor", async () => {
   const fixture = createRawPromptFixture(24);
