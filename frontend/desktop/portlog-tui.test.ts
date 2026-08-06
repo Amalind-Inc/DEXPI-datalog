@@ -318,6 +318,30 @@ test("PortLog open-right borders suppress scrollbar enclosure glyphs", () => {
   assert.doesNotMatch(transcript, /[╭╮╰╯]/u);
   assert.doesNotMatch(transcript, /█/u);
   assert.doesNotMatch(transcript, /│[^\n]*│/u);
+  const bottom = transcript.split("\n").find((line) => line.trimStart().startsWith("└"));
+  assert.ok(bottom);
+  assert.notEqual(bottom!.trimEnd().at(-1), "─");
+});
+test("open-right prompt leaves no stray dash at the bottom-right corner", async () => {
+  const fixture = createRawPromptFixture(24);
+  const question = fixture.prompt.question("", { multiline: true, editorLabel: "You" });
+  fixture.emit("probe");
+
+  // The prompt redraws in place with cursor-movement escapes, so consecutive frames
+  // are glued onto the same text line. Normalize the control sequences, then inspect
+  // the final live bottom rule (nothing is glued after it).
+  const normalized = stripAnsi(fixture.output.join(""))
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "")
+    .replace(/[\r\u0007]/g, "");
+  const bottom = normalized
+    .split("\n")
+    .filter((line) => line.trimStart().startsWith("└"))
+    .at(-1);
+  assert.ok(bottom);
+  assert.notEqual(bottom!.trimEnd().at(-1), "─");
+
+  fixture.emit("\r");
+  assert.equal(await question, "probe");
 });
 test("chat prompt delegates the insertion cursor to the terminal", async () => {
   const fixture = createRawPromptFixture();

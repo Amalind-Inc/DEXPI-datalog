@@ -1100,18 +1100,22 @@ export class Editor implements Component, Focusable {
 			// trailing `─`, but never the corner/vertical bar itself.
 			const isLastLine = visibleIndex === visibleLayoutLines.length - 1;
 			const rightChromeCells = Math.max(1, paddingX + 1 - cursorPaddingOverflow);
+			const openRight = box.rightVertical === "";
 			if (isLastLine && imeSafeCursorTail) {
 				const leftBorder = this.borderColor(`${box.vertical}${padding(paddingX)}`);
+				const bottomRuleWidth = Math.max(0, width - 2 - (openRight ? 1 : 0));
 				const bottomBorder = this.borderColor(
-					`${box.bottomLeft}${box.horizontal.repeat(Math.max(0, width - 2))}${box.bottomRight}`,
+					`${box.bottomLeft}${box.horizontal.repeat(bottomRuleWidth)}${box.bottomRight}`,
 				);
 				result.push(leftBorder + displayText);
 				result.push(bottomBorder);
 				continue;
 			}
 			if (isLastLine) {
+				// For an explicitly open-right theme the corner is drawn as a continuous
+				// left rule: drop the trailing bottom `─` so the bottom-right edge stays blank.
 				const rightPad = Math.max(0, rightChromeCells - 2);
-				const includeHorizontal = rightChromeCells >= 2;
+				const includeHorizontal = rightChromeCells >= 2 && !openRight;
 				const bottomRightAdjusted = this.borderColor(
 					`${padding(rightPad)}${includeHorizontal ? box.horizontal : ""}${box.bottomRight}`,
 				);
