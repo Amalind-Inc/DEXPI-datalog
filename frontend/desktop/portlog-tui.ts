@@ -16,7 +16,7 @@ import {
   type TuiEvent,
   type TuiState,
 } from "./portlog-tui-model.ts";
-import { renderTui } from "./portlog-tui-renderer.ts";
+import { renderTui, terminalCellWidth } from "./portlog-tui-renderer.ts";
 import { startReviewProcess } from "./portlog-tui-supervisor.ts";
 import {
   buildTuiModelChoices,
@@ -24,6 +24,7 @@ import {
   parseTuiModelSelection,
   type TuiModelSelection,
 } from "./portlog-tui-model-selector.ts";
+import { Editor } from "./vendor/pi-tui-editor/editor.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 export type CliOptions = {
@@ -171,6 +172,7 @@ export interface TuiChatPromptInput {
 
 export interface TuiChatPromptOutput {
   write(text: string): unknown;
+  readonly columns?: number;
 }
 
 export interface TuiCommandPrompt {
@@ -182,11 +184,22 @@ export interface TuiChatPrompt extends TuiCommandPrompt {
   onInterrupt(listener: () => void): void;
 }
 
-function renderChatInputBody(value: string): string {
-  return value
-    .split("\n")
-    .map((line, index) => `${index === 0 ? "│ You: " : "│      "}${line}`)
+function renderChatInputBody(editor: Editor, columns = 80): string {
+  const prefix = "│ You: ";
+  const continuation = "│      ";
+  const contentWidth = Math.max(1, Math.floor(columns) - terminalCellWidth(prefix));
+  return editor
+    .render(contentWidth)
+    .map((line, index) => `${index === 0 ? prefix : continuation}${line}`)
     .join("\n");
+}
+
+function renderPromptInputBody(editor: Editor, prompt: string, columns = 80): string {
+  const promptWidth = terminalCellWidth(prompt);
+  const contentWidth = Math.max(1, Math.floor(columns) - promptWidth);
+  const [first = "", ...continuation] = editor.render(contentWidth);
+  const continuationPrefix = " ".repeat(Math.max(0, promptWidth));
+  return [prompt + first, ...continuation.map((line) => `${continuationPrefix}${line}`)].join("\n");
 }
 
 function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): void {
@@ -199,24 +212,11 @@ function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): voi
   output.write("\r");
 }
 
-function isShiftEnterKey(character: string, key: TuiPromptKey): boolean {
+function normalizeChatInputKey(character: string, key: TuiPromptKey): string {
   const sequence = key.sequence ?? character;
-  if (key.shift && (key.name === "return" || key.name === "enter")) return true;
-  return sequence === "\u001b[13;2u" || sequence === "\u001b[27;2;13~" || sequence === "\u001b\r";
-}
-
-function isEnterKey(character: string, key: TuiPromptKey): boolean {
-  if (isShiftEnterKey(character, key)) return false;
-  return (
-    key.name === "return" ||
-    key.name === "enter" ||
-    (key.sequence ?? character) === "\r" ||
-    (key.sequence ?? character) === "\n"
-  );
-}
-
-function sanitizeChatInput(value: string): string {
-  return sanitizeChatText(value).replace(/[\n\r]+/gu, "");
+  if (key.shift && (key.name === "return" || key.name === "enter")) return "\u001b[13;2u";
+  if (key.ctrl && (key.name === "return" || key.name === "enter")) return "\u001b[13;2;5u";
+  return sequence;
 }
 
 export function createTuiChatPrompt(
@@ -224,8 +224,9 @@ export function createTuiChatPrompt(
   output: TuiChatPromptOutput,
 ): TuiChatPrompt {
   type ActiveQuestion = {
-    multiline: boolean;
-    value: string;
+    editor: Editor;
+    prompt: string;
+    hasChatMarker: boolean;
     renderedBodyLines: number;
     resolve: (value: string) => void;
     reject: (error: Error) => void;
@@ -256,8 +257,18 @@ export function createTuiChatPrompt(
   };
   const redraw = (pending: ActiveQuestion): void => {
     clearChatInputBody(output, pending.renderedBodyLines);
-    output.write(renderChatInputBody(pending.value));
-    pending.renderedBodyLines = pending.value.split("\n").length;
+    const columns = output.columns ?? 80;
+    if (pending.hasChatMarker) {
+      output.write(renderChatInputBody(pending.editor, columns));
+      pending.renderedBodyLines = pending.editor.render(
+        Math.max(1, Math.floor(columns) - terminalCellWidth("│ You: ")),
+      ).length;
+    } else {
+      output.write(renderPromptInputBody(pending.editor, pending.prompt, columns));
+      pending.renderedBodyLines = pending.editor.render(
+        Math.max(1, Math.floor(columns) - terminalCellWidth(pending.prompt)),
+      ).length;
+    }
   };
   const onKeypress: TuiPromptKeyListener = (character, key) => {
     const pending = active;
@@ -268,34 +279,7 @@ export function createTuiChatPrompt(
       pendingInterrupt?.();
       return;
     }
-    if (pending.multiline && isShiftEnterKey(character, key)) {
-      pending.value += "\n";
-      redraw(pending);
-      return;
-    }
-    if (isEnterKey(character, key)) {
-      output.write("\n");
-      complete(pending.value);
-      return;
-    }
-    if (key.name === "backspace" && !key.ctrl && !key.meta) {
-      if (!pending.value) return;
-      if (pending.value.endsWith("\n")) {
-        pending.value = pending.value.slice(0, -1);
-        redraw(pending);
-      } else {
-        const characters = Array.from(pending.value);
-        characters.pop();
-        pending.value = characters.join("");
-        output.write("\b \b");
-      }
-      return;
-    }
-    if (key.ctrl || key.meta) return;
-    const text = sanitizeChatInput(character);
-    if (!text) return;
-    pending.value += text;
-    output.write(text);
+    pending.editor.handleInput(normalizeChatInputKey(character, key));
   };
 
   const question = (prompt: string, options: TuiPromptQuestionOptions = {}): Promise<string> => {
@@ -305,18 +289,41 @@ export function createTuiChatPrompt(
       const multiline = options.multiline === true;
       const marker = "\n│ You: ";
       const markerIndex = prompt.lastIndexOf(marker);
-      const promptPrefix = markerIndex >= 0 ? prompt.slice(0, markerIndex + 1) : prompt;
-      active = {
-        multiline,
-        value: "",
+      const hasChatMarker = markerIndex >= 0;
+      const finalNewline = prompt.lastIndexOf("\n");
+      const immutablePrefix = hasChatMarker
+        ? prompt.slice(0, markerIndex + 1)
+        : finalNewline >= 0
+          ? prompt.slice(0, finalNewline + 1)
+          : "";
+      const promptLabel = hasChatMarker ? "│ You: " : prompt.slice(finalNewline + 1);
+      const editor = new Editor({}, { multiline });
+      const pending: ActiveQuestion = {
+        editor,
+        prompt: promptLabel,
+        hasChatMarker,
         renderedBodyLines: 1,
         resolve: resolveQuestion,
         reject: rejectQuestion,
       };
+      editor.onChange = () => {
+        redraw(pending);
+      };
+      editor.onSubmit = () => {
+        output.write("\n");
+        complete(editor.getExpandedText());
+      };
+      active = pending;
       input.setRawMode?.(true);
       input.resume();
       input.on("keypress", onKeypress);
-      output.write(multiline && markerIndex >= 0 ? `${promptPrefix}│ You: ` : prompt);
+      output.write(
+        `${immutablePrefix}${
+          pending.hasChatMarker
+            ? renderChatInputBody(editor, output.columns ?? 80)
+            : renderPromptInputBody(editor, pending.prompt, output.columns ?? 80)
+        }`,
+      );
     });
   };
 

@@ -283,6 +283,73 @@ test("shift+enter expands the boxed prompt and submits embedded newlines on ente
   assert.match(transcript, /└─{2,}/);
   assert.deepEqual(rawModes, [true, false, true, false]);
 });
+test("chat prompt wraps long input and submits with ctrl+enter", async () => {
+  const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
+  const output: string[] = [];
+  const input = {
+    on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+      listeners.add(listener);
+      return input;
+    },
+    off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+      listeners.delete(listener);
+      return input;
+    },
+    pause: () => {},
+    resume: () => {},
+    setRawMode: (_enabled: boolean) => {},
+  };
+  const emitKey = (character: string, key: TuiPromptKey = {}) => {
+    for (const listener of listeners) listener(character, key);
+  };
+  const prompt = createTuiChatPrompt(input, {
+    columns: 28,
+    write: (text) => {
+      output.push(text);
+      return true;
+    },
+  });
+  const question = prompt.question("header\n│ You: ", { multiline: true });
+  for (const character of "abcdefghijklmnopqrstuvwxyz") {
+    emitKey(character, { name: character, sequence: character });
+  }
+  emitKey("", { name: "return", sequence: "\u001b[13;2;5u", ctrl: true });
+  assert.equal(await question, "abcdefghijklmnopqrstuvwxyz");
+  const transcript = stripAnsi(output.join(""));
+  assert.match(transcript, /│ You: [a-z]+\n│      [a-z]+/);
+});
+test("non-chat prompt preserves a leading prefix while editing", async () => {
+  const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
+  const output: string[] = [];
+  const input = {
+    on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+      listeners.add(listener);
+      return input;
+    },
+    off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+      listeners.delete(listener);
+      return input;
+    },
+    pause: () => {},
+    resume: () => {},
+    setRawMode: (_enabled: boolean) => {},
+  };
+  const emitKey = (character: string, key: TuiPromptKey) => {
+    for (const listener of listeners) listener(character, key);
+  };
+  const prompt = createTuiChatPrompt(input, {
+    write: (text) => {
+      output.push(text);
+      return true;
+    },
+  });
+  const question = prompt.question("\nCommand: ");
+  emitKey("a", { name: "a", sequence: "a" });
+  emitKey("b", { name: "b", sequence: "b" });
+  emitKey("\r", { name: "return", sequence: "\r" });
+  assert.equal(await question, "ab");
+  assert.equal((output.join("").match(/\n/gu) ?? []).length, 2);
+});
 test("chat prompt restores input state on cancellation and close", async () => {
   const makePrompt = () => {
     const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
