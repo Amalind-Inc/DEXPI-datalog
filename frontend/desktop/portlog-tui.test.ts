@@ -20,6 +20,7 @@ import {
 import {
   buildReviewArgs,
   parseTuiOptions,
+  renderTuiWelcome,
   runTuiChatSession,
   runTuiChatTurn,
   runTuiCommandPrompt,
@@ -121,13 +122,30 @@ test("command prompt restores terminal lifecycle on success, invalid commands, a
     ["Command input was cancelled; no change was made.\n"],
   );
 });
-test("CLI parsing makes review the default and dispatches explicit chat mode", () => {
-  assert.equal(parseTuiOptions(["--project", "/tmp/e06-review"]).mode, "review");
-  assert.equal(parseTuiOptions(["--project", "/tmp/e06-review", "--mode", "chat"]).mode, "chat");
+test("CLI parsing opens the unified chat shell without a mode or model picker", () => {
+  const defaults = parseTuiOptions(["--project", "/tmp/e06-review"]);
+  assert.equal(defaults.mode, "chat");
+  assert.equal(defaults.selectModelOnStart, false);
   assert.equal(
-    parseTuiOptions(["--project", "/tmp/e06-review", "--mode", "chat"]).selectModelOnStart,
-    true,
+    parseTuiOptions(["--project", "/tmp/e06-review", "--mode", "review"]).mode,
+    "review",
   );
+  assert.equal(
+    parseTuiOptions(["--project", "/tmp/e06-review", "--provider", "anthropic"]).selectModelOnStart,
+    false,
+  );
+});
+test("welcome shell names the workspace and model without asking for a mode", () => {
+  const welcome = renderTuiWelcome({
+    projectDirectory: "/tmp/e06-review",
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4-flash",
+  });
+  assert.match(welcome, /PORTLOG/);
+  assert.match(welcome, /WORKSPACE.*\/tmp\/e06-review/);
+  assert.match(welcome, /MODEL.*openrouter.*deepseek\/deepseek-v4-flash/);
+  assert.match(welcome, /Tips/);
+  assert.doesNotMatch(welcome, /Select a number|review or chat/);
 });
 
 test("selected provider and model remain explicit in review arguments and TUI identity", () => {
@@ -248,6 +266,34 @@ test("chat turns use the project-backed supervisor boundary with fresh turn iden
   assert.notEqual(started[0].args.at(-1), started[1].args.at(-1));
 });
 
+test("chat turns surface supervisor output when the worker exits before a terminal event", async () => {
+  const result = await runTuiChatTurn(
+    {
+      project: "/tmp/e06-review",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+      posture: "inspect",
+      help: false,
+    },
+    "hello",
+    () => {},
+    (processOptions) => {
+      queueMicrotask(() => {
+        processOptions.onOutput?.(
+          "ERROR: Prepared project unavailable; create a project manifest first",
+        );
+        processOptions.onExit({ code: 1, signal: null, cancelled: false });
+      });
+      return {
+        id: processOptions.id,
+        cancel: () => {},
+        dispose: () => {},
+      };
+    },
+  );
+  assert.equal(result.status, "failed");
+  assert.match(result.message ?? "", /Prepared project unavailable/);
+});
 test("renderer removes terminal controls from initial provider and model identity", () => {
   const rows = renderTui(
     createTuiState({

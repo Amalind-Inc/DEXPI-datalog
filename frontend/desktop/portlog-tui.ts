@@ -43,8 +43,8 @@ const USAGE = `Usage:
     [--mode review|chat] [--provider PROVIDER --model MODEL] \\
     [--posture inspect|verify|review] [--question QUESTION]
 
-Omit --model to choose the provider/model during startup. In chat mode,
-the terminal keeps accepting follow-up questions in the same project session.
+The default mode is chat. Provider and model use the configured runtime
+defaults; use /model only when you want to switch them during the session.
 Omit --question to enter the first question interactively.
 
 The control room keeps the review event feed bounded and labels PortLog-owned
@@ -52,7 +52,7 @@ outcomes separately from ordinary model context. Provider credentials stay in
 the host environment, as they do for portlog:review.
 
 Interactive commands:
-  /model  choose the provider/model for the next review run
+  /model  choose the provider/model for the next turn
   /quit   leave chat mode
   Set PORTLOG_TUI_MODELS to comma-separated provider:model choices.
 
@@ -60,6 +60,23 @@ Keys:
   c cancel   space pause/follow feed   ↑/↓ scroll  r run again
   n new question   / command   ? help   q quit
 `;
+export interface TuiWelcomeOptions {
+  readonly projectDirectory: string;
+  readonly provider: string;
+  readonly model: string;
+}
+
+export function renderTuiWelcome(options: TuiWelcomeOptions): string {
+  return [
+    "PORTLOG / CHAT",
+    "",
+    `WORKSPACE ${resolve(options.projectDirectory)}`,
+    `MODEL ${options.provider}/${options.model}`,
+    "",
+    "Ask a question about the project, its diagrams, or its review evidence.",
+    "Tips: /model changes the model; /quit exits. PortLog tools appear as they run.",
+  ].join("\n");
+}
 
 export async function runPortLogTui(
   argv: readonly string[] = process.argv.slice(2),
@@ -287,6 +304,11 @@ export function runTuiChatTurn(
     let settled = false;
     let startedProcess: TuiChatProcess | undefined;
     let processDisposed = false;
+    let latestProcessOutput = "";
+    const diagnostic = (message: string): string => {
+      const output = latestProcessOutput.trim();
+      return output ? `${message} Diagnostic: ${output}` : message;
+    };
     const disposeStartedProcess = () => {
       if (processDisposed || !startedProcess) return;
       processDisposed = true;
@@ -304,21 +326,29 @@ export function runTuiChatTurn(
       cwd: REPO_ROOT,
       args: buildReviewArgs(options, question),
       env: process.env,
+      onOutput: (line) => {
+        latestProcessOutput = boundChatText(sanitizeSingleLineChatText(line), MAX_CHAT_ERROR_CHARS);
+      },
       onEvent: (event) => {
         onEvent(event);
         if (event.type === "turn_completed") settle({ status: "completed" });
         else if (event.type === "turn_cancelled") settle({ status: "cancelled" });
         else if (event.type === "turn_failed")
-          settle({ status: "failed", message: event.message ?? "The chat turn failed." });
+          settle({
+            status: "failed",
+            message: diagnostic(event.message ?? "The chat turn failed."),
+          });
       },
       onExit: ({ cancelled, code, signal }) => {
         if (cancelled) settle({ status: "cancelled" });
         else if (!settled)
           settle({
             status: "failed",
-            message: `Chat process stopped before a terminal result (code ${
-              code ?? "none"
-            }, signal ${signal ?? "none"}).`,
+            message: diagnostic(
+              `Chat process stopped before a terminal result (code ${
+                code ?? "none"
+              }, signal ${signal ?? "none"}).`,
+            ),
           });
       },
     });
@@ -352,18 +382,13 @@ class PortLogChatApp {
       prompt.close();
     });
     try {
-      if (this.options.selectModelOnStart) {
-        let selection: TuiModelSelection;
-        try {
-          selection = await runTuiRequiredModelSelection(prompt, (activePrompt) =>
-            this.chooseModel(activePrompt),
-          );
-        } catch {
-          return;
-        }
-        this.applyModelSelection(selection);
-        output.write(`Selected ${selection.provider}/${selection.model} for chat.\n`);
-      }
+      output.write(
+        `${renderTuiWelcome({
+          projectDirectory: this.options.project,
+          provider: this.options.provider,
+          model: this.options.model,
+        })}\n\n`,
+      );
       await runTuiChatSession({
         prompt,
         initialQuestion: this.options.question,
@@ -672,7 +697,7 @@ export function parseTuiOptions(argv: readonly string[]): CliOptions {
     provider: process.env.PORTLOG_RUNTIME_PROVIDER?.trim() || "openrouter",
     model: process.env.PORTLOG_RUNTIME_MODEL?.trim() || "deepseek/deepseek-v4-flash",
     posture: "inspect",
-    mode: "review",
+    mode: "chat",
     help: false,
   };
   const aliases: Record<string, keyof CliOptions> = {
@@ -704,9 +729,7 @@ export function parseTuiOptions(argv: readonly string[]): CliOptions {
       throw new Error(`Unsupported posture ${value}.\n\n${USAGE}`);
     options[key] = value as never;
   }
-  options.selectModelOnStart = !argv.some(
-    (argument) => argument === "--model" || argument.startsWith("--model="),
-  );
+  options.selectModelOnStart = false;
   return options;
 }
 
