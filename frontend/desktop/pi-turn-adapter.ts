@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { Agent } from "@earendil-works/pi-agent-core";
@@ -12,6 +13,8 @@ import {
   createPortLogCapabilityRegistry,
   type PortLogCapabilityRegistry,
 } from "./portlog-capability-registry.ts";
+import { PORTLOG_HOST_POLICY } from "./capability-routing.ts";
+import { GONDOLIN_REVIEW_CANDIDATE_PROFILE } from "./gondolin-qemu.ts";
 import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
 import { createPortLogWorkspaceReadTool } from "./pi-workspace-read.ts";
 
@@ -35,6 +38,18 @@ export type RunGovernedPiIsolatedCommand = (
   request: IsolatedCommandToolRequest,
   signal: AbortSignal,
 ) => Promise<IsolatedCommandResult>;
+
+type BashToolRoute = "gondolin" | "unavailable";
+
+type BashToolResult = ReturnType<typeof toIsolatedCommandToolResult> & {
+  readonly route: BashToolRoute;
+  readonly authority: "ordinary";
+  readonly profile: {
+    readonly id: string;
+    readonly version: string;
+  };
+  readonly output_truncated: false;
+};
 
 export interface GovernedPiReviewTurnOptions {
   agentDir: string;
@@ -181,11 +196,102 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
       }
     : null;
 
+  const bashTool = options.runIsolatedCommand
+    ? {
+        name: "bash",
+        label: "PortLog bash",
+        description:
+          "Run the one approved immutable PortLog bash profile in Gondolin. Supply only profileId 'review-bundle-candidate'. Arbitrary command strings, argv, paths, environment, PTY, and background execution are not supported.",
+        parameters: Type.Object(
+          {
+            profileId: Type.String(),
+          },
+          { additionalProperties: false },
+        ),
+        executionMode: "sequential" as const,
+        async execute(
+          _toolCallId: string,
+          params: unknown,
+          signal?: AbortSignal,
+          onUpdate?: (partialResult: {
+            content: Array<{ type: "text"; text: string }>;
+            details: Record<string, never>;
+          }) => void,
+        ) {
+          if (!isApprovedBashParams(params)) {
+            return bashToolResponse(
+              createBashPolicyResult(
+                "rejected",
+                "The requested bash profile is not approved; no command was executed.",
+              ),
+              "unavailable",
+            );
+          }
+          const linked = linkAbortSignals(options.signal, signal);
+          try {
+            onUpdate?.({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    route: "gondolin",
+                    authority: "ordinary",
+                    profile: GONDOLIN_REVIEW_CANDIDATE_PROFILE,
+                    phase: "gondolin_started",
+                  }),
+                },
+              ],
+              details: {},
+            });
+            if (linked.signal.aborted) {
+              return bashToolResponse(
+                createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
+                "gondolin",
+              );
+            }
+            const result = await options.runIsolatedCommand!(
+              { profileId: GONDOLIN_REVIEW_CANDIDATE_PROFILE.id },
+              linked.signal,
+            );
+            if (linked.signal.aborted) {
+              return bashToolResponse(
+                createBashPolicyResult("cancelled", "The approved bash profile was cancelled."),
+                "gondolin",
+              );
+            }
+            if (!hasApprovedBashProfile(result)) {
+              return bashToolResponse(
+                createBashPolicyResult(
+                  "rejected",
+                  "The isolated executor did not preserve the approved bash profile identity.",
+                ),
+                "gondolin",
+              );
+            }
+            return bashToolResponse(result, "gondolin");
+          } catch {
+            return bashToolResponse(
+              createBashPolicyResult(
+                linked.signal.aborted ? "cancelled" : "failed",
+                linked.signal.aborted
+                  ? "The approved bash profile was cancelled."
+                  : "The approved bash profile failed before a result was available.",
+              ),
+              "gondolin",
+            );
+          } finally {
+            linked.dispose();
+          }
+        },
+      }
+    : null;
+
   const tools = [
     ...(readTool ? [readTool] : []),
     ...(evidenceTool ? [evidenceTool] : []),
     ...(ruleCheckTool ? [ruleCheckTool] : []),
     ...(isolatedCommandTool ? [isolatedCommandTool] : []),
+    ...(bashTool ? [bashTool] : []),
   ];
   const agent = new Agent({
     initialState: {
@@ -279,6 +385,71 @@ function isIsolatedCommandParams(value: unknown): value is IsolatedCommandToolRe
   if (value === null || typeof value !== "object") return false;
   const profileId = (value as Record<string, unknown>).profileId;
   return typeof profileId === "string" && profileId.length > 0;
+}
+
+function isApprovedBashParams(value: unknown): value is IsolatedCommandToolRequest {
+  if (!isIsolatedCommandParams(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 1 &&
+    keys[0] === "profileId" &&
+    value.profileId === GONDOLIN_REVIEW_CANDIDATE_PROFILE.id
+  );
+}
+
+function hasApprovedBashProfile(result: IsolatedCommandResult): boolean {
+  return (
+    result.provenance.commandProfile.id === GONDOLIN_REVIEW_CANDIDATE_PROFILE.id &&
+    result.provenance.commandProfile.version === GONDOLIN_REVIEW_CANDIDATE_PROFILE.version
+  );
+}
+
+function createBashPolicyResult(
+  outcome: Exclude<IsolatedCommandResult["outcome"], "admitted">,
+  diagnostic: string,
+): IsolatedCommandResult {
+  const timestamp = new Date().toISOString();
+  return {
+    outcome,
+    diagnostic,
+    provenance: {
+      runId: randomUUID(),
+      backend: { id: "portlog-bash-policy", version: "1" },
+      image: { id: "none", digest: `sha256:${"0".repeat(64)}` },
+      policy: { id: PORTLOG_HOST_POLICY.id, digest: PORTLOG_HOST_POLICY.digest },
+      commandProfile: {
+        id: GONDOLIN_REVIEW_CANDIDATE_PROFILE.id,
+        version: GONDOLIN_REVIEW_CANDIDATE_PROFILE.version,
+      },
+      startedAt: timestamp,
+      completedAt: timestamp,
+      durationMs: 0,
+      outcome,
+    },
+  };
+}
+
+function bashToolResponse(
+  result: IsolatedCommandResult,
+  route: BashToolRoute,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, never>;
+} {
+  const toolResult: BashToolResult = {
+    ...toIsolatedCommandToolResult(result),
+    route,
+    authority: "ordinary",
+    profile: {
+      id: GONDOLIN_REVIEW_CANDIDATE_PROFILE.id,
+      version: GONDOLIN_REVIEW_CANDIDATE_PROFILE.version,
+    },
+    output_truncated: false,
+  };
+  return {
+    content: [{ type: "text", text: JSON.stringify(toolResult) }],
+    details: {},
+  };
 }
 
 interface LinkedAbortSignal {

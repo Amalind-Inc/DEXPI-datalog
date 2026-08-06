@@ -215,7 +215,7 @@ test("optional isolated command tool supports one model-tool-model continuation"
     });
     assert.deepEqual(
       review.session.agent.state.tools.map((tool) => tool.name),
-      ["portlog_isolated_command"],
+      ["portlog_isolated_command", "bash"],
     );
     await review.prompt("Run the approved native child.");
     assert.equal(isolatedCalls, 1);
