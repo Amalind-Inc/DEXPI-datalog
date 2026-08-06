@@ -22,6 +22,8 @@ export type TuiEventKind =
 export interface TuiSessionIdentity {
   readonly sessionId?: string;
   readonly projectDirectory?: string;
+  readonly provider?: string;
+  readonly model?: string;
   readonly sourceRevision?: string;
   readonly policyRevision?: string;
 }

@@ -11,8 +11,159 @@ import {
   type TuiState,
 } from "./portlog-tui-model.ts";
 import { renderTui, terminalCellWidth } from "./portlog-tui-renderer.ts";
+import {
+  buildTuiModelChoices,
+  parseTuiCommand,
+  parseTuiModelSelection,
+  parseTuiModelSpec,
+} from "./portlog-tui-model-selector.ts";
+import { buildReviewArgs, runTuiCommandPrompt } from "./portlog-tui.ts";
 import { parseReviewLine, startReviewProcess } from "./portlog-tui-supervisor.ts";
+test("/model is the explicit selector command and unknown slash commands are inert", () => {
+  assert.equal(parseTuiCommand("/model"), "model");
+  assert.equal(parseTuiCommand(" /model "), "model");
+  assert.equal(parseTuiCommand("/other"), "unknown");
+  assert.equal(parseTuiCommand("ordinary text"), undefined);
+});
 
+test("model selector parses supported provider:model specs and keeps the current choice first", () => {
+  const current = { provider: "openrouter", model: "deepseek/deepseek-v4-flash" } as const;
+  assert.deepEqual(parseTuiModelSpec("anthropic:claude-sonnet-4-5"), {
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+  });
+  assert.equal(parseTuiModelSpec("unsupported:model"), undefined);
+  assert.equal(parseTuiModelSpec("anthropic:claude-sonnet-4-5\u001b[31m"), undefined);
+  const unsupportedCurrent = buildTuiModelChoices(
+    { provider: "unsupported", model: "model" },
+    "anthropic:claude-sonnet-4-5",
+  );
+  assert.deepEqual(
+    unsupportedCurrent.map(({ provider, model }) => `${provider}:${model}`),
+    ["anthropic:claude-sonnet-4-5"],
+  );
+  const choices = buildTuiModelChoices(
+    current,
+    "anthropic:claude-sonnet-4-5,openrouter:deepseek/deepseek-v4-flash",
+  );
+  assert.deepEqual(
+    choices.map(({ provider, model }) => `${provider}:${model}`),
+    ["openrouter:deepseek/deepseek-v4-flash", "anthropic:claude-sonnet-4-5"],
+  );
+  assert.deepEqual(parseTuiModelSelection("2", choices), {
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+  });
+  assert.deepEqual(parseTuiModelSelection("openai-codex:gpt-5.4", choices), {
+    provider: "openai-codex",
+    model: "gpt-5.4",
+  });
+  assert.equal(parseTuiModelSelection("0", choices), undefined);
+});
+test("command prompt restores terminal lifecycle on success, invalid commands, and cancellation", async () => {
+  const run = async (
+    answer: string,
+    questionError = false,
+    onModel: () => Promise<void> = async () => {},
+  ) => {
+    const events: string[] = [];
+    const writes: string[] = [];
+    const prompt = {
+      question: async () => {
+        if (questionError) throw new Error("closed");
+        return answer;
+      },
+      close: () => events.push("close"),
+    };
+    await runTuiCommandPrompt(
+      prompt,
+      {
+        detachKeypress: () => events.push("detach"),
+        setRawMode: (enabled) => events.push(`raw:${enabled}`),
+        resume: () => events.push("resume"),
+        attachKeypress: () => events.push("attach"),
+        render: () => events.push("render"),
+      },
+      (text) => writes.push(text),
+      onModel,
+    );
+    assert.deepEqual(events, [
+      "detach",
+      "raw:false",
+      "close",
+      "raw:true",
+      "resume",
+      "attach",
+      "render",
+    ]);
+    return writes;
+  };
+
+  let selected = false;
+  await run("/model", false, async () => {
+    selected = true;
+  });
+  assert.equal(selected, true);
+  assert.deepEqual(await run("/other"), ["Unknown command. Use /model.\n"]);
+  assert.deepEqual(await run("", true), ["Command input was cancelled; no change was made.\n"]);
+  assert.deepEqual(
+    await run("/model", false, async () => {
+      throw new Error("selector failed");
+    }),
+    ["Command input was cancelled; no change was made.\n"],
+  );
+});
+
+test("selected provider and model remain explicit in review arguments and TUI identity", () => {
+  const args = buildReviewArgs(
+    {
+      project: "/tmp/e06-review",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      posture: "inspect",
+      help: false,
+    },
+    "Inspect the source.",
+  );
+  assert.deepEqual(args.slice(0, 6), [
+    "--project",
+    "/tmp/e06-review",
+    "--provider",
+    "anthropic",
+    "--model",
+    "claude-sonnet-4-5",
+  ]);
+  const rows = renderTui(
+    createTuiState({
+      identity: {
+        projectDirectory: "/tmp/e06-review",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+      },
+      posture: "inspect",
+      question: "Inspect the source.",
+    }),
+    { width: 120, height: 24 },
+  );
+  assert.ok(rows.some((row) => row.includes("claude-sonnet-4-5")));
+});
+test("renderer removes terminal controls from initial provider and model identity", () => {
+  const rows = renderTui(
+    createTuiState({
+      identity: {
+        projectDirectory: "/tmp/e06-review",
+        provider: "anthropic",
+        model: "bad\u001b]0;evil\u0007",
+      },
+      posture: "inspect",
+      question: "Inspect the source.",
+    }),
+    { width: 120, height: 24 },
+  );
+  const output = rows.join("\n");
+  assert.doesNotMatch(output, /\u001b\]0;evil\u0007/);
+  assert.doesNotMatch(output, /\u0007/);
+});
 test("review events become process-engineering phases with explicit PortLog authority", () => {
   let state = createTuiState({
     identity: { projectDirectory: "/tmp/e06-review" },

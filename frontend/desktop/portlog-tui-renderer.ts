@@ -40,7 +40,7 @@ export function renderTui(state: TuiState, options: TuiRenderOptions): readonly 
   );
   lines.push(
     fit(
-      `${paint(ANSI.gray, "SOURCE")} ${paint(ANSI.white, sourceLabel(state))}  ${paint(ANSI.gray, "STATUS")} ${statusLabel(state)}  ${paint(ANSI.gray, "ELAPSED")} ${elapsed(state, options.now ?? new Date())}`,
+      `${paint(ANSI.gray, "SOURCE")} ${paint(ANSI.white, sourceLabel(state))}  ${paint(ANSI.gray, "MODEL")} ${paint(ANSI.white, modelLabel(state))}  ${paint(ANSI.gray, "STATUS")} ${statusLabel(state)}  ${paint(ANSI.gray, "ELAPSED")} ${elapsed(state, options.now ?? new Date())}`,
       width,
     ),
   );
@@ -190,6 +190,7 @@ function renderHelp(width: number, height: number): readonly string[] {
     `${paint(ANSI.yellow, "space")} pause or resume following new events (the review keeps running)`,
     `${paint(ANSI.yellow, "c")} request cancellation; the final state remains visible`,
     `${paint(ANSI.yellow, "r")} run the same question again after a terminal outcome`,
+    `${paint(ANSI.yellow, "/")} enter a command; use ${paint(ANSI.yellow, "/model")} to choose the next review model`,
     `${paint(ANSI.yellow, "q")} quit; active reviews ask for confirmation`,
     "",
     paint(
@@ -217,6 +218,11 @@ function sourceLabel(state: TuiState): string {
   if (!directory) return "prepared project";
   const parts = directory.split(/[\\/]/).filter(Boolean);
   return parts.at(-1) ?? directory;
+}
+
+function modelLabel(state: TuiState): string {
+  if (!state.identity.provider || !state.identity.model) return "not selected";
+  return sanitizeTerminalText(`${state.identity.provider}/${state.identity.model}`);
 }
 
 function statusLabel(state: TuiState): string {

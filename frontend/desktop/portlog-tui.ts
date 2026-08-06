@@ -16,10 +16,15 @@ import {
 } from "./portlog-tui-model.ts";
 import { renderTui } from "./portlog-tui-renderer.ts";
 import { startReviewProcess } from "./portlog-tui-supervisor.ts";
+import {
+  buildTuiModelChoices,
+  parseTuiCommand,
+  parseTuiModelSelection,
+} from "./portlog-tui-model-selector.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
-type CliOptions = {
+export type CliOptions = {
   project?: string;
   provider: string;
   model: string;
@@ -38,9 +43,13 @@ The control room keeps the review event feed bounded and labels PortLog-owned
 outcomes separately from ordinary model context. Provider credentials stay in
 the host environment, as they do for portlog:review.
 
+Interactive commands:
+  /model  choose the provider/model for the next review run
+  Set PORTLOG_TUI_MODELS to comma-separated provider:model choices.
+
 Keys:
-  c cancel   space pause/follow feed   ↑/↓ scroll   r run again
-  n new question   ? help   q quit
+  c cancel   space pause/follow feed   ↑/↓ scroll  r run again
+  n new question   / command   ? help   q quit
 `;
 
 export async function runPortLogTui(
@@ -62,6 +71,41 @@ export async function runPortLogTui(
   const app = new PortLogTuiApp({ ...options, project, question });
   await app.run();
 }
+export interface TuiCommandPrompt {
+  question(prompt: string): Promise<string>;
+  close(): void;
+}
+
+export interface TuiCommandPromptLifecycle {
+  detachKeypress(): void;
+  setRawMode(enabled: boolean): void;
+  resume(): void;
+  attachKeypress(): void;
+  render(): void;
+}
+
+export async function runTuiCommandPrompt(
+  prompt: TuiCommandPrompt,
+  lifecycle: TuiCommandPromptLifecycle,
+  write: (text: string) => void,
+  onModel: (prompt: TuiCommandPrompt) => Promise<void>,
+): Promise<void> {
+  lifecycle.detachKeypress();
+  lifecycle.setRawMode(false);
+  try {
+    const command = parseTuiCommand(await prompt.question("\nCommand: "));
+    if (command === "model") await onModel(prompt);
+    else if (command === "unknown") write("Unknown command. Use /model.\n");
+  } catch {
+    write("Command input was cancelled; no change was made.\n");
+  } finally {
+    prompt.close();
+    lifecycle.setRawMode(true);
+    lifecycle.resume();
+    lifecycle.attachKeypress();
+    lifecycle.render();
+  }
+}
 
 class PortLogTuiApp {
   private readonly options: CliOptions & { project: string; question: string };
@@ -73,7 +117,11 @@ class PortLogTuiApp {
   constructor(options: CliOptions & { project: string; question: string }) {
     this.options = options;
     this.state = createTuiState({
-      identity: { projectDirectory: resolve(options.project) },
+      identity: {
+        projectDirectory: resolve(options.project),
+        provider: options.provider,
+        model: options.model,
+      },
       posture: options.posture,
       question: options.question,
     });
@@ -146,6 +194,10 @@ class PortLogTuiApp {
     if (value === "?") {
       this.showHelp = true;
       this.render();
+      return;
+    }
+    if (value === "/") {
+      void this.startCommandPrompt();
       return;
     }
     if (value === "r" && isTerminal(this.state.status)) {
@@ -221,6 +273,54 @@ class PortLogTuiApp {
       this.render();
     }
   }
+  private async startCommandPrompt(): Promise<void> {
+    const prompt = createInterface({ input, output });
+    await runTuiCommandPrompt(
+      prompt,
+      {
+        detachKeypress: () => input.off("keypress", this.handleKeypress),
+        setRawMode: (enabled) => input.setRawMode?.(enabled),
+        resume: () => input.resume(),
+        attachKeypress: () => input.on("keypress", this.handleKeypress),
+        render: this.render,
+      },
+      (text) => output.write(text),
+      (activePrompt) => this.startModelSelector(activePrompt),
+    );
+  }
+
+  private async startModelSelector(prompt: TuiCommandPrompt): Promise<void> {
+    const current = {
+      provider: this.options.provider,
+      model: this.options.model,
+    };
+    const choices = buildTuiModelChoices(current, process.env.PORTLOG_TUI_MODELS?.trim() ?? "");
+    output.write("\nAvailable review models:\n");
+    for (const [index, choice] of choices.entries()) {
+      const marker =
+        choice.provider === current.provider && choice.model === current.model ? " (current)" : "";
+      output.write(`  ${index + 1}. ${choice.label}${marker}\n`);
+    }
+    const answer = await prompt.question("Select a number or provider:model: ");
+    const selection = parseTuiModelSelection(answer, choices);
+    if (!selection) {
+      output.write(
+        "No model change was made. Enter a listed number or supported provider:model.\n",
+      );
+      return;
+    }
+    this.options.provider = selection.provider;
+    this.options.model = selection.model;
+    this.state = {
+      ...this.state,
+      identity: {
+        ...this.state.identity,
+        provider: selection.provider,
+        model: selection.model,
+      },
+    };
+    output.write(`Selected ${selection.provider}/${selection.model} for the next review run.\n`);
+  }
 }
 
 function parseArgs(argv: readonly string[]): CliOptions {
@@ -260,7 +360,10 @@ function parseArgs(argv: readonly string[]): CliOptions {
   return options;
 }
 
-function buildReviewArgs(options: CliOptions & { project: string }, question: string): string[] {
+export function buildReviewArgs(
+  options: CliOptions & { project: string },
+  question: string,
+): string[] {
   const args = [
     "--project",
     options.project,
