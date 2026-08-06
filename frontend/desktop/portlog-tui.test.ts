@@ -148,7 +148,7 @@ test("welcome shell leaves workspace identity for the prompt border", () => {
   assert.match(welcome, /Tips/);
   assert.doesNotMatch(welcome, /\/tmp\/e06-review|MODEL/u);
 });
-test("inline chat boxes user input and keeps assistant output outside", async () => {
+test("archived chat messages are plain on a background, without box or identity", async () => {
   const output: string[] = [];
   await runTuiChatSession({
     prompt: {
@@ -172,12 +172,10 @@ test("inline chat boxes user input and keeps assistant output outside", async ()
   });
 
   const transcript = stripAnsi(output.join(""));
-  assert.match(transcript, /┌─ \[PORTLOG\] \/tmp\/e06-review/);
-  assert.match(transcript, /│  MODEL openrouter\/deepseek\/deepseek-v4-flash/);
-  assert.match(transcript, /│ You: Explain the source\./);
-  assert.match(transcript, /└─{2,}/);
+  assert.match(transcript, /You: Explain the source\./);
+  assert.doesNotMatch(transcript, /\[PORTLOG\]|MODEL |┌─ \[|│ You:|e06-review/);
+  assert.match(output.join(""), /\u001b\[48;5;236m\u001b\[38;5;250m You: Explain the source\. /);
   assert.match(transcript, /\[PortLog tool: portlog_evidence\]\nAssistant\nHello\nworld/);
-  assert.doesNotMatch(transcript, /│ Assistant/);
   assert.match(output.join(""), /\u001b\[90mAssistant/);
 });
 test("interactive chat prompt puts identity in the editor label", async () => {
@@ -377,7 +375,10 @@ test("terminal cursor follows the insertion point across multiline editor rows",
 
   fixture.emit("\r");
   assert.equal(await question, "abc\ndef");
-  assert.match(fixture.output.join(""), /\u001b\[1B\r\n\u001b\[\?25l$/u);
+  assert.match(
+    fixture.output.join(""),
+    /\u001b\[48;5;236m\u001b\[38;5;250m You: abc \u001b\[0m\n\u001b\[48;5;236m\u001b\[38;5;250m     def \u001b\[0m\u001b\[\?25l$/u,
+  );
 });
 test("terminal cursor tracks a soft-wrapped editor row", async () => {
   const fixture = createRawPromptFixture(16);

@@ -74,7 +74,6 @@ export interface TuiWelcomeOptions {
 }
 
 export type TuiChatIdentity = TuiWelcomeOptions;
-const CHAT_RULE = "─".repeat(66);
 const CHAT_ASSISTANT_COLOR = "\u001b[90m";
 const CHAT_TOOL_COLOR = "\u001b[2m";
 const CURSOR_HIDE = "\u001b[?25l";
@@ -126,20 +125,20 @@ export const PORTLOG_EDITOR_THEME: EditorTheme = {
   hintStyle: stylePortLogEditorMuted,
 };
 
-function renderChatUserMessage(identity: TuiChatIdentity, question: string): string {
-  return [
-    CHAT_RESET,
-    CHAT_RULE,
-    `┌─ [PORTLOG] ${displayChatPath(identity.projectDirectory)}`,
-    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
-    `│ You: ${sanitizeSingleLineChatText(question)}`,
-    `└${CHAT_RULE.slice(1)}`,
-    "",
-  ].join("\n");
-}
+const CHAT_USER_BG = "\u001b[48;5;236m";
+const CHAT_USER_FG = "\u001b[38;5;250m";
 
-function closeChatInput(): string {
-  return `${CHAT_RESET}\n`;
+// Renders a submitted user message as a plain, read-only history line on a subtle
+// background so it reads as "user" against the assistant's plain gray text. The
+// live input box is the only box on screen; everything submitted becomes a chip.
+function renderArchivedUserMessage(text: string): string {
+  const lines = sanitizeChatText(text).split("\n");
+  return lines
+    .map(
+      (line, index) =>
+        `${CHAT_USER_BG}${CHAT_USER_FG}${index === 0 ? " You: " : "     "}${line} ${CHAT_RESET}`,
+    )
+    .join("\n");
 }
 function displayChatPath(projectDirectory: string): string {
   const absolute = resolve(projectDirectory);
@@ -399,9 +398,11 @@ export function createTuiChatPrompt(
         }
       };
       editor.onSubmit = (text) => {
-        const rowsDown = Math.max(0, pending.renderedBodyLines - 1 - pending.cursorRow);
-        if (rowsDown > 0) output.write(`\u001b[${rowsDown}B`);
-        output.write("\r\n");
+        // The live input box is the only box on screen. On submit, erase it and
+        // recommit the message as a plain background chip so history never looks
+        // like the active input.
+        clearChatInputBody(output, pending.renderedBodyLines, pending.cursorRow);
+        output.write(renderArchivedUserMessage(text));
         complete(text);
       };
       active = pending;
@@ -541,7 +542,7 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
               }
             : undefined,
         ));
-      if (identity && !providedQuestion) options.write(closeChatInput());
+      if (identity && !providedQuestion) options.write("\n\n");
     } catch {
       return;
     }
@@ -569,7 +570,7 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
     }
 
     const framed = identity !== undefined;
-    if (framed && providedQuestion) options.write(renderChatUserMessage(identity, question));
+    if (framed && providedQuestion) options.write(`${renderArchivedUserMessage(question)}\n\n`);
     else if (!framed)
       options.write(`${providedQuestion ? `\nYou: ${question}\n` : "\n"}Assistant: `);
 
