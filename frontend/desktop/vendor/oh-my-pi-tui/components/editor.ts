@@ -1121,7 +1121,8 @@ export class Editor implements Component, Focusable {
 				// When scrollbar is active, replace the right border vertical with a
 				// thumb glyph (█) on lines inside the thumb range, keeping the track (│) elsewhere.
 				const inThumb = scrollbarThumb && visibleIndex >= scrollbarThumb.start && visibleIndex < scrollbarThumb.end;
-				const rightGlyph = inThumb ? "█" : box.vertical;
+				const rightGlyph =
+					inThumb && box.rightVertical !== "" ? "█" : (box.rightVertical ?? box.vertical);
 				const rightBorder = this.borderColor(`${padding(Math.max(0, rightChromeCells - 1))}${rightGlyph}`);
 				result.push(leftBorder + displayText + linePad + rightBorder);
 			}

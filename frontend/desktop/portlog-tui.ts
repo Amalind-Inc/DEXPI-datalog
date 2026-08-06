@@ -84,12 +84,13 @@ const CURSOR_SYNC_END = "\u001b[?2026l";
 const CHAT_RESET = "\u001b[0m";
 
 const PORTLOG_EDITOR_BOX = {
-  topLeft: "╭",
-  topRight: "╮",
-  bottomLeft: "╰",
-  bottomRight: "╯",
+  topLeft: "┌",
+  topRight: "",
+  bottomLeft: "└",
+  bottomRight: "",
   horizontal: "─",
   vertical: "│",
+  rightVertical: "",
   teeDown: "┬",
   teeUp: "┴",
   teeLeft: "├",
@@ -110,7 +111,7 @@ const PORTLOG_EDITOR_SYMBOLS: SymbolTheme = {
 
 const stylePortLogEditorMuted = (text: string): string => `${CHAT_TOOL_COLOR}${text}${CHAT_RESET}`;
 
-const PORTLOG_EDITOR_THEME: EditorTheme = {
+export const PORTLOG_EDITOR_THEME: EditorTheme = {
   borderColor: stylePortLogEditorMuted,
   selectList: {
     selectedPrefix: stylePortLogEditorMuted,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { Editor } from "./vendor/oh-my-pi-tui/components/editor.ts";
 import {
   createTuiState,
   MAX_FEED_ENTRIES,
@@ -18,6 +19,7 @@ import {
   parseTuiModelSpec,
 } from "./portlog-tui-model-selector.ts";
 import {
+  PORTLOG_EDITOR_THEME,
   buildReviewArgs,
   createTuiChatPrompt,
   parseTuiOptions,
@@ -270,12 +272,52 @@ test("chat prompt combines identity with You and truncates the label to fit", as
   });
   fixture.emit("\r");
 
-  assert.equal(await question, "");
   const raw = fixture.output.join("");
   const transcript = stripAnsi(raw);
-  assert.match(transcript, /╭─ You · .*….*╮/u);
-  assert.doesNotMatch(transcript, /PORTLOG|MODEL/u);
+  assert.equal(await question, "");
+  assert.match(transcript, /┌─ You · .*$/mu);
+  assert.match(transcript, /└─+/u);
+  assert.doesNotMatch(transcript, /[╭╮╰╯]/u);
+  assert.doesNotMatch(transcript, /│[^\n]*│/u);
   assert.doesNotMatch(raw, /\u001b_pi:c\u0007/u);
+});
+
+test("chat prompt keeps the left rule and leaves the right side open", async () => {
+  const fixture = createRawPromptFixture(24);
+  const question = fixture.prompt.question("", {
+    multiline: true,
+    editorLabel: "You",
+  });
+  fixture.emit("abc");
+  fixture.emit("\u001b[13;2u");
+  fixture.emit("def");
+
+  const transcript = stripAnsi(fixture.output.join(""));
+  assert.match(transcript, /┌─ You .*$/mu);
+  assert.match(transcript, /│ abc[^\n]*$/mu);
+  assert.match(transcript, /└─def[^\n]*$/mu);
+  assert.match(transcript, /└─+/u);
+  assert.doesNotMatch(transcript, /│[^\n]*│/u);
+
+  fixture.emit("\r");
+  assert.equal(await question, "abc\ndef");
+});
+
+test("PortLog open-right borders suppress scrollbar enclosure glyphs", () => {
+  const editor = new Editor(PORTLOG_EDITOR_THEME);
+  editor.focused = true;
+  editor.setUseTerminalCursor(true);
+  editor.setMaxHeight(4);
+  editor.setScrollbarVisible(true);
+  editor.setText("one\ntwo\nthree\nfour\nfive");
+
+  const transcript = stripAnsi(editor.render(24).join("\n"));
+  assert.match(transcript, /┌/u);
+  assert.match(transcript, /│/u);
+  assert.match(transcript, /└/u);
+  assert.doesNotMatch(transcript, /[╭╮╰╯]/u);
+  assert.doesNotMatch(transcript, /█/u);
+  assert.doesNotMatch(transcript, /│[^\n]*│/u);
 });
 test("chat prompt delegates the insertion cursor to the terminal", async () => {
   const fixture = createRawPromptFixture();
@@ -351,8 +393,8 @@ test("raw split shift+enter reassembles before reaching the upstream editor", as
 
   assert.equal(await question, "hello\nworld");
   const transcript = stripAnsi(fixture.output.join(""));
-  assert.match(transcript, /╭.*You.*╮/u);
-  assert.match(transcript, /╰.*╯/u);
+  assert.match(transcript, /┌.*You/u);
+  assert.match(transcript, /└/u);
   assert.match(transcript, /hello/u);
   assert.match(transcript, /world/u);
   assert.doesNotMatch(transcript, /13~|\[13;2u/u);
@@ -385,8 +427,8 @@ test("upstream editor surface wraps and preserves cursor-aware backspace edits",
 
   assert.equal(await question, "abcdefghijZ");
   const transcript = stripAnsi(fixture.output.join(""));
-  assert.match(transcript, /╭/u);
-  assert.match(transcript, /╰/u);
+  assert.match(transcript, /┌/u);
+  assert.match(transcript, /└/u);
   assert.match(transcript, /abcdef/u);
   assert.match(transcript, /ghijZ/u);
   assert.doesNotMatch(fixture.output.join(""), /▏/u);

@@ -5,6 +5,7 @@ export interface BoxSymbols {
 	bottomRight: string;
 	horizontal: string;
 	vertical: string;
+	rightVertical?: string;
 	teeDown: string;
 	teeUp: string;
 	teeLeft: string;
