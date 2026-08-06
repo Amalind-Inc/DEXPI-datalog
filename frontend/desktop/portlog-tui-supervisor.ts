@@ -107,6 +107,13 @@ export function startReviewProcess(options: ReviewProcessOptions): ReviewProcess
 }
 
 export function parseReviewLine(line: string): TuiEvent | undefined {
+  if (line.startsWith("ASSISTANT:")) {
+    const payload = line.slice("ASSISTANT:".length);
+    return {
+      type: "assistant_text_delta",
+      text: payload.startsWith(" ") ? payload.slice(1) : payload,
+    };
+  }
   const value = line.trim();
   if (!value) return undefined;
   if (value === "TURN STARTED") return { type: "turn_started" };
@@ -114,8 +121,6 @@ export function parseReviewLine(line: string): TuiEvent | undefined {
   if (value === "TURN CANCELLED") return { type: "turn_cancelled" };
   if (value.startsWith("TURN FAILED:"))
     return { type: "turn_failed", message: value.slice("TURN FAILED:".length).trim() };
-  if (value.startsWith("ASSISTANT:"))
-    return { type: "assistant_text_delta", text: value.slice("ASSISTANT:".length).trimStart() };
 
   const request = parseToolLine(value, "TOOL REQUEST");
   if (request) return { type: "tool_request", ...request };

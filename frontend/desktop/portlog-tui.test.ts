@@ -712,12 +712,20 @@ test("disposed supervisor workers cannot report stale failures into a replacemen
   assert.equal(events.includes("turn_cancelled"), false);
 });
 
-test("review output parser accepts normalized lines and ignores raw noise", () => {
+test("review output parser preserves whitespace at assistant chunk boundaries", () => {
   assert.deepEqual(parseReviewLine("TURN STARTED"), { type: "turn_started" });
   assert.deepEqual(parseReviewLine("ASSISTANT: Evidence is bounded."), {
     type: "assistant_text_delta",
     text: "Evidence is bounded.",
   });
+  const first = parseReviewLine("ASSISTANT: How can I");
+  const second = parseReviewLine("ASSISTANT:  help you today?");
+  const indented = parseReviewLine("ASSISTANT:   keep this indentation");
+  assert.equal(first?.type, "assistant_text_delta");
+  assert.equal(second?.type, "assistant_text_delta");
+  assert.equal(indented?.type, "assistant_text_delta");
+  assert.equal(`${first?.text ?? ""}${second?.text ?? ""}`, "How can I help you today?");
+  assert.equal(indented?.text, "  keep this indentation");
   assert.deepEqual(parseReviewLine('TOOL REQUEST portlog_evidence {"artifactId":"topology"}'), {
     type: "tool_request",
     tool: "portlog_evidence",
