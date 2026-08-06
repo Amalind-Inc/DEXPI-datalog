@@ -277,7 +277,55 @@ test("chat prompt combines identity with You and truncates the label to fit", as
   assert.doesNotMatch(transcript, /PORTLOG|MODEL/u);
   assert.doesNotMatch(raw, /\u001b_pi:c\u0007/u);
 });
+test("chat prompt delegates the insertion cursor to the terminal", async () => {
+  const fixture = createRawPromptFixture();
+  const question = fixture.prompt.question("", { multiline: true });
 
+  const initial = fixture.output.join("");
+  assert.match(initial, /\u001b\[3G\u001b\[\?25h/u);
+
+  fixture.emit("abc");
+  const beforeNavigation = fixture.output.length;
+  fixture.emit("\u001b[D");
+  const navigationOutput = fixture.output.slice(beforeNavigation).join("");
+  assert.equal(navigationOutput.match(/\u001b\[\d+G\u001b\[\?25h/u)?.[0], "\u001b[5G\u001b[?25h");
+
+  fixture.emit("\r");
+  assert.equal(await question, "abc");
+});
+
+test("terminal cursor follows the insertion point across multiline editor rows", async () => {
+  const fixture = createRawPromptFixture(80);
+  const question = fixture.prompt.question("", { multiline: true });
+  fixture.emit("abc");
+  fixture.emit("\u001b[13;2u");
+  fixture.emit("def");
+  const beforeNavigation = fixture.output.length;
+  fixture.emit("\u001b[A");
+  const position = fixture.output.slice(beforeNavigation).join("");
+
+  assert.equal(
+    position.match(/\u001b\[1A\u001b\[6G\u001b\[\?25h/u)?.[0],
+    "\u001b[1A\u001b[6G\u001b[?25h",
+  );
+
+  fixture.emit("\r");
+  assert.equal(await question, "abc\ndef");
+  assert.match(fixture.output.join(""), /\u001b\[1B\r\n\u001b\[\?25l$/u);
+});
+test("terminal cursor tracks a soft-wrapped editor row", async () => {
+  const fixture = createRawPromptFixture(16);
+  const question = fixture.prompt.question("", { multiline: true });
+  fixture.emit("abcdefghijklmnop");
+  const beforeNavigation = fixture.output.length;
+  fixture.emit("\u001b[A");
+
+  const position = fixture.output.slice(beforeNavigation).join("");
+  assert.match(position, /\u001b\[1A\u001b\[\d+G\u001b\[\?25h/u);
+
+  fixture.emit("\r");
+  assert.equal(await question, "abcdefghijklmnop");
+});
 test("backspace after a multiline newline redraws without cursor artifacts", async () => {
   const fixture = createRawPromptFixture(24);
   const question = fixture.prompt.question("", { multiline: true });
@@ -341,6 +389,8 @@ test("upstream editor surface wraps and preserves cursor-aware backspace edits",
   assert.match(transcript, /╰/u);
   assert.match(transcript, /abcdef/u);
   assert.match(transcript, /ghijZ/u);
+  assert.doesNotMatch(fixture.output.join(""), /▏/u);
+  assert.match(fixture.output.join(""), /\u001b\[\d+G\u001b\[\?25h/u);
 });
 
 test("raw prompt input cleans up on ctrl+c cancellation and close", async () => {

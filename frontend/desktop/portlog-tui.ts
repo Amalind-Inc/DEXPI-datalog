@@ -77,6 +77,8 @@ export type TuiChatIdentity = TuiWelcomeOptions;
 const CHAT_RULE = "─".repeat(66);
 const CHAT_ASSISTANT_COLOR = "\u001b[90m";
 const CHAT_TOOL_COLOR = "\u001b[2m";
+const CURSOR_HIDE = "\u001b[?25l";
+const CURSOR_SHOW = "\u001b[?25h";
 const CURSOR_SYNC_START = "\u001b[?2026h";
 const CURSOR_SYNC_END = "\u001b[?2026l";
 const CHAT_RESET = "\u001b[0m";
@@ -207,23 +209,40 @@ export interface TuiCommandPrompt {
 export interface TuiChatPrompt extends TuiCommandPrompt {
   onInterrupt(listener: () => void): void;
 }
+type RenderedEditor = {
+  readonly lines: string[];
+  readonly cursor?: { row: number; column: number };
+};
 
-function renderEditorLines(editor: Editor, columns = 80): string[] {
-  return editor
-    .render(Math.max(3, Math.floor(columns)))
-    .map((line) => line.replaceAll(CURSOR_MARKER, ""));
+function renderEditor(editor: Editor, columns = 80): RenderedEditor {
+  let cursor: { row: number; column: number } | undefined;
+  const lines = editor.render(Math.max(3, Math.floor(columns))).map((line, row) => {
+    const markerIndex = line.indexOf(CURSOR_MARKER);
+    if (editor.getUseTerminalCursor() && cursor === undefined && markerIndex >= 0) {
+      cursor = {
+        row,
+        column: visibleWidth(line.slice(0, markerIndex)),
+      };
+    }
+    return line.replaceAll(CURSOR_MARKER, "");
+  });
+  return { lines, cursor };
 }
 
-function renderChatInputBody(editor: Editor, columns = 80): string {
-  return renderEditorLines(editor, columns).join("\n");
+function positionTerminalCursor(cursor: RenderedEditor["cursor"], lineCount: number): string {
+  if (!cursor) return CURSOR_HIDE;
+  const rowsUp = Math.max(0, lineCount - 1 - cursor.row);
+  const moveUp = rowsUp > 0 ? `\u001b[${rowsUp}A` : "";
+  return `${moveUp}\u001b[${cursor.column + 1}G${CURSOR_SHOW}`;
 }
 
-function renderPromptInputBody(editor: Editor, prompt: string, columns = 80): string {
-  return `${prompt}\n${renderChatInputBody(editor, columns)}`;
-}
-
-function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): void {
-  if (lineCount > 1) output.write(`\u001b[${lineCount - 1}A`);
+function clearChatInputBody(
+  output: TuiChatPromptOutput,
+  lineCount: number,
+  cursorRow: number,
+): void {
+  const rowsUp = Math.max(0, Math.min(lineCount - 1, cursorRow));
+  if (rowsUp > 0) output.write(`\u001b[${rowsUp}A`);
   for (let index = 0; index < lineCount; index += 1) {
     output.write("\r\u001b[2K");
     if (index < lineCount - 1) output.write("\u001b[1B");
@@ -231,7 +250,6 @@ function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): voi
   if (lineCount > 1) output.write(`\u001b[${lineCount - 1}A`);
   output.write("\r");
 }
-
 export function createTuiChatPrompt(
   input: TuiChatPromptInput,
   output: TuiChatPromptOutput,
@@ -246,6 +264,7 @@ export function createTuiChatPrompt(
     readonly sequenceListener: (sequence: string) => void;
     readonly pasteListener: (content: string) => void;
     renderedBodyLines: number;
+    cursorRow: number;
     completing: boolean;
     resolve: (value: string) => void;
     reject: (error: Error) => void;
@@ -262,6 +281,7 @@ export function createTuiChatPrompt(
     pending.sequenceBuffer.destroy();
     input.setRawMode?.(false);
     input.pause();
+    output.write(CURSOR_HIDE);
   };
   const complete = (value: string): void => {
     const pending = active;
@@ -279,11 +299,13 @@ export function createTuiChatPrompt(
   };
   const redraw = (pending: ActiveQuestion): void => {
     output.write(CURSOR_SYNC_START);
-    clearChatInputBody(output, pending.renderedBodyLines);
+    clearChatInputBody(output, pending.renderedBodyLines, pending.cursorRow);
     const columns = Math.max(3, Math.floor(output.columns ?? 80));
-    const lines = renderEditorLines(pending.editor, columns);
-    output.write(lines.join("\n"));
-    pending.renderedBodyLines = lines.length;
+    const rendered = renderEditor(pending.editor, columns);
+    output.write(rendered.lines.join("\n"));
+    pending.renderedBodyLines = rendered.lines.length;
+    pending.cursorRow = rendered.cursor?.row ?? rendered.lines.length - 1;
+    output.write(positionTerminalCursor(rendered.cursor, rendered.lines.length));
     output.write(CURSOR_SYNC_END);
   };
   const isSubmitSequence = (sequence: string): boolean =>
@@ -311,6 +333,7 @@ export function createTuiChatPrompt(
       const promptLabel = hasChatSurface ? "" : prompt.slice(finalNewline + 1);
       const editor = new Editor(PORTLOG_EDITOR_THEME);
       editor.focused = true;
+      if (hasChatSurface) editor.setUseTerminalCursor(true);
       const columns = Math.max(3, Math.floor(output.columns ?? 80));
       if (hasChatSurface) {
         const availableWidth = editor.getTopBorderAvailableWidth(columns);
@@ -325,6 +348,12 @@ export function createTuiChatPrompt(
 
       const sequenceBuffer = new StdinBuffer({ timeout: 50 });
       let pending!: ActiveQuestion;
+      let redrawnByChange = false;
+      const handleEditorInput = (data: string): void => {
+        redrawnByChange = false;
+        pending.editor.handleInput(data);
+        if (!redrawnByChange && active === pending && !pending.completing) redraw(pending);
+      };
       const sequenceListener = (sequence: string): void => {
         if (active !== pending) return;
         if (matchesKey(sequence, "ctrl+c") || sequence === "\u0003") {
@@ -339,12 +368,10 @@ export function createTuiChatPrompt(
           return;
         }
         if (!pending.multiline && matchesKey(sequence, "shift+enter")) return;
-        pending.editor.handleInput(sequence);
+        handleEditorInput(sequence);
       };
       const pasteListener = (content: string): void => {
-        if (active === pending) {
-          pending.editor.handleInput(`\u001b[200~${content}\u001b[201~`);
-        }
+        if (active === pending) handleEditorInput(`\u001b[200~${content}\u001b[201~`);
       };
       const inputListener: TuiPromptDataListener = (chunk) => {
         sequenceBuffer.process(chunk);
@@ -359,15 +386,21 @@ export function createTuiChatPrompt(
         sequenceListener,
         pasteListener,
         renderedBodyLines: 1,
+        cursorRow: 0,
         completing: false,
         resolve: resolveQuestion,
         reject: rejectQuestion,
       };
       editor.onChange = () => {
-        if (active === pending && !pending.completing) redraw(pending);
+        if (active === pending && !pending.completing) {
+          redrawnByChange = true;
+          redraw(pending);
+        }
       };
       editor.onSubmit = (text) => {
-        output.write("\n");
+        const rowsDown = Math.max(0, pending.renderedBodyLines - 1 - pending.cursorRow);
+        if (rowsDown > 0) output.write(`\u001b[${rowsDown}B`);
+        output.write("\r\n");
         complete(text);
       };
       active = pending;
@@ -376,12 +409,18 @@ export function createTuiChatPrompt(
       input.setRawMode?.(true);
       input.on("data", inputListener);
       input.resume();
-      const lines = renderEditorLines(editor, columns);
-      pending.renderedBodyLines = lines.length;
+      const rendered = renderEditor(editor, columns);
+      pending.renderedBodyLines = rendered.lines.length;
+      pending.cursorRow = rendered.cursor?.row ?? rendered.lines.length - 1;
       const initialBody = pending.hasChatSurface
-        ? lines.join("\n")
-        : renderPromptInputBody(editor, pending.prompt, columns);
-      output.write(`${CURSOR_SYNC_START}${immutablePrefix}${initialBody}${CURSOR_SYNC_END}`);
+        ? rendered.lines.join("\n")
+        : `${pending.prompt}\n${rendered.lines.join("\n")}`;
+      const cursorControl = pending.hasChatSurface
+        ? positionTerminalCursor(rendered.cursor, rendered.lines.length)
+        : CURSOR_HIDE;
+      output.write(
+        `${CURSOR_SYNC_START}${immutablePrefix}${initialBody}${cursorControl}${CURSOR_SYNC_END}`,
+      );
     });
   };
 
