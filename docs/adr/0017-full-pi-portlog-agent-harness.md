@@ -184,6 +184,14 @@ No request may partially execute on the host and partially in Gondolin. Isolatio
 
 Bash interceptors and user patterns are advisory or narrowing controls only. They cannot authorize host execution, credentials, network, unsafe paths, or bypass the Gondolin route. Live output streams to clients; durable persistence stores one bounded final result plus truncation, artifact, policy, backend, and command-digest metadata.
 
+#### Deferred Oh My Pi-style bash capability
+
+PortLog explicitly wants a future `bash` capability with the familiar, request-oriented behavior demonstrated by [Oh My Pi's bash executor](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/exec/bash-executor.ts), rather than retaining a profile-only interface. Its [SSH connection and file-transfer modules](https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/ssh) are additional behavioral references for capability probing, timeouts, cancellation, safe quoting, byte-bounded transfer, and cleanup.
+
+The deferred PortLog capability should accept a workspace-bound command request with bounded `cwd`, environment, timeout, PTY, and asynchronous/background fields; classify the whole request before execution; run only a small explicitly approved host-safe subset locally; route compound, risky, or ambiguous requests atomically to Gondolin; and stream live output while persisting one bounded result with artifact metadata. Unsupported semantics must return `unavailable`, and no classification, initialization, cancellation, cleanup, or backend failure may fall back to host execution.
+
+This is a desired future product capability, not a request to import the Oh My Pi runtime or SSH implementation as a production dependency. The current immutable Gondolin profile bridge remains the intentionally narrower first slice until this contract is implemented and verified.
+
 ### Web search
 
 `web_search` follows the native Oh My Pi model-facing result contract. The request exposes a query and bounded result, recency/date, and domain hints. Provider selection, credentials, limits, concurrency, and deadlines remain host-controlled.
