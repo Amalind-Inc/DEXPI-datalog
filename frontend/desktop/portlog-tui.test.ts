@@ -27,10 +27,8 @@ import {
   runTuiCommandPrompt,
   runTuiRequiredModelSelection,
   runTuiStartupPrompt,
-  type TuiPromptKey,
 } from "./portlog-tui.ts";
 import { parseReviewLine, startReviewProcess } from "./portlog-tui-supervisor.ts";
-import { Editor } from "./vendor/pi-tui-editor/editor.ts";
 test("/model is the explicit selector command and unknown slash commands are inert", () => {
   assert.equal(parseTuiCommand("/model"), "model");
   assert.equal(parseTuiCommand(" /model "), "model");
@@ -212,206 +210,115 @@ test("interactive chat prompt places the user input inside the box", async () =>
   assert.match(promptText, /─{66}/);
   assert.match(
     promptText,
-    /┌─ \[PORTLOG\] \/tmp\/e06-review\n│  MODEL openrouter\/deepseek\/deepseek-v4-flash\n│ You: $/,
+    /┌─ \[PORTLOG\] \/tmp\/e06-review\n│  MODEL openrouter\/deepseek\/deepseek-v4-flash\n└─$/,
   );
   assert.match(stripAnsi(output.join("")), /└─{2,}/);
 });
-test("shift+enter expands the boxed prompt and submits embedded newlines on enter", async () => {
-  const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
+function createRawPromptFixture(columns = 80) {
+  const listeners = new Set<(chunk: string | Buffer) => void>();
   const rawModes: boolean[] = [];
+  let pauseCount = 0;
+  let resumeCount = 0;
   const output: string[] = [];
   const input = {
-    on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+    on: (_event: "data", listener: (chunk: string | Buffer) => void) => {
       listeners.add(listener);
       return input;
     },
-    off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
+    off: (_event: "data", listener: (chunk: string | Buffer) => void) => {
       listeners.delete(listener);
       return input;
     },
-    pause: () => {},
-    resume: () => {},
+    pause: () => {
+      pauseCount += 1;
+    },
+    resume: () => {
+      resumeCount += 1;
+    },
     setRawMode: (enabled: boolean) => rawModes.push(enabled),
   };
-  const emitKey = (character: string, key: TuiPromptKey = {}) => {
-    for (const listener of listeners) listener(character, key);
-  };
-  const prompt = createTuiChatPrompt(input, {
-    write: (text) => {
-      output.push(text);
-      return true;
-    },
-  });
-  const questions: string[] = [];
-  let resolveTurn!: () => void;
-  const turnFinished = new Promise<void>((resolve) => {
-    resolveTurn = resolve;
-  });
-  const session = runTuiChatSession({
-    prompt,
-    chooseModel: async () => undefined,
-    applyModelSelection: () => {},
-    getIdentity: () => ({
-      projectDirectory: "/tmp/e06-review",
-      provider: "openrouter",
-      model: "deepseek/deepseek-v4-flash",
+  return {
+    prompt: createTuiChatPrompt(input, {
+      columns,
+      write: (text) => {
+        output.push(text);
+        return true;
+      },
     }),
-    runTurn: async (question) => {
-      questions.push(question);
-      await turnFinished;
-      return { status: "completed" };
+    output,
+    rawModes,
+    listeners,
+    emit: (chunk: string | Buffer) => {
+      for (const listener of listeners) listener(chunk);
     },
-    write: (text) => output.push(text),
-  });
+    get pauseCount() {
+      return pauseCount;
+    },
+    get resumeCount() {
+      return resumeCount;
+    },
+  };
+}
 
-  for (const character of "hello") emitKey(character, { name: character, sequence: character });
-  emitKey("", { name: "return", sequence: "\u001b[13;2u", shift: true });
-  for (const character of "world") emitKey(character, { name: character, sequence: character });
-  assert.deepEqual(questions, []);
+test("raw split shift+enter reassembles before reaching the upstream editor", async () => {
+  const fixture = createRawPromptFixture(24);
+  const question = fixture.prompt.question("header", { multiline: true });
+  fixture.emit("hello");
+  fixture.emit("\u001b[13;2");
+  fixture.emit("u");
+  fixture.emit("world");
+  fixture.emit("\r");
 
-  emitKey("\r", { name: "return", sequence: "\r" });
-  await Promise.resolve();
-  assert.deepEqual(questions, ["hello\nworld"]);
-  resolveTurn();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-
-  for (const character of "/quit") emitKey(character, { name: character, sequence: character });
-  emitKey("\r", { name: "return", sequence: "\r" });
-  await session;
-
-  const transcript = stripAnsi(output.join(""));
-  assert.match(transcript, /│ You: hello\n│      world/);
-  assert.match(transcript, /└─{2,}/);
-  assert.deepEqual(rawModes, [true, false, true, false]);
+  assert.equal(await question, "hello\nworld");
+  const transcript = stripAnsi(fixture.output.join(""));
+  assert.match(transcript, /╭.*You.*╮/u);
+  assert.match(transcript, /╰.*╯/u);
+  assert.match(transcript, /hello/u);
+  assert.match(transcript, /world/u);
+  assert.doesNotMatch(transcript, /13~|\[13;2u/u);
+  assert.deepEqual(fixture.rawModes, [true, false]);
+  assert.equal(fixture.listeners.size, 0);
 });
-test("chat prompt wraps long input and submits with ctrl+enter", async () => {
-  const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
-  const output: string[] = [];
-  const input = {
-    on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-      listeners.add(listener);
-      return input;
-    },
-    off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-      listeners.delete(listener);
-      return input;
-    },
-    pause: () => {},
-    resume: () => {},
-    setRawMode: (_enabled: boolean) => {},
-  };
-  const emitKey = (character: string, key: TuiPromptKey = {}) => {
-    for (const listener of listeners) listener(character, key);
-  };
-  const prompt = createTuiChatPrompt(input, {
-    columns: 28,
-    write: (text) => {
-      output.push(text);
-      return true;
-    },
-  });
-  const question = prompt.question("header\n│ You: ", { multiline: true });
-  for (const character of "abcdefghijklmnopqrstuvwxyz") {
-    emitKey(character, { name: character, sequence: character });
-  }
-  emitKey("", { sequence: "\u001b[13;5u" });
-  assert.equal(await question, "abcdefghijklmnopqrstuvwxyz");
-  const transcript = stripAnsi(output.join(""));
-  assert.match(transcript, /│ You: [a-z]+\n│      [a-z]+/);
-});
-test("editor ignores legacy F3 sequences and accepts legacy ctrl+enter", () => {
-  const editor = new Editor();
-  let submitted: string | undefined;
-  editor.onSubmit = (text) => {
-    submitted = text;
-  };
-  editor.handleInput("hello");
-  editor.handleInput("\u001b[13;5~");
-  assert.equal(editor.getText(), "hello");
-  assert.equal(submitted, undefined);
-  editor.handleInput("\u001b[27;5;13~");
-  assert.equal(submitted, "hello");
-});
-test("non-chat prompt preserves a leading prefix while editing", async () => {
-  const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
-  const output: string[] = [];
-  const input = {
-    on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-      listeners.add(listener);
-      return input;
-    },
-    off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-      listeners.delete(listener);
-      return input;
-    },
-    pause: () => {},
-    resume: () => {},
-    setRawMode: (_enabled: boolean) => {},
-  };
-  const emitKey = (character: string, key: TuiPromptKey) => {
-    for (const listener of listeners) listener(character, key);
-  };
-  const prompt = createTuiChatPrompt(input, {
-    write: (text) => {
-      output.push(text);
-      return true;
-    },
-  });
-  const question = prompt.question("\nCommand: ");
-  emitKey("a", { name: "a", sequence: "a" });
-  emitKey("b", { name: "b", sequence: "b" });
-  emitKey("\r", { name: "return", sequence: "\r" });
-  assert.equal(await question, "ab");
-  assert.equal((output.join("").match(/\n/gu) ?? []).length, 2);
-});
-test("chat prompt restores input state on cancellation and close", async () => {
-  const makePrompt = () => {
-    const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
-    const rawModes: boolean[] = [];
-    let pauseCount = 0;
-    let resumeCount = 0;
-    const input = {
-      on: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-        listeners.add(listener);
-        return input;
-      },
-      off: (_event: "keypress", listener: (character: string, key: TuiPromptKey) => void) => {
-        listeners.delete(listener);
-        return input;
-      },
-      pause: () => {
-        pauseCount += 1;
-      },
-      resume: () => {
-        resumeCount += 1;
-      },
-      setRawMode: (enabled: boolean) => rawModes.push(enabled),
-    };
-    const prompt = createTuiChatPrompt(input, { write: () => true });
-    return {
-      input,
-      prompt,
-      listeners,
-      rawModes,
-      emit: (character: string, key: TuiPromptKey) => {
-        for (const listener of listeners) listener(character, key);
-      },
-      get pauseCount() {
-        return pauseCount;
-      },
-      get resumeCount() {
-        return resumeCount;
-      },
-    };
-  };
 
-  const cancelled = makePrompt();
+test("raw ctrl+enter and plain enter submit without escape suffixes", async () => {
+  const ctrl = createRawPromptFixture();
+  const ctrlQuestion = ctrl.prompt.question("header", { multiline: true });
+  ctrl.emit("ctrl submit");
+  ctrl.emit("\u001b[13;5u");
+  assert.equal(await ctrlQuestion, "ctrl submit");
+
+  const plain = createRawPromptFixture();
+  const plainQuestion = plain.prompt.question("header", { multiline: true });
+  plain.emit("plain submit");
+  plain.emit("\r");
+  assert.equal(await plainQuestion, "plain submit");
+  assert.doesNotMatch(stripAnsi(ctrl.output.join("") + plain.output.join("")), /13~|\[13;5u/u);
+});
+
+test("upstream editor surface wraps and preserves cursor-aware backspace edits", async () => {
+  const fixture = createRawPromptFixture(16);
+  const question = fixture.prompt.question("header", { multiline: true });
+  fixture.emit("abcdefghijk");
+  fixture.emit("\x7f");
+  fixture.emit("Z");
+  fixture.emit("\r");
+
+  assert.equal(await question, "abcdefghijZ");
+  const transcript = stripAnsi(fixture.output.join(""));
+  assert.match(transcript, /╭/u);
+  assert.match(transcript, /╰/u);
+  assert.match(transcript, /abcdef/u);
+  assert.match(transcript, /ghijZ/u);
+});
+
+test("raw prompt input cleans up on ctrl+c cancellation and close", async () => {
+  const cancelled = createRawPromptFixture();
   let interrupted = false;
   cancelled.prompt.onInterrupt(() => {
     interrupted = true;
   });
-  const cancelledQuestion = cancelled.prompt.question("You: ", { multiline: true });
-  cancelled.emit("", { name: "c", ctrl: true });
+  const cancelledQuestion = cancelled.prompt.question("header", { multiline: true });
+  cancelled.emit("\u0003");
   await assert.rejects(cancelledQuestion, /Input cancelled/);
   assert.equal(interrupted, true);
   assert.equal(cancelled.listeners.size, 0);
@@ -419,14 +326,14 @@ test("chat prompt restores input state on cancellation and close", async () => {
   assert.equal(cancelled.resumeCount, 1);
   assert.equal(cancelled.pauseCount, 1);
 
-  const closed = makePrompt();
-  const closedQuestion = closed.prompt.question("You: ", { multiline: true });
+  const closed = createRawPromptFixture();
+  const closedQuestion = closed.prompt.question("header", { multiline: true });
   closed.prompt.close();
   await assert.rejects(closedQuestion, /Prompt closed/);
   assert.equal(closed.listeners.size, 0);
   assert.equal(closed.rawModes.at(-1), false);
   assert.equal(closed.resumeCount, 1);
-  assert.ok(closed.pauseCount >= 1);
+  assert.equal(closed.pauseCount, 1);
 });
 test("inline chat keeps assistant failures outside the input box", async () => {
   const output: string[] = [];

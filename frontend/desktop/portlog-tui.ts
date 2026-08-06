@@ -16,7 +16,7 @@ import {
   type TuiEvent,
   type TuiState,
 } from "./portlog-tui-model.ts";
-import { renderTui, terminalCellWidth } from "./portlog-tui-renderer.ts";
+import { renderTui } from "./portlog-tui-renderer.ts";
 import { startReviewProcess } from "./portlog-tui-supervisor.ts";
 import {
   buildTuiModelChoices,
@@ -24,7 +24,10 @@ import {
   parseTuiModelSelection,
   type TuiModelSelection,
 } from "./portlog-tui-model-selector.ts";
-import { Editor } from "./vendor/pi-tui-editor/editor.ts";
+import { Editor, type EditorTheme } from "./vendor/oh-my-pi-tui/components/editor.ts";
+import { matchesKey } from "./vendor/oh-my-pi-tui/keys.ts";
+import { StdinBuffer } from "./vendor/oh-my-pi-tui/stdin-buffer.ts";
+import type { SymbolTheme } from "./vendor/oh-my-pi-tui/symbols.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 export type CliOptions = {
@@ -74,15 +77,52 @@ const CHAT_ASSISTANT_COLOR = "\u001b[90m";
 const CHAT_TOOL_COLOR = "\u001b[2m";
 const CHAT_RESET = "\u001b[0m";
 
+const PORTLOG_EDITOR_BOX = {
+  topLeft: "╭",
+  topRight: "╮",
+  bottomLeft: "╰",
+  bottomRight: "╯",
+  horizontal: "─",
+  vertical: "│",
+  teeDown: "┬",
+  teeUp: "┴",
+  teeLeft: "├",
+  teeRight: "┤",
+  cross: "┼",
+};
+
+const PORTLOG_EDITOR_SYMBOLS: SymbolTheme = {
+  cursor: "›",
+  inputCursor: "▏",
+  boxRound: PORTLOG_EDITOR_BOX,
+  boxSharp: PORTLOG_EDITOR_BOX,
+  table: PORTLOG_EDITOR_BOX,
+  quoteBorder: "│",
+  hrChar: "─",
+  spinnerFrames: ["⠋", "⠙", "⠹", "⠸"],
+};
+
+const stylePortLogEditorMuted = (text: string): string => `${CHAT_TOOL_COLOR}${text}${CHAT_RESET}`;
+
+const PORTLOG_EDITOR_THEME: EditorTheme = {
+  borderColor: stylePortLogEditorMuted,
+  selectList: {
+    selectedPrefix: stylePortLogEditorMuted,
+    selectedText: stylePortLogEditorMuted,
+    description: stylePortLogEditorMuted,
+    scrollInfo: stylePortLogEditorMuted,
+    noMatch: stylePortLogEditorMuted,
+    symbols: PORTLOG_EDITOR_SYMBOLS,
+  },
+  symbols: PORTLOG_EDITOR_SYMBOLS,
+  editorPaddingX: 1,
+  hintStyle: stylePortLogEditorMuted,
+};
+
 function renderChatInputPrompt(identity: TuiChatIdentity): string {
-  return [
-    CHAT_RESET,
-    "",
-    CHAT_RULE,
-    `┌─ [PORTLOG] ${displayChatPath(identity.projectDirectory)}`,
-    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
-    "│ You: ",
-  ].join("\n");
+  return [CHAT_RESET, "", CHAT_RULE, renderChatIdentityHeader(identity, "PORTLOG"), "└─"].join(
+    "\n",
+  );
 }
 function renderChatUserMessage(identity: TuiChatIdentity, question: string): string {
   return [
@@ -97,7 +137,7 @@ function renderChatUserMessage(identity: TuiChatIdentity, question: string): str
 }
 
 function closeChatInput(): string {
-  return `${CHAT_RESET}\n└${CHAT_RULE.slice(1)}\n`;
+  return `${CHAT_RESET}└${CHAT_RULE.slice(1)}\n`;
 }
 
 function displayChatPath(projectDirectory: string): string {
@@ -152,19 +192,11 @@ export interface TuiPromptQuestionOptions {
   readonly multiline?: boolean;
 }
 
-export interface TuiPromptKey {
-  readonly name?: string;
-  readonly sequence?: string;
-  readonly shift?: boolean;
-  readonly ctrl?: boolean;
-  readonly meta?: boolean;
-}
-
-export type TuiPromptKeyListener = (character: string, key: TuiPromptKey) => void;
+export type TuiPromptDataListener = (chunk: string | Buffer) => void;
 
 export interface TuiChatPromptInput {
-  on(event: "keypress", listener: TuiPromptKeyListener): TuiChatPromptInput;
-  off(event: "keypress", listener: TuiPromptKeyListener): TuiChatPromptInput;
+  on(event: "data", listener: TuiPromptDataListener): TuiChatPromptInput;
+  off(event: "data", listener: TuiPromptDataListener): TuiChatPromptInput;
   pause(): void;
   resume(): void;
   setRawMode?(enabled: boolean): void;
@@ -185,21 +217,11 @@ export interface TuiChatPrompt extends TuiCommandPrompt {
 }
 
 function renderChatInputBody(editor: Editor, columns = 80): string {
-  const prefix = "│ You: ";
-  const continuation = "│      ";
-  const contentWidth = Math.max(1, Math.floor(columns) - terminalCellWidth(prefix));
-  return editor
-    .render(contentWidth)
-    .map((line, index) => `${index === 0 ? prefix : continuation}${line}`)
-    .join("\n");
+  return editor.render(Math.max(3, Math.floor(columns))).join("\n");
 }
 
 function renderPromptInputBody(editor: Editor, prompt: string, columns = 80): string {
-  const promptWidth = terminalCellWidth(prompt);
-  const contentWidth = Math.max(1, Math.floor(columns) - promptWidth);
-  const [first = "", ...continuation] = editor.render(contentWidth);
-  const continuationPrefix = " ".repeat(Math.max(0, promptWidth));
-  return [prompt + first, ...continuation.map((line) => `${continuationPrefix}${line}`)].join("\n");
+  return `${prompt}\n${editor.render(Math.max(3, Math.floor(columns))).join("\n")}`;
 }
 
 function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): void {
@@ -212,22 +234,21 @@ function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): voi
   output.write("\r");
 }
 
-function normalizeChatInputKey(character: string, key: TuiPromptKey): string {
-  const sequence = key.sequence ?? character;
-  if (key.shift && (key.name === "return" || key.name === "enter")) return "\u001b[13;2u";
-  if (key.ctrl && (key.name === "return" || key.name === "enter")) return "\u001b[13;2;5u";
-  return sequence;
-}
-
 export function createTuiChatPrompt(
   input: TuiChatPromptInput,
   output: TuiChatPromptOutput,
 ): TuiChatPrompt {
   type ActiveQuestion = {
-    editor: Editor;
-    prompt: string;
-    hasChatMarker: boolean;
+    readonly editor: Editor;
+    readonly prompt: string;
+    readonly hasChatSurface: boolean;
+    readonly multiline: boolean;
+    readonly sequenceBuffer: StdinBuffer;
+    readonly inputListener: TuiPromptDataListener;
+    readonly sequenceListener: (sequence: string) => void;
+    readonly pasteListener: (content: string) => void;
     renderedBodyLines: number;
+    completing: boolean;
     resolve: (value: string) => void;
     reject: (error: Error) => void;
   };
@@ -236,8 +257,11 @@ export function createTuiChatPrompt(
   let closed = false;
   let interrupt: (() => void) | undefined;
 
-  const cleanup = (): void => {
-    input.off("keypress", onKeypress);
+  const cleanup = (pending: ActiveQuestion): void => {
+    input.off("data", pending.inputListener);
+    pending.sequenceBuffer.off("data", pending.sequenceListener);
+    pending.sequenceBuffer.off("paste", pending.pasteListener);
+    pending.sequenceBuffer.destroy();
     input.setRawMode?.(false);
     input.pause();
   };
@@ -245,83 +269,113 @@ export function createTuiChatPrompt(
     const pending = active;
     if (!pending) return;
     active = undefined;
-    cleanup();
+    cleanup(pending);
     pending.resolve(value);
   };
   const cancel = (error = new Error("Input cancelled")): void => {
     const pending = active;
     if (!pending) return;
     active = undefined;
-    cleanup();
+    cleanup(pending);
     pending.reject(error);
   };
   const redraw = (pending: ActiveQuestion): void => {
     clearChatInputBody(output, pending.renderedBodyLines);
-    const columns = output.columns ?? 80;
-    if (pending.hasChatMarker) {
-      output.write(renderChatInputBody(pending.editor, columns));
-      pending.renderedBodyLines = pending.editor.render(
-        Math.max(1, Math.floor(columns) - terminalCellWidth("│ You: ")),
-      ).length;
-    } else {
-      output.write(renderPromptInputBody(pending.editor, pending.prompt, columns));
-      pending.renderedBodyLines = pending.editor.render(
-        Math.max(1, Math.floor(columns) - terminalCellWidth(pending.prompt)),
-      ).length;
-    }
+    const columns = Math.max(3, Math.floor(output.columns ?? 80));
+    output.write(renderChatInputBody(pending.editor, columns));
+    pending.renderedBodyLines = pending.editor.render(columns).length;
   };
-  const onKeypress: TuiPromptKeyListener = (character, key) => {
-    const pending = active;
-    if (!pending) return;
-    if (key.ctrl && key.name === "c") {
-      const pendingInterrupt = interrupt;
-      cancel();
-      pendingInterrupt?.();
-      return;
-    }
-    pending.editor.handleInput(normalizeChatInputKey(character, key));
-  };
+  const isSubmitSequence = (sequence: string): boolean =>
+    sequence === "\r" ||
+    sequence === "\n" ||
+    matchesKey(sequence, "ctrl+enter") ||
+    sequence === "\u001b[13;2;5u" ||
+    sequence === "\u001b[27;5;13~" ||
+    sequence === "\u001b[27;2;5;13~";
 
   const question = (prompt: string, options: TuiPromptQuestionOptions = {}): Promise<string> => {
     if (closed) return Promise.reject(new Error("Prompt is closed"));
     if (active) return Promise.reject(new Error("Prompt already has an active question"));
     return new Promise<string>((resolveQuestion, rejectQuestion) => {
       const multiline = options.multiline === true;
-      const marker = "\n│ You: ";
-      const markerIndex = prompt.lastIndexOf(marker);
-      const hasChatMarker = markerIndex >= 0;
+      const hasChatSurface = multiline;
       const finalNewline = prompt.lastIndexOf("\n");
-      const immutablePrefix = hasChatMarker
-        ? prompt.slice(0, markerIndex + 1)
+      const immutablePrefix = hasChatSurface
+        ? `${prompt}\n`
         : finalNewline >= 0
           ? prompt.slice(0, finalNewline + 1)
           : "";
-      const promptLabel = hasChatMarker ? "│ You: " : prompt.slice(finalNewline + 1);
-      const editor = new Editor({}, { multiline });
-      const pending: ActiveQuestion = {
+      const promptLabel = hasChatSurface ? "" : prompt.slice(finalNewline + 1);
+      const editor = new Editor(PORTLOG_EDITOR_THEME);
+      editor.focused = true;
+      if (hasChatSurface) {
+        editor.setTopBorder({
+          content: `${CHAT_TOOL_COLOR} You ${CHAT_RESET}`,
+          width: 5,
+        });
+      }
+
+      const sequenceBuffer = new StdinBuffer({ timeout: 50 });
+      let pending!: ActiveQuestion;
+      const sequenceListener = (sequence: string): void => {
+        if (active !== pending) return;
+        if (matchesKey(sequence, "ctrl+c") || sequence === "\u0003") {
+          const pendingInterrupt = interrupt;
+          cancel();
+          pendingInterrupt?.();
+          return;
+        }
+        if (isSubmitSequence(sequence)) {
+          pending.completing = true;
+          pending.editor.submit();
+          return;
+        }
+        if (!pending.multiline && matchesKey(sequence, "shift+enter")) return;
+        pending.editor.handleInput(sequence);
+      };
+      const pasteListener = (content: string): void => {
+        if (active === pending) {
+          pending.editor.handleInput(`\u001b[200~${content}\u001b[201~`);
+        }
+      };
+      const inputListener: TuiPromptDataListener = (chunk) => {
+        sequenceBuffer.process(chunk);
+      };
+      pending = {
         editor,
         prompt: promptLabel,
-        hasChatMarker,
+        hasChatSurface,
+        multiline,
+        sequenceBuffer,
+        inputListener,
+        sequenceListener,
+        pasteListener,
         renderedBodyLines: 1,
+        completing: false,
         resolve: resolveQuestion,
         reject: rejectQuestion,
       };
       editor.onChange = () => {
-        redraw(pending);
+        if (active === pending && !pending.completing) redraw(pending);
       };
-      editor.onSubmit = () => {
+      editor.onSubmit = (text) => {
         output.write("\n");
-        complete(editor.getExpandedText());
+        complete(text);
       };
       active = pending;
+      sequenceBuffer.on("data", sequenceListener);
+      sequenceBuffer.on("paste", pasteListener);
       input.setRawMode?.(true);
+      input.on("data", inputListener);
       input.resume();
-      input.on("keypress", onKeypress);
+      const columns = Math.max(3, Math.floor(output.columns ?? 80));
+      const editorBody = renderChatInputBody(editor, columns);
+      pending.renderedBodyLines = editor.render(columns).length;
       output.write(
         `${immutablePrefix}${
-          pending.hasChatMarker
-            ? renderChatInputBody(editor, output.columns ?? 80)
-            : renderPromptInputBody(editor, pending.prompt, output.columns ?? 80)
+          pending.hasChatSurface
+            ? editorBody
+            : renderPromptInputBody(editor, pending.prompt, columns)
         }`,
       );
     });
@@ -331,9 +385,11 @@ export function createTuiChatPrompt(
     question,
     close: () => {
       closed = true;
-      cancel(new Error("Prompt closed"));
-      input.setRawMode?.(false);
-      input.pause();
+      if (active) cancel(new Error("Prompt closed"));
+      else {
+        input.setRawMode?.(false);
+        input.pause();
+      }
     },
     onInterrupt: (listener) => {
       interrupt = listener;
@@ -677,7 +733,6 @@ class PortLogChatApp {
   }
 
   async run(): Promise<void> {
-    emitKeypressEvents(input);
     const prompt = createTuiChatPrompt(input, output);
     const handleSigint = () => {
       this.activeProcess?.cancel();
