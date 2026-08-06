@@ -20,6 +20,7 @@ import {
   buildTuiModelChoices,
   parseTuiCommand,
   parseTuiModelSelection,
+  type TuiModelSelection,
 } from "./portlog-tui-model-selector.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -30,14 +31,19 @@ export type CliOptions = {
   model: string;
   posture: TuiPosture;
   question?: string;
+  selectModelOnStart?: boolean;
   baseUrl?: string;
   sidecarEndpoint?: string;
   help: boolean;
 };
 
 const USAGE = `Usage:
-  npm run portlog:tui -- --project PATH --provider PROVIDER --model MODEL \\
-    [--posture inspect|verify|review] [--question QUESTION]
+  npm run portlog:tui -- --project PATH \\
+    [--provider PROVIDER --model MODEL] [--posture inspect|verify|review] \\
+    [--question QUESTION]
+
+Omit --model to choose the provider/model during startup. Omit --question
+to enter the review question during startup.
 
 The control room keeps the review event feed bounded and labels PortLog-owned
 outcomes separately from ordinary model context. Provider credentials stay in
@@ -65,10 +71,11 @@ export async function runPortLogTui(
   const project = options.project;
   if (!project) throw new Error(`--project is required.\n\n${USAGE}`);
 
-  const question = options.question?.trim() || (await askQuestion());
-  if (!question) throw new Error("A review question is required.");
-
-  const app = new PortLogTuiApp({ ...options, project, question });
+  const app = new PortLogTuiApp({
+    ...options,
+    project,
+    question: options.question?.trim() ?? "",
+  });
   await app.run();
 }
 export interface TuiCommandPrompt {
@@ -106,6 +113,32 @@ export async function runTuiCommandPrompt(
     lifecycle.render();
   }
 }
+export interface TuiStartupPromptOptions {
+  readonly chooseModel: boolean;
+  readonly initialQuestion?: string;
+}
+
+export interface TuiStartupSelection {
+  readonly provider?: TuiModelSelection["provider"];
+  readonly model?: string;
+  readonly question: string;
+}
+
+export async function runTuiStartupPrompt(
+  prompt: TuiCommandPrompt,
+  options: TuiStartupPromptOptions,
+  chooseModel: (prompt: TuiCommandPrompt) => Promise<TuiModelSelection | undefined>,
+): Promise<TuiStartupSelection> {
+  const selection = options.chooseModel ? await chooseModel(prompt) : undefined;
+  const question =
+    options.initialQuestion?.trim() ||
+    (await prompt.question("What should this review establish? ")).trim();
+  if (!question) throw new Error("A review question is required.");
+  return {
+    ...(selection ? { provider: selection.provider, model: selection.model } : {}),
+    question,
+  };
+}
 
 class PortLogTuiApp {
   private readonly options: CliOptions & { project: string; question: string };
@@ -127,7 +160,30 @@ class PortLogTuiApp {
     });
   }
 
+  private async configureStartup(): Promise<void> {
+    if (!this.options.selectModelOnStart && this.state.question) return;
+    const prompt = createInterface({ input, output });
+    try {
+      const startup = await runTuiStartupPrompt(
+        prompt,
+        {
+          chooseModel: this.options.selectModelOnStart === true,
+          initialQuestion: this.state.question,
+        },
+        (activePrompt) => this.chooseModel(activePrompt),
+      );
+      if (startup.provider && startup.model) {
+        this.applyModelSelection({ provider: startup.provider, model: startup.model });
+        output.write(`Selected ${startup.provider}/${startup.model} for this review.\n`);
+      }
+      this.state = { ...this.state, question: startup.question };
+    } finally {
+      prompt.close();
+    }
+  }
+
   async run(): Promise<void> {
+    await this.configureStartup();
     emitKeypressEvents(input);
     input.resume();
     process.stdout.on("resize", this.render);
@@ -289,7 +345,7 @@ class PortLogTuiApp {
     );
   }
 
-  private async startModelSelector(prompt: TuiCommandPrompt): Promise<void> {
+  private async chooseModel(prompt: TuiCommandPrompt): Promise<TuiModelSelection | undefined> {
     const current = {
       provider: this.options.provider,
       model: this.options.model,
@@ -307,8 +363,12 @@ class PortLogTuiApp {
       output.write(
         "No model change was made. Enter a listed number or supported provider:model.\n",
       );
-      return;
+      return undefined;
     }
+    return selection;
+  }
+
+  private applyModelSelection(selection: TuiModelSelection): void {
     this.options.provider = selection.provider;
     this.options.model = selection.model;
     this.state = {
@@ -319,6 +379,12 @@ class PortLogTuiApp {
         model: selection.model,
       },
     };
+  }
+
+  private async startModelSelector(prompt: TuiCommandPrompt): Promise<void> {
+    const selection = await this.chooseModel(prompt);
+    if (!selection) return;
+    this.applyModelSelection(selection);
     output.write(`Selected ${selection.provider}/${selection.model} for the next review run.\n`);
   }
 }
@@ -357,6 +423,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
       throw new Error(`Unsupported posture ${value}.\n\n${USAGE}`);
     options[key] = value as never;
   }
+  options.selectModelOnStart = !argv.some(
+    (argument) => argument === "--model" || argument.startsWith("--model="),
+  );
   return options;
 }
 
@@ -381,15 +450,6 @@ export function buildReviewArgs(
   if (options.baseUrl) args.push("--base-url", options.baseUrl);
   if (options.sidecarEndpoint) args.push("--sidecar-endpoint", options.sidecarEndpoint);
   return args;
-}
-
-async function askQuestion(): Promise<string> {
-  const prompt = createInterface({ input, output });
-  try {
-    return (await prompt.question("What should this review establish? ")).trim();
-  } finally {
-    prompt.close();
-  }
 }
 
 function isTerminal(status: TuiState["status"]): boolean {

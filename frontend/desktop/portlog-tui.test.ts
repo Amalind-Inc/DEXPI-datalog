@@ -17,7 +17,7 @@ import {
   parseTuiModelSelection,
   parseTuiModelSpec,
 } from "./portlog-tui-model-selector.ts";
-import { buildReviewArgs, runTuiCommandPrompt } from "./portlog-tui.ts";
+import { buildReviewArgs, runTuiCommandPrompt, runTuiStartupPrompt } from "./portlog-tui.ts";
 import { parseReviewLine, startReviewProcess } from "./portlog-tui-supervisor.ts";
 test("/model is the explicit selector command and unknown slash commands are inert", () => {
   assert.equal(parseTuiCommand("/model"), "model");
@@ -163,6 +163,47 @@ test("renderer removes terminal controls from initial provider and model identit
   const output = rows.join("\n");
   assert.doesNotMatch(output, /\u001b\]0;evil\u0007/);
   assert.doesNotMatch(output, /\u0007/);
+});
+test("startup flow collects the model before an interactive review question", async () => {
+  const steps: string[] = [];
+  const prompt = {
+    question: async (message: string) => {
+      steps.push(message);
+      return "What is downstream of P-400?";
+    },
+    close: () => {},
+  };
+  const result = await runTuiStartupPrompt(prompt, { chooseModel: true }, async () => {
+    steps.push("model-picker");
+    return { provider: "anthropic", model: "claude-sonnet-4-5" };
+  });
+  assert.deepEqual(result, {
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+    question: "What is downstream of P-400?",
+  });
+  assert.deepEqual(steps, ["model-picker", "What should this review establish? "]);
+});
+test("explicit startup arguments bypass the interactive model and question prompts", async () => {
+  let asked = false;
+  const result = await runTuiStartupPrompt(
+    {
+      question: async () => {
+        asked = true;
+        return "unexpected";
+      },
+      close: () => {},
+    },
+    {
+      chooseModel: false,
+      initialQuestion: "  Review the source.  ",
+    },
+    async () => {
+      throw new Error("model picker should not run");
+    },
+  );
+  assert.deepEqual(result, { question: "Review the source." });
+  assert.equal(asked, false);
 });
 test("review events become process-engineering phases with explicit PortLog authority", () => {
   let state = createTuiState({
