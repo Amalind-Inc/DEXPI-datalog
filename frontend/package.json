@@ -18,6 +18,7 @@
     "desktop:dev": "electron desktop/electron-main.cjs",
     "portlog:review": "node --experimental-strip-types desktop/portlog-review.ts",
     "prototype:pi-read": "node --experimental-strip-types desktop/pi-read-evidence-prototype.ts",
+    "prototype:web-search": "node --experimental-strip-types desktop/web-search-prototype.ts",
     "prototype:gondolin": "node --experimental-strip-types desktop/gondolin-spike.ts",
     "test:desktop-native": "node desktop/electron-native-acceptance.mjs",
     "desktop:package": "node ../scripts/package-macos-release.mjs",
