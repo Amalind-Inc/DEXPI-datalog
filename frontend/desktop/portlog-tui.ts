@@ -147,9 +147,191 @@ export async function runPortLogTui(
   }
   await new PortLogTuiApp(appOptions).run();
 }
+export interface TuiPromptQuestionOptions {
+  readonly multiline?: boolean;
+}
+
+export interface TuiPromptKey {
+  readonly name?: string;
+  readonly sequence?: string;
+  readonly shift?: boolean;
+  readonly ctrl?: boolean;
+  readonly meta?: boolean;
+}
+
+export type TuiPromptKeyListener = (character: string, key: TuiPromptKey) => void;
+
+export interface TuiChatPromptInput {
+  on(event: "keypress", listener: TuiPromptKeyListener): TuiChatPromptInput;
+  off(event: "keypress", listener: TuiPromptKeyListener): TuiChatPromptInput;
+  pause(): void;
+  resume(): void;
+  setRawMode?(enabled: boolean): void;
+}
+
+export interface TuiChatPromptOutput {
+  write(text: string): unknown;
+}
+
 export interface TuiCommandPrompt {
-  question(prompt: string): Promise<string>;
+  question(prompt: string, options?: TuiPromptQuestionOptions): Promise<string>;
   close(): void;
+}
+
+export interface TuiChatPrompt extends TuiCommandPrompt {
+  onInterrupt(listener: () => void): void;
+}
+
+function renderChatInputBody(value: string): string {
+  return value
+    .split("\n")
+    .map((line, index) => `${index === 0 ? "│ You: " : "│      "}${line}`)
+    .join("\n");
+}
+
+function clearChatInputBody(output: TuiChatPromptOutput, lineCount: number): void {
+  if (lineCount > 1) output.write(`\u001b[${lineCount - 1}A`);
+  for (let index = 0; index < lineCount; index += 1) {
+    output.write("\r\u001b[2K");
+    if (index < lineCount - 1) output.write("\u001b[1B");
+  }
+  if (lineCount > 1) output.write(`\u001b[${lineCount - 1}A`);
+  output.write("\r");
+}
+
+function isShiftEnterKey(character: string, key: TuiPromptKey): boolean {
+  const sequence = key.sequence ?? character;
+  if (key.shift && (key.name === "return" || key.name === "enter")) return true;
+  return sequence === "\u001b[13;2u" || sequence === "\u001b[27;2;13~" || sequence === "\u001b\r";
+}
+
+function isEnterKey(character: string, key: TuiPromptKey): boolean {
+  if (isShiftEnterKey(character, key)) return false;
+  return (
+    key.name === "return" ||
+    key.name === "enter" ||
+    (key.sequence ?? character) === "\r" ||
+    (key.sequence ?? character) === "\n"
+  );
+}
+
+function sanitizeChatInput(value: string): string {
+  return sanitizeChatText(value).replace(/[\n\r]+/gu, "");
+}
+
+export function createTuiChatPrompt(
+  input: TuiChatPromptInput,
+  output: TuiChatPromptOutput,
+): TuiChatPrompt {
+  type ActiveQuestion = {
+    multiline: boolean;
+    value: string;
+    renderedBodyLines: number;
+    resolve: (value: string) => void;
+    reject: (error: Error) => void;
+  };
+
+  let active: ActiveQuestion | undefined;
+  let closed = false;
+  let interrupt: (() => void) | undefined;
+
+  const cleanup = (): void => {
+    input.off("keypress", onKeypress);
+    input.setRawMode?.(false);
+    input.pause();
+  };
+  const complete = (value: string): void => {
+    const pending = active;
+    if (!pending) return;
+    active = undefined;
+    cleanup();
+    pending.resolve(value);
+  };
+  const cancel = (error = new Error("Input cancelled")): void => {
+    const pending = active;
+    if (!pending) return;
+    active = undefined;
+    cleanup();
+    pending.reject(error);
+  };
+  const redraw = (pending: ActiveQuestion): void => {
+    clearChatInputBody(output, pending.renderedBodyLines);
+    output.write(renderChatInputBody(pending.value));
+    pending.renderedBodyLines = pending.value.split("\n").length;
+  };
+  const onKeypress: TuiPromptKeyListener = (character, key) => {
+    const pending = active;
+    if (!pending) return;
+    if (key.ctrl && key.name === "c") {
+      const pendingInterrupt = interrupt;
+      cancel();
+      pendingInterrupt?.();
+      return;
+    }
+    if (pending.multiline && isShiftEnterKey(character, key)) {
+      pending.value += "\n";
+      redraw(pending);
+      return;
+    }
+    if (isEnterKey(character, key)) {
+      output.write("\n");
+      complete(pending.value);
+      return;
+    }
+    if (key.name === "backspace" && !key.ctrl && !key.meta) {
+      if (!pending.value) return;
+      if (pending.value.endsWith("\n")) {
+        pending.value = pending.value.slice(0, -1);
+        redraw(pending);
+      } else {
+        const characters = Array.from(pending.value);
+        characters.pop();
+        pending.value = characters.join("");
+        output.write("\b \b");
+      }
+      return;
+    }
+    if (key.ctrl || key.meta) return;
+    const text = sanitizeChatInput(character);
+    if (!text) return;
+    pending.value += text;
+    output.write(text);
+  };
+
+  const question = (prompt: string, options: TuiPromptQuestionOptions = {}): Promise<string> => {
+    if (closed) return Promise.reject(new Error("Prompt is closed"));
+    if (active) return Promise.reject(new Error("Prompt already has an active question"));
+    return new Promise<string>((resolveQuestion, rejectQuestion) => {
+      const multiline = options.multiline === true;
+      const marker = "\n│ You: ";
+      const markerIndex = prompt.lastIndexOf(marker);
+      const promptPrefix = markerIndex >= 0 ? prompt.slice(0, markerIndex + 1) : prompt;
+      active = {
+        multiline,
+        value: "",
+        renderedBodyLines: 1,
+        resolve: resolveQuestion,
+        reject: rejectQuestion,
+      };
+      input.setRawMode?.(true);
+      input.resume();
+      input.on("keypress", onKeypress);
+      output.write(multiline && markerIndex >= 0 ? `${promptPrefix}│ You: ` : prompt);
+    });
+  };
+
+  return {
+    question,
+    close: () => {
+      closed = true;
+      cancel(new Error("Prompt closed"));
+      input.setRawMode?.(false);
+      input.pause();
+    },
+    onInterrupt: (listener) => {
+      interrupt = listener;
+    },
+  };
 }
 
 export interface TuiCommandPromptLifecycle {
@@ -241,7 +423,9 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
     try {
       answer =
         nextQuestion ??
-        (await options.prompt.question(identity ? renderChatInputPrompt(identity) : "You: "));
+        (await options.prompt.question(identity ? renderChatInputPrompt(identity) : "You: ", {
+          multiline: identity !== undefined,
+        }));
       if (identity && !providedQuestion) options.write(closeChatInput());
     } catch {
       return;
@@ -486,11 +670,14 @@ class PortLogChatApp {
   }
 
   async run(): Promise<void> {
-    const prompt = createInterface({ input, output });
-    prompt.on("SIGINT", () => {
+    emitKeypressEvents(input);
+    const prompt = createTuiChatPrompt(input, output);
+    const handleSigint = () => {
       this.activeProcess?.cancel();
       prompt.close();
-    });
+    };
+    prompt.onInterrupt(handleSigint);
+    process.on("SIGINT", handleSigint);
     try {
       output.write(
         `${renderTuiWelcome({
@@ -513,6 +700,7 @@ class PortLogChatApp {
         write: (text) => output.write(text),
       });
     } finally {
+      process.off("SIGINT", handleSigint);
       this.activeProcess?.dispose();
       this.activeProcess = undefined;
       prompt.close();
