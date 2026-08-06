@@ -142,10 +142,62 @@ test("welcome shell names the workspace and model without asking for a mode", ()
     model: "deepseek/deepseek-v4-flash",
   });
   assert.match(welcome, /PORTLOG/);
-  assert.match(welcome, /WORKSPACE.*\/tmp\/e06-review/);
+  assert.match(welcome, /┌─ \[PORTLOG CHAT\] \/tmp\/e06-review/);
   assert.match(welcome, /MODEL.*openrouter.*deepseek\/deepseek-v4-flash/);
   assert.match(welcome, /Tips/);
   assert.doesNotMatch(welcome, /Select a number|review or chat/);
+});
+test("inline chat frames the selected model, workspace, and assistant lines", async () => {
+  const output: string[] = [];
+  await runTuiChatSession({
+    prompt: {
+      question: async () => "/quit",
+      close: () => {},
+    },
+    initialQuestion: "Explain the source.",
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    getIdentity: () => ({
+      projectDirectory: "/tmp/e06-review",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+    }),
+    runTurn: async (_question, onEvent) => {
+      onEvent({ type: "tool_request", tool: "portlog_evidence", arguments: {} });
+      onEvent({ type: "assistant_text_delta", text: "Hello\nworld" });
+      return { status: "completed" };
+    },
+    write: (text) => output.push(text),
+  });
+
+  const transcript = output.join("");
+  assert.match(transcript, /┌─ \[PORTLOG\] \/tmp\/e06-review/);
+  assert.match(transcript, /│  MODEL openrouter\/deepseek\/deepseek-v4-flash/);
+  assert.match(transcript, /│ You: Explain the source\./);
+  assert.match(transcript, /│ \[PortLog tool: portlog_evidence\]\n│ Assistant: Hello/);
+  assert.match(transcript, /│ Assistant: Hello\n│ world/);
+  assert.match(transcript, /└─\n/);
+});
+test("inline chat keeps assistant failures inside the response frame", async () => {
+  const output: string[] = [];
+  await runTuiChatSession({
+    prompt: {
+      question: async () => "/quit",
+      close: () => {},
+    },
+    initialQuestion: "Explain the source.",
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    getIdentity: () => ({
+      projectDirectory: "/tmp/e06-review",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+    }),
+    runTurn: async () => ({ status: "failed", message: "provider unavailable" }),
+    write: (text) => output.push(text),
+  });
+
+  assert.match(output.join(""), /│ Assistant unavailable: provider unavailable\n└─\n/);
 });
 
 test("selected provider and model remain explicit in review arguments and TUI identity", () => {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { emitKeypressEvents } from "node:readline";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -66,12 +67,26 @@ export interface TuiWelcomeOptions {
   readonly model: string;
 }
 
+export type TuiChatIdentity = TuiWelcomeOptions;
+
+function displayChatPath(projectDirectory: string): string {
+  const absolute = resolve(projectDirectory);
+  const home = homedir();
+  if (absolute === home) return "~";
+  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
+}
+
+function renderChatIdentityHeader(identity: TuiChatIdentity, label: string): string {
+  return [
+    `┌─ [${label}] ${displayChatPath(identity.projectDirectory)}`,
+    `│  MODEL ${identity.provider}/${identity.model}`,
+  ].join("\n");
+}
+
 export function renderTuiWelcome(options: TuiWelcomeOptions): string {
   return [
-    "PORTLOG / CHAT",
-    "",
-    `WORKSPACE ${resolve(options.projectDirectory)}`,
-    `MODEL ${options.provider}/${options.model}`,
+    renderChatIdentityHeader(options, "PORTLOG CHAT"),
+    "└─",
     "",
     "Ask a question about the project, its diagrams, or its review evidence.",
     "Tips: /model changes the model; /quit exits. PortLog tools appear as they run.",
@@ -173,6 +188,7 @@ export interface TuiChatSessionOptions {
   readonly initialQuestion?: string;
   readonly chooseModel: (prompt: TuiCommandPrompt) => Promise<TuiModelSelection | undefined>;
   readonly applyModelSelection: (selection: TuiModelSelection) => void;
+  readonly getIdentity?: () => TuiChatIdentity;
   readonly runTurn: (
     question: string,
     onEvent: (event: TuiEvent) => void,
@@ -219,7 +235,62 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
       continue;
     }
 
-    options.write(`${providedQuestion ? `\nYou: ${question}\n` : "\n"}Assistant: `);
+    const identity = options.getIdentity?.();
+    const framed = identity !== undefined;
+    if (framed) {
+      options.write(
+        [
+          "",
+          renderChatIdentityHeader(identity, "PORTLOG"),
+          "├─",
+          `│ You: ${question}`,
+          "│ Assistant: ",
+        ].join("\n"),
+      );
+    } else {
+      options.write(`${providedQuestion ? `\nYou: ${question}\n` : "\n"}Assistant: `);
+    }
+
+    let assistantNeedsPrefix = false;
+    const writeAssistant = (text: string): void => {
+      if (!framed) {
+        options.write(text);
+        return;
+      }
+      let cursor = 0;
+      while (cursor < text.length) {
+        const newline = text.indexOf("\n", cursor);
+        const end = newline === -1 ? text.length : newline;
+        const segment = text.slice(cursor, end);
+        if (segment) {
+          if (assistantNeedsPrefix) options.write("│ ");
+          options.write(segment);
+          assistantNeedsPrefix = false;
+        }
+        if (newline === -1) break;
+        options.write("\n");
+        assistantNeedsPrefix = true;
+        cursor = newline + 1;
+      }
+    };
+    const writeToolHeader = (label: string): void => {
+      if (!framed) {
+        options.write(`\n${label}\nAssistant: `);
+        return;
+      }
+      if (!assistantNeedsPrefix) options.write("\n");
+      options.write(`│ ${label}\n│ Assistant: `);
+      assistantNeedsPrefix = false;
+    };
+    const writeTerminal = (message?: string): void => {
+      if (!framed) {
+        options.write(message ? `\n${message}\n` : "\n");
+        return;
+      }
+      if (!assistantNeedsPrefix) options.write("\n");
+      if (message) options.write(`│ ${message}\n`);
+      options.write("└─\n");
+    };
     let assistantCharacters = 0;
     let assistantTruncated = false;
     let toolEvents = 0;
@@ -232,11 +303,11 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
           if (remaining > 0) {
             const visible = text.slice(0, remaining);
             assistantCharacters += visible.length;
-            options.write(visible);
+            writeAssistant(visible);
           }
           if (text.length > remaining && !assistantTruncated) {
             assistantTruncated = true;
-            options.write("\n[assistant output truncated]");
+            writeAssistant("\n[assistant output truncated]");
           }
         } else if (event.type === "tool_request") {
           if (toolEvents < MAX_CHAT_TOOL_EVENTS) {
@@ -245,10 +316,10 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
               sanitizeSingleLineChatText(event.tool ?? "unknown"),
               MAX_CHAT_TOOL_NAME_CHARS,
             );
-            options.write(`\n[PortLog tool: ${toolName}]\nAssistant: `);
+            writeToolHeader(`[PortLog tool: ${toolName}]`);
           } else if (!toolEventsTruncated) {
             toolEventsTruncated = true;
-            options.write("\n[additional PortLog tool events truncated]\nAssistant: ");
+            writeToolHeader("[additional PortLog tool events truncated]");
           }
         }
       });
@@ -257,18 +328,18 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
           sanitizeSingleLineChatText(result.message ?? "unknown error"),
           MAX_CHAT_ERROR_CHARS,
         );
-        options.write(`\nAssistant unavailable: ${message}\n`);
+        writeTerminal(`Assistant unavailable: ${message}`);
       } else if (result.status === "cancelled") {
-        options.write("\nAssistant turn cancelled.\n");
+        writeTerminal("Assistant turn cancelled.");
       } else {
-        options.write("\n");
+        writeTerminal();
       }
     } catch (error) {
       const message = boundChatText(
         sanitizeSingleLineChatText(error instanceof Error ? error.message : String(error)),
         MAX_CHAT_ERROR_CHARS,
       );
-      options.write(`\nAssistant unavailable: ${message}\n`);
+      writeTerminal(`Assistant unavailable: ${message}`);
     }
   }
 }
@@ -398,6 +469,11 @@ class PortLogChatApp {
         prompt,
         initialQuestion: this.options.question,
         chooseModel: (activePrompt) => this.chooseModel(activePrompt),
+        getIdentity: () => ({
+          projectDirectory: this.options.project,
+          provider: this.options.provider,
+          model: this.options.model,
+        }),
         applyModelSelection: (selection) => this.applyModelSelection(selection),
         runTurn: (question, onEvent) => this.runTurn(question, onEvent),
         write: (text) => output.write(text),
