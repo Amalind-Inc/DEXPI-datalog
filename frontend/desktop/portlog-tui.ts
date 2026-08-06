@@ -742,9 +742,12 @@ export function buildReviewArgs(
   options: CliOptions & { project: string },
   question: string,
 ): string[] {
+  const mode = options.mode === "review" ? "inspection" : "chat";
   const args = [
     "--project",
     options.project,
+    "--mode",
+    mode,
     "--provider",
     options.provider,
     "--model",

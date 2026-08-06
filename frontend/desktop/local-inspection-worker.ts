@@ -71,9 +71,11 @@ const baseUrl =
       : "https://openrouter.ai/api/v1");
 const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
 const NO_PROJECT_SOURCE_DIGEST = `sha256:${"0".repeat(64)}`;
-const workingDirectory = request.cwd ?? request.projectDirectory ?? process.cwd();
-const askRoute = request.mode === "ask" ? routeLocalAsk(request.question) : null;
 const isChat = request.mode === "chat";
+const workingDirectory = isChat
+  ? (request.projectDirectory ?? request.cwd ?? process.cwd())
+  : (request.cwd ?? request.projectDirectory ?? process.cwd());
+const askRoute = request.mode === "ask" ? routeLocalAsk(request.question) : null;
 const posture = isChat ? "chat" : (request.posture ?? "inspect");
 const qemuPath = process.env.PORTLOG_QEMU_PATH ?? "/opt/homebrew/bin/qemu-system-aarch64";
 const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile(qemuPath));
@@ -90,7 +92,7 @@ const projectManifest = request.projectDirectory
   ? await loadLocalProject(request.projectDirectory)
   : undefined;
 const sessionIdentity =
-  request.projectDirectory && request.sessionId && projectManifest
+  request.mode === "inspection" && request.projectDirectory && request.sessionId && projectManifest
     ? ({
         workspaceRoot: request.projectDirectory,
         projectId: projectManifest.projectId,
@@ -109,7 +111,7 @@ const modelFreeAsk =
   askRoute?.kind === "universal_rule";
 if (!apiKey && !modelFreeAsk) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
-const sessionKey = request.sessionId ?? (isChat ? `chat-${request.turnId}` : undefined);
+const sessionKey = isChat ? `chat-${request.turnId}` : request.sessionId;
 const workerSessionIdentity =
   sessionIdentity ??
   (isChat

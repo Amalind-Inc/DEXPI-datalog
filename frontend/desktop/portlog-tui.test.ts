@@ -159,9 +159,12 @@ test("selected provider and model remain explicit in review arguments and TUI id
     },
     "Inspect the source.",
   );
-  assert.deepEqual(args.slice(0, 6), [
+  assert.equal(args[args.indexOf("--mode") + 1], "chat");
+  assert.deepEqual(args.slice(0, 8), [
     "--project",
     "/tmp/e06-review",
+    "--mode",
+    "chat",
     "--provider",
     "anthropic",
     "--model",

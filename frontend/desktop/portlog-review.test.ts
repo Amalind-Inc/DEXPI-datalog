@@ -231,6 +231,112 @@ test("terminal review prints bounded PortLog events and persists the completed r
     await rm(root, { recursive: true, force: true });
   }
 });
+test("chat mode starts a chat session instead of reopening the prepared review session", async () => {
+  let modelRequests = 0;
+  const modelServer = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    sse(response, {
+      id: "chat-answer",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: { role: "assistant", content: "Hello from chat." },
+          finish_reason: "stop",
+        },
+      ],
+    });
+    response.end("data: [DONE]\n\n");
+  });
+  modelServer.listen(0, "127.0.0.1");
+  await once(modelServer, "listening");
+  const modelAddress = modelServer.address();
+  assert.ok(modelAddress && typeof modelAddress !== "string");
+
+  const sidecarServer = http.createServer((request, response) => {
+    if (request.url === "/openapi.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  sidecarServer.listen(0, "127.0.0.1");
+  await once(sidecarServer, "listening");
+  const sidecarAddress = sidecarServer.address();
+  assert.ok(sidecarAddress && typeof sidecarAddress !== "string");
+
+  const root = await mkdtemp(join(repoRoot, ".tmp-portlog-chat-identity-test-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await persistLocalProject({
+    projectDirectory,
+    sourcePath,
+    sourceContent: "<PlantModel />",
+    sessionId: "chat-identity-session",
+    filename: "C01.xml",
+    status: "ready",
+  });
+
+  try {
+    const project = await loadLocalProject(projectDirectory);
+    const preparedSession = await PortLogPiSessionCoordinator.create({
+      sessionRoot: join(projectDirectory, ".portlog", "sessions"),
+      sessionId: project.projectId,
+      identity: {
+        workspaceRoot: projectDirectory,
+        projectId: project.projectId,
+        sourceDigest: project.source.digest,
+        policy: PORTLOG_HOST_POLICY,
+        toolProfile: createPortLogToolProfile({
+          hostEvidence: false,
+          hostRules: false,
+          isolatedExecution: false,
+          policyRoutedBash: false,
+        }),
+      },
+    });
+    await preparedSession.close();
+
+    const result = await runCommand(
+      [
+        "--project",
+        projectDirectory,
+        "--mode",
+        "chat",
+        "--provider",
+        "openrouter",
+        "--model",
+        "chat-model",
+        "--posture",
+        "inspect",
+        "--question",
+        "Say hello.",
+      ],
+      {
+        PORTLOG_RUNTIME_API_KEY: "test-key",
+        PORTLOG_RUNTIME_BASE_URL: `http://127.0.0.1:${modelAddress.port}/v1`,
+        PORTLOG_REVIEW_SIDECAR_ENDPOINT: `http://127.0.0.1:${sidecarAddress.port}`,
+      },
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.doesNotMatch(result.stderr, /identity_mismatch/);
+    assert.match(result.stdout, /"posture": "chat"/);
+    assert.match(result.stdout, /Hello from chat/);
+    assert.equal(modelRequests, 1);
+  } finally {
+    modelServer.closeAllConnections();
+    sidecarServer.closeAllConnections();
+    await Promise.all([
+      new Promise<void>((resolveClose) => modelServer.close(() => resolveClose())),
+      new Promise<void>((resolveClose) => sidecarServer.close(() => resolveClose())),
+    ]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("terminal review completes the governed E06 evidence-check-isolation journey", async () => {
   let modelRequests = 0;

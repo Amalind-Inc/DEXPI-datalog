@@ -11,10 +11,12 @@ import { resolveReviewArtifactRoot } from "./portlog-review-paths.ts";
 import { startLocalReviewRuntime, type LocalReviewRuntime } from "./local-review-runtime.ts";
 
 type Posture = "inspect" | "verify" | "review";
+type ReviewMode = "inspection" | "chat";
 type Provider = "openrouter" | "anthropic" | "openai-codex";
 
 type CliOptions = {
   project?: string;
+  mode?: string;
   provider?: string;
   model?: string;
   posture?: string;
@@ -47,8 +49,8 @@ const MAX_DISPLAYED_ASSISTANT_CHARS = 16_000;
 const MAX_DISPLAYED_TOOL_VALUE_CHARS = 2_000;
 
 const USAGE = `Usage:
-  npm run portlog:review -- --project PATH --provider PROVIDER --model MODEL \\
-    --posture inspect|verify|review --question QUESTION
+  npm run portlog:review -- --project PATH [--mode inspection|chat] \\
+    --provider PROVIDER --model MODEL --posture inspect|verify|review --question QUESTION
 
 Required environment:
   PORTLOG_RUNTIME_API_KEY       Provider credential kept in the host process.
@@ -93,6 +95,7 @@ function parseArgs(argv: string[]): CliOptions {
     "-p": "project",
     "-q": "question",
     "--project": "project",
+    "--mode": "mode",
     "--provider": "provider",
     "--model": "model",
     "--posture": "posture",
@@ -121,6 +124,7 @@ function parseArgs(argv: string[]): CliOptions {
 
 async function resolveConfig(options: CliOptions) {
   const projectDirectory = requireValue(options.project, "--project");
+  const mode = options.mode ?? "inspection";
   const provider = requireValue(options.provider, "--provider");
   const model = requireValue(options.model, "--model");
   const posture = requireValue(options.posture, "--posture");
@@ -131,6 +135,7 @@ async function resolveConfig(options: CliOptions) {
     );
   if (posture !== "inspect" && posture !== "verify" && posture !== "review")
     throw new Error(`Unsupported posture ${posture}; choose inspect, verify, or review.`);
+  if (!isReviewMode(mode)) throw new Error(`Unsupported mode ${mode}; choose inspection or chat.`);
 
   const absoluteProjectDirectory = resolve(projectDirectory);
   let project: Awaited<ReturnType<typeof loadLocalProject>>;
@@ -178,6 +183,7 @@ async function resolveConfig(options: CliOptions) {
   }
   return {
     projectDirectory: absoluteProjectDirectory,
+    mode,
     sessionId: project.projectId,
     provider,
     model,
@@ -188,6 +194,7 @@ async function resolveConfig(options: CliOptions) {
     turnId: options.turnId ?? `terminal-${randomUUID()}`,
     sidecarEndpoint: options.sidecarEndpoint ?? process.env.PORTLOG_REVIEW_SIDECAR_ENDPOINT,
   } satisfies {
+    mode: ReviewMode;
     projectDirectory: string;
     sessionId: string;
     provider: Provider;
@@ -352,10 +359,10 @@ async function runWorker(
   });
   worker.stdin?.end(
     JSON.stringify({
-      mode: "inspection",
+      mode: config.mode,
       projectDirectory: config.projectDirectory,
       cwd: REPO_ROOT,
-      sessionId: config.sessionId,
+      sessionId: config.mode === "inspection" ? config.sessionId : undefined,
       turnId: config.turnId,
       question: config.question,
       posture: config.posture,
@@ -392,6 +399,9 @@ function requireValue(value: string | undefined, option: string): string {
   return value.trim();
 }
 
+function isReviewMode(value: string): value is ReviewMode {
+  return value === "inspection" || value === "chat";
+}
 function isProvider(value: string): value is Provider {
   return value === "openrouter" || value === "anthropic" || value === "openai-codex";
 }
