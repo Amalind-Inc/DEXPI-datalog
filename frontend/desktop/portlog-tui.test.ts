@@ -17,7 +17,15 @@ import {
   parseTuiModelSelection,
   parseTuiModelSpec,
 } from "./portlog-tui-model-selector.ts";
-import { buildReviewArgs, runTuiCommandPrompt, runTuiStartupPrompt } from "./portlog-tui.ts";
+import {
+  buildReviewArgs,
+  parseTuiOptions,
+  runTuiChatSession,
+  runTuiChatTurn,
+  runTuiCommandPrompt,
+  runTuiRequiredModelSelection,
+  runTuiStartupPrompt,
+} from "./portlog-tui.ts";
 import { parseReviewLine, startReviewProcess } from "./portlog-tui-supervisor.ts";
 test("/model is the explicit selector command and unknown slash commands are inert", () => {
   assert.equal(parseTuiCommand("/model"), "model");
@@ -113,6 +121,14 @@ test("command prompt restores terminal lifecycle on success, invalid commands, a
     ["Command input was cancelled; no change was made.\n"],
   );
 });
+test("CLI parsing makes review the default and dispatches explicit chat mode", () => {
+  assert.equal(parseTuiOptions(["--project", "/tmp/e06-review"]).mode, "review");
+  assert.equal(parseTuiOptions(["--project", "/tmp/e06-review", "--mode", "chat"]).mode, "chat");
+  assert.equal(
+    parseTuiOptions(["--project", "/tmp/e06-review", "--mode", "chat"]).selectModelOnStart,
+    true,
+  );
+});
 
 test("selected provider and model remain explicit in review arguments and TUI identity", () => {
   const args = buildReviewArgs(
@@ -133,6 +149,19 @@ test("selected provider and model remain explicit in review arguments and TUI id
     "--model",
     "claude-sonnet-4-5",
   ]);
+  assert.equal(args.at(-2), "--turn-id");
+  assert.match(args.at(-1) ?? "", /^tui-/);
+  const nextArgs = buildReviewArgs(
+    {
+      project: "/tmp/e06-review",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      posture: "inspect",
+      help: false,
+    },
+    "Inspect the source.",
+  );
+  assert.notEqual(args.at(-1), nextArgs.at(-1));
   const rows = renderTui(
     createTuiState({
       identity: {
@@ -147,6 +176,78 @@ test("selected provider and model remain explicit in review arguments and TUI id
   );
   assert.ok(rows.some((row) => row.includes("claude-sonnet-4-5")));
 });
+test("chat turns use the project-backed supervisor boundary with fresh turn identities", async () => {
+  const options = {
+    project: "/tmp/e06-review",
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4-flash",
+    posture: "inspect" as const,
+    help: false,
+  };
+  const started: Array<{ id: string; args: string[] }> = [];
+  let processCount = 0;
+  let disposedProcesses = 0;
+  const startProcess = (processOptions: Parameters<typeof startReviewProcess>[0]) => {
+    processCount += 1;
+    started.push({ id: processOptions.id, args: [...processOptions.args] });
+    queueMicrotask(() => {
+      if (processCount === 3) {
+        processOptions.onExit({ code: 1, signal: null, cancelled: false });
+      } else if (processCount === 4) {
+        processOptions.onEvent({ type: "turn_cancelled" });
+      } else if (processCount === 5) {
+        processOptions.onEvent({ type: "turn_failed", message: "terminal failure" });
+      } else {
+        processOptions.onEvent({ type: "turn_completed" });
+      }
+    });
+    return {
+      id: processOptions.id,
+      cancel: () => {},
+      dispose: () => {
+        disposedProcesses += 1;
+      },
+    };
+  };
+  const firstEvents: string[] = [];
+  const first = await runTuiChatTurn(
+    options,
+    "first question",
+    (event) => firstEvents.push(event.type),
+    startProcess,
+  );
+  options.provider = "anthropic";
+  options.model = "claude-sonnet-4-5";
+  const second = await runTuiChatTurn(options, "second question", () => {}, startProcess);
+  const failed = await runTuiChatTurn(options, "third question", () => {}, startProcess);
+  const cancelled = await runTuiChatTurn(options, "cancelled question", () => {}, startProcess);
+  const terminalFailed = await runTuiChatTurn(options, "terminal failure", () => {}, startProcess);
+
+  assert.deepEqual(first, { status: "completed" });
+  assert.deepEqual(second, { status: "completed" });
+  assert.equal(failed.status, "failed");
+  assert.deepEqual(cancelled, { status: "cancelled" });
+  assert.deepEqual(terminalFailed, { status: "failed", message: "terminal failure" });
+  assert.deepEqual(firstEvents, ["turn_completed"]);
+  assert.equal(started.length, 5);
+  assert.equal(disposedProcesses, 5);
+  assert.match(started[0].id, /^chat-/);
+  assert.match(started[1].id, /^chat-/);
+  assert.notEqual(started[0].id, started[1].id);
+  assert.equal(started[0].args[1], "/tmp/e06-review");
+  assert.equal(started[1].args[1], "/tmp/e06-review");
+  assert.equal(
+    started[0].args[started[0].args.indexOf("--model") + 1],
+    "deepseek/deepseek-v4-flash",
+  );
+  assert.equal(started[1].args[started[1].args.indexOf("--model") + 1], "claude-sonnet-4-5");
+  assert.equal(started[0].args[started[0].args.indexOf("--question") + 1], "first question");
+  assert.equal(started[1].args[started[1].args.indexOf("--question") + 1], "second question");
+  assert.match(started[0].args.at(-1) ?? "", /^tui-/);
+  assert.match(started[1].args.at(-1) ?? "", /^tui-/);
+  assert.notEqual(started[0].args.at(-1), started[1].args.at(-1));
+});
+
 test("renderer removes terminal controls from initial provider and model identity", () => {
   const rows = renderTui(
     createTuiState({
@@ -164,6 +265,21 @@ test("renderer removes terminal controls from initial provider and model identit
   assert.doesNotMatch(output, /\u001b\]0;evil\u0007/);
   assert.doesNotMatch(output, /\u0007/);
 });
+test("chat startup keeps prompting until a model is selected", async () => {
+  let attempts = 0;
+  const prompt = {
+    question: async () => "ignored",
+    close: () => {},
+  };
+  const selection = await runTuiRequiredModelSelection(prompt, async () => {
+    attempts += 1;
+    return attempts === 2 ? { provider: "anthropic", model: "claude-sonnet-4-5" } : undefined;
+  });
+
+  assert.deepEqual(selection, { provider: "anthropic", model: "claude-sonnet-4-5" });
+  assert.equal(attempts, 2);
+});
+
 test("startup flow collects the model before an interactive review question", async () => {
   const steps: string[] = [];
   const prompt = {
@@ -205,6 +321,131 @@ test("explicit startup arguments bypass the interactive model and question promp
   assert.deepEqual(result, { question: "Review the source." });
   assert.equal(asked, false);
 });
+test("chat session keeps follow-up questions, model changes, and streamed answers in one loop", async () => {
+  const answers = ["follow-up", "/model", "after model", "/quit"];
+  const prompts: string[] = [];
+  const output: string[] = [];
+  const questions: string[] = [];
+  let selection = { provider: "openrouter", model: "deepseek/deepseek-v4-flash" };
+  const prompt = {
+    question: async (message: string) => {
+      prompts.push(message);
+      return answers.shift() ?? "/quit";
+    },
+    close: () => {},
+  };
+
+  await runTuiChatSession({
+    prompt,
+    initialQuestion: "first question",
+    chooseModel: async () => ({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+    }),
+    applyModelSelection: (next) => {
+      selection = next;
+    },
+    runTurn: async (question, onEvent) => {
+      questions.push(`${selection.provider}/${selection.model}:${question}`);
+      onEvent({ type: "assistant_text_delta", text: "grounded answer" });
+      return { status: "completed" };
+    },
+    write: (text) => output.push(text),
+  });
+  assert.deepEqual(questions, [
+    "openrouter/deepseek/deepseek-v4-flash:first question",
+    "openrouter/deepseek/deepseek-v4-flash:follow-up",
+    "anthropic/claude-sonnet-4-5:after model",
+  ]);
+  assert.deepEqual(prompts, ["You: ", "You: ", "You: ", "You: "]);
+  assert.equal(selection.provider, "anthropic");
+  assert.equal(selection.model, "claude-sonnet-4-5");
+  assert.match(output.join(""), /Assistant: grounded answer/);
+});
+
+test("chat session reports failed turns and does not start empty or slash-command turns", async () => {
+  const answers = ["", "/unknown", "question", "/quit"];
+  const questions: string[] = [];
+  const output: string[] = [];
+  await runTuiChatSession({
+    prompt: {
+      question: async () => answers.shift() ?? "/quit",
+      close: () => {},
+    },
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    runTurn: async (question) => {
+      questions.push(question);
+      return { status: "failed", message: "provider unavailable" };
+    },
+    write: (text) => output.push(text),
+  });
+
+  assert.deepEqual(questions, ["question"]);
+  assert.match(output.join(""), /Assistant unavailable: provider unavailable/);
+  assert.match(output.join(""), /Unknown command/);
+});
+test("chat session recovers after cancelled and thrown turns", async () => {
+  const answers = ["cancelled turn", "thrown turn", "/quit"];
+  const questions: string[] = [];
+  const output: string[] = [];
+  let turn = 0;
+  await runTuiChatSession({
+    prompt: {
+      question: async () => answers.shift() ?? "/quit",
+      close: () => {},
+    },
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    runTurn: async (question) => {
+      questions.push(question);
+      turn += 1;
+      if (turn === 1) return { status: "cancelled" };
+      throw new Error("worker failed\r\n\tforged-thrown");
+    },
+    write: (text) => output.push(text),
+  });
+
+  const transcript = output.join("");
+  assert.deepEqual(questions, ["cancelled turn", "thrown turn"]);
+  assert.match(transcript, /Assistant turn cancelled/);
+  assert.match(transcript, /Assistant unavailable: worker failed/);
+  assert.doesNotMatch(transcript, /\r|\t|worker failed\nforged-thrown/);
+});
+
+test("chat session bounds and sanitizes worker-derived output", async () => {
+  const hugeTool = `${"portlog_tool ".repeat(300)}\r\n\tforged-tool`;
+  const hugeAnswer = `${"A".repeat(20_000)}\r\t\u001b[2J`;
+  const hugeFailure = `${"E".repeat(5_000)}\r\n\tforged-failure`;
+  const output: string[] = [];
+  await runTuiChatSession({
+    prompt: {
+      question: async () => "/quit",
+      close: () => {},
+    },
+    initialQuestion: "show bounded output",
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    runTurn: async (_question, onEvent) => {
+      for (let index = 0; index < 40; index += 1) {
+        onEvent({ type: "tool_request", tool: hugeTool });
+      }
+      onEvent({ type: "assistant_text_delta", text: hugeAnswer });
+      return { status: "failed", message: hugeFailure };
+    },
+    write: (text) => output.push(text),
+  });
+
+  const transcript = output.join("");
+  assert.ok(transcript.length < 24_000);
+  assert.doesNotMatch(transcript, /\u001b/);
+  assert.ok(!transcript.includes(hugeTool));
+  assert.match(transcript, /assistant output truncated/);
+  assert.doesNotMatch(transcript, /\t|\r/);
+  assert.doesNotMatch(transcript, /\[PortLog tool:[^\]]*\nforged-tool/);
+  assert.doesNotMatch(transcript, /Assistant unavailable:[^\n]*\nforged-failure/);
+});
+
 test("review events become process-engineering phases with explicit PortLog authority", () => {
   let state = createTuiState({
     identity: { projectDirectory: "/tmp/e06-review" },

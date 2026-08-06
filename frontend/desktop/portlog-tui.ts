@@ -12,6 +12,7 @@ import {
   requestTuiCancellation,
   setTuiFollowLive,
   type TuiPosture,
+  type TuiEvent,
   type TuiState,
 } from "./portlog-tui-model.ts";
 import { renderTui } from "./portlog-tui-renderer.ts";
@@ -24,12 +25,12 @@ import {
 } from "./portlog-tui-model-selector.ts";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-
 export type CliOptions = {
   project?: string;
   provider: string;
   model: string;
   posture: TuiPosture;
+  mode?: "review" | "chat";
   question?: string;
   selectModelOnStart?: boolean;
   baseUrl?: string;
@@ -39,11 +40,12 @@ export type CliOptions = {
 
 const USAGE = `Usage:
   npm run portlog:tui -- --project PATH \\
-    [--provider PROVIDER --model MODEL] [--posture inspect|verify|review] \\
-    [--question QUESTION]
+    [--mode review|chat] [--provider PROVIDER --model MODEL] \\
+    [--posture inspect|verify|review] [--question QUESTION]
 
-Omit --model to choose the provider/model during startup. Omit --question
-to enter the review question during startup.
+Omit --model to choose the provider/model during startup. In chat mode,
+the terminal keeps accepting follow-up questions in the same project session.
+Omit --question to enter the first question interactively.
 
 The control room keeps the review event feed bounded and labels PortLog-owned
 outcomes separately from ordinary model context. Provider credentials stay in
@@ -51,6 +53,7 @@ the host environment, as they do for portlog:review.
 
 Interactive commands:
   /model  choose the provider/model for the next review run
+  /quit   leave chat mode
   Set PORTLOG_TUI_MODELS to comma-separated provider:model choices.
 
 Keys:
@@ -61,7 +64,7 @@ Keys:
 export async function runPortLogTui(
   argv: readonly string[] = process.argv.slice(2),
 ): Promise<void> {
-  const options = parseArgs(argv);
+  const options = parseTuiOptions(argv);
   if (options.help) {
     output.write(`${USAGE}\n`);
     return;
@@ -71,12 +74,16 @@ export async function runPortLogTui(
   const project = options.project;
   if (!project) throw new Error(`--project is required.\n\n${USAGE}`);
 
-  const app = new PortLogTuiApp({
+  const appOptions = {
     ...options,
     project,
     question: options.question?.trim() ?? "",
-  });
-  await app.run();
+  };
+  if (options.mode === "chat") {
+    await new PortLogChatApp(appOptions).run();
+    return;
+  }
+  await new PortLogTuiApp(appOptions).run();
 }
 export interface TuiCommandPrompt {
   question(prompt: string): Promise<string>;
@@ -138,6 +145,277 @@ export async function runTuiStartupPrompt(
     ...(selection ? { provider: selection.provider, model: selection.model } : {}),
     question,
   };
+}
+export interface TuiChatTurnResult {
+  readonly status: "completed" | "cancelled" | "failed";
+  readonly message?: string;
+}
+
+export interface TuiChatSessionOptions {
+  readonly prompt: TuiCommandPrompt;
+  readonly initialQuestion?: string;
+  readonly chooseModel: (prompt: TuiCommandPrompt) => Promise<TuiModelSelection | undefined>;
+  readonly applyModelSelection: (selection: TuiModelSelection) => void;
+  readonly runTurn: (
+    question: string,
+    onEvent: (event: TuiEvent) => void,
+  ) => Promise<TuiChatTurnResult>;
+  readonly write: (text: string) => void;
+}
+
+const MAX_CHAT_ASSISTANT_CHARS = 16_000;
+const MAX_CHAT_TOOL_EVENTS = 32;
+const MAX_CHAT_TOOL_NAME_CHARS = 120;
+const MAX_CHAT_ERROR_CHARS = 1_000;
+export async function runTuiChatSession(options: TuiChatSessionOptions): Promise<void> {
+  let nextQuestion = options.initialQuestion?.trim();
+
+  while (true) {
+    const providedQuestion = nextQuestion !== undefined;
+    let answer: string;
+    try {
+      answer = nextQuestion ?? (await options.prompt.question("You: "));
+    } catch {
+      return;
+    }
+    nextQuestion = undefined;
+    const question = answer.trim();
+    if (!question) continue;
+    if (question === "q" || question === "/quit" || question === "/exit") return;
+
+    const command = parseTuiCommand(question);
+    if (command === "model") {
+      try {
+        const selection = await options.chooseModel(options.prompt);
+        if (selection) {
+          options.applyModelSelection(selection);
+          options.write(`Selected ${selection.provider}/${selection.model} for the next turn.\n`);
+        }
+      } catch {
+        options.write("Model selection was cancelled; no change was made.\n");
+      }
+      continue;
+    }
+    if (command === "unknown") {
+      options.write("Unknown command. Use /model or /quit.\n");
+      continue;
+    }
+
+    options.write(`${providedQuestion ? `\nYou: ${question}\n` : "\n"}Assistant: `);
+    let assistantCharacters = 0;
+    let assistantTruncated = false;
+    let toolEvents = 0;
+    let toolEventsTruncated = false;
+    try {
+      const result = await options.runTurn(question, (event) => {
+        if (event.type === "assistant_text_delta") {
+          const text = sanitizeChatText(event.text ?? "");
+          const remaining = MAX_CHAT_ASSISTANT_CHARS - assistantCharacters;
+          if (remaining > 0) {
+            const visible = text.slice(0, remaining);
+            assistantCharacters += visible.length;
+            options.write(visible);
+          }
+          if (text.length > remaining && !assistantTruncated) {
+            assistantTruncated = true;
+            options.write("\n[assistant output truncated]");
+          }
+        } else if (event.type === "tool_request") {
+          if (toolEvents < MAX_CHAT_TOOL_EVENTS) {
+            toolEvents += 1;
+            const toolName = boundChatText(
+              sanitizeSingleLineChatText(event.tool ?? "unknown"),
+              MAX_CHAT_TOOL_NAME_CHARS,
+            );
+            options.write(`\n[PortLog tool: ${toolName}]\nAssistant: `);
+          } else if (!toolEventsTruncated) {
+            toolEventsTruncated = true;
+            options.write("\n[additional PortLog tool events truncated]\nAssistant: ");
+          }
+        }
+      });
+      if (result.status === "failed") {
+        const message = boundChatText(
+          sanitizeSingleLineChatText(result.message ?? "unknown error"),
+          MAX_CHAT_ERROR_CHARS,
+        );
+        options.write(`\nAssistant unavailable: ${message}\n`);
+      } else if (result.status === "cancelled") {
+        options.write("\nAssistant turn cancelled.\n");
+      } else {
+        options.write("\n");
+      }
+    } catch (error) {
+      const message = boundChatText(
+        sanitizeSingleLineChatText(error instanceof Error ? error.message : String(error)),
+        MAX_CHAT_ERROR_CHARS,
+      );
+      options.write(`\nAssistant unavailable: ${message}\n`);
+    }
+  }
+}
+
+function sanitizeChatText(value: string): string {
+  return value
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/gu, "")
+    .replace(/\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))/gu, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
+    .replace(/[\t\r]/gu, " ");
+}
+function sanitizeSingleLineChatText(value: string): string {
+  return sanitizeChatText(value).replace(/[\t\n\r\u2028\u2029]+/gu, " ");
+}
+
+function boundChatText(value: string, maximum: number): string {
+  if (value.length <= maximum) return value;
+  return `${value.slice(0, Math.max(0, maximum - 1))}…`;
+}
+type TuiChatProcess = Pick<ReturnType<typeof startReviewProcess>, "cancel" | "dispose"> & {
+  readonly id: string;
+};
+
+type TuiChatProcessStarter = (options: Parameters<typeof startReviewProcess>[0]) => TuiChatProcess;
+
+export function runTuiChatTurn(
+  options: CliOptions & { project: string },
+  question: string,
+  onEvent: (event: TuiEvent) => void,
+  startProcess: TuiChatProcessStarter = startReviewProcess,
+  onProcessChange?: (process: TuiChatProcess | undefined) => void,
+): Promise<TuiChatTurnResult> {
+  return new Promise((resolveTurn) => {
+    let settled = false;
+    let startedProcess: TuiChatProcess | undefined;
+    let processDisposed = false;
+    const disposeStartedProcess = () => {
+      if (processDisposed || !startedProcess) return;
+      processDisposed = true;
+      startedProcess.dispose();
+    };
+    const settle = (result: TuiChatTurnResult) => {
+      if (settled) return;
+      settled = true;
+      disposeStartedProcess();
+      onProcessChange?.(undefined);
+      resolveTurn(result);
+    };
+    startedProcess = startProcess({
+      id: `chat-${randomUUID()}`,
+      cwd: REPO_ROOT,
+      args: buildReviewArgs(options, question),
+      env: process.env,
+      onEvent: (event) => {
+        onEvent(event);
+        if (event.type === "turn_completed") settle({ status: "completed" });
+        else if (event.type === "turn_cancelled") settle({ status: "cancelled" });
+        else if (event.type === "turn_failed")
+          settle({ status: "failed", message: event.message ?? "The chat turn failed." });
+      },
+      onExit: ({ cancelled, code, signal }) => {
+        if (cancelled) settle({ status: "cancelled" });
+        else if (!settled)
+          settle({
+            status: "failed",
+            message: `Chat process stopped before a terminal result (code ${
+              code ?? "none"
+            }, signal ${signal ?? "none"}).`,
+          });
+      },
+    });
+    if (settled) disposeStartedProcess();
+    else onProcessChange?.(startedProcess);
+  });
+}
+
+export async function runTuiRequiredModelSelection(
+  prompt: TuiCommandPrompt,
+  chooseModel: (prompt: TuiCommandPrompt) => Promise<TuiModelSelection | undefined>,
+): Promise<TuiModelSelection> {
+  while (true) {
+    const selection = await chooseModel(prompt);
+    if (selection) return selection;
+  }
+}
+
+class PortLogChatApp {
+  private readonly options: CliOptions & { project: string; question: string };
+  private activeProcess: TuiChatProcess | undefined;
+
+  constructor(options: CliOptions & { project: string; question: string }) {
+    this.options = options;
+  }
+
+  async run(): Promise<void> {
+    const prompt = createInterface({ input, output });
+    prompt.on("SIGINT", () => {
+      this.activeProcess?.cancel();
+      prompt.close();
+    });
+    try {
+      if (this.options.selectModelOnStart) {
+        let selection: TuiModelSelection;
+        try {
+          selection = await runTuiRequiredModelSelection(prompt, (activePrompt) =>
+            this.chooseModel(activePrompt),
+          );
+        } catch {
+          return;
+        }
+        this.applyModelSelection(selection);
+        output.write(`Selected ${selection.provider}/${selection.model} for chat.\n`);
+      }
+      await runTuiChatSession({
+        prompt,
+        initialQuestion: this.options.question,
+        chooseModel: (activePrompt) => this.chooseModel(activePrompt),
+        applyModelSelection: (selection) => this.applyModelSelection(selection),
+        runTurn: (question, onEvent) => this.runTurn(question, onEvent),
+        write: (text) => output.write(text),
+      });
+    } finally {
+      this.activeProcess?.dispose();
+      this.activeProcess = undefined;
+      prompt.close();
+      output.write("\n");
+    }
+  }
+
+  private async chooseModel(prompt: TuiCommandPrompt): Promise<TuiModelSelection | undefined> {
+    const current = {
+      provider: this.options.provider,
+      model: this.options.model,
+    };
+    const choices = buildTuiModelChoices(current, process.env.PORTLOG_TUI_MODELS?.trim() ?? "");
+    output.write("\nAvailable chat models:\n");
+    for (const [index, choice] of choices.entries()) {
+      const marker =
+        choice.provider === current.provider && choice.model === current.model ? " (current)" : "";
+      output.write(`  ${index + 1}. ${choice.label}${marker}\n`);
+    }
+    const answer = await prompt.question("Select a number or provider:model: ");
+    const selection = parseTuiModelSelection(answer, choices);
+    if (!selection) {
+      output.write(
+        "No model change was made. Enter a listed number or supported provider:model.\n",
+      );
+      return undefined;
+    }
+    return selection;
+  }
+
+  private applyModelSelection(selection: TuiModelSelection): void {
+    this.options.provider = selection.provider;
+    this.options.model = selection.model;
+  }
+
+  private runTurn(
+    question: string,
+    onEvent: (event: TuiEvent) => void,
+  ): Promise<TuiChatTurnResult> {
+    return runTuiChatTurn(this.options, question, onEvent, startReviewProcess, (process) => {
+      this.activeProcess = process;
+    });
+  }
 }
 
 class PortLogTuiApp {
@@ -389,11 +667,12 @@ class PortLogTuiApp {
   }
 }
 
-function parseArgs(argv: readonly string[]): CliOptions {
+export function parseTuiOptions(argv: readonly string[]): CliOptions {
   const options: CliOptions = {
     provider: process.env.PORTLOG_RUNTIME_PROVIDER?.trim() || "openrouter",
     model: process.env.PORTLOG_RUNTIME_MODEL?.trim() || "deepseek/deepseek-v4-flash",
     posture: "inspect",
+    mode: "review",
     help: false,
   };
   const aliases: Record<string, keyof CliOptions> = {
@@ -401,6 +680,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
     "-p": "project",
     "--provider": "provider",
     "--model": "model",
+    "--mode": "mode",
     "--posture": "posture",
     "--question": "question",
     "-q": "question",
@@ -418,7 +698,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
     const key = aliases[name];
     if (!key) throw new Error(`Unknown option ${name}.\n\n${USAGE}`);
     const value = equals === -1 ? argv[++index] : argument.slice(equals + 1);
-    if (!value) throw new Error(`${name} requires a value.\n\n${USAGE}`);
+    if (key === "mode" && value !== "review" && value !== "chat")
+      throw new Error(`Unsupported mode ${value}.\n\n${USAGE}`);
     if (key === "posture" && value !== "inspect" && value !== "verify" && value !== "review")
       throw new Error(`Unsupported posture ${value}.\n\n${USAGE}`);
     options[key] = value as never;
