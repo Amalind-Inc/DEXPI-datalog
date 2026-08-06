@@ -294,6 +294,36 @@ test("chat turns surface supervisor output when the worker exits before a termin
   assert.equal(result.status, "failed");
   assert.match(result.message ?? "", /Prepared project unavailable/);
 });
+test("chat turn keeps useful worker diagnostics when a Node.js footer follows", async () => {
+  const result = await runTuiChatTurn(
+    {
+      project: "/tmp/e06-review",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+      posture: "inspect",
+      help: false,
+    },
+    "hello",
+    () => {},
+    (processOptions) => {
+      queueMicrotask(() => {
+        processOptions.onOutput?.("stderr: ERROR: Provider credential is missing");
+        for (let index = 0; index < 8; index += 1)
+          processOptions.onOutput?.(`stderr: at stack frame ${index}`);
+        processOptions.onOutput?.("stderr: Node.js v26.5.0");
+        processOptions.onExit({ code: 1, signal: null, cancelled: false });
+      });
+      return {
+        id: processOptions.id,
+        cancel: () => {},
+        dispose: () => {},
+      };
+    },
+  );
+  assert.equal(result.status, "failed");
+  assert.match(result.message ?? "", /Provider credential is missing/);
+  assert.match(result.message ?? "", /Node\.js v26\.5\.0/);
+});
 test("renderer removes terminal controls from initial provider and model identity", () => {
   const rows = renderTui(
     createTuiState({

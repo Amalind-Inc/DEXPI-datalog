@@ -184,6 +184,7 @@ const MAX_CHAT_ASSISTANT_CHARS = 16_000;
 const MAX_CHAT_TOOL_EVENTS = 32;
 const MAX_CHAT_TOOL_NAME_CHARS = 120;
 const MAX_CHAT_ERROR_CHARS = 1_000;
+const MAX_CHAT_DIAGNOSTIC_LINES = 8;
 export async function runTuiChatSession(options: TuiChatSessionOptions): Promise<void> {
   let nextQuestion = options.initialQuestion?.trim();
 
@@ -304,9 +305,9 @@ export function runTuiChatTurn(
     let settled = false;
     let startedProcess: TuiChatProcess | undefined;
     let processDisposed = false;
-    let latestProcessOutput = "";
+    const processOutputLines: string[] = [];
     const diagnostic = (message: string): string => {
-      const output = latestProcessOutput.trim();
+      const output = boundChatText(processOutputLines.join(" "), MAX_CHAT_ERROR_CHARS).trim();
       return output ? `${message} Diagnostic: ${output}` : message;
     };
     const disposeStartedProcess = () => {
@@ -327,7 +328,11 @@ export function runTuiChatTurn(
       args: buildReviewArgs(options, question),
       env: process.env,
       onOutput: (line) => {
-        latestProcessOutput = boundChatText(sanitizeSingleLineChatText(line), MAX_CHAT_ERROR_CHARS);
+        const output = boundChatText(sanitizeSingleLineChatText(line), MAX_CHAT_ERROR_CHARS);
+        if (!output) return;
+        if (processOutputLines.length >= MAX_CHAT_DIAGNOSTIC_LINES)
+          processOutputLines.splice(Math.floor(MAX_CHAT_DIAGNOSTIC_LINES / 2), 1);
+        processOutputLines.push(output);
       },
       onEvent: (event) => {
         onEvent(event);
