@@ -68,6 +68,36 @@ export interface TuiWelcomeOptions {
 }
 
 export type TuiChatIdentity = TuiWelcomeOptions;
+const CHAT_RULE = "─".repeat(66);
+const CHAT_ASSISTANT_COLOR = "\u001b[90m";
+const CHAT_TOOL_COLOR = "\u001b[2m";
+const CHAT_RESET = "\u001b[0m";
+
+function renderChatInputPrompt(identity: TuiChatIdentity): string {
+  return [
+    CHAT_RESET,
+    "",
+    CHAT_RULE,
+    `┌─ [PORTLOG] ${displayChatPath(identity.projectDirectory)}`,
+    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
+    "│ You: ",
+  ].join("\n");
+}
+function renderChatUserMessage(identity: TuiChatIdentity, question: string): string {
+  return [
+    CHAT_RESET,
+    CHAT_RULE,
+    `┌─ [PORTLOG] ${displayChatPath(identity.projectDirectory)}`,
+    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
+    `│ You: ${sanitizeSingleLineChatText(question)}`,
+    `└${CHAT_RULE.slice(1)}`,
+    "",
+  ].join("\n");
+}
+
+function closeChatInput(): string {
+  return `${CHAT_RESET}\n└${CHAT_RULE.slice(1)}\n`;
+}
 
 function displayChatPath(projectDirectory: string): string {
   const absolute = resolve(projectDirectory);
@@ -79,7 +109,7 @@ function displayChatPath(projectDirectory: string): string {
 function renderChatIdentityHeader(identity: TuiChatIdentity, label: string): string {
   return [
     `┌─ [${label}] ${displayChatPath(identity.projectDirectory)}`,
-    `│  MODEL ${identity.provider}/${identity.model}`,
+    `│  MODEL ${sanitizeSingleLineChatText(`${identity.provider}/${identity.model}`)}`,
   ].join("\n");
 }
 
@@ -206,9 +236,13 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
 
   while (true) {
     const providedQuestion = nextQuestion !== undefined;
+    const identity = options.getIdentity?.();
     let answer: string;
     try {
-      answer = nextQuestion ?? (await options.prompt.question("You: "));
+      answer =
+        nextQuestion ??
+        (await options.prompt.question(identity ? renderChatInputPrompt(identity) : "You: "));
+      if (identity && !providedQuestion) options.write(closeChatInput());
     } catch {
       return;
     }
@@ -235,61 +269,53 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
       continue;
     }
 
-    const identity = options.getIdentity?.();
     const framed = identity !== undefined;
-    if (framed) {
-      options.write(
-        [
-          "",
-          renderChatIdentityHeader(identity, "PORTLOG"),
-          "├─",
-          `│ You: ${question}`,
-          "│ Assistant: ",
-        ].join("\n"),
-      );
-    } else {
+    if (framed && providedQuestion) options.write(renderChatUserMessage(identity, question));
+    else if (!framed)
       options.write(`${providedQuestion ? `\nYou: ${question}\n` : "\n"}Assistant: `);
-    }
 
-    let assistantNeedsPrefix = false;
+    let assistantStarted = false;
+    let assistantLineOpen = false;
+    const startAssistant = (): void => {
+      if (assistantStarted) return;
+      options.write(`${CHAT_ASSISTANT_COLOR}Assistant\n`);
+      assistantStarted = true;
+      assistantLineOpen = false;
+    };
     const writeAssistant = (text: string): void => {
       if (!framed) {
         options.write(text);
         return;
       }
-      let cursor = 0;
-      while (cursor < text.length) {
-        const newline = text.indexOf("\n", cursor);
-        const end = newline === -1 ? text.length : newline;
-        const segment = text.slice(cursor, end);
-        if (segment) {
-          if (assistantNeedsPrefix) options.write("│ ");
-          options.write(segment);
-          assistantNeedsPrefix = false;
-        }
-        if (newline === -1) break;
-        options.write("\n");
-        assistantNeedsPrefix = true;
-        cursor = newline + 1;
+      if (!text) return;
+      startAssistant();
+      options.write(text);
+      assistantLineOpen = !text.endsWith("\n");
+    };
+    const finishAssistant = (): void => {
+      if (!assistantStarted) return;
+      if (assistantLineOpen) options.write("\n");
+      options.write(CHAT_RESET);
+      assistantStarted = false;
+      assistantLineOpen = false;
+    };
+    const writeAssistantStatus = (message: string): void => {
+      if (!framed) {
+        options.write(`\n${message}\n`);
+        return;
       }
+      startAssistant();
+      if (assistantLineOpen) options.write("\n");
+      options.write(message);
+      assistantLineOpen = true;
     };
     const writeToolHeader = (label: string): void => {
       if (!framed) {
         options.write(`\n${label}\nAssistant: `);
         return;
       }
-      if (!assistantNeedsPrefix) options.write("\n");
-      options.write(`│ ${label}\n│ Assistant: `);
-      assistantNeedsPrefix = false;
-    };
-    const writeTerminal = (message?: string): void => {
-      if (!framed) {
-        options.write(message ? `\n${message}\n` : "\n");
-        return;
-      }
-      if (!assistantNeedsPrefix) options.write("\n");
-      if (message) options.write(`│ ${message}\n`);
-      options.write("└─\n");
+      finishAssistant();
+      options.write(`${CHAT_TOOL_COLOR}${label}${CHAT_RESET}\n`);
     };
     let assistantCharacters = 0;
     let assistantTruncated = false;
@@ -328,18 +354,26 @@ export async function runTuiChatSession(options: TuiChatSessionOptions): Promise
           sanitizeSingleLineChatText(result.message ?? "unknown error"),
           MAX_CHAT_ERROR_CHARS,
         );
-        writeTerminal(`Assistant unavailable: ${message}`);
+        writeAssistantStatus(`Assistant unavailable: ${message}`);
       } else if (result.status === "cancelled") {
-        writeTerminal("Assistant turn cancelled.");
-      } else {
-        writeTerminal();
+        writeAssistantStatus("Assistant turn cancelled.");
+      }
+      if (framed) {
+        finishAssistant();
+        options.write("\n");
+      } else if (result.status === "completed") {
+        options.write("\n");
       }
     } catch (error) {
       const message = boundChatText(
         sanitizeSingleLineChatText(error instanceof Error ? error.message : String(error)),
         MAX_CHAT_ERROR_CHARS,
       );
-      writeTerminal(`Assistant unavailable: ${message}`);
+      writeAssistantStatus(`Assistant unavailable: ${message}`);
+      if (framed) {
+        finishAssistant();
+        options.write("\n");
+      }
     }
   }
 }

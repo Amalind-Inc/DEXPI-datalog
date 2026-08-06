@@ -147,7 +147,7 @@ test("welcome shell names the workspace and model without asking for a mode", ()
   assert.match(welcome, /Tips/);
   assert.doesNotMatch(welcome, /Select a number|review or chat/);
 });
-test("inline chat frames the selected model, workspace, and assistant lines", async () => {
+test("inline chat boxes user input and keeps assistant output outside", async () => {
   const output: string[] = [];
   await runTuiChatSession({
     prompt: {
@@ -170,15 +170,50 @@ test("inline chat frames the selected model, workspace, and assistant lines", as
     write: (text) => output.push(text),
   });
 
-  const transcript = output.join("");
+  const transcript = stripAnsi(output.join(""));
   assert.match(transcript, /┌─ \[PORTLOG\] \/tmp\/e06-review/);
   assert.match(transcript, /│  MODEL openrouter\/deepseek\/deepseek-v4-flash/);
   assert.match(transcript, /│ You: Explain the source\./);
-  assert.match(transcript, /│ \[PortLog tool: portlog_evidence\]\n│ Assistant: Hello/);
-  assert.match(transcript, /│ Assistant: Hello\n│ world/);
-  assert.match(transcript, /└─\n/);
+  assert.match(transcript, /└─{2,}/);
+  assert.match(transcript, /\[PortLog tool: portlog_evidence\]\nAssistant\nHello\nworld/);
+  assert.doesNotMatch(transcript, /│ Assistant/);
+  assert.match(output.join(""), /\u001b\[90mAssistant/);
 });
-test("inline chat keeps assistant failures inside the response frame", async () => {
+test("interactive chat prompt places the user input inside the box", async () => {
+  const answers = ["typed question", "/quit"];
+  const prompts: string[] = [];
+  const output: string[] = [];
+  await runTuiChatSession({
+    prompt: {
+      question: async (message) => {
+        prompts.push(message);
+        return answers.shift() ?? "/quit";
+      },
+      close: () => {},
+    },
+    chooseModel: async () => undefined,
+    applyModelSelection: () => {},
+    getIdentity: () => ({
+      projectDirectory: "/tmp/e06-review",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+    }),
+    runTurn: async (_question, onEvent) => {
+      onEvent({ type: "assistant_text_delta", text: "Done." });
+      return { status: "completed" };
+    },
+    write: (text) => output.push(text),
+  });
+
+  const promptText = stripAnsi(prompts[0] ?? "");
+  assert.match(promptText, /─{66}/);
+  assert.match(
+    promptText,
+    /┌─ \[PORTLOG\] \/tmp\/e06-review\n│  MODEL openrouter\/deepseek\/deepseek-v4-flash\n│ You: $/,
+  );
+  assert.match(stripAnsi(output.join("")), /└─{2,}/);
+});
+test("inline chat keeps assistant failures outside the input box", async () => {
   const output: string[] = [];
   await runTuiChatSession({
     prompt: {
@@ -197,7 +232,10 @@ test("inline chat keeps assistant failures inside the response frame", async () 
     write: (text) => output.push(text),
   });
 
-  assert.match(output.join(""), /│ Assistant unavailable: provider unavailable\n└─\n/);
+  const transcript = stripAnsi(output.join(""));
+  assert.match(transcript, /Assistant\nAssistant unavailable: provider unavailable\n/);
+  assert.doesNotMatch(transcript, /│ Assistant/);
+  assert.match(output.join(""), /\u001b\[90mAssistant/);
 });
 
 test("selected provider and model remain explicit in review arguments and TUI identity", () => {
