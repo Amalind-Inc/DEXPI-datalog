@@ -17,7 +17,14 @@ export interface EditorTheme {
 
 const ANSI_ESCAPE = /\u001b\[[0-?]*[ -/]*[@-~]/gu;
 const SHIFT_ENTER_SEQUENCES = new Set(["\u001b[13;2u", "\u001b[27;2;13~", "\u001b\r"]);
-const SUBMIT_SEQUENCES = new Set(["\r", "\n", "\u001b[13;2;5u", "\u001b[27;2;5;13~"]);
+const SUBMIT_SEQUENCES = new Set([
+  "\r",
+  "\n",
+  "\u001b[13;5u",
+  "\u001b[13;2;5u",
+  "\u001b[27;5;13~",
+  "\u001b[27;2;5;13~",
+]);
 
 function graphemes(value: string): string[] {
   if (typeof Intl.Segmenter === "function") {

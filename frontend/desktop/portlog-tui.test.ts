@@ -30,6 +30,7 @@ import {
   type TuiPromptKey,
 } from "./portlog-tui.ts";
 import { parseReviewLine, startReviewProcess } from "./portlog-tui-supervisor.ts";
+import { Editor } from "./vendor/pi-tui-editor/editor.ts";
 test("/model is the explicit selector command and unknown slash commands are inert", () => {
   assert.equal(parseTuiCommand("/model"), "model");
   assert.equal(parseTuiCommand(" /model "), "model");
@@ -313,10 +314,23 @@ test("chat prompt wraps long input and submits with ctrl+enter", async () => {
   for (const character of "abcdefghijklmnopqrstuvwxyz") {
     emitKey(character, { name: character, sequence: character });
   }
-  emitKey("", { name: "return", sequence: "\u001b[13;2;5u", ctrl: true });
+  emitKey("", { sequence: "\u001b[13;5u" });
   assert.equal(await question, "abcdefghijklmnopqrstuvwxyz");
   const transcript = stripAnsi(output.join(""));
   assert.match(transcript, /│ You: [a-z]+\n│      [a-z]+/);
+});
+test("editor ignores legacy F3 sequences and accepts legacy ctrl+enter", () => {
+  const editor = new Editor();
+  let submitted: string | undefined;
+  editor.onSubmit = (text) => {
+    submitted = text;
+  };
+  editor.handleInput("hello");
+  editor.handleInput("\u001b[13;5~");
+  assert.equal(editor.getText(), "hello");
+  assert.equal(submitted, undefined);
+  editor.handleInput("\u001b[27;5;13~");
+  assert.equal(submitted, "hello");
 });
 test("non-chat prompt preserves a leading prefix while editing", async () => {
   const listeners = new Set<(character: string, key: TuiPromptKey) => void>();
