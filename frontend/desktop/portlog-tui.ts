@@ -128,15 +128,17 @@ export const PORTLOG_EDITOR_THEME: EditorTheme = {
 const CHAT_USER_BG = "\u001b[48;5;236m";
 const CHAT_USER_FG = "\u001b[38;5;250m";
 
-// Renders a submitted user message as a plain, read-only history line on a subtle
-// background so it reads as "user" against the assistant's plain gray text. The
-// live input box is the only box on screen; everything submitted becomes a chip.
+// Renders a submitted user message as a plain, read-only history line on a full-width
+// subtle background so it reads as "user" against the assistant's plain gray text. The
+// live input box is the only box on screen; everything submitted becomes a band.
+// `\x1b[K` extends the active background to the end of the line without needing the
+// terminal width.
 function renderArchivedUserMessage(text: string): string {
   const lines = sanitizeChatText(text).split("\n");
   return lines
     .map(
       (line, index) =>
-        `${CHAT_USER_BG}${CHAT_USER_FG}${index === 0 ? " You: " : "     "}${line} ${CHAT_RESET}`,
+        `${CHAT_USER_BG}${CHAT_USER_FG}${index === 0 ? " You: " : "     "}${line}\x1b[K${CHAT_RESET}`,
     )
     .join("\n");
 }

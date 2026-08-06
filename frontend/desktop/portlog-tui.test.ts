@@ -174,7 +174,10 @@ test("archived chat messages are plain on a background, without box or identity"
   const transcript = stripAnsi(output.join(""));
   assert.match(transcript, /You: Explain the source\./);
   assert.doesNotMatch(transcript, /\[PORTLOG\]|MODEL |┌─ \[|│ You:|e06-review/);
-  assert.match(output.join(""), /\u001b\[48;5;236m\u001b\[38;5;250m You: Explain the source\. /);
+  assert.match(
+    output.join(""),
+    /\u001b\[48;5;236m\u001b\[38;5;250m You: Explain the source\.\u001b\[K/,
+  );
   assert.match(transcript, /\[PortLog tool: portlog_evidence\]\nAssistant\nHello\nworld/);
   assert.match(output.join(""), /\u001b\[90mAssistant/);
 });
@@ -377,7 +380,7 @@ test("terminal cursor follows the insertion point across multiline editor rows",
   assert.equal(await question, "abc\ndef");
   assert.match(
     fixture.output.join(""),
-    /\u001b\[48;5;236m\u001b\[38;5;250m You: abc \u001b\[0m\n\u001b\[48;5;236m\u001b\[38;5;250m     def \u001b\[0m\u001b\[\?25l$/u,
+    /\u001b\[48;5;236m\u001b\[38;5;250m You: abc\u001b\[K\u001b\[0m\n\u001b\[48;5;236m\u001b\[38;5;250m     def\u001b\[K\u001b\[0m\u001b\[\?25l$/u,
   );
 });
 test("terminal cursor tracks a soft-wrapped editor row", async () => {
