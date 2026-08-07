@@ -15,14 +15,14 @@ Apply this filter **before** any UI or harness work. If the work is commodity, b
 - Reopen provenance and host-owned session policy
 - Thin policy wrappers around a mature Pi agent loop (ADR 0017)
 
-## Commodity (bind / thin-wrap — do not rebuild)
+## Commodity (bind / thin-wrap / approved fork — do not rebuild)
 
 - Generic chat transcript and scrollback
 - Markdown / rich-text rendering
 - Prompt editors and sticky input chrome
 - Model pickers and provider login chrome
 - Full TUI engines and InteractiveMode clones
-- Coding-agent session UX chrome copied from Oh My Pi, Claude Code, Synara, or similar (steal grammar, do not fork their product)
+- **Desktop workbench shell:** fork and edit [Synara](https://github.com/Emanuele-web04/synara) per `docs/research/synara-fork-for-portlog-workbench.md` — do not reimplement Synara/Codex/Cursor chrome in `frontend/desktop/`
 
 ## Synthesis rule (replaces GitHub-memory-slop)
 
@@ -30,13 +30,15 @@ Apply this filter **before** any UI or harness work. If the work is commodity, b
 
 - Short **behavior** notes in `docs/agents/portlog-interaction-taste.md` (what the engineer should see or do, and why).
 - Dependencies on maintained packages or git pins with a thin PortLog adapter.
+- **Controlled fork** of Synara (MIT) at a pinned SHA, edited at documented seams — not a file dump into `vendor/`.
 - Taste mining from `quarantine/portlog-tui-oh-my-pi-wip` as **read-only** behavior extraction.
 
 **Forbidden**
 
-- Copying upstream component trees into `frontend/desktop/vendor/` without an accepted ADR that names the dependency and adapter boundary.
+- Copying upstream component trees into `frontend/desktop/vendor/` without an accepted ADR that names the dependency and adapter boundary (Synara fork lives outside that anti-pattern; see the research doc).
 - Agent tasks that “remember” a GitHub repo and dump a degraded remix into this tree.
 - Expanding the frozen terminal TUI (see `docs/agents/terminal-ui-freeze.md`).
+- Rebuilding Synara-class shell chrome from scratch inside PortLog.
 
 ## Decision question
 

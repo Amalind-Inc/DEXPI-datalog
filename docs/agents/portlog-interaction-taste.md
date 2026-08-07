@@ -8,13 +8,18 @@ Product sentence: create, edit, and optimize P&IDs; neurosymbolic engine is
 co-pilot and verifier. QA/review is a mode, not the destination.
 See `CONTEXT.md` § Product.
 
-## Shell grammar (steal carefully)
+## Shell grammar (steal carefully / fork Synara)
+
+**Approved shell:** fork Synara (MIT) — see `docs/research/synara-fork-for-portlog-workbench.md`.
+Keep projects/threads, files, agent transcript, panes, terminal. Replace the craft
+surface with P&ID + PortLog authority/apply. Do not rebuild that chrome in
+`frontend/desktop/`.
 
 Synara / Codex / Cursor energy: projects and threads sidebar, document tree,
 agent transcript, resizable panes, accessible VM/process lane.
-**Steal shell grammar. Own domain chrome** (drawing, evidence, propose/apply,
-rule outcomes). If you remove the P&ID and authority UI and it still looks like
-a generic coding command center, the workbench is wrong.
+**Steal shell grammar via the fork. Own domain chrome** (drawing, evidence,
+propose/apply, rule outcomes). If you remove the P&ID and authority UI and it
+still looks like a generic coding command center, the workbench is wrong.
 
 ## Wanted (engineer-facing)
 
