@@ -4,11 +4,15 @@ Apply this filter **before** any UI or harness work. If the work is commodity, b
 
 ## Core (deep, PortLog-owned)
 
+- P&ID workbench loop: create / edit / optimize under grounded checks
+- Proposed edit → validate → host-owned apply + provenance
 - Evidence and authority envelopes (`ordinary` vs `portlog` vs `deterministic`)
 - Rule evaluation outcomes, coverage, and indeterminacy
 - DEXPI → canonical facts → Soufflé path
-- Gondolin / isolated-command confinement and cancel semantics
-- Review reopen provenance and host-owned session policy
+- Drawing / topology as the primary engineering surface
+- Multi-doc project workspace and readable uploaded artifacts
+- Gondolin / isolated-command confinement, accessible VM surface, cancel semantics
+- Reopen provenance and host-owned session policy
 - Thin policy wrappers around a mature Pi agent loop (ADR 0017)
 
 ## Commodity (bind / thin-wrap — do not rebuild)
@@ -18,7 +22,7 @@ Apply this filter **before** any UI or harness work. If the work is commodity, b
 - Prompt editors and sticky input chrome
 - Model pickers and provider login chrome
 - Full TUI engines and InteractiveMode clones
-- Coding-agent session UX copied from Oh My Pi, Claude Code, or similar
+- Coding-agent session UX chrome copied from Oh My Pi, Claude Code, Synara, or similar (steal grammar, do not fork their product)
 
 ## Synthesis rule (replaces GitHub-memory-slop)
 
@@ -36,7 +40,7 @@ Apply this filter **before** any UI or harness work. If the work is commodity, b
 
 ## Decision question
 
-Ask: *Is this unique to grounded P&ID review with PortLog authority, or is it generic agent UX?*
+Ask: *Does this help someone create, edit, or optimize a P&ID under grounded checks — or is it generic agent UX?*
 
-- Generic → buy/bind/thin-wrap; ship on the desktop GUI or the existing `portlog:review` smoke CLI.
+- Generic → buy/bind/thin-wrap; ship on the desktop workbench or the existing `portlog:review` smoke CLI.
 - Unique → overengineer in PortLog-owned modules; cover with behavior tests.

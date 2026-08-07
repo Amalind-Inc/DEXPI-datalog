@@ -6,7 +6,8 @@ How the engineering skills should consume this repo's domain documentation. This
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root — the domain glossary / ubiquitous language.
+- **`CONTEXT.md`** at the repo root — product sentence (§ Product: P&ID workbench)
+  plus the domain glossary / ubiquitous language.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in. Current ADRs
   include `0002-control-deterministic-boundaries-not-model-prose`,
   `0003-web-native-grounded-agent-harness`,

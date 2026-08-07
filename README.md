@@ -1,6 +1,8 @@
 # PortLog
 
-An open source tool for deterministic P&ID QA over DEXPI source files (version 1.3)
+A neurosymbolic P&ID workbench for DEXPI 1.3: create, edit, and optimize plant
+drawings with grounded evidence and deterministic checks. Review/QA is a mode
+inside the workbench, not the whole product.
 
 [![CI](https://github.com/Harborfield-suite/PortLog/actions/workflows/ci.yml/badge.svg)](https://github.com/Harborfield-suite/PortLog/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)

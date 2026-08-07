@@ -5,7 +5,48 @@ then derives deterministic Souffle predicates for verification. The current
 trust boundary is `pyDEXPI` for XML-to-graph extraction and this repository
 for graph-to-facts export plus derived classification and utility layers.
 
+## Product
+
+**PortLog** is a neurosymbolic **P&ID workbench**. Process engineers use it to
+**create, edit, and optimize** piping and instrumentation diagrams (DEXPI). The
+model proposes and explains; deterministic facts, rules, and host-owned policy
+verify and gate changes. Inspect, Verify, and review QA are **modes inside the
+workbench**, not the product itself.
+
+**Product face:** macOS desktop GUI — an agent-workbench shell (Synara / Codex /
+Cursor grammar for projects, documents, agent transcript, and accessible VM).
+PortLog owns the drawing surface, multi-doc project workspace, evidence and
+authority UX, propose→validate→apply edit path, and reopen provenance.
+
+**Not the product:** interactive TUI; web UI as the product face; a chat-only
+review viewer with no edit/apply path; silent DEXPI mutation or compliance
+claims from model prose alone.
+
+**Agent filter:** a task belongs in scope only if it helps someone create, edit,
+or optimize a P&ID under grounded checks (or is required plumbing for that
+loop). See `docs/agents/commodity-vs-core.md` and
+`docs/agents/portlog-interaction-taste.md`.
+
 ## Language
+
+**P&ID workbench**:
+The PortLog product: a desktop workspace where process engineers create, edit,
+and optimize P&IDs with a neurosymbolic engine (model + facts + rules +
+host-owned policy and isolation). Review and QA are modes on this workbench.
+_Avoid_: review-only chatbot, chat viewer, TUI product, web-as-product-face,
+coding-agent clone without a drawing/edit path
+
+**proposed edit**:
+A structured candidate change to a P&ID / DEXPI / derived artifacts that the
+model or a tool may suggest. It has no authority until host validation and an
+explicit engineer accept/apply.
+_Avoid_: silent rewrite, automatic DEXPI mutation, prose-as-applied-change
+
+**apply (host-owned)**:
+The explicit, host-authorized commit of an accepted proposed edit into PortLog-
+owned document and artifact state, with provenance. The renderer and the model
+never apply on their own.
+_Avoid_: auto-apply, Pi session as source of truth, implicit save from chat
 
 **DEXPI 1.3 source file**:
 A single DEXPI 1.3 XML export that acts as the authoritative engineering input

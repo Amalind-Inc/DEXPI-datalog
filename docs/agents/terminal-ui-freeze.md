@@ -1,6 +1,9 @@
 # Terminal UI freeze
 
-Interactive PortLog TUI work is **frozen**. Process engineers will use the **desktop GUI** (macOS PortLog desktop harness). The terminal is a **dev/smoke harness**, not a product face. Do not treat web UI epics as the product face.
+Interactive PortLog TUI work is **frozen**. Process engineers use the **desktop
+P&ID workbench** (create / edit / optimize — see `CONTEXT.md` § Product). The
+terminal is a **dev/smoke harness**, not a product face. Do not treat web UI
+epics as the product face.
 
 ## Supported terminal entry
 
@@ -24,8 +27,8 @@ Interactive PortLog TUI work is **frozen**. Process engineers will use the **des
 
 ## Where to spend effort instead
 
-- Core: evidence/authority envelopes, Soufflé outcomes, Gondolin isolation, provenance, host-owned Pi harness (see `docs/adr/0017-full-pi-portlog-agent-harness.md` and `docs/agents/commodity-vs-core.md`)
-- Product face: macOS desktop review harness (`pydexpi-datalog-1-34eu` and related desktop work) — not web UI epics
-- Taste: short GUI behavior notes in `docs/agents/portlog-interaction-taste.md` — never component-tree dumps
+- Core: workbench edit/apply path, evidence/authority, Soufflé outcomes, accessible VM/isolation, provenance, host-owned Pi harness (see `docs/adr/0017-full-pi-portlog-agent-harness.md` and `docs/agents/commodity-vs-core.md`)
+- Product face: macOS desktop P&ID workbench (`pydexpi-datalog-1-34eu` and related desktop work) — not web UI epics
+- Taste: short workbench behavior notes in `docs/agents/portlog-interaction-taste.md` — never component-tree dumps
 
 Lift this freeze only by closing or explicitly updating the Beads freeze decision and accepting a new ADR.
