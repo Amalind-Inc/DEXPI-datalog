@@ -32,12 +32,13 @@ Upstream run path today: `bun install` / `bun run dev`. License: **MIT** (retain
 ## Pin
 
 - Upstream: `https://github.com/Emanuele-web04/synara`
+- **GitHub fork home:** https://github.com/Harborfield-suite/portlog-synara (public fork of Synara)
 - Local fork working copy: `/Users/vikramoddiraju/LogicProgramming/portlog-synara` (sibling of PortLog; **not** vendored into this repo)
-- GitHub fork home: *blocked this session — `gh` auth token invalid; create `Harborfield-suite/portlog-synara` (or equivalent) and `git remote add origin …` when authenticated*
-- Upstream remote on local clone: `upstream` → `Emanuele-web04/synara`
+- Remotes on local clone: `origin` → Harborfield fork; `upstream` → `Emanuele-web04/synara`
 - Upstream commit pinned: `2e25a16a0e97764c4ffcaacd32fcdaac710415da` (2026-08-07, “Fix composer send arrow alignment (#566)”)
-- Spike branch on local clone: `portlog/spike-host-bridge` @ `559e997`
+- Spike branch: `portlog/spike-host-bridge` @ `559e997` (pushed to origin)
 - Date pinned: 2026-08-07
+- Official fork published: 2026-08-07
 
 ## What we keep from Synara (commodity — edit lightly)
 
@@ -145,7 +146,6 @@ Renderer is a client. PortLog (Electron main / host worker / sidecar) remains au
 
 **Still open**
 
-- Push GitHub fork under Harborfield when `gh` works  
 - Branding rename `@synara/*` → PortLog  
 - Canvas baseline (chemical-graph-editor vs PandID)  
 - Wire real PortLog host events (not marker strings) into the bridge  
@@ -162,7 +162,6 @@ Renderer is a client. PortLog (Electron main / host worker / sidecar) remains au
 - Whether PortLog’s existing Electron main is replaced by Synara desktop or embeds PortLog as a sidecar host  
 - Branding/package rename cadence (`@synara/*` → PortLog identifiers)  
 - Canvas baseline choice  
-- GitHub remote for `portlog-synara` after `gh auth login`
 
 ## References
 
