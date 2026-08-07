@@ -32,9 +32,12 @@ Upstream run path today: `bun install` / `bun run dev`. License: **MIT** (retain
 ## Pin
 
 - Upstream: `https://github.com/Emanuele-web04/synara`
-- Fork home: *TBD at spike* (Harborfield / PortLog org)
-- Upstream commit: *TBD*
-- Date pinned: *TBD*
+- Local fork working copy: `/Users/vikramoddiraju/LogicProgramming/portlog-synara` (sibling of PortLog; **not** vendored into this repo)
+- GitHub fork home: *blocked this session — `gh` auth token invalid; create `Harborfield-suite/portlog-synara` (or equivalent) and `git remote add origin …` when authenticated*
+- Upstream remote on local clone: `upstream` → `Emanuele-web04/synara`
+- Upstream commit pinned: `2e25a16a0e97764c4ffcaacd32fcdaac710415da` (2026-08-07, “Fix composer send arrow alignment (#566)”)
+- Spike branch on local clone: `portlog/spike-host-bridge` @ `559e997`
+- Date pinned: 2026-08-07
 
 ## What we keep from Synara (commodity — edit lightly)
 
@@ -111,6 +114,42 @@ Renderer is a client. PortLog (Electron main / host worker / sidecar) remains au
 4. Prove one **no-op PortLog host bridge**: one PortLog event type rendered in Synara transcript chrome (e.g. distinguish a fake `portlog` evidence line from ordinary chat).  
 5. Stop. Do not redesign the whole app in the spike.
 
+## Spike closeout (2026-08-07, bead `pydexpi-datalog-1-ngrs`)
+
+**Done**
+
+- Shallow-cloned Synara to sibling `portlog-synara`; remotes: `upstream` only (GitHub org fork pending owner `gh auth login`).
+- `bun install` succeeded; `bun run dev:web` reached Vite ready on `http://localhost:5733/` (stock shell path proven; full Electron desktop not required for this seam).
+- No-op PortLog evidence bridge landed on branch `portlog/spike-host-bridge`:
+  - `apps/web/src/portlog/portlogHostBridge.ts` (+ tests)
+  - `PortLogEvidenceChip` / `PortLogTranscriptSegments`
+  - Wired into assistant `ChatMarkdown` so `[portlog:evidence|E1|…]` lines render with `data-portlog-authority="portlog"`, distinct from ordinary prose
+  - Focused vitest: 28 passed (`portlogHostBridge` + `ChatMarkdown`)
+
+**Seam map (pin `2e25a16`)**
+
+| Concern | Where |
+|---|---|
+| Craft / editor center | `apps/web/src/components/EditorWorkspaceView.tsx` — file/diff center + `WorkspaceFilesSidebar` / `WorkspaceFilePreview`; replace later with P&ID canvas |
+| Files tree | Right-dock kind `explorer` / `file` via `apps/web/src/rightDockStore.logic.ts` (`RIGHT_DOCK_PANE_KINDS`); editor explorer in `components/chat/workspaceExplorer` |
+| Terminal | Right-dock kind `terminal`; state `apps/web/src/terminalStateStore.ts` |
+| Browser / side chat / git | Right-dock kinds `browser`, `sidechat`, `git`, `pullRequest`, `diff` |
+| Agent / provider sessions | `apps/server/src/agentGateway/` (+ `harnessPolicy.ts`); providers include **`pi`** in `PROVIDERS_WITH_THREAD_SCOPED_SYNARA_MCP`; Codex path also `codexAppServerManager.ts` |
+| Transcript chrome (PortLog spike) | `apps/web/src/components/ChatMarkdown.tsx` ← `portlog/PortLogTranscriptSegments.tsx` |
+| Desktop packaging | `apps/desktop` (Electron); monorepo scripts `dev:desktop` / `electron:dev` |
+
+**Resolved from open questions**
+
+- Layout: **sibling repo** (`portlog-synara`), not submodule/vendor dump into PortLog.
+- Electron host strategy: deferred — Synara desktop remains candidate shell; PortLog core stays sidecar/host API.
+
+**Still open**
+
+- Push GitHub fork under Harborfield when `gh` works  
+- Branding rename `@synara/*` → PortLog  
+- Canvas baseline (chemical-graph-editor vs PandID)  
+- Wire real PortLog host events (not marker strings) into the bridge  
+
 ## Non-goals for the spike
 
 - Full DEXPI edit/apply  
@@ -118,12 +157,12 @@ Renderer is a client. PortLog (Electron main / host worker / sidecar) remains au
 - Merging Synara into the existing Electron app without a pin  
 - Web-as-product-face  
 
-## Open questions (resolve in spike, not in chat)
+## Open questions (post-spike)
 
-- Sibling repo vs submodule vs monorepo package under PortLog  
 - Whether PortLog’s existing Electron main is replaced by Synara desktop or embeds PortLog as a sidecar host  
 - Branding/package rename cadence (`@synara/*` → PortLog identifiers)  
 - Canvas baseline choice  
+- GitHub remote for `portlog-synara` after `gh auth login`
 
 ## References
 
