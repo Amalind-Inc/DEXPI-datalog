@@ -3,6 +3,7 @@ import { access, constants, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
+import { createGondolinBashRunner } from "./gondolin-bash.ts";
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE, createGondolinQemuExecutor } from "./gondolin-qemu.ts";
 import { runHostSafeBash } from "./host-safe-bash.ts";
 import {
@@ -69,7 +70,10 @@ const baseUrl =
     : provider === "openai-codex"
       ? "https://chatgpt.com/backend-api"
       : "https://openrouter.ai/api/v1");
-const apiKey = process.env.PORTLOG_RUNTIME_API_KEY ?? process.env.PORTLOG_OPENROUTER_API_KEY;
+const apiKey =
+  process.env.PORTLOG_RUNTIME_API_KEY ??
+  process.env.PORTLOG_OPENROUTER_API_KEY ??
+  process.env.OPENROUTER_API_KEY;
 const NO_PROJECT_SOURCE_DIGEST = `sha256:${"0".repeat(64)}`;
 const isChat = request.mode === "chat";
 const workingDirectory = isChat
@@ -82,20 +86,23 @@ const qemuAvailable = !isChat && posture === "review" && (await isExecutableFile
 const preparedToolMode = request.mode === "inspection";
 const preparedToolPosture = posture === "inspect" || posture === "verify" || posture === "review";
 const preparedSession = preparedToolMode && preparedToolPosture && Boolean(request.sessionId);
+const chatWorkspaceSession = isChat && Boolean(request.projectDirectory && request.sessionId);
+const policyRoutedBash = preparedSession || chatWorkspaceSession;
 const toolProfile = createPortLogToolProfile({
   hostEvidence: preparedSession,
   hostRules: preparedSession,
   isolatedExecution: preparedSession,
-  policyRoutedBash: preparedSession,
+  policyRoutedBash,
+  workspaceMutation: preparedSession || chatWorkspaceSession,
 });
 const projectManifest = request.projectDirectory
   ? await loadLocalProject(request.projectDirectory)
   : undefined;
 const sessionIdentity =
-  request.mode === "inspection" && request.projectDirectory && request.sessionId && projectManifest
+  request.projectDirectory && request.sessionId && projectManifest
     ? ({
         workspaceRoot: request.projectDirectory,
-        projectId: projectManifest.projectId,
+        projectId: isChat ? `chat-${projectManifest.projectId}` : projectManifest.projectId,
         sourceDigest: projectManifest.source.digest,
         policy: PORTLOG_HOST_POLICY,
         toolProfile,
@@ -111,7 +118,11 @@ const modelFreeAsk =
   askRoute?.kind === "universal_rule";
 if (!apiKey && !modelFreeAsk) throw new Error("The selected model provider is not configured");
 const agentDir = await mkdtemp(join(tmpdir(), "portlog-inspection-agent-"));
-const sessionKey = isChat ? `chat-${request.turnId}` : request.sessionId;
+const sessionKey = isChat
+  ? request.sessionId
+    ? `chat-${request.sessionId}`
+    : `chat-${request.turnId}`
+  : request.sessionId;
 const workerSessionIdentity =
   sessionIdentity ??
   (isChat
@@ -154,6 +165,15 @@ try {
   const isolatedExecutor = qemuAvailable
     ? createGondolinQemuExecutor({
         qemuPath,
+      })
+    : undefined;
+  const qemuForBash =
+    (preparedSession || chatWorkspaceSession) && (await isExecutableFile(qemuPath));
+  const runGondolinBash = qemuForBash
+    ? createGondolinBashRunner({
+        workspaceRoot: workingDirectory,
+        qemuPath,
+        policyDigest: PORTLOG_HOST_POLICY.digest,
       })
     : undefined;
   const runIsolatedCommand = preparedSession
@@ -315,7 +335,8 @@ try {
       getEvidence,
       getRuleCheck,
       runIsolatedCommand,
-      runHostSafeBash: preparedSession ? runHostSafeBash : undefined,
+      runHostSafeBash: policyRoutedBash ? runHostSafeBash : undefined,
+      runGondolinBash,
     });
     const record = await runLocalReviewInspection({
       projectDirectory: isChat ? undefined : request.projectDirectory,
@@ -332,6 +353,7 @@ try {
       getRuleCheck: capabilities.getRuleCheck,
       runIsolatedCommand: capabilities.runIsolatedCommand,
       runHostSafeBash: capabilities.runHostSafeBash,
+      runGondolinBash: capabilities.runGondolinBash,
       session,
     });
     send({ kind: "result", record });

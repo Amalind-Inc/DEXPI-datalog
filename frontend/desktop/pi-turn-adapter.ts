@@ -18,6 +18,11 @@ import { PORTLOG_HOST_POLICY } from "./capability-routing.ts";
 import { GONDOLIN_REVIEW_CANDIDATE_PROFILE } from "./gondolin-qemu.ts";
 import { toIsolatedCommandToolResult, type IsolatedCommandResult } from "./isolated-command.ts";
 import { createPortLogWorkspaceReadTool } from "./pi-workspace-read.ts";
+import {
+  createPortLogWorkspaceEditTool,
+  createPortLogWorkspaceWriteTool,
+  createWorkspaceSnapshotStore,
+} from "./pi-workspace-mutation.ts";
 
 export interface EvidenceRequest {
   artifactId: string;
@@ -100,10 +105,26 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
   const model = await readPortLogModel(options);
   const apiKey = options.apiKey ?? model.configuredApiKey;
   if (!apiKey) throw new Error(`No PortLog runtime key for ${options.provider}`);
+  const workspaceSnapshots = options.workspaceRoot ? createWorkspaceSnapshotStore() : undefined;
   const readTool = options.workspaceRoot
     ? createPortLogWorkspaceReadTool({
         workspaceRoot: options.workspaceRoot,
         signal: options.signal,
+        snapshots: workspaceSnapshots,
+      })
+    : null;
+  const writeTool = options.workspaceRoot
+    ? createPortLogWorkspaceWriteTool({
+        workspaceRoot: options.workspaceRoot,
+        signal: options.signal,
+        snapshots: workspaceSnapshots,
+      })
+    : null;
+  const editTool = options.workspaceRoot
+    ? createPortLogWorkspaceEditTool({
+        workspaceRoot: options.workspaceRoot,
+        signal: options.signal,
+        snapshots: workspaceSnapshots,
       })
     : null;
 
@@ -300,6 +321,8 @@ export async function createPortLogPiAgent(options: GovernedPiReviewTurnOptions)
 
   const tools = [
     ...(readTool ? [readTool] : []),
+    ...(writeTool ? [writeTool] : []),
+    ...(editTool ? [editTool] : []),
     ...(evidenceTool ? [evidenceTool] : []),
     ...(ruleCheckTool ? [ruleCheckTool] : []),
     ...(isolatedCommandTool ? [isolatedCommandTool] : []),

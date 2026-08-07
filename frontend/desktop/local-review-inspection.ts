@@ -17,6 +17,7 @@ export type LocalInspectionEvent =
       tool: string;
       arguments: Record<string, unknown>;
     }
+  | { type: "tool_update"; callId: string; tool: string; result: unknown }
   | { type: "tool_result"; callId: string; tool: string; result: unknown }
   | { type: "turn_completed" }
   | { type: "turn_cancelled" }
@@ -311,6 +312,13 @@ function normalizePiEvent(
       tool: String(event.toolName ?? ""),
       arguments: isRecord(event.args) ? event.args : {},
     };
+  if (event.type === "tool_execution_update")
+    return {
+      type: "tool_update",
+      callId: String(event.toolCallId ?? ""),
+      tool: String(event.toolName ?? ""),
+      result: readPiToolResult(event.partialResult),
+    };
   if (event.type === "tool_execution_end")
     return {
       type: "tool_result",
@@ -376,7 +384,14 @@ function isApplicableVerifyResult(question: string, check: Record<string, unknow
 }
 
 function chatPrompt(question: string) {
-  return `You are the PortLog desktop assistant in general conversation mode. Answer the user's question directly and helpfully. No P&ID has been prepared for this turn, so do not claim to have topology evidence or issue an engineering verification verdict.\n\nUser question: ${question}`;
+  return [
+    "You are the PortLog desktop assistant in general conversation mode.",
+    "You may use ordinary workspace read, write, edit, and policy-routed bash when those tools are available.",
+    "Workspace mutations require a current read snapshot for existing files and remain ordinary context, not PortLog evidence.",
+    "Do not claim prepared P&ID topology evidence or issue an engineering verification verdict unless PortLog evidence/rule tools are available and used.",
+    "",
+    `User question: ${question}`,
+  ].join("\n");
 }
 
 function verifyPrompt(question: string) {

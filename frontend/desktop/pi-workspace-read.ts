@@ -1,15 +1,25 @@
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { open } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
+
+import {
+  recordWorkspaceReadSnapshot,
+  type WorkspaceSnapshotStore,
+} from "./pi-workspace-mutation.ts";
+import {
+  assertNoWorkspaceSymlinkComponents,
+  loadPortLogWorkspacePathPolicy,
+} from "./workspace-path-policy.ts";
 
 const MAX_READ_BYTES = 12_000;
 
 export function createPortLogWorkspaceReadTool(options: {
   workspaceRoot: string;
   signal: AbortSignal;
+  snapshots?: WorkspaceSnapshotStore;
 }): AgentTool {
   return {
     name: "read",
@@ -23,8 +33,15 @@ export function createPortLogWorkspaceReadTool(options: {
       const requestedPath = readPath(params);
       if (isAbsolute(requestedPath))
         throw new Error("Read blocked: absolute paths are not allowed.");
-      const authorizedPath = await authorizePath(options.workspaceRoot, requestedPath);
-      const result = await readBoundedUtf8(authorizedPath, options.signal, signal);
+      const authorized = await authorizePath(options.workspaceRoot, requestedPath);
+      const result = await readBoundedUtf8(authorized.path, options.signal, signal);
+      if (!result.truncated && options.snapshots) {
+        await recordWorkspaceReadSnapshot(options.snapshots, {
+          workspaceRoot: options.workspaceRoot,
+          relativePath: authorized.relativePath,
+          content: result.text,
+        });
+      }
       return {
         content: [
           {
@@ -33,7 +50,7 @@ export function createPortLogWorkspaceReadTool(options: {
               source: "Pi workspace read",
               authority: "ordinary",
               limitations: ["workspace context only", "not PortLog evidence", "bounded output"],
-              path: relative(await realpath(options.workspaceRoot), authorizedPath),
+              path: authorized.relativePath,
               content: result.text,
               truncated: result.truncated,
             }),
@@ -42,7 +59,7 @@ export function createPortLogWorkspaceReadTool(options: {
         details: {
           source: "Pi workspace read",
           authority: "ordinary",
-          path: relative(await realpath(options.workspaceRoot), authorizedPath),
+          path: authorized.relativePath,
           truncated: result.truncated,
         },
       };
@@ -50,22 +67,15 @@ export function createPortLogWorkspaceReadTool(options: {
   };
 }
 
-async function authorizePath(workspaceRoot: string, requestedPath: string): Promise<string> {
-  const root = await realpath(workspaceRoot);
-  const lexicalTarget = resolve(root, requestedPath);
-  if (!isWithin(root, lexicalTarget))
-    throw new Error("Read blocked: path escapes the authorized workspace.");
-  const target = await realpath(lexicalTarget).catch((error) => {
-    throw new Error(
-      `Read failed for ${requestedPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  });
-  if (!isWithin(root, target))
-    throw new Error("Read blocked: resolved target escapes the authorized workspace.");
-  const relativePath = relative(root, target);
-  if (isProtectedPath(relativePath))
-    throw new Error("Read blocked: credential-like and protected paths are not available.");
-  return target;
+async function authorizePath(
+  workspaceRoot: string,
+  requestedPath: string,
+): Promise<{ path: string; relativePath: string }> {
+  const identity = await assertNoWorkspaceSymlinkComponents(workspaceRoot, requestedPath);
+  const policy = await loadPortLogWorkspacePathPolicy(identity.root);
+  if (!policy.evaluate(identity.relativePath, "file").include)
+    throw new Error("Read blocked: credential-like, ignored, and protected paths are unavailable.");
+  return { path: identity.path, relativePath: identity.relativePath };
 }
 
 async function readBoundedUtf8(
@@ -76,8 +86,20 @@ async function readBoundedUtf8(
   if (sessionSignal.aborted || toolSignal?.aborted) throw abortError();
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.nlink !== 1)
+      throw new Error("Read blocked: only single-link regular files are available.");
     const buffer = Buffer.alloc(MAX_READ_BYTES + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const after = await handle.stat();
+    if (
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs ||
+      after.nlink !== 1
+    )
+      throw new Error("Read blocked: the file changed while it was read.");
     if (sessionSignal.aborted || toolSignal?.aborted) throw abortError();
     const truncated = bytesRead > MAX_READ_BYTES;
     let end = Math.min(bytesRead, MAX_READ_BYTES);
@@ -97,25 +119,7 @@ function readPath(params: unknown): string {
     throw new Error("Invalid read arguments.");
   const path = (params as { path: string }).path.trim();
   if (!path) throw new Error("Invalid read path.");
-  if (isProtectedPath(path))
-    throw new Error("Read blocked: credential-like and protected paths are not available.");
   return path;
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const suffix = relative(root, candidate);
-  return (
-    suffix === "" ||
-    (suffix !== ".." &&
-      !suffix.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) &&
-      !isAbsolute(suffix))
-  );
-}
-
-function isProtectedPath(path: string): boolean {
-  return /(^|[\\/])(?:\.env(?:\..*)?|\.git|\.ssh|credentials?|secrets?|id_rsa|.*\.(?:pem|key))(?:[\\/]|$)/i.test(
-    path,
-  );
 }
 
 function abortError(): DOMException {

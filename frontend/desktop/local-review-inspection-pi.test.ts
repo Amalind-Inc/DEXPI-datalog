@@ -6,6 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import type { VMOptions, VirtualProvider } from "@earendil-works/gondolin";
+
+import { createGondolinBashRunner } from "./gondolin-bash.ts";
+
 import { loadLocalProject, persistLocalProject } from "./local-project-manifest.cjs";
 import { runLocalReviewInspection } from "./local-review-inspection.ts";
 import {
@@ -20,6 +24,7 @@ async function createSession(
   workspaceRoot: string,
   sessionId: string,
   sourceDigest: string,
+  attachmentRoot?: string,
 ): Promise<PortLogPiSessionCoordinator> {
   const identity: PortLogSessionIdentity = {
     workspaceRoot,
@@ -32,6 +37,7 @@ async function createSession(
     sessionRoot: join(workspaceRoot, ".portlog", "sessions"),
     sessionId,
     identity,
+    ...(attachmentRoot === undefined ? {} : { attachmentRoot }),
   });
 }
 
@@ -366,6 +372,195 @@ test("controlled Verify journey keeps the Soufflé outcome separate from model p
       record.events.filter((event) => event.type.startsWith("tool_")).map((event) => event.type),
       ["tool_request", "tool_result"],
     );
+  } finally {
+    await session?.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("model-issued Bash runs once through Gondolin and persists bounded ordinary metadata", async () => {
+  let modelRequests = 0;
+  const server = http.createServer((_request, response) => {
+    modelRequests += 1;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    if (modelRequests === 1) {
+      sse(response, {
+        id: "bash-tool",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "bash-call-1",
+                  type: "function",
+                  function: {
+                    name: "bash",
+                    arguments: JSON.stringify({
+                      command: "printf guest-output && printf changed > generated.txt",
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+    } else {
+      sse(response, {
+        id: "bash-answer",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: "The isolated command completed.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      });
+    }
+    response.end("data: [DONE]\n\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const root = await mkdtemp(join(tmpdir(), "portlog-bash-session-"));
+  const projectDirectory = join(root, "project");
+  const sourcePath = join(root, "C01.xml");
+  await writeFile(sourcePath, "<PlantModel />");
+  await writeFile(
+    join(root, "models.json"),
+    JSON.stringify({
+      providers: {
+        "portlog-test": {
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          api: "openai-completions",
+          apiKey: "test-key",
+          models: [{ id: "review-model", reasoning: false, input: ["text"] }],
+        },
+      },
+    }),
+  );
+
+  let session: PortLogPiSessionCoordinator | undefined;
+  let guestCalls = 0;
+  let hostCalls = 0;
+  let guestClosed = false;
+  try {
+    await persistLocalProject({
+      projectDirectory,
+      sourcePath,
+      sourceContent: "<PlantModel />",
+      sessionId: "bash-project",
+      filename: "C01.xml",
+      status: "ready",
+    });
+    const project = await loadLocalProject(projectDirectory);
+    session = await createSession(
+      projectDirectory,
+      project.projectId,
+      project.source.digest,
+      join(root, "attachments"),
+    );
+    const runGondolinBash = createGondolinBashRunner({
+      workspaceRoot: projectDirectory,
+      qemuPath: "/absolute/qemu-system-aarch64",
+      policyDigest: "sha256:portlog-host-policy-v1",
+      createVm: async (vmOptions: VMOptions) => {
+        const provider = vmOptions.vfs?.mounts?.["/workspace"] as VirtualProvider | undefined;
+        assert.ok(provider?.writeFile);
+        return {
+          exec(command) {
+            guestCalls += 1;
+            assert.deepEqual(command, [
+              "/bin/sh",
+              "-c",
+              "printf guest-output && printf changed > generated.txt",
+            ]);
+            const completion = (async () => {
+              await provider.writeFile!("/generated.txt", Buffer.from("changed"));
+              return { exitCode: 0, stdout: "", stderr: "" };
+            })();
+            return {
+              then: completion.then.bind(completion),
+              async *output() {
+                yield {
+                  stream: "stdout" as const,
+                  data: Buffer.from("guest-output"),
+                  text: "guest-output",
+                };
+              },
+            };
+          },
+          async close() {
+            guestClosed = true;
+          },
+        };
+      },
+    });
+
+    const record = await runLocalReviewInspection({
+      projectDirectory,
+      turnId: "bash-pi-turn",
+      posture: "review",
+      question: "Inspect the source and create a scratch summary.",
+      model: { provider: "portlog-test", id: "review-model" },
+      session,
+      signal: new AbortController().signal,
+      agentDir: root,
+      cwd: projectDirectory,
+      runHostSafeBash: async () => {
+        hostCalls += 1;
+        throw new Error("Host fallback must not run.");
+      },
+      runGondolinBash,
+    });
+
+    assert.equal(modelRequests, 2);
+    assert.equal(guestCalls, 1);
+    assert.equal(hostCalls, 0);
+    assert.equal(guestClosed, true);
+    assert.equal(record.status, "completed");
+    assert.match(record.finalText, /isolated command completed/i);
+    assert.deepEqual(
+      record.events.filter((event) => event.type.startsWith("tool_")).map((event) => event.type),
+      ["tool_request", "tool_update", "tool_result"],
+    );
+    const liveUpdate = record.events.find((event) => event.type === "tool_update");
+    assert.ok(liveUpdate && "result" in liveUpdate);
+    assert.match(JSON.stringify(liveUpdate.result), /guest-output/);
+    assert.match(JSON.stringify(liveUpdate.result), /"stream_sequence":1/);
+    const recordText = JSON.stringify(record);
+    assert.match(recordText, /gondolin-qemu-hvf/);
+    assert.match(recordText, /generated\.txt/);
+    assert.match(recordText, /"authority":"ordinary"/);
+
+    const credentials = await session.issueClientCredentials({
+      clientId: "bash-observer",
+      role: "observer",
+    });
+    const observer = await session.attachClient(credentials);
+    const history = await observer.resync({ nextEntryIndex: 0 });
+    const persistedTranscript = JSON.stringify(history.entries);
+    assert.match(persistedTranscript, /gondolin-qemu-hvf/);
+    assert.match(persistedTranscript, /generated\.txt/);
+
+    const persistedProject = await loadLocalProject(projectDirectory);
+    const persistedTurn = persistedProject.turns.find(
+      (turn: { turnId?: string }) => turn.turnId === "bash-pi-turn",
+    );
+    assert.ok(persistedTurn);
+    assert.match(JSON.stringify(persistedTurn), /gondolin-qemu-hvf/);
   } finally {
     await session?.close();
     server.closeAllConnections();

@@ -55,6 +55,7 @@ const USAGE = `Usage:
 Required environment:
   PORTLOG_RUNTIME_API_KEY       Provider credential kept in the host process.
   PORTLOG_OPENROUTER_API_KEY    OpenRouter fallback when the provider is openrouter.
+  OPENROUTER_API_KEY            Additional OpenRouter fallback used by local desktop.
 
 Optional environment:
   PORTLOG_RUNTIME_BASE_URL      Provider base URL override.
@@ -74,7 +75,10 @@ async function run(argv: string[]): Promise<void> {
       return;
     }
     const config = await resolveConfig(options);
-    const sidecar = await connectSidecar(config.projectDirectory, config.sidecarEndpoint);
+    const sidecar =
+      config.mode === "chat"
+        ? { endpoint: "http://127.0.0.1:0", stop: async () => {} }
+        : await connectSidecar(config.projectDirectory, config.sidecarEndpoint);
     try {
       const record = await runWorker(config, sidecar.endpoint);
       console.log("FINAL PORTLOG RECORD");
@@ -155,11 +159,13 @@ async function resolveConfig(options: CliOptions) {
 
   const apiKey =
     process.env.PORTLOG_RUNTIME_API_KEY?.trim() ||
-    (provider === "openrouter" ? process.env.PORTLOG_OPENROUTER_API_KEY?.trim() : undefined);
+    (provider === "openrouter"
+      ? process.env.PORTLOG_OPENROUTER_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim()
+      : undefined);
   if (!apiKey)
     throw new Error(
       `Provider credential is missing; set PORTLOG_RUNTIME_API_KEY${
-        provider === "openrouter" ? " or PORTLOG_OPENROUTER_API_KEY" : ""
+        provider === "openrouter" ? ", PORTLOG_OPENROUTER_API_KEY, or OPENROUTER_API_KEY" : ""
       } in the host environment.`,
     );
 
@@ -320,6 +326,10 @@ async function runWorker(
       console.log(
         `TOOL REQUEST ${String(event.tool)} ${boundedJson(event.arguments, MAX_DISPLAYED_TOOL_VALUE_CHARS)}`,
       );
+    } else if (event.type === "tool_update") {
+      console.log(
+        `TOOL UPDATE ${String(event.tool)} ${boundedJson(event.result, MAX_DISPLAYED_TOOL_VALUE_CHARS)}`,
+      );
     } else if (event.type === "tool_result") {
       console.log(
         `TOOL RESULT ${String(event.tool)} ${boundedJson(event.result, MAX_DISPLAYED_TOOL_VALUE_CHARS)}`,
@@ -362,7 +372,7 @@ async function runWorker(
       mode: config.mode,
       projectDirectory: config.projectDirectory,
       cwd: REPO_ROOT,
-      sessionId: config.mode === "inspection" ? config.sessionId : undefined,
+      sessionId: config.sessionId,
       turnId: config.turnId,
       question: config.question,
       posture: config.posture,

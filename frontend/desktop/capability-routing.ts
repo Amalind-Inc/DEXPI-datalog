@@ -30,9 +30,11 @@ export function createPortLogToolProfile(options: {
   hostRules: boolean;
   isolatedExecution: boolean;
   policyRoutedBash?: boolean;
+  workspaceMutation?: boolean;
 }) {
   const tools = [
     "read",
+    ...(options.workspaceMutation ? ["write", "edit"] : []),
     ...(options.hostEvidence ? ["portlog_evidence"] : []),
     ...(options.hostRules ? ["portlog_rule_check"] : []),
     ...(options.isolatedExecution ? ["portlog_isolated_command"] : []),
@@ -80,7 +82,8 @@ export function routeCapabilities(options: CapabilityRoutingInput): CapabilityRo
   const hostRules = prepared && options.getRuleCheck !== undefined;
   const isolatedExecution = prepared && options.runIsolatedCommand !== undefined;
   const policyRoutedBash =
-    prepared && (options.runHostSafeBash !== undefined || options.runGondolinBash !== undefined);
+    (prepared || options.mode === "chat") &&
+    (options.runHostSafeBash !== undefined || options.runGondolinBash !== undefined);
 
   return {
     prepared,

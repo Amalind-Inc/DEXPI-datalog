@@ -124,6 +124,8 @@ export function parseReviewLine(line: string): TuiEvent | undefined {
 
   const request = parseToolLine(value, "TOOL REQUEST");
   if (request) return { type: "tool_request", ...request };
+  const update = parseToolLine(value, "TOOL UPDATE");
+  if (update) return { type: "tool_update", ...update };
   const result = parseToolLine(value, "TOOL RESULT");
   if (result) return { type: "tool_result", ...result };
   return undefined;

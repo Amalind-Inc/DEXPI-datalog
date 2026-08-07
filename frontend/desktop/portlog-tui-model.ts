@@ -13,6 +13,7 @@ export type TuiEventKind =
   | "turn_started"
   | "assistant_text_delta"
   | "tool_request"
+  | "tool_update"
   | "tool_result"
   | "turn_completed"
   | "turn_cancelled"
@@ -186,6 +187,31 @@ export function reduceTuiEvent(state: TuiState, event: TuiEvent, now = new Date(
         phase,
         actionLabel(tool),
         boundedJson(event.arguments),
+        timestamp,
+      ),
+    );
+  }
+
+  if (event.type === "tool_update") {
+    const tool = event.tool ?? "unknown action";
+    const phase = phaseForTool(tool);
+    const lane = laneForPhase(phase);
+    return appendFeed(
+      {
+        ...base,
+        status: state.status === "idle" ? "running" : state.status,
+        phase,
+        lanes: lane
+          ? updateLane(state.lanes, lane, "working", actionNote(tool, "Streaming output"))
+          : state.lanes,
+      },
+      makeFeedEntry(
+        sequence,
+        "tool_update",
+        authorityForTool(tool),
+        phase,
+        `${actionLabel(tool)} output`,
+        boundedJson(event.result),
         timestamp,
       ),
     );

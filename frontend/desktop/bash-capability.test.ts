@@ -40,6 +40,15 @@ test("classifier keeps only exact read-only commands on the host", () => {
   );
 });
 
+test("classifier preserves guest shell text while rejecting detached execution", () => {
+  const command = "printf '%s' 'a  b&c' && printf done > result.txt";
+  const quoted = classifyBashRequest({ command }, workspaceRoot);
+  assert.equal(quoted.route, "gondolin");
+  assert.equal(quoted.route === "gondolin" ? quoted.request.command : undefined, command);
+  assert.equal(classifyBashRequest({ command: "sleep 60 &" }, workspaceRoot).route, "unavailable");
+  assert.equal(classifyBashRequest({ command: "printf ok 2>&1" }, workspaceRoot).route, "gondolin");
+});
+
 test("host-safe execution receives normalized input and emits bounded output", async () => {
   let received: NormalizedBashRequest | undefined;
   const updates: string[] = [];
@@ -65,6 +74,7 @@ test("host-safe execution receives normalized input and emits bounded output", a
   assert.deepEqual(received, {
     command: "pwd",
     cwd: workspaceRoot,
+    workspaceRoot,
     timeoutMs: 3_000,
     pty: false,
     env: {},

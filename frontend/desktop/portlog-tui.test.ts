@@ -1095,6 +1095,11 @@ test("review output parser preserves whitespace at assistant chunk boundaries", 
     tool: "portlog_evidence",
     arguments: { artifactId: "topology" },
   });
+  assert.deepEqual(parseReviewLine('TOOL UPDATE bash {"stdout":"live"}'), {
+    type: "tool_update",
+    tool: "bash",
+    result: { stdout: "live" },
+  });
   assert.equal(parseReviewLine("provider debug noise"), undefined);
 });
 

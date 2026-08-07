@@ -6,13 +6,13 @@ const MAX_COMMAND_LENGTH = 2_000;
 const MAX_OUTPUT_LENGTH = 8_192;
 const MAX_TIMEOUT_MS = 10_000;
 const DEFAULT_TIMEOUT_MS = 3_000;
-const HOST_SAFE_COMMANDS = new Set([
-  "pwd",
-  "git status --short",
-  "git diff --stat",
-  "git diff --check",
-  "git rev-parse --show-toplevel",
-]);
+const HOST_SAFE_COMMANDS: Record<string, true> = {
+  pwd: true,
+  "git status --short": true,
+  "git diff --stat": true,
+  "git diff --check": true,
+  "git rev-parse --show-toplevel": true,
+};
 
 export type BashRoute = "host-safe" | "gondolin" | "unavailable";
 export type BashOutcome =
@@ -34,6 +34,7 @@ export type BashRequest = {
 export type NormalizedBashRequest = {
   command: string;
   cwd: string;
+  workspaceRoot?: string;
   timeoutMs: number;
   pty: false;
   env: Record<string, never>;
@@ -43,17 +44,89 @@ export type BashClassification =
   | { route: "host-safe" | "gondolin"; request: NormalizedBashRequest; diagnostic: string }
   | { route: "unavailable"; diagnostic: string };
 
+export type BashDiffEntry = {
+  path: string;
+  status: "added" | "modified" | "deleted";
+  entryType: "file" | "directory";
+  baselineDigest?: string;
+  resultDigest?: string;
+  baselineBytes?: number;
+  resultBytes?: number;
+  baselineMode?: number;
+  resultMode?: number;
+  content?: { encoding: "base64"; data: string };
+};
+
+export type BashDiffArtifact = {
+  schemaVersion: 1;
+  authority: "ordinary";
+  applicable: false;
+  truncated: boolean;
+  digest: string;
+  entries: BashDiffEntry[];
+};
+
+export type BashExecutionMetadata = {
+  schemaVersion: 1;
+  backend: { id: string; version: string };
+  image: { id: string; version: string };
+  commandProfile: { id: string; version: string; digest: string };
+  network: "disabled";
+  policyDigest: string;
+  workspacePolicyDigest: string;
+  ignoreDigest: string;
+  snapshotDigest: string;
+  commandDigest: string;
+  timeoutMs: number;
+  snapshotFiles: number;
+  snapshotDirectories: number;
+  snapshotBytes: number;
+  cwd: string;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+  stdoutCapturedBytes: number;
+  stderrCapturedBytes: number;
+  stdoutDroppedBytes: number;
+  stderrDroppedBytes: number;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  cleanup: "completed" | "failed";
+  terminalCause?: "external" | "deadline";
+  exclusions: {
+    protected: number;
+    ignored: number;
+    defaultIgnored: number;
+    symlinks: number;
+  };
+  diffDigest?: string;
+  diffTruncated?: boolean;
+  diffEntries?: number;
+};
+
 export type BashExecutionResult = {
   outcome: BashOutcome;
   stdout: string;
   stderr: string;
   diagnostic: string;
   exitCode?: number;
+  stdoutBytes?: number;
+  stderrBytes?: number;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  metadata?: BashExecutionMetadata;
+  diffArtifact?: BashDiffArtifact;
 };
 
 export type BashOutputUpdate = {
   stdout: string;
   stderr: string;
+  sequence?: number;
+  stdoutBytes?: number;
+  stderrBytes?: number;
+  truncated?: boolean;
 };
 
 export type RunGovernedBash = (
@@ -88,10 +161,15 @@ export function classifyBashRequest(
 ): BashClassification {
   if (!request || typeof request.command !== "string")
     return { route: "unavailable", diagnostic: "Bash command is missing." };
-  const command = request.command.trim().replace(/\s+/g, " ");
+  const command = request.command.trim();
   if (!command) return { route: "unavailable", diagnostic: "Bash command must not be empty." };
   if (command.length > MAX_COMMAND_LENGTH)
     return { route: "unavailable", diagnostic: "Bash command exceeds the bounded command length." };
+  if (hasDetachedOrBackgroundOperator(command))
+    return {
+      route: "unavailable",
+      diagnostic: "Detached or background Bash execution is not authorized.",
+    };
 
   const root = resolve(workspaceRoot);
   const cwd = resolve(root, request.cwd?.trim() || ".");
@@ -111,14 +189,17 @@ export function classifyBashRequest(
   )
     return { route: "unavailable", diagnostic: "Bash timeout must be a positive integer." };
 
+  const hostSafeCommand = command.replace(/\s+/g, " ");
+  const hostSafe = HOST_SAFE_COMMANDS[hostSafeCommand] === true;
   const normalized: NormalizedBashRequest = {
-    command,
+    command: hostSafe ? hostSafeCommand : command,
     cwd,
+    workspaceRoot: root,
     timeoutMs: Math.min(MAX_TIMEOUT_MS, request.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     pty: false,
     env: {},
   };
-  if (HOST_SAFE_COMMANDS.has(command))
+  if (hostSafe)
     return {
       route: "host-safe",
       request: normalized,
@@ -234,6 +315,8 @@ function toolResponse(
 } {
   const stdout = boundOutput(result?.stdout ?? "");
   const stderr = boundOutput(result?.stderr ?? "");
+  const metadataTruncated =
+    result?.metadata?.stdoutTruncated === true || result?.metadata?.stderrTruncated === true;
   return {
     content: [
       {
@@ -246,8 +329,20 @@ function toolResponse(
           stdout: stdout.value,
           stderr: stderr.value,
           diagnostic: diagnostic.slice(0, 240),
-          output_truncated: stdout.truncated || stderr.truncated,
+          output_truncated:
+            stdout.truncated ||
+            stderr.truncated ||
+            metadataTruncated ||
+            result?.stdoutTruncated === true ||
+            result?.stderrTruncated === true,
           ...(result?.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+          ...(result?.sequence === undefined ? {} : { stream_sequence: result.sequence }),
+          ...(result?.stdoutBytes === undefined ? {} : { stdout_bytes: result.stdoutBytes }),
+          ...(result?.stderrBytes === undefined ? {} : { stderr_bytes: result.stderrBytes }),
+          ...(result?.truncated === undefined ? {} : { live_truncated: result.truncated }),
+          ...(result?.metadata === undefined ? {} : { metadata: result.metadata }),
+
+          ...(result?.diffArtifact === undefined ? {} : { diff_artifact: result.diffArtifact }),
         }),
       },
     ],
@@ -260,4 +355,33 @@ function boundOutput(value: string): { value: string; truncated: boolean } {
   return safe.length > MAX_OUTPUT_LENGTH
     ? { value: safe.slice(0, MAX_OUTPUT_LENGTH), truncated: true }
     : { value: safe, truncated: false };
+}
+function hasDetachedOrBackgroundOperator(command: string): boolean {
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character !== "&") continue;
+    const previous = command[index - 1];
+    const next = command[index + 1];
+    if (previous === "&" || next === "&" || previous === ">" || next === ">") continue;
+    return true;
+  }
+  return false;
 }
